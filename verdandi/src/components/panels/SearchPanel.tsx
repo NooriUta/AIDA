@@ -228,20 +228,31 @@ export const SearchPanel = memo(() => {
   const handleSelect = useCallback((result: SearchResult) => {
     const type = result.type as string;
     if (type === 'DaliTable') {
-      // L3: column-level lineage for this table
+      // L3: bidirectional lineage for this table
       jumpTo('L3', result.id, result.label, 'DaliTable');
+    } else if (type === 'DaliColumn' || type === 'DaliOutputColumn') {
+      // L3: lineage for this column (result.id = column @rid)
+      jumpTo('L3', result.id, result.label, 'DaliColumn');
     } else if (type === 'DaliSchema') {
-      // L2: explore this schema
+      // L2: explore schema by name
       jumpTo('L2', `schema-${result.label}`, result.label, 'DaliSchema');
     } else if (type === 'DaliPackage') {
-      // L2: explore this package
+      // L2: explore package by RID
       jumpTo('L2', result.id, result.label, 'DaliPackage');
+    } else if (type === 'DaliRoutine' || type === 'DaliSession') {
+      // L2: explore by RID — shows the routine's statements and tables
+      jumpTo('L2', result.id, result.label, 'DaliRoutine');
+    } else if (type === 'DaliStatement') {
+      // L3: lineage for this statement
+      jumpTo('L3', result.id, result.label, 'DaliStatement');
+    } else if (type === 'DaliParameter' || type === 'DaliVariable') {
+      // L3: lineage for this parameter/variable
+      jumpTo('L3', result.id, result.label, type as never);
     } else if (type === 'DaliDatabase' || type === 'DaliApplication') {
-      // L1: go to overview, select/highlight that node
+      // L1: overview, highlight that node
       jumpTo('L1', null, result.label);
       selectNode(result.id);
     } else {
-      // Routines, Statements, Columns — highlight on current canvas
       selectNode(result.id);
     }
   }, [jumpTo, selectNode]);
