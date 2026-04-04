@@ -228,14 +228,15 @@ export const SearchPanel = memo(() => {
   const handleSelect = useCallback((result: SearchResult) => {
     const type = result.type as string;
     if (type === 'DaliTable') {
-      // L3: bidirectional lineage for this table
-      jumpTo('L3', result.id, result.label, 'DaliTable');
+      // L2: explore table context (columns, routines, statements)
+      jumpTo('L2', result.id, result.label, 'DaliTable');
     } else if (type === 'DaliColumn' || type === 'DaliOutputColumn') {
-      // L3: lineage for this column (result.id = column @rid)
-      jumpTo('L3', result.id, result.label, 'DaliColumn');
+      // L2: explore column context
+      jumpTo('L2', result.id, result.label, 'DaliColumn');
     } else if (type === 'DaliSchema') {
-      // L2: explore schema by name
-      jumpTo('L2', `schema-${result.label}`, result.label, 'DaliSchema');
+      // L1: overview, highlight schema node
+      jumpTo('L1', null, result.label);
+      selectNode(result.id);
     } else if (type === 'DaliPackage') {
       // L2: explore package by RID
       jumpTo('L2', result.id, result.label, 'DaliPackage');
