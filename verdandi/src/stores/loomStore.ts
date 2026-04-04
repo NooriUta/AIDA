@@ -105,6 +105,14 @@ interface LoomStore {
   /** Replace the entire L1 scope stack with a single entry, or clear it (null). */
   setL1Scope: (nodeId: string | null, label?: string) => void;
 
+  // ── Node expansion / visibility (LOOM-026) ───────────────────────────────
+  nodeExpansionState: Record<string, 'collapsed' | 'partial' | 'expanded'>;
+  hiddenNodeIds: Set<string>;
+  setNodeExpansion: (nodeId: string, state: 'collapsed' | 'partial' | 'expanded') => void;
+  hideNode: (nodeId: string) => void;
+  restoreNode: (nodeId: string) => void;
+  showAllNodes: () => void;
+
   // ── Filter toolbar actions (LOOM-023b) ────────────────────────────────────
   setStartObject: (nodeId: string, nodeType: DaliNodeType, label: string) => void;
   setFieldFilter: (columnName: string | null) => void;
@@ -140,6 +148,8 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   highlightedEdges: new Set<string>(),
   filter: { ...FILTER_DEFAULTS },
   availableFields: [],
+  nodeExpansionState: {},
+  hiddenNodeIds: new Set<string>(),
   theme: (localStorage.getItem('seer-theme') as 'dark' | 'light') ?? 'dark',
   palette: localStorage.getItem('seer-palette') ?? 'amber-forest',
   nodeCount: 0,
@@ -331,6 +341,29 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   },
 
   setAvailableApps: (apps) => set({ availableApps: apps }),
+
+  // ── Node expansion / visibility (LOOM-026) ───────────────────────────────
+  setNodeExpansion: (nodeId, state) => {
+    set((s) => ({ nodeExpansionState: { ...s.nodeExpansionState, [nodeId]: state } }));
+  },
+
+  hideNode: (nodeId) => {
+    set((s) => {
+      const next = new Set(s.hiddenNodeIds);
+      next.add(nodeId);
+      return { hiddenNodeIds: next };
+    });
+  },
+
+  restoreNode: (nodeId) => {
+    set((s) => {
+      const next = new Set(s.hiddenNodeIds);
+      next.delete(nodeId);
+      return { hiddenNodeIds: next };
+    });
+  },
+
+  showAllNodes: () => set({ hiddenNodeIds: new Set<string>() }),
 
   // ── L1 toolbar actions (LOOM-024b) ────────────────────────────────────────
   setL1Depth:          (depth)  => set((s) => ({ l1Filter: { ...s.l1Filter, depth } })),

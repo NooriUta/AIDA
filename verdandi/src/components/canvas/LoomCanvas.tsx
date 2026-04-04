@@ -33,6 +33,7 @@ import { useOverview, useExplore, useLineage }       from '../../services/hooks'
 import { isUnauthorized }                            from '../../services/lineage';
 import { SCOPE_FILTER_TYPES }                        from '../../utils/transformGraph';
 import type { LoomNode, LoomEdge }                   from '../../types/graph';
+import type { ColumnInfo }                            from '../../types/domain';
 
 // ─── nodeTypes must be defined OUTSIDE the render function ───────────────────
 const NODE_TYPES: NodeTypes = {
@@ -57,6 +58,8 @@ const LoomCanvasInner = memo(() => {
     l1ScopeStack,
     expandedDbs,
     l1Filter,
+    filter,
+    hiddenNodeIds,
     theme,
     setGraphStats,
     setZoom,
@@ -139,16 +142,89 @@ const LoomCanvasInner = memo(() => {
     return { nodes, edges: rawGraph.edges };
   }, [rawGraph, viewLevel, l1ScopeStack]);
 
-  // ── L1 system-level view: hide DB and Schema nodes, show only App nodes ─────
+  // ── Column-level edge types suppressed by tableLevelView (LOOM-025) ─────────
+  const COLUMN_EDGE_TYPES = useMemo(
+    () => new Set(['HAS_COLUMN', 'ATOM_REF_COLUMN', 'HAS_ATOM', 'ATOM_PRODUCES']),
+    [],
+  );
+
+  // ── displayGraph: 4-phase transform pipeline ─────────────────────────────────
+  //   Phase 1: L1 system-level (hide DB/Schema nodes)
+  //   Phase 2: Hide nodes marked via 🔴 button (LOOM-026)
+  //   Phase 3: tableLevelView — suppress column-level edges (LOOM-025)
+  //   Phase 4: fieldFilter — dim edges/nodes unrelated to selected field (LOOM-025)
   const displayGraph = useMemo(() => {
-    if (!scopedGraph || viewLevel !== 'L1' || !l1Filter.systemLevel) return scopedGraph;
-    const nodes = scopedGraph.nodes.map((n) =>
-      (n.type === 'databaseNode' || n.type === 'l1SchemaNode')
-        ? { ...n, hidden: true }
-        : n,
-    );
-    return { nodes, edges: scopedGraph.edges };
-  }, [scopedGraph, viewLevel, l1Filter.systemLevel]);
+    if (!scopedGraph) return null;
+
+    // Phase 1 — L1 system-level
+    let base = scopedGraph;
+    if (viewLevel === 'L1' && l1Filter.systemLevel) {
+      base = {
+        nodes: base.nodes.map((n) =>
+          n.type === 'databaseNode' || n.type === 'l1SchemaNode'
+            ? { ...n, hidden: true }
+            : n,
+        ),
+        edges: base.edges,
+      };
+    }
+
+    // Phase 2 — Hidden nodes (LOOM-026 🔴 button)
+    if (hiddenNodeIds.size > 0) {
+      base = {
+        nodes: base.nodes.map((n) =>
+          hiddenNodeIds.has(n.id) ? { ...n, hidden: true } : n,
+        ),
+        edges: base.edges,
+      };
+    }
+
+    // Phase 3 — Table-level view: suppress column-level edges (LOOM-025)
+    if (filter.tableLevelView && viewLevel !== 'L1') {
+      base = {
+        nodes: base.nodes,
+        edges: base.edges.filter(
+          (e) => !COLUMN_EDGE_TYPES.has(e.data?.edgeType as string),
+        ),
+      };
+    }
+
+    // Phase 4 — Field filter: dim edges/nodes unrelated to selected field (LOOM-025)
+    if (filter.fieldFilter && viewLevel !== 'L1') {
+      const fieldName = filter.fieldFilter.toLowerCase();
+      // Nodes directly matching the field (by label or containing that column)
+      const relevantIds = new Set<string>();
+      for (const n of base.nodes) {
+        const byLabel = n.data.label?.toLowerCase() === fieldName;
+        const byCol   = (n.data.columns as ColumnInfo[] | undefined)?.some(
+          (c) => c.name.toLowerCase() === fieldName,
+        );
+        if (byLabel || byCol) relevantIds.add(n.id);
+      }
+      // Expand to immediate neighbours (one hop)
+      for (const e of base.edges) {
+        if (relevantIds.has(e.source) || relevantIds.has(e.target)) {
+          relevantIds.add(e.source);
+          relevantIds.add(e.target);
+        }
+      }
+      const DIM = 0.08;
+      base = {
+        nodes: base.nodes.map((n) =>
+          relevantIds.has(n.id)
+            ? n
+            : { ...n, style: { ...n.style, opacity: DIM, pointerEvents: 'none' as const } },
+        ),
+        edges: base.edges.map((e) =>
+          relevantIds.has(e.source) && relevantIds.has(e.target)
+            ? e
+            : { ...e, style: { ...e.style, opacity: DIM } },
+        ),
+      };
+    }
+
+    return base;
+  }, [scopedGraph, viewLevel, l1Filter.systemLevel, hiddenNodeIds, filter.tableLevelView, filter.fieldFilter, COLUMN_EDGE_TYPES]);
 
   // ── Layout: L1 = pre-computed + applyL1Layout; L2/L3 = ELK ─────────────────
   useEffect(() => {

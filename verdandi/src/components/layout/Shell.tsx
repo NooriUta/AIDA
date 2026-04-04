@@ -5,8 +5,8 @@ import { FilterToolbarL1 } from './FilterToolbarL1';
 import { StatusBar } from './StatusBar';
 import { ResizablePanel } from './ResizablePanel';
 import { LoomCanvas } from '../canvas/LoomCanvas';
+import { SearchPanel } from '../panels/SearchPanel';
 import { useLoomStore } from '../../stores/loomStore';
-import { Search } from 'lucide-react';
 
 export const Shell = memo(() => {
   const { viewLevel } = useLoomStore();
@@ -26,7 +26,7 @@ export const Shell = memo(() => {
 
         {/* Left panel — Search / Explorer */}
         <ResizablePanel side="left" defaultWidth={240} minWidth={160} maxWidth={400} title="Explorer">
-          <SearchPanelPlaceholder />
+          <SearchPanel />
         </ResizablePanel>
 
         {/* Canvas area = FilterToolbar (level-dependent) + LoomCanvas */}
@@ -53,31 +53,6 @@ export const Shell = memo(() => {
 Shell.displayName = 'Shell';
 
 // ── Placeholder panels ────────────────────────────────────────────────────────
-
-function SearchPanelPlaceholder() {
-  return (
-    <div style={{ padding: '4px' }}>
-      {/* Search input stub */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        padding: '6px 8px',
-        background: 'var(--seer-surface-2)',
-        border: '1px solid var(--seer-border)',
-        borderRadius: '6px',
-        marginBottom: '12px',
-      }}>
-        <Search size={13} color="var(--seer-text-muted)" />
-        <span style={{ fontSize: '12px', color: 'var(--seer-text-muted)' }}>Search… (⌘F)</span>
-      </div>
-
-      <p style={{ fontSize: '11px', color: 'var(--seer-text-muted)', margin: 0 }}>
-        Search panel — Phase 2
-      </p>
-    </div>
-  );
-}
 
 function KnotPanelPlaceholder() {
   return (
