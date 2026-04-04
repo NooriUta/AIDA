@@ -99,6 +99,12 @@ interface LoomStore {
   toggleL1DirDown:     () => void;
   toggleL1SystemLevel: () => void;
 
+  // ── Available app list for L1 scope selector (LOOM-024b) ─────────────────────
+  availableApps: { id: string; label: string }[];
+  setAvailableApps: (apps: { id: string; label: string }[]) => void;
+  /** Replace the entire L1 scope stack with a single entry, or clear it (null). */
+  setL1Scope: (nodeId: string | null, label?: string) => void;
+
   // ── Filter toolbar actions (LOOM-023b) ────────────────────────────────────
   setStartObject: (nodeId: string, nodeType: DaliNodeType, label: string) => void;
   setFieldFilter: (columnName: string | null) => void;
@@ -128,6 +134,7 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   l1ScopeStack: [],
   expandedDbs: new Set<string>(),
   l1Filter: { depth: 2, dirUp: true, dirDown: true, systemLevel: false },
+  availableApps: [],
   selectedNodeId: null,
   highlightedNodes: new Set<string>(),
   highlightedEdges: new Set<string>(),
@@ -237,6 +244,17 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
 
   clearL1Scope: () => set({ l1ScopeStack: [], selectedNodeId: null }),
 
+  setL1Scope: (nodeId, label) => {
+    if (!nodeId) {
+      set({ l1ScopeStack: [], selectedNodeId: null });
+    } else {
+      set({
+        l1ScopeStack: [{ nodeId, label: label ?? nodeId, nodeType: 'DaliApplication' }],
+        selectedNodeId: null,
+      });
+    }
+  },
+
   toggleDbExpansion: (dbId) => {
     set((s) => {
       const next = new Set(s.expandedDbs);
@@ -311,6 +329,8 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
       },
     }));
   },
+
+  setAvailableApps: (apps) => set({ availableApps: apps }),
 
   // ── L1 toolbar actions (LOOM-024b) ────────────────────────────────────────
   setL1Depth:          (depth)  => set((s) => ({ l1Filter: { ...s.l1Filter, depth } })),

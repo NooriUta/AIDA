@@ -92,11 +92,16 @@ export function applyL1Layout(
   const targetDbH  = new Map<string, number>();
   const targetAppH = new Map<string, number>();
 
-  // Grouped DBs: y positions are relative to their App parent
+  // Grouped DBs: y positions are relative to their App parent.
+  // Hidden DBs (e.g. systemLevel=true) are excluded from height calculation
+  // so the App group collapses to header-only height.
   for (const [appId, dbs] of dbsByApp) {
     let y = L1_APP_HEADER;
+    let hasVisible = false;
 
     for (const db of dbs) {
+      if (db.hidden) continue;          // skip hidden DBs
+      hasVisible = true;
       targetDbY.set(db.id, y);
 
       const schemas = schemasByDb.get(db.id) ?? [];
@@ -108,7 +113,10 @@ export function applyL1Layout(
       y += dbH + L1_DB_GAP;
     }
 
-    targetAppH.set(appId, y - L1_DB_GAP + L1_APP_PAD_BOT);
+    targetAppH.set(
+      appId,
+      hasVisible ? y - L1_DB_GAP + L1_APP_PAD_BOT : L1_APP_HEADER + L1_APP_PAD_BOT,
+    );
   }
 
   // Standalone DBs: only their height changes (position is absolute, never moves)

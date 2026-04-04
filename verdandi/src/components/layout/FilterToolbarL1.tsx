@@ -51,7 +51,8 @@ function Sep() {
 export const FilterToolbarL1 = memo(() => {
   const { t } = useTranslation();
   const {
-    l1ScopeStack, clearL1Scope,
+    l1ScopeStack, clearL1Scope, setL1Scope,
+    availableApps,
     l1Filter, setL1Depth, toggleL1DirUp, toggleL1DirDown, toggleL1SystemLevel,
   } = useLoomStore();
 
@@ -79,8 +80,10 @@ export const FilterToolbarL1 = memo(() => {
       overflow: 'hidden',
     }}>
 
-      {/* ── Scope pill ──────────────────────────────────────────────────── */}
+      {/* ── Scope selector ─────────────────────────────────────────────── */}
+      {/* Invisible <select> sits on top of the styled pill for native dropdown UX. */}
       <div style={{
+        position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
@@ -93,16 +96,43 @@ export const FilterToolbarL1 = memo(() => {
         whiteSpace: 'nowrap',
         flexShrink: 0,
         maxWidth: 180,
+        cursor: 'pointer',
       }}>
         <IconApp active={!!activeScope} />
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none' }}>
           {activeScope ? activeScope.label : t('l1.allSystems')}
         </span>
+
+        {/* Transparent select overlay — provides native OS dropdown */}
+        <select
+          value={activeScope?.nodeId ?? ''}
+          onChange={(e) => {
+            const id = e.target.value;
+            if (!id) { clearL1Scope(); return; }
+            const app = availableApps.find((a) => a.id === id);
+            if (app) setL1Scope(app.id, app.label);
+          }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: 0,
+            cursor: 'pointer',
+            width: '100%',
+            fontSize: 10,
+          }}
+        >
+          <option value="">{t('l1.allSystems')}</option>
+          {availableApps.map((app) => (
+            <option key={app.id} value={app.id}>{app.label}</option>
+          ))}
+        </select>
+
         {activeScope && (
           <button
-            onClick={clearL1Scope}
+            onClick={(e) => { e.stopPropagation(); clearL1Scope(); }}
             title={t('l1.clearScope')}
             style={{
+              position: 'relative', zIndex: 1,
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               width: 14, height: 14,
               border: 'none', background: 'transparent',

@@ -60,6 +60,7 @@ const LoomCanvasInner = memo(() => {
     drillDown,
     pushL1Scope,
     setAvailableFields,
+    setAvailableApps,
   } = useLoomStore();
   const { t } = useTranslation();
 
@@ -84,6 +85,18 @@ const LoomCanvasInner = memo(() => {
     if (viewLevel === 'L3' && lineageQ.data)  return transformGqlExplore(lineageQ.data);
     return null;
   }, [viewLevel, overviewQ.data, exploreQ.data, lineageQ.data]);
+
+  // ── Populate availableApps for the L1 scope selector ───────────────────────
+  useEffect(() => {
+    if (viewLevel !== 'L1' || !rawGraph) {
+      setAvailableApps([]);
+      return;
+    }
+    const apps = rawGraph.nodes
+      .filter((n) => n.type === 'applicationNode')
+      .map((n) => ({ id: n.id, label: n.data.label }));
+    setAvailableApps(apps);
+  }, [viewLevel, rawGraph, setAvailableApps]);
 
   // ── L1 scope filter: dim nodes outside selected app (3-level parentId-aware) ─
   const scopedGraph = useMemo(() => {
