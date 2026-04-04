@@ -209,6 +209,7 @@ export const SearchPanel = memo(() => {
     if (typeFilters.has('tables')       && r.type === 'DaliTable') return true;
     if (typeFilters.has('routines')     && (r.type === 'DaliRoutine' || r.type === 'DaliPackage' || r.type === 'DaliSession')) return true;
     if (typeFilters.has('columns')      && (r.type === 'DaliColumn' || r.type === 'DaliOutputColumn')) return true;
+    if (typeFilters.has('statements')   && r.type === 'DaliStatement') return true;
     if (typeFilters.has('databases')    && (r.type === 'DaliDatabase' || r.type === 'DaliSchema')) return true;
     if (typeFilters.has('applications') && r.type === 'DaliApplication') return true;
     return false;
@@ -241,6 +242,7 @@ export const SearchPanel = memo(() => {
     { key: 'tables',       label: t('search.filters.tables') },
     { key: 'columns',      label: t('search.filters.columns') },
     { key: 'routines',     label: t('search.filters.routines') },
+    { key: 'statements',   label: t('search.filters.statements') },
     { key: 'databases',    label: t('search.filters.databases') },
     { key: 'applications', label: t('search.filters.applications') },
   ];
