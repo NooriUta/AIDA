@@ -200,7 +200,7 @@ function pushStandaloneDb(
     data: {
       label:             dbLabel,
       nodeType:          'DaliDatabase' as DaliNodeType,
-      childrenAvailable: false,
+      childrenAvailable: true,   // double-click → L2 (explore all schemas in this DB)
       metadata:          { color, engine: dbEngine, tableCount: totalTables, schemaCount: schemas.length },
       tablesCount:       totalTables,
     },
@@ -231,7 +231,7 @@ function pushGroupedDb(
     data: {
       label:             dbLabel,
       nodeType:          'DaliDatabase' as DaliNodeType,
-      childrenAvailable: false,
+      childrenAvailable: true,   // double-click → L2 (explore all schemas in this DB)
       metadata:          { color, engine: dbEngine, tableCount: totalTables, schemaCount: schemas.length },
       tablesCount:       totalTables,
     },

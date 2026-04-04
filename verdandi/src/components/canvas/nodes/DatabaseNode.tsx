@@ -32,8 +32,9 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
   const isExpanded = expandedDbs.has(id);
   const hasSchemas = schemaCount > 0;
 
-  // If no schema children, double-click drills directly to L2
-  const drillableNode = data.childrenAvailable && !hasSchemas;
+  // Double-click always drills to L2: DB scope → SHUTTLE explore returns all
+  // schemas in this DB. Schema chips (L1SchemaNode) handle schema-scoped L2.
+  const drillableNode = data.childrenAvailable;
 
   return (
     <div
