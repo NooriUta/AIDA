@@ -181,7 +181,8 @@ function pushSchemaChip(
 }
 
 /** Push a standalone DatabaseNode (no parentId, top-level) + its schema chips.
- *  Returns curX advanced past the node. */
+ *  Returns curX advanced past the node.
+ *  drillable=true only when dbId is a real ArcadeDB @rid (real mode). */
 function pushStandaloneDb(
   nodes:    LoomNode[],
   dbId:     string,
@@ -190,6 +191,7 @@ function pushStandaloneDb(
   schemas:  SchemaNode[],
   color:    string,
   curX:     number,
+  drillable = true,
 ): number {
   const totalTables = schemas.reduce((s, sch) => s + sch.tableCount, 0);
   nodes.push({
@@ -200,7 +202,7 @@ function pushStandaloneDb(
     data: {
       label:             dbLabel,
       nodeType:          'DaliDatabase' as DaliNodeType,
-      childrenAvailable: true,   // double-click → L2 (explore all schemas in this DB)
+      childrenAvailable: drillable,
       metadata:          { color, engine: dbEngine, tableCount: totalTables, schemaCount: schemas.length },
       tablesCount:       totalTables,
     },
@@ -209,7 +211,8 @@ function pushStandaloneDb(
   return curX + L1_DB_WIDTH + L1_APP_X_GAP;
 }
 
-/** Push a DatabaseNode as a child of an ApplicationNode group + its schema chips. */
+/** Push a DatabaseNode as a child of an ApplicationNode group + its schema chips.
+ *  drillable=true only when dbId is a real ArcadeDB @rid (real mode). */
 function pushGroupedDb(
   nodes:    LoomNode[],
   dbId:     string,
@@ -219,6 +222,7 @@ function pushGroupedDb(
   parentId: string,
   dbY:      number,
   color:    string,
+  drillable = true,
 ): void {
   const totalTables = schemas.reduce((s, sch) => s + sch.tableCount, 0);
   nodes.push({
@@ -231,7 +235,7 @@ function pushGroupedDb(
     data: {
       label:             dbLabel,
       nodeType:          'DaliDatabase' as DaliNodeType,
-      childrenAvailable: true,   // double-click → L2 (explore all schemas in this DB)
+      childrenAvailable: drillable,
       metadata:          { color, engine: dbEngine, tableCount: totalTables, schemaCount: schemas.length },
       tablesCount:       totalTables,
     },
@@ -323,9 +327,10 @@ function buildRealL1(schemas: SchemaNode[]): { nodes: LoomNode[]; edges: LoomEdg
   }
 
   // ── Stub bucket (schemas with neither databaseGeoid nor applicationGeoid)
+  // l1-stub-hound is a synthetic placeholder — not drillable via SHUTTLE
   if (stubBucket.length > 0) {
     const color = L1_APP_COLORS[colorIdx++ % L1_APP_COLORS.length];
-    curX = pushStandaloneDb(nodes, 'l1-stub-hound', 'HoundDB', '', stubBucket, color, curX);
+    curX = pushStandaloneDb(nodes, 'l1-stub-hound', 'HoundDB', '', stubBucket, color, curX, false);
   }
 
   return { nodes, edges: [] };
@@ -349,7 +354,8 @@ function buildSyntheticL1(schemas: SchemaNode[]): { nodes: LoomNode[]; edges: Lo
     const dbCount = dbBuckets.length;
 
     if (dbCount === 1) {
-      curX = pushStandaloneDb(nodes, `l1-db-${appIndex}-0`, 'HoundDB', '', dbBuckets[0], color, curX);
+      // Synthetic stub ID — not drillable (SHUTTLE can't resolve l1-db-N)
+      curX = pushStandaloneDb(nodes, `l1-db-${appIndex}-0`, 'HoundDB', '', dbBuckets[0], color, curX, false);
       continue;
     }
 
@@ -371,7 +377,8 @@ function buildSyntheticL1(schemas: SchemaNode[]): { nodes: LoomNode[]; edges: Lo
     dbBuckets.forEach((dbSchemas, dbIdx) => {
       const dbLabel = dbCount > 1 ? `HoundDB-${dbIdx + 1}` : 'HoundDB';
       const dbY     = L1_APP_HEADER + dbIdx * (L1_DB_BASE_H + L1_DB_GAP);
-      pushGroupedDb(nodes, `l1-db-${appIndex}-${dbIdx}`, dbLabel, '', dbSchemas, appId, dbY, color);
+      // Synthetic stub IDs — not drillable until SHUTTLE provides real databaseGeoid
+      pushGroupedDb(nodes, `l1-db-${appIndex}-${dbIdx}`, dbLabel, '', dbSchemas, appId, dbY, color, false);
     });
 
     curX += L1_APP_WIDTH + L1_APP_X_GAP;

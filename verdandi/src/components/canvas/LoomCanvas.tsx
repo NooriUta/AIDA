@@ -216,9 +216,13 @@ const LoomCanvasInner = memo(() => {
       pushL1Scope(node.id, node.data.label, node.data.nodeType);
       return;
     }
-    if (node.data.childrenAvailable && viewLevel !== 'L3') {
-      drillDown(node.id, node.data.label, node.data.nodeType);
-    }
+    if (!node.data.childrenAvailable || viewLevel === 'L3') return;
+    // DaliSchema: use name-based scope so SHUTTLE dispatches to exploreSchema()
+    // DaliDatabase in real mode: node.id is a real @rid → exploreByRid() works
+    const scope = node.data.nodeType === 'DaliSchema'
+      ? `schema-${node.data.label}`
+      : node.id;
+    drillDown(scope, node.data.label, node.data.nodeType);
   }, [viewLevel, pushL1Scope, drillDown]);
 
   // ── Zoom tracking for status bar ────────────────────────────────────────
