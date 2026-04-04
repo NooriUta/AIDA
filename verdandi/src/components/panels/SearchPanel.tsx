@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useCallback } from 'react';
+import { memo, useState, useRef, useCallback, useEffect } from 'react';
 import { Search, X, Table2, Code2, Columns3, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
@@ -155,10 +155,12 @@ export const SearchPanel = memo(() => {
   const { t } = useTranslation();
   const { drillDown, selectNode, hiddenNodeIds, restoreNode, showAllNodes } = useLoomStore();
 
-  const [query, setQuery]               = useState('');
-  const [debouncedQuery, setDebounced]  = useState('');
-  const [typeFilter, setTypeFilter]     = useState<string>('all');
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [query, setQuery]              = useState('');
+  const [debouncedQuery, setDebounced] = useState('');
+  const [typeFilters, setTypeFilters]  = useState<Set<string>>(new Set());
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tabsRef   = useRef<HTMLDivElement>(null);
 
   // Debounced input: fire search 300ms after last keystroke
   const handleInput = useCallback((value: string) => {
@@ -175,13 +177,42 @@ export const SearchPanel = memo(() => {
 
   const searchQ = useSearch(debouncedQuery.length >= 2 ? debouncedQuery : '');
 
-  // Filter results by type tab
+  // Track tab-bar overflow to show/hide ">>" scroll button
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const check = () => setCanScrollRight(el.scrollWidth > el.clientWidth + 2);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    el.addEventListener('scroll', check);
+    return () => { ro.disconnect(); el.removeEventListener('scroll', check); };
+  }, []);
+
+  // Toggle a type filter; 'all' clears the entire set
+  const toggleFilter = useCallback((key: string) => {
+    if (key === 'all') {
+      setTypeFilters(new Set());
+      return;
+    }
+    setTypeFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // Filter results — empty set means show everything
   const results = (searchQ.data ?? []).filter((r) => {
-    if (typeFilter === 'all') return true;
-    if (typeFilter === 'tables')   return r.type === 'DaliTable';
-    if (typeFilter === 'routines') return r.type === 'DaliRoutine' || r.type === 'DaliStatement' || r.type === 'DaliSession';
-    if (typeFilter === 'columns')  return r.type === 'DaliColumn' || r.type === 'DaliOutputColumn';
-    return true;
+    if (typeFilters.size === 0) return true;
+    if (typeFilters.has('tables')       && r.type === 'DaliTable') return true;
+    if (typeFilters.has('routines')     && (r.type === 'DaliRoutine' || r.type === 'DaliSession')) return true;
+    if (typeFilters.has('statements')   && r.type === 'DaliStatement') return true;
+    if (typeFilters.has('columns')      && (r.type === 'DaliColumn' || r.type === 'DaliOutputColumn')) return true;
+    if (typeFilters.has('databases')    && r.type === 'DaliDatabase') return true;
+    if (typeFilters.has('applications') && r.type === 'DaliApplication') return true;
+    return false;
   });
 
   // Handle result click
@@ -200,11 +231,20 @@ export const SearchPanel = memo(() => {
   }, [drillDown, selectNode]);
 
   const tabs: { key: string; label: string }[] = [
-    { key: 'all',      label: t('search.filters.all') },
-    { key: 'tables',   label: t('search.filters.tables') },
-    { key: 'routines', label: t('search.filters.routines') },
-    { key: 'columns',  label: t('search.filters.columns') },
+    { key: 'all',          label: t('search.filters.all') },
+    { key: 'tables',       label: t('search.filters.tables') },
+    { key: 'routines',     label: t('search.filters.routines') },
+    { key: 'statements',   label: t('search.filters.statements') },
+    { key: 'columns',      label: t('search.filters.columns') },
+    { key: 'databases',    label: t('search.filters.databases') },
+    { key: 'applications', label: t('search.filters.applications') },
   ];
+
+  const isAllActive = typeFilters.size === 0;
+
+  const scrollTabsRight = () => {
+    tabsRef.current?.scrollBy({ left: 80, behavior: 'smooth' });
+  };
 
   const hiddenIds = [...hiddenNodeIds];
   const showHiddenSection = hiddenIds.length > 0 && debouncedQuery.length < 2;
@@ -251,33 +291,68 @@ export const SearchPanel = memo(() => {
       </div>
 
       {/* ── Type filter tabs ──────────────────────────────────────────────────── */}
-      <div style={{
-        display:      'flex',
-        gap:          '2px',
-        padding:      '2px 4px',
-        flexShrink:   0,
-        overflowX:    'auto',
-      }}>
-        {tabs.map((tab) => (
+      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, position: 'relative' }}>
+        <div
+          ref={tabsRef}
+          style={{
+            display:    'flex',
+            gap:        '2px',
+            padding:    '2px 4px',
+            flex:       1,
+            overflowX:  'auto',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {tabs.map((tab) => {
+            const active = tab.key === 'all' ? isAllActive : typeFilters.has(tab.key);
+            return (
+              <button
+                key={tab.key}
+                onClick={() => toggleFilter(tab.key)}
+                style={{
+                  padding:      '2px 7px',
+                  borderRadius: '4px',
+                  border:       'none',
+                  cursor:       'pointer',
+                  fontSize:     '10px',
+                  fontWeight:   active ? 600 : 400,
+                  background:   active ? 'var(--acc)' : 'transparent',
+                  color:        active ? 'var(--bg1)' : 'var(--t3)',
+                  whiteSpace:   'nowrap',
+                  transition:   'background 0.1s, color 0.1s',
+                  flexShrink:   0,
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ">>" scroll arrow — appears when tabs overflow */}
+        {canScrollRight && (
           <button
-            key={tab.key}
-            onClick={() => setTypeFilter(tab.key)}
+            onClick={scrollTabsRight}
+            title="Ещё фильтры"
             style={{
-              padding:      '2px 7px',
-              borderRadius: '4px',
+              flexShrink:   0,
+              padding:      '2px 5px',
+              background:   'linear-gradient(to right, transparent, var(--bg2) 40%)',
               border:       'none',
               cursor:       'pointer',
               fontSize:     '10px',
-              fontWeight:   typeFilter === tab.key ? 600 : 400,
-              background:   typeFilter === tab.key ? 'var(--acc)' : 'transparent',
-              color:        typeFilter === tab.key ? 'var(--bg1)' : 'var(--t3)',
-              whiteSpace:   'nowrap',
-              transition:   'background 0.1s, color 0.1s',
+              color:        'var(--t3)',
+              position:     'absolute',
+              right:        0,
+              top:          0,
+              bottom:       0,
+              display:      'flex',
+              alignItems:   'center',
             }}
           >
-            {tab.label}
+            »
           </button>
-        ))}
+        )}
       </div>
 
       {/* ── Results / empty states ────────────────────────────────────────────── */}

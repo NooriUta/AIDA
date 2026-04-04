@@ -70,8 +70,10 @@
       "all": "Все",
       "tables": "Таблицы",
       "routines": "Процедуры",
+      "statements": "Трансформации",
       "columns": "Колонки",
-      "statements": "Стейтменты"
+      "databases": "СУБД",
+      "applications": "Приложения"
     },
     "sections": {
       "sources": "Источники",

@@ -70,8 +70,10 @@
       "all": "All",
       "tables": "Tables",
       "routines": "Routines",
+      "statements": "Statements",
       "columns": "Columns",
-      "statements": "Statements"
+      "databases": "Databases",
+      "applications": "Applications"
     },
     "sections": {
       "sources": "Sources",

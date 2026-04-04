@@ -25,7 +25,7 @@ export const Shell = memo(() => {
       <div style={{ display: 'flex', overflow: 'hidden', position: 'relative' }}>
 
         {/* Left panel — Search / Explorer */}
-        <ResizablePanel side="left" defaultWidth={240} minWidth={160} maxWidth={400} title="Explorer">
+        <ResizablePanel side="left" defaultWidth={240} minWidth={160} maxWidth={600} title="Explorer">
           <SearchPanel />
         </ResizablePanel>
 
