@@ -302,6 +302,7 @@ const LoomCanvasInner = memo(() => {
         elementsSelectable={true}
         panOnDrag={true}
         zoomOnScroll={true}
+        zoomOnDoubleClick={false}
       >
         {/* Dot-grid: 24px gap, Amber Forest --bd at opacity 0.3 */}
         <Background
