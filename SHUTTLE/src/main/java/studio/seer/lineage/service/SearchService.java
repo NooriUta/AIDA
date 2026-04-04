@@ -20,11 +20,9 @@ import java.util.Map;
  *   DaliColumn:   column_name,   table_geoid  (scope)
  *   DaliPackage:  package_name,  schema_geoid (scope, via routine inheritance)
  *   DaliRoutine:  routine_name,  schema_geoid (scope)
- *   DaliSchema:   schema_name,   db_name      (scope)
- *   DaliDatabase: database_name, db_name      (scope)
- *
- * DaliStatement (snippet + short_name) intentionally excluded — navigation
- * to statements goes through table/routine context, not direct search.
+ *   DaliSchema:    schema_name,   db_name      (scope)
+ *   DaliDatabase:  database_name, db_name      (scope)
+ *   DaliStatement: stmt_geoid (label/path),    snippet (searched via snippet_ft index)
  */
 @ApplicationScoped
 public class SearchService {
@@ -48,7 +46,10 @@ public class SearchService {
             SELECT @rid AS rid, @type AS type, schema_name   AS label, db_name        AS scope, $score AS score FROM DaliSchema   WHERE SEARCH_INDEX('DaliSchema[schema_name_ft]',     '%s') = true LIMIT %d
             UNION ALL
             SELECT @rid AS rid, @type AS type, database_name AS label, db_name        AS scope, $score AS score FROM DaliDatabase WHERE SEARCH_INDEX('DaliDatabase[database_name_ft]', '%s') = true LIMIT %d
+            UNION ALL
+            SELECT @rid AS rid, @type AS type, stmt_geoid    AS label, session_id     AS scope, $score AS score FROM DaliStatement WHERE SEARCH_INDEX('DaliStatement[snippet_ft]',       '%s') = true LIMIT %d
             """,
+            luceneQ, limit,
             luceneQ, limit,
             luceneQ, limit,
             luceneQ, limit,
