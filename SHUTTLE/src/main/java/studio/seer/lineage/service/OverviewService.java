@@ -25,13 +25,22 @@ public class OverviewService {
     ArcadeGateway arcade;
 
     public Uni<List<SchemaNode>> overview() {
+        // Traversal chain (confirmed against hound DB 2026-04-04):
+        //   DaliSchema  <-[CONTAINS_SCHEMA]-  DaliDatabase  <-[HAS_DATABASE]-  DaliApplication
+        //   DaliDatabase properties: db_name, db_geoid  (no db_engine)
+        //   DaliApplication properties: app_name, app_geoid
+        //   Schemas without CONTAINS_SCHEMA edge → databaseGeoid/applicationGeoid = null
         String sql = """
             SELECT
-                @rid                             AS rid,
+                @rid                                                       AS rid,
                 schema_name,
-                out('CONTAINS_TABLE').size()     AS tableCount,
-                out('CONTAINS_PACKAGE').size()   AS packageCount,
-                out('CONTAINS_ROUTINE').size()   AS routineCount
+                out('CONTAINS_TABLE').size()                               AS tableCount,
+                out('CONTAINS_PACKAGE').size()                             AS packageCount,
+                out('CONTAINS_ROUTINE').size()                             AS routineCount,
+                in('CONTAINS_SCHEMA')[0].@rid                              AS databaseGeoid,
+                in('CONTAINS_SCHEMA')[0].db_name                           AS databaseName,
+                in('CONTAINS_SCHEMA')[0].in('HAS_DATABASE')[0].@rid        AS applicationGeoid,
+                in('CONTAINS_SCHEMA')[0].in('HAS_DATABASE')[0].app_name    AS applicationName
             FROM DaliSchema
             ORDER BY schema_name
             """;
@@ -44,17 +53,30 @@ public class OverviewService {
 
     private static SchemaNode toSchemaNode(Map<String, Object> row) {
         return new SchemaNode(
-            str(row, "rid"),   // SQL alias: @rid AS rid
+            str(row, "rid"),
             str(row, "schema_name"),
             num(row, "tableCount"),
             num(row, "routineCount"),
-            num(row, "packageCount")
+            num(row, "packageCount"),
+            strOrNull(row, "databaseGeoid"),
+            strOrNull(row, "databaseName"),
+            null,                              // databaseEngine — property absent in DaliDatabase
+            strOrNull(row, "applicationGeoid"),
+            strOrNull(row, "applicationName")
         );
     }
 
     static String str(Map<String, Object> row, String key) {
         Object v = row.get(key);
         return v != null ? v.toString() : "";
+    }
+
+    /** Returns null for absent/empty values — used for optional hierarchy fields. */
+    static String strOrNull(Map<String, Object> row, String key) {
+        Object v = row.get(key);
+        if (v == null) return null;
+        String s = v.toString().strip();
+        return s.isEmpty() ? null : s;
     }
 
     static int num(Map<String, Object> row, String key) {

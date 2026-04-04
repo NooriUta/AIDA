@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { ApiGraphResponse } from '../types/api';
-import type { DaliNodeType, DaliEdgeType } from '../types/domain';
+import type { DaliNodeType, DaliEdgeType, ColumnInfo } from '../types/domain';
 import type { LoomNode, LoomEdge } from '../types/graph';
 import type { ExploreResult, SchemaNode } from '../services/lineage';
 import { L1_APP_HEADER, L1_APP_PAD_BOT, L1_DB_BASE_H, L1_DB_GAP, schemaChipY } from './layoutL1';
@@ -17,7 +17,7 @@ const NODE_TYPE_MAP: Record<DaliNodeType, string> = {
   DaliOutputColumn: 'columnNode',
   DaliAtom:         'atomNode',
   DaliRoutine:      'routineNode',
-  DaliStatement:    'routineNode',
+  DaliStatement:    'statementNode',
   DaliSession:      'routineNode',
   DaliJoin:         'routineNode',
   DaliParameter:    'columnNode',
@@ -95,38 +95,252 @@ export function transformGraph(response: ApiGraphResponse): {
 
 // ─── LOOM-020: GraphQL ExploreResult → LoomNode[] / LoomEdge[] ───────────────
 // Used by all L2/L3 views: explore, lineage, upstream, downstream.
+//
+// Schema explore mode (DaliSchema + CONTAINS_TABLE/CONTAINS_ROUTINE edges):
+//   — Schema becomes a React Flow group node (schemaGroupNode).
+//   — Tables and own routines are children (parentId = schemaId) with pre-computed
+//     grid positions relative to the group.
+//   — External routines (source of READS_FROM/WRITES_TO) are top-level nodes.
+//   — CONTAINS_TABLE/CONTAINS_ROUTINE edges suppressed (implicit via parentId).
+//   See layoutGraph.ts → applyELKLayout compound mode for positioning logic.
+
+// Grid layout constants for schema group children
+const L2_CHILD_W     = 240;
+const L2_CHILD_H_BASE= 80;   // table header height (no columns)
+const L2_COL_ROW_H   = 22;   // height of one column row in TableNode
+const L2_COL_EXTRA   = 24;   // TableNode bottom padding when columns are shown
+const L2_MAX_COLS    = 5;    // max column rows shown per table in L2
+const L2_GAP_X       = 16;
+const L2_GAP_Y       = 12;
+const L2_GROUP_HDR   = 44;   // schema group header height
+const L2_GROUP_PAD_S = 20;   // left / right padding
+const L2_GROUP_PAD_B = 20;   // bottom padding
+
+function isSchemaExploreResult(result: ExploreResult): boolean {
+  if (!result.nodes.some((n) => n.type === 'DaliSchema')) return false;
+  return result.edges.some(
+    (e) => e.type === 'CONTAINS_TABLE' || e.type === 'CONTAINS_ROUTINE',
+  );
+}
+
+/**
+ * DaliSession labels come from SHUTTLE as the raw file_path string
+ * (e.g. "C:\AIDA\...\package_RMS\DM_LOADER_RMS_FCT_RWA_INPUTS.pck").
+ * Extract just the filename (without extension) for display.
+ */
+function sessionLabel(filePath: string): string {
+  // Split on both \ and / to handle Windows and Unix paths
+  const parts = filePath.split(/[\\/]/);
+  const filename = parts[parts.length - 1] ?? filePath;
+  // Strip extension
+  const dotIdx = filename.lastIndexOf('.');
+  return dotIdx > 0 ? filename.slice(0, dotIdx) : filename;
+}
+
+function transformSchemaExplore(result: ExploreResult): {
+  nodes: LoomNode[];
+  edges: LoomEdge[];
+} {
+  const schemaNode = result.nodes.find((n) => n.type === 'DaliSchema')!;
+  const schemaId   = schemaNode.id;
+
+  // IDs of nodes directly owned by the schema (tables + own routines)
+  const childIds = new Set(
+    result.edges
+      .filter((e) => e.source === schemaId && (e.type === 'CONTAINS_TABLE' || e.type === 'CONTAINS_ROUTINE'))
+      .map((e) => e.target),
+  );
+
+  // ── Column data: group DaliColumn nodes by their parent table ─────────────
+  // HAS_COLUMN edges: source = tableId, target = columnId
+  const columnsByTable = new Map<string, ColumnInfo[]>();
+  for (const e of result.edges) {
+    if (e.type !== 'HAS_COLUMN') continue;
+    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliColumn');
+    if (!colNode) continue;
+    if (!columnsByTable.has(e.source)) columnsByTable.set(e.source, []);
+    const cols = columnsByTable.get(e.source)!;
+    if (cols.length < L2_MAX_COLS) {
+      cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
+    }
+  }
+
+  // ── Per-table cell heights (variable: depends on column count) ───────────
+  const childList = result.nodes.filter((nd) => childIds.has(nd.id));
+
+  function cellHeight(nodeId: string, nodeType: string): number {
+    if (nodeType !== 'DaliTable') return L2_CHILD_H_BASE;
+    const colCount = Math.min(columnsByTable.get(nodeId)?.length ?? 0, L2_MAX_COLS);
+    return L2_CHILD_H_BASE + colCount * L2_COL_ROW_H + (colCount > 0 ? L2_COL_EXTRA : 0);
+  }
+
+  // ── Grid layout ───────────────────────────────────────────────────────────
+  const childCount = childIds.size;
+  const gridCols   = childCount <= 3 ? 1 : childCount <= 8 ? 2 : childCount <= 15 ? 3 : 4;
+  const gridRows   = Math.ceil(childCount / gridCols);
+  const groupW     = L2_GROUP_PAD_S * 2 + gridCols * L2_CHILD_W + (gridCols - 1) * L2_GAP_X;
+
+  // Per-row max heights (so each row accommodates its tallest cell)
+  const rowMaxH: number[] = Array.from({ length: gridRows }, (_, row) => {
+    let maxH = L2_CHILD_H_BASE;
+    for (let gc = 0; gc < gridCols; gc++) {
+      const idx = row * gridCols + gc;
+      if (idx >= childList.length) break;
+      maxH = Math.max(maxH, cellHeight(childList[idx].id, childList[idx].type));
+    }
+    return maxH;
+  });
+
+  // Cumulative Y offsets for each row
+  const rowY: number[] = [];
+  let yAcc = L2_GROUP_HDR;
+  for (let row = 0; row < gridRows; row++) {
+    rowY.push(yAcc);
+    yAcc += rowMaxH[row] + L2_GAP_Y;
+  }
+  const groupH = yAcc - L2_GAP_Y + L2_GROUP_PAD_B;
+
+  const rfNodes: LoomNode[] = [];
+
+  // ── Schema group node ─────────────────────────────────────────────────────
+  rfNodes.push({
+    id:       schemaId,
+    type:     'schemaGroupNode',
+    position: { x: 0, y: 0 },
+    style:    { width: groupW, height: groupH },
+    data: {
+      label:             schemaNode.label,
+      nodeType:          'DaliSchema',
+      childrenAvailable: false,
+      metadata:          {},
+    },
+  });
+
+  // ── Children: tables + own routines + sessions inside the group ─────────
+  childList.forEach((nd, idx) => {
+    const gc       = idx % gridCols;
+    const gr       = Math.floor(idx / gridCols);
+    const nodeType = nd.type as DaliNodeType;
+    const ch       = cellHeight(nd.id, nd.type);
+    // DaliSession labels are raw file paths — extract filename for display
+    const label = nodeType === 'DaliSession' ? sessionLabel(nd.label) : nd.label;
+    rfNodes.push({
+      id:       nd.id,
+      type:     NODE_TYPE_MAP[nodeType] ?? 'tableNode',
+      position: {
+        x: L2_GROUP_PAD_S + gc * (L2_CHILD_W + L2_GAP_X),
+        y: rowY[gr],
+      },
+      parentId: schemaId,
+      extent:   'parent' as const,
+      style:    { width: L2_CHILD_W, height: ch },
+      data: {
+        label,
+        nodeType,
+        childrenAvailable: DRILLABLE_TYPES.has(nodeType),
+        metadata:          { scope: nd.scope },
+        schema:            nd.scope || undefined,
+        columns:           columnsByTable.get(nd.id),
+      },
+    });
+  });
+
+  // ── External nodes (tables accessed from outside the schema group) ─────────
+  // DaliColumn + DaliOutputColumn skipped — they're inline in table/statement cards.
+  for (const nd of result.nodes) {
+    if (nd.id === schemaId || childIds.has(nd.id) || nd.type === 'DaliColumn' || nd.type === 'DaliOutputColumn') continue;
+    const nodeType = nd.type as DaliNodeType;
+    // DaliSession labels are raw file paths — extract filename for display
+    const label = nodeType === 'DaliSession' ? sessionLabel(nd.label) : nd.label;
+    rfNodes.push({
+      id:       nd.id,
+      type:     NODE_TYPE_MAP[nodeType] ?? 'routineNode',
+      position: { x: 0, y: 0 },
+      data: {
+        label,
+        nodeType,
+        childrenAvailable: DRILLABLE_TYPES.has(nodeType),
+        metadata:          { scope: nd.scope },
+        schema:            nd.scope || undefined,
+      },
+    });
+  }
+
+  // ── Edges: suppress containment + inline-column edges ────────────────────
+  const rfEdges: LoomEdge[] = result.edges
+    .filter((e) => e.type !== 'CONTAINS_TABLE' && e.type !== 'CONTAINS_ROUTINE' && e.type !== 'HAS_COLUMN' && e.type !== 'HAS_OUTPUT_COL')
+    .map((e) => {
+      const edgeType = e.type as DaliEdgeType;
+      return {
+        id:       e.id,
+        source:   e.source,
+        target:   e.target,
+        animated: ANIMATED_EDGES.has(edgeType),
+        style:    getEdgeStyle(edgeType),
+        data:     { edgeType },
+      };
+    });
+
+  return { nodes: rfNodes, edges: rfEdges };
+}
 
 export function transformGqlExplore(result: ExploreResult): {
   nodes: LoomNode[];
   edges: LoomEdge[];
 } {
-  const nodes: LoomNode[] = result.nodes.map((n) => {
-    const nodeType = n.type as DaliNodeType;
-    return {
-      id: n.id,
-      type: NODE_TYPE_MAP[nodeType] ?? 'schemaNode',
-      position: { x: 0, y: 0 },
-      data: {
-        label: n.label,
-        nodeType,
-        childrenAvailable: DRILLABLE_TYPES.has(nodeType),
-        metadata: { scope: n.scope },
-        schema: n.scope || undefined,
-      },
-    };
-  });
+  // Schema explore: group layout with schema as container
+  if (isSchemaExploreResult(result)) {
+    return transformSchemaExplore(result);
+  }
 
-  const edges: LoomEdge[] = result.edges.map((e) => {
-    const edgeType = e.type as DaliEdgeType;
-    return {
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      animated: ANIMATED_EDGES.has(edgeType),
-      style: getEdgeStyle(edgeType),
-      data: { edgeType },
-    };
-  });
+  // Build output-column map: DaliStatement id → ColumnInfo[] (from HAS_OUTPUT_COL edges)
+  const outputColsByStmt = new Map<string, ColumnInfo[]>();
+  for (const e of result.edges) {
+    if (e.type !== 'HAS_OUTPUT_COL') continue;
+    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliOutputColumn');
+    if (!colNode) continue;
+    if (!outputColsByStmt.has(e.source)) outputColsByStmt.set(e.source, []);
+    const cols = outputColsByStmt.get(e.source)!;
+    if (cols.length < L2_MAX_COLS) {
+      cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
+    }
+  }
+
+  // Flat explore (package, rid-based, lineage)
+  // DaliOutputColumn nodes are skipped — they render inline inside StatementNode.
+  const nodes: LoomNode[] = result.nodes
+    .filter((n) => n.type !== 'DaliOutputColumn')
+    .map((n) => {
+      const nodeType = n.type as DaliNodeType;
+      return {
+        id: n.id,
+        type: NODE_TYPE_MAP[nodeType] ?? 'schemaNode',
+        position: { x: 0, y: 0 },
+        data: {
+          label:             n.label,
+          nodeType,
+          childrenAvailable: DRILLABLE_TYPES.has(nodeType),
+          metadata:          { scope: n.scope },
+          schema:            n.scope || undefined,
+          columns:           outputColsByStmt.get(n.id),
+        },
+      };
+    });
+
+  // HAS_OUTPUT_COL edges are implicit (inline in StatementNode); suppress them.
+  const edges: LoomEdge[] = result.edges
+    .filter((e) => e.type !== 'HAS_OUTPUT_COL')
+    .map((e) => {
+      const edgeType = e.type as DaliEdgeType;
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        animated: ANIMATED_EDGES.has(edgeType),
+        style: getEdgeStyle(edgeType),
+        data: { edgeType },
+      };
+    });
 
   return { nodes, edges };
 }

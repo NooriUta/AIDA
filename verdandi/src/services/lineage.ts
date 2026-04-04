@@ -55,9 +55,6 @@ export interface SearchResult {
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
-// SHUTTLE-TODO: databaseGeoid / databaseName / databaseEngine / applicationGeoid / applicationName
-// are not yet in the SchemaNode type — add them back once SHUTTLE implements the L1 hierarchy.
-// See: SHUTTLE_TASK_LOOM024_L1_HIERARCHY.md
 const OVERVIEW = /* GraphQL */ `
   query Overview {
     overview {
@@ -66,6 +63,11 @@ const OVERVIEW = /* GraphQL */ `
       tableCount
       routineCount
       packageCount
+      databaseGeoid
+      databaseName
+      databaseEngine
+      applicationGeoid
+      applicationName
     }
   }
 `;

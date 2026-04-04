@@ -8,13 +8,11 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData } from '../../../types/domain';
 
 export type ApplicationNodeType = Node<DaliNodeData>;
 
-export const ApplicationNode = memo(({ data, selected, id }: NodeProps<ApplicationNodeType>) => {
-  const { pushL1Scope, selectNode } = useLoomStore();
+export const ApplicationNode = memo(({ data, selected }: NodeProps<ApplicationNodeType>) => {
   const { t } = useTranslation();
 
   const color   = (data.metadata?.color as string | undefined) ?? 'var(--acc)';
@@ -31,11 +29,6 @@ export const ApplicationNode = memo(({ data, selected, id }: NodeProps<Applicati
         position: 'relative',
         cursor: 'default',
         transition: 'border-color 0.15s',
-      }}
-      onClick={(e) => { e.stopPropagation(); selectNode(id); }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        pushL1Scope(id, data.label, 'DaliApplication');
       }}
     >
       {/* ── Header ─────────────────────────────────────────────────────────── */}

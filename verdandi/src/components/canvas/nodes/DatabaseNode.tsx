@@ -18,7 +18,7 @@ import type { DaliNodeData } from '../../../types/domain';
 export type DatabaseNodeType = Node<DaliNodeData>;
 
 export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNodeType>) => {
-  const { drillDown, selectNode, expandedDbs, toggleDbExpansion } = useLoomStore();
+  const { expandedDbs, toggleDbExpansion } = useLoomStore();
   const { t } = useTranslation();
 
   const color      = (data.metadata?.color      as string  | undefined) ?? 'var(--t3)';
@@ -49,11 +49,6 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
         userSelect:   'none',
         transition:   'border-color 0.12s',
         boxSizing:    'border-box' as const,
-      }}
-      onClick={(e) => { e.stopPropagation(); selectNode(id); }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        if (drillableNode) drillDown(id, data.label, data.nodeType);
       }}
     >
       {/* ── Header ─────────────────────────────────────────────────────────── */}

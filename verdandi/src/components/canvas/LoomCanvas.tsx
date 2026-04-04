@@ -14,10 +14,12 @@ import {
 } from '@xyflow/react';
 
 import { SchemaNode }      from './nodes/SchemaNode';
+import { SchemaGroupNode } from './nodes/SchemaGroupNode';
 import { PackageNode }     from './nodes/PackageNode';
 import { TableNode }       from './nodes/TableNode';
 import { RoutineNode }     from './nodes/RoutineNode';
 import { ColumnNode }      from './nodes/ColumnNode';
+import { StatementNode }   from './nodes/StatementNode';
 import { ApplicationNode } from './nodes/ApplicationNode';
 import { DatabaseNode }    from './nodes/DatabaseNode';
 import { L1SchemaNode }    from './nodes/L1SchemaNode';
@@ -35,9 +37,11 @@ import type { LoomNode, LoomEdge }                   from '../../types/graph';
 // ─── nodeTypes must be defined OUTSIDE the render function ───────────────────
 const NODE_TYPES: NodeTypes = {
   schemaNode:       SchemaNode       as NodeTypes[string],
+  schemaGroupNode:  SchemaGroupNode  as NodeTypes[string], // L2 schema group container
   packageNode:      PackageNode      as NodeTypes[string],
   tableNode:        TableNode        as NodeTypes[string],
   routineNode:      RoutineNode      as NodeTypes[string],
+  statementNode:    StatementNode    as NodeTypes[string],
   columnNode:       ColumnNode       as NodeTypes[string],
   atomNode:         ColumnNode       as NodeTypes[string], // reuse ColumnNode for atoms
   applicationNode:  ApplicationNode  as NodeTypes[string],
@@ -233,14 +237,16 @@ const LoomCanvasInner = memo(() => {
   // ── Minimap node colour ─────────────────────────────────────────────────
   const minimapNodeColor = useCallback((node: LoomNode) => {
     switch (node.type) {
-      case 'applicationNode': return '#A8B860';
-      case 'databaseNode':    return '#a89a7a';
-      case 'tableNode':       return '#A8B860';
-      case 'routineNode':     return '#7DBF78';
-      case 'columnNode':      return '#88B8A8';
-      case 'atomNode':        return '#D4922A';
+      case 'applicationNode':  return '#A8B860';
+      case 'databaseNode':     return '#a89a7a';
+      case 'schemaGroupNode':  return '#88B8A8';
+      case 'tableNode':        return '#A8B860';
+      case 'routineNode':      return '#7DBF78';
+      case 'statementNode':    return '#7DBF78';
+      case 'columnNode':       return '#88B8A8';
+      case 'atomNode':         return '#D4922A';
       case 'packageNode':
-      default:                return '#665c48';
+      default:                 return '#665c48';
     }
   }, []);
 
