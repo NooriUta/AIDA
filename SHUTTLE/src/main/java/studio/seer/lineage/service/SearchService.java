@@ -10,13 +10,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Full-text search across tables, columns, and routines.
+ * Full-text search across tables, columns, packages, routines, schemas and databases.
  *
- * Confirmed field names (hound DB, 2026-04-04):
- *   DaliTable:   table_name,   schema_geoid
- *   DaliColumn:  column_name,  table_geoid
- *   DaliPackage: package_name
- *   DaliRoutine: routine_name, package_geoid, schema_geoid
+ * Indexes are created automatically by HOUND SchemaInitializer v10 (FULL_TEXT = Lucene).
+ * Index name convention: `DaliType[field_ft]`
+ *
+ * Schema v10 fields used:
+ *   DaliTable:    table_name,    schema_geoid (scope)
+ *   DaliColumn:   column_name,   table_geoid  (scope)
+ *   DaliPackage:  package_name,  schema_geoid (scope, via routine inheritance)
+ *   DaliRoutine:  routine_name,  schema_geoid (scope)
+ *   DaliSchema:   schema_name,   db_name      (scope)
+ *   DaliDatabase: database_name, db_name      (scope)
+ *
+ * DaliStatement (snippet + short_name) intentionally excluded — navigation
+ * to statements goes through table/routine context, not direct search.
  */
 @ApplicationScoped
 public class SearchService {
@@ -25,19 +33,28 @@ public class SearchService {
     ArcadeGateway arcade;
 
     public Uni<List<SearchResult>> search(String query, int limit) {
-        String like = "%" + esc(query) + "%";
+        // Lucene prefix query: "cust" → "cust*"  (case-insensitive by default)
+        String luceneQ = esc(query) + "*";
 
-        // ArcadeDB SQL UNION ALL across all node types
         String sql = String.format("""
-            SELECT @rid AS rid, @type AS type, table_name   AS label, schema_geoid AS scope, 1.0 AS score FROM DaliTable   WHERE table_name   LIKE '%s' LIMIT %d
+            SELECT @rid AS rid, @type AS type, table_name    AS label, schema_geoid   AS scope, $score AS score FROM DaliTable    WHERE SEARCH_INDEX('DaliTable[table_name_ft]',       '%s') = true LIMIT %d
             UNION ALL
-            SELECT @rid AS rid, @type AS type, column_name  AS label, table_geoid  AS scope, 0.9 AS score FROM DaliColumn  WHERE column_name  LIKE '%s' LIMIT %d
+            SELECT @rid AS rid, @type AS type, column_name   AS label, table_geoid    AS scope, $score AS score FROM DaliColumn   WHERE SEARCH_INDEX('DaliColumn[column_name_ft]',     '%s') = true LIMIT %d
             UNION ALL
-            SELECT @rid AS rid, @type AS type, package_name AS label, ''           AS scope, 0.8 AS score FROM DaliPackage WHERE package_name LIKE '%s' LIMIT %d
+            SELECT @rid AS rid, @type AS type, package_name  AS label, schema_geoid   AS scope, $score AS score FROM DaliPackage  WHERE SEARCH_INDEX('DaliPackage[package_name_ft]',   '%s') = true LIMIT %d
             UNION ALL
-            SELECT @rid AS rid, @type AS type, routine_name AS label, schema_geoid AS scope, 0.7 AS score FROM DaliRoutine WHERE routine_name LIKE '%s' LIMIT %d
+            SELECT @rid AS rid, @type AS type, routine_name  AS label, schema_geoid   AS scope, $score AS score FROM DaliRoutine  WHERE SEARCH_INDEX('DaliRoutine[routine_name_ft]',   '%s') = true LIMIT %d
+            UNION ALL
+            SELECT @rid AS rid, @type AS type, schema_name   AS label, db_name        AS scope, $score AS score FROM DaliSchema   WHERE SEARCH_INDEX('DaliSchema[schema_name_ft]',     '%s') = true LIMIT %d
+            UNION ALL
+            SELECT @rid AS rid, @type AS type, database_name AS label, db_name        AS scope, $score AS score FROM DaliDatabase WHERE SEARCH_INDEX('DaliDatabase[database_name_ft]', '%s') = true LIMIT %d
             """,
-            like, limit, like, limit, like, limit, like, limit
+            luceneQ, limit,
+            luceneQ, limit,
+            luceneQ, limit,
+            luceneQ, limit,
+            luceneQ, limit,
+            luceneQ, limit
         );
 
         return arcade.sql(sql).map(rows -> rows.stream()

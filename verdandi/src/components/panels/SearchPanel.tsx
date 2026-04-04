@@ -207,10 +207,9 @@ export const SearchPanel = memo(() => {
   const results = (searchQ.data ?? []).filter((r) => {
     if (typeFilters.size === 0) return true;
     if (typeFilters.has('tables')       && r.type === 'DaliTable') return true;
-    if (typeFilters.has('routines')     && (r.type === 'DaliRoutine' || r.type === 'DaliSession')) return true;
-    if (typeFilters.has('statements')   && r.type === 'DaliStatement') return true;
+    if (typeFilters.has('routines')     && (r.type === 'DaliRoutine' || r.type === 'DaliPackage' || r.type === 'DaliSession')) return true;
     if (typeFilters.has('columns')      && (r.type === 'DaliColumn' || r.type === 'DaliOutputColumn')) return true;
-    if (typeFilters.has('databases')    && r.type === 'DaliDatabase') return true;
+    if (typeFilters.has('databases')    && (r.type === 'DaliDatabase' || r.type === 'DaliSchema')) return true;
     if (typeFilters.has('applications') && r.type === 'DaliApplication') return true;
     return false;
   });
@@ -240,9 +239,8 @@ export const SearchPanel = memo(() => {
   const tabs: { key: string; label: string }[] = [
     { key: 'all',          label: t('search.filters.all') },
     { key: 'tables',       label: t('search.filters.tables') },
-    { key: 'routines',     label: t('search.filters.routines') },
-    { key: 'statements',   label: t('search.filters.statements') },
     { key: 'columns',      label: t('search.filters.columns') },
+    { key: 'routines',     label: t('search.filters.routines') },
     { key: 'databases',    label: t('search.filters.databases') },
     { key: 'applications', label: t('search.filters.applications') },
   ];
