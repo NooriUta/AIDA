@@ -26,12 +26,6 @@
     "zoom": "Zoom",
     "computingLayout": "computing layout…"
   },
-  "nodes": {
-    "tables": "tables",
-    "routines": "routines",
-    "columns": "columns",
-    "moreColumns": "+{{count}} more"
-  },
   "breadcrumb": { "overview": "Overview" },
   "theme": { "dark": "Dark", "light": "Light" },
   "palette": {
@@ -47,6 +41,265 @@
     "loading": "Loading…",
     "error": "Failed to load data",
     "empty": "No nodes found",
-    "unauthorized": "Session expired. Please sign in again."
+    "unauthorized": "Session expired. Please sign in again.",
+    "forbidden": "Access denied",
+    "graphLoading": "Building graph…",
+    "noData": "No lineage data for this object"
+  },
+
+  "toolbar": {
+    "startObject":     "Start object",
+    "changeObject":    "Change",
+    "field":           "Field",
+    "allColumns":      "all columns",
+    "depth":           "Depth",
+    "upstream":        "Upstream",
+    "downstream":      "Downstream",
+    "tableLevelView":  "Table-level view",
+    "columnLevelView": "Column-level view",
+    "clearFilter":     "Clear filter",
+    "depthSteps":      "{{n}} steps",
+    "depthInfinity":   "∞ steps"
+  },
+
+  "search": {
+    "placeholder": "tables, columns, routines…",
+    "noResults": "Nothing found",
+    "resultCount": "{{count}} results",
+    "filters": {
+      "all": "All",
+      "tables": "Tables",
+      "routines": "Routines",
+      "columns": "Columns",
+      "statements": "Statements"
+    },
+    "sections": {
+      "sources": "Sources",
+      "transformation": "Transformation",
+      "target": "Target table",
+      "statements": "Root statements",
+      "hidden": "Hidden nodes"
+    },
+    "hidden": {
+      "label": "hidden",
+      "restore": "Restore"
+    },
+    "openLevel": "Open on {{level}}",
+    "notOnCanvas": "Located on {{level}} · {{scope}}",
+    "goToLevel": "Go there →"
+  },
+
+  "nodes": {
+    "tables": "tables",
+    "routines": "routines",
+    "columns": "columns",
+    "moreColumns": "+{{count}} more",
+    "statements": "statements",
+    "services": "services",
+    "databases": "databases",
+    "nestedStmts": "{{count}} nested",
+    "outputColumns": "{{count}} output columns",
+    "filterColumns": "filter columns…",
+    "sourceTable": "source",
+    "targetTable": "target",
+    "depth": "depth {{n}}"
+  },
+
+  "nodeTypes": {
+    "DaliApplication": "Application",
+    "DaliService":     "Service",
+    "DaliDatabase":    "Database",
+    "DaliSchema":      "Schema",
+    "DaliPackage":     "Package",
+    "DaliTable":       "Table",
+    "DaliColumn":      "Column",
+    "DaliRoutine":     "Routine",
+    "DaliStatement":   "Statement",
+    "DaliAtom":        "Atom",
+    "DaliOutputColumn":"Output column",
+    "DaliJoin":        "Join",
+    "DaliParameter":   "Parameter",
+    "DaliVariable":    "Variable",
+    "DaliSession":     "Session"
+  },
+
+  "mapping": {
+    "title": "Column mapping",
+    "allMappings": "All {{count}} mappings",
+    "types": {
+      "passthrough": "passthrough",
+      "computed": "computed",
+      "subquery": "subquery",
+      "literal": "literal",
+      "caseWhen": "CASE WHEN",
+      "window": "window function",
+      "null": "null"
+    },
+    "nullable": "nullable",
+    "expression": "Expression",
+    "drilldownHint": "+{{count}} more — drill-down L3"
+  },
+
+  "tableNode": {
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "hide": "Hide from canvas",
+    "moreColumns": "+{{count}} more columns",
+    "allMapped": "all mapped 1:1",
+    "filterPlaceholder": "filter columns…",
+    "pkLabel": "PK",
+    "fkLabel": "FK"
+  },
+
+  "expand": {
+    "upstream": "Upstream",
+    "downstream": "Downstream",
+    "loading": "Loading…",
+    "partialCount": "+{{shown}}/{{total}}",
+    "allLoaded": "All loaded",
+    "collapseUpstream": "Collapse upstream",
+    "collapseDownstream": "Collapse downstream",
+    "noNeighbors": "No neighbors"
+  },
+
+  "statement": {
+    "types": {
+      "query": "Query",
+      "insert": "Insert",
+      "update": "Update",
+      "delete": "Delete",
+      "cursor": "Cursor",
+      "refcursor": "RefCursor",
+      "merge": "Merge",
+      "call": "Call"
+    },
+    "rootStatement": "root statement",
+    "nestedStatements": "{{count}} nested",
+    "reads": "Reads",
+    "writes": "Writes",
+    "expandStatements": "Expand statements",
+    "collapseGroup": "Collapse",
+    "groupLabel": "{{name}} — statement scope"
+  },
+
+  "subquery": {
+    "types": {
+      "from": "FROM",
+      "where": "WHERE",
+      "select": "SELECT",
+      "exists": "EXISTS",
+      "scalar": "scalar"
+    },
+    "badge": "{{type}} ⊂",
+    "levels": "{{count}} levels",
+    "tables": "{{count}} tables",
+    "drilldown": "Drill-down into subquery →",
+    "cte": "CTE"
+  },
+
+  "impact": {
+    "title": "Impact analysis",
+    "upstream": "Upstream ({{count}})",
+    "downstream": "Downstream ({{count}})",
+    "traceUpstream": "↑ Trace upstream",
+    "traceDownstream": "↓ Impact downstream",
+    "clearHighlight": "Clear highlight",
+    "depth": "Depth",
+    "depthWarning": "More than {{limit}} nodes — performance may degrade",
+    "affected": {
+      "tables": "{{count}} tables affected",
+      "columns": "{{count}} columns affected",
+      "routines": "{{count}} routines affected",
+      "statements": "{{count}} statements affected"
+    },
+    "depthLabel": "depth {{n}}"
+  },
+
+  "knot": {
+    "title": "KNOT Inspector",
+    "empty": "Click any node to inspect",
+    "sections": {
+      "node": "Node",
+      "field": "Field lineage",
+      "impact": "Impact",
+      "upstream": "Upstream sources",
+      "downstream": "Downstream consumers",
+      "stats": "Stats",
+      "mappings": "Mappings",
+      "subqueryChain": "Subquery chain",
+      "actions": "Actions"
+    },
+    "fields": {
+      "type": "Type",
+      "schema": "Schema",
+      "columns": "Columns",
+      "level": "Level",
+      "language": "Language",
+      "expression": "Expression",
+      "dataType": "Data type",
+      "mappingType": "Mapping",
+      "readsFrom": "Reads from",
+      "writtenBy": "Written by",
+      "usedIn": "Used in",
+      "subqueries": "Subqueries",
+      "currentView": "Current view"
+    }
+  },
+
+  "atom": {
+    "operations": {
+      "SUM": "SUM",
+      "AVG": "AVG",
+      "COUNT": "COUNT",
+      "MIN": "MIN",
+      "MAX": "MAX",
+      "RANK": "RANK",
+      "ROW_NUMBER": "ROW_NUMBER",
+      "DENSE_RANK": "DENSE_RANK",
+      "FILTER": "FILTER",
+      "JOIN": "JOIN",
+      "EXTRACT": "EXTRACT",
+      "CASE": "CASE WHEN",
+      "COALESCE": "COALESCE",
+      "CAST": "CAST",
+      "GROUP_BY": "GROUP BY",
+      "ORDER_BY": "ORDER BY",
+      "UNION_ALL": "UNION ALL",
+      "UNION": "UNION",
+      "PASSTHROUGH": "passthrough",
+      "CTE_REF": "CTE ref"
+    },
+    "partitionBy": "PARTITION BY {{cols}}",
+    "orderBy": "ORDER BY {{cols}}"
+  },
+
+  "roles": {
+    "viewer": "viewer",
+    "editor": "editor",
+    "admin": "admin",
+    "readOnly": "read-only",
+    "readWrite": "read-write"
+  },
+
+  "l1": {
+    "schemas":         "schemas",
+    "dbUnit":          "DB",
+    "appBadge":        "App",
+    "allSystems":      "all systems",
+    "clearScope":      "Clear scope",
+    "systemLevel":     "System-level",
+    "systemLevelHint": "Show applications only, hide databases"
+  },
+
+  "actions": {
+    "drilldownL3": "Drill-down L3",
+    "fullChain": "Full lineage chain",
+    "impactAnalysis": "Impact analysis",
+    "showDiff": "Show diff",
+    "fitView": "Fit to view",
+    "exportPng": "Export PNG",
+    "copyId": "Copy ID",
+    "openInSource": "Open in source",
+    "setAsStart": "Set as start object"
   }
 }

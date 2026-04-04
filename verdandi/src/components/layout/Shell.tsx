@@ -1,11 +1,15 @@
 import { memo } from 'react';
 import { Header } from './Header';
+import { FilterToolbar } from './FilterToolbar';
+import { FilterToolbarL1 } from './FilterToolbarL1';
 import { StatusBar } from './StatusBar';
 import { ResizablePanel } from './ResizablePanel';
 import { LoomCanvas } from '../canvas/LoomCanvas';
+import { useLoomStore } from '../../stores/loomStore';
 import { Search } from 'lucide-react';
 
 export const Shell = memo(() => {
+  const { viewLevel } = useLoomStore();
   return (
     <div style={{
       display: 'grid',
@@ -25,9 +29,12 @@ export const Shell = memo(() => {
           <SearchPanelPlaceholder />
         </ResizablePanel>
 
-        {/* Canvas area */}
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-          <LoomCanvas />
+        {/* Canvas area = FilterToolbar (level-dependent) + LoomCanvas */}
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {viewLevel === 'L1' ? <FilterToolbarL1 /> : <FilterToolbar />}
+          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            <LoomCanvas />
+          </div>
         </div>
 
         {/* Right panel — KNOT Inspector */}

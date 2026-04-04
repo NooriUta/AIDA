@@ -1,5 +1,7 @@
 // ─── Dali Node Types ────────────────────────────────────────────────────────
 export type DaliNodeType =
+  | 'DaliApplication'
+  | 'DaliService'
   | 'DaliDatabase'
   | 'DaliSchema'
   | 'DaliPackage'
@@ -16,6 +18,10 @@ export type DaliNodeType =
 
 // ─── Dali Edge Types ─────────────────────────────────────────────────────────
 export type DaliEdgeType =
+  | 'HAS_DATABASE'      // Application → DaliDatabase (система владеет СУБД)
+  | 'CONTAINS_SCHEMA'   // DaliDatabase → DaliSchema (СУБД содержит схему)
+  | 'HAS_SERVICE'       // зарезервировано — будущее использование
+  | 'USES_DATABASE'     // зарезервировано — будущее использование
   | 'HAS_ATOM'
   | 'ATOM_REF_COLUMN'
   | 'ATOM_REF_TABLE'
@@ -54,12 +60,21 @@ export interface ColumnInfo {
   isForeignKey?: boolean;
 }
 
+// ─── Schema chip entry (used inside DatabaseNode for inline schema list) ─────
+export interface SchemaEntry {
+  id: string;
+  name: string;
+  tableCount?: number;
+}
+
 // ─── Base node data (all nodes share this) ───────────────────────────────────
 export interface DaliNodeData {
   label: string;
   nodeType: DaliNodeType;
   childrenAvailable: boolean;
   metadata: Record<string, unknown>;
+  // L1 grouped: schema chips inside a DB node
+  schemas?: SchemaEntry[];
   // Schema
   tablesCount?: number;
   routinesCount?: number;
@@ -75,6 +90,18 @@ export interface DaliNodeData {
 }
 
 // ─── Typed sub-interfaces ────────────────────────────────────────────────────
+export interface ApplicationNodeData extends DaliNodeData {
+  nodeType: 'DaliApplication';
+  serviceCount: number;
+  databaseCount: number;
+}
+
+export interface ServiceNodeData extends DaliNodeData {
+  nodeType: 'DaliService';
+  technology?: string;
+  databaseCount: number;
+}
+
 export interface SchemaNodeData extends DaliNodeData {
   nodeType: 'DaliSchema';
   tablesCount: number;

@@ -4,10 +4,23 @@ import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 
 export const Breadcrumb = memo(() => {
-  const { navigationStack, viewLevel, currentScope, navigateBack, navigateToLevel } = useLoomStore();
+  const {
+    navigationStack,
+    viewLevel,
+    currentScope,
+    l1ScopeStack,
+    navigateBack,
+    navigateToLevel,
+    popL1ScopeToIndex,
+    clearL1Scope,
+  } = useLoomStore();
   const { t } = useTranslation();
 
-  if (navigationStack.length === 0 && viewLevel === 'L1') return null;
+  const hasL1Scope  = viewLevel === 'L1' && l1ScopeStack.length > 0;
+  const hasL2L3Path = navigationStack.length > 0 || (viewLevel !== 'L1' && currentScope);
+
+  // On pure L1 with no scope — hide breadcrumb entirely
+  if (!hasL1Scope && !hasL2L3Path && viewLevel === 'L1') return null;
 
   return (
     <div style={{
@@ -24,19 +37,39 @@ export const Breadcrumb = memo(() => {
       border: '1px solid var(--bd)',
       borderRadius: 'var(--seer-radius-md)',
       fontSize: '12px',
-      maxWidth: '580px',
+      maxWidth: '640px',
       flexWrap: 'wrap',
     }}>
-      {/* Root — always clickable to go back to L1 */}
+
+      {/* ── Root: Overview ────────────────────────────────────────────────── */}
       <BreadcrumbSegment
         label={t('breadcrumb.overview')}
         icon={<LayoutGrid size={12} />}
-        onClick={() => navigateToLevel('L1')}
-        isCurrent={viewLevel === 'L1'}
+        onClick={() => {
+          clearL1Scope();
+          navigateToLevel('L1');
+        }}
+        isCurrent={viewLevel === 'L1' && !hasL1Scope}
       />
 
+      {/* ── L1 scope stack (Application › Service) ────────────────────────── */}
+      {hasL1Scope && l1ScopeStack.map((item, idx) => {
+        const isLast = idx === l1ScopeStack.length - 1;
+        return (
+          <span key={`l1-${item.nodeId}`} style={{ display: 'contents' }}>
+            <ChevronRight size={11} color="var(--t3)" style={{ flexShrink: 0 }} />
+            <BreadcrumbSegment
+              label={item.label}
+              onClick={isLast ? undefined : () => popL1ScopeToIndex(idx + 1)}
+              isCurrent={isLast}
+            />
+          </span>
+        );
+      })}
+
+      {/* ── L2/L3 navigation stack ────────────────────────────────────────── */}
       {navigationStack.map((item, idx) => (
-        <span key={`${item.level}-${idx}`} style={{ display: 'contents' }}>
+        <span key={`nav-${item.level}-${idx}`} style={{ display: 'contents' }}>
           <ChevronRight size={11} color="var(--t3)" style={{ flexShrink: 0 }} />
           <BreadcrumbSegment
             label={item.label}
@@ -46,8 +79,8 @@ export const Breadcrumb = memo(() => {
         </span>
       ))}
 
-      {/* Current segment — not clickable */}
-      {(navigationStack.length > 0 || currentScope) && (
+      {/* ── Current L2/L3 scope (not clickable) ──────────────────────────── */}
+      {viewLevel !== 'L1' && (navigationStack.length > 0 || currentScope) && (
         <>
           <ChevronRight size={11} color="var(--t3)" style={{ flexShrink: 0 }} />
           <BreadcrumbSegment
@@ -66,7 +99,6 @@ Breadcrumb.displayName = 'Breadcrumb';
 
 function currentScopeLabel(viewLevel: string, scope: string | null): string {
   if (!scope) return viewLevel;
-  // Extract label from scope id (e.g. "schema-public" → "public", "tbl-orders" → "orders")
   const parts = scope.split('-');
   return parts.slice(1).join('-') || scope;
 }
@@ -88,13 +120,13 @@ function BreadcrumbSegment({ label, icon, onClick, isCurrent }: SegmentProps) {
         gap: '4px',
         padding: '1px 4px',
         borderRadius: '4px',
-        cursor: isCurrent ? 'default' : 'pointer',
+        cursor: isCurrent || !onClick ? 'default' : 'pointer',
         color: isCurrent ? 'var(--t1)' : 'var(--acc)',
         fontWeight: isCurrent ? 500 : 400,
         transition: 'background 0.1s',
       }}
       onMouseEnter={(e) => {
-        if (!isCurrent) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)';
+        if (!isCurrent && onClick) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)';
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLElement).style.background = 'transparent';

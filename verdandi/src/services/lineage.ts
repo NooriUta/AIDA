@@ -17,6 +17,13 @@ export interface SchemaNode {
   tableCount: number;
   routineCount: number;
   packageCount: number;
+  // L1 hierarchy refs — populated by SHUTTLE once DaliDatabase/DaliApplication are registered.
+  // Absent/null → LOOM falls back to synthetic grouping (HoundDB / System-N stubs).
+  databaseGeoid?:    string;  // @rid of parent DaliDatabase vertex
+  databaseName?:     string;  // database_name property
+  databaseEngine?:   string;  // database_engine (e.g. "PostgreSQL", "Oracle")
+  applicationGeoid?: string;  // @rid of parent DaliApplication vertex
+  applicationName?:  string;  // app_name property
 }
 
 export interface GraphNode {
@@ -48,6 +55,9 @@ export interface SearchResult {
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
+// SHUTTLE-TODO: databaseGeoid / databaseName / databaseEngine / applicationGeoid / applicationName
+// are not yet in the SchemaNode type — add them back once SHUTTLE implements the L1 hierarchy.
+// See: SHUTTLE_TASK_LOOM024_L1_HIERARCHY.md
 const OVERVIEW = /* GraphQL */ `
   query Overview {
     overview {

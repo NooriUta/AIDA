@@ -13,28 +13,36 @@ import {
   type OnMoveEnd,
 } from '@xyflow/react';
 
-import { SchemaNode }  from './nodes/SchemaNode';
-import { PackageNode } from './nodes/PackageNode';
-import { TableNode }   from './nodes/TableNode';
-import { RoutineNode } from './nodes/RoutineNode';
-import { ColumnNode }  from './nodes/ColumnNode';
-import { Breadcrumb }  from './Breadcrumb';
+import { SchemaNode }      from './nodes/SchemaNode';
+import { PackageNode }     from './nodes/PackageNode';
+import { TableNode }       from './nodes/TableNode';
+import { RoutineNode }     from './nodes/RoutineNode';
+import { ColumnNode }      from './nodes/ColumnNode';
+import { ApplicationNode } from './nodes/ApplicationNode';
+import { DatabaseNode }    from './nodes/DatabaseNode';
+import { L1SchemaNode }    from './nodes/L1SchemaNode';
+import { Breadcrumb }      from './Breadcrumb';
 
-import { useLoomStore }                          from '../../stores/loomStore';
+import { useLoomStore }                              from '../../stores/loomStore';
 import { transformGqlOverview, transformGqlExplore } from '../../utils/transformGraph';
-import { applyELKLayout }                        from '../../utils/layoutGraph';
-import { useOverview, useExplore, useLineage }   from '../../services/hooks';
-import { isUnauthorized }                        from '../../services/lineage';
-import type { LoomNode, LoomEdge }               from '../../types/graph';
+import { applyELKLayout }                            from '../../utils/layoutGraph';
+import { applyL1Layout }                             from '../../utils/layoutL1';
+import { useOverview, useExplore, useLineage }       from '../../services/hooks';
+import { isUnauthorized }                            from '../../services/lineage';
+import { SCOPE_FILTER_TYPES }                        from '../../utils/transformGraph';
+import type { LoomNode, LoomEdge }                   from '../../types/graph';
 
 // ─── nodeTypes must be defined OUTSIDE the render function ───────────────────
 const NODE_TYPES: NodeTypes = {
-  schemaNode:  SchemaNode  as NodeTypes[string],
-  packageNode: PackageNode as NodeTypes[string],
-  tableNode:   TableNode   as NodeTypes[string],
-  routineNode: RoutineNode as NodeTypes[string],
-  columnNode:  ColumnNode  as NodeTypes[string],
-  atomNode:    ColumnNode  as NodeTypes[string], // reuse ColumnNode for atoms
+  schemaNode:       SchemaNode       as NodeTypes[string],
+  packageNode:      PackageNode      as NodeTypes[string],
+  tableNode:        TableNode        as NodeTypes[string],
+  routineNode:      RoutineNode      as NodeTypes[string],
+  columnNode:       ColumnNode       as NodeTypes[string],
+  atomNode:         ColumnNode       as NodeTypes[string], // reuse ColumnNode for atoms
+  applicationNode:  ApplicationNode  as NodeTypes[string],
+  databaseNode:     DatabaseNode     as NodeTypes[string],
+  l1SchemaNode:     L1SchemaNode     as NodeTypes[string], // compact schema chip for L1
 };
 
 // ─── Inner canvas (needs ReactFlowProvider to already be mounted) ─────────────
@@ -42,11 +50,16 @@ const LoomCanvasInner = memo(() => {
   const {
     viewLevel,
     currentScope,
+    l1ScopeStack,
+    expandedDbs,
+    l1Filter,
     theme,
     setGraphStats,
     setZoom,
     selectNode,
     drillDown,
+    pushL1Scope,
+    setAvailableFields,
   } = useLoomStore();
   const { t } = useTranslation();
 
@@ -72,18 +85,85 @@ const LoomCanvasInner = memo(() => {
     return null;
   }, [viewLevel, overviewQ.data, exploreQ.data, lineageQ.data]);
 
-  // ── ELK layout whenever graph data changes ──────────────────────────────
+  // ── L1 scope filter: dim nodes outside selected app (3-level parentId-aware) ─
+  const scopedGraph = useMemo(() => {
+    if (!rawGraph) return null;
+    if (viewLevel !== 'L1' || l1ScopeStack.length === 0) return rawGraph;
+
+    const scopeId = l1ScopeStack[l1ScopeStack.length - 1].nodeId;
+
+    // L1 has 3 levels: App (group) → DB (child) → Schema (grandchild).
+    // Build a set of all DB IDs that are direct children of the selected App,
+    // so we can also include their L1SchemaNode grandchildren in scope.
+    const scopedDbIds = new Set(
+      rawGraph.nodes
+        .filter((n) => n.type === 'databaseNode' && n.parentId === scopeId)
+        .map((n) => n.id),
+    );
+
+    const nodes = rawGraph.nodes.map((node) => {
+      const inScope =
+        node.id === scopeId ||                                                    // the App itself
+        (node.parentId === scopeId) ||                                            // DB children
+        (node.parentId != null && scopedDbIds.has(node.parentId));               // Schema grandchildren
+
+      return inScope
+        ? node
+        : {
+            ...node,
+            style: {
+              ...node.style,
+              opacity:       0.15,
+              pointerEvents: 'none' as const,
+            },
+          };
+    });
+
+    return { nodes, edges: rawGraph.edges };
+  }, [rawGraph, viewLevel, l1ScopeStack]);
+
+  // ── L1 system-level view: hide DB and Schema nodes, show only App nodes ─────
+  const displayGraph = useMemo(() => {
+    if (!scopedGraph || viewLevel !== 'L1' || !l1Filter.systemLevel) return scopedGraph;
+    const nodes = scopedGraph.nodes.map((n) =>
+      (n.type === 'databaseNode' || n.type === 'l1SchemaNode')
+        ? { ...n, hidden: true }
+        : n,
+    );
+    return { nodes, edges: scopedGraph.edges };
+  }, [scopedGraph, viewLevel, l1Filter.systemLevel]);
+
+  // ── Layout: L1 = pre-computed + applyL1Layout; L2/L3 = ELK ─────────────────
   useEffect(() => {
-    if (!rawGraph) return;
+    if (!displayGraph) return;
     let cancelled = false;
+
+    // L1 grouped layout: positions set by transformGqlOverview, dynamically
+    // adjusted by applyL1Layout whenever expandedDbs changes.
+    if (viewLevel === 'L1') {
+      const laid = applyL1Layout(displayGraph.nodes, expandedDbs);
+      setNodes(laid);
+      setEdges(displayGraph.edges);
+      setGraphStats(laid.length, displayGraph.edges.length);
+      setAvailableFields([]);
+      return;
+    }
+
     setLayouting(true);
 
-    applyELKLayout(rawGraph.nodes, rawGraph.edges)
+    applyELKLayout(displayGraph.nodes, displayGraph.edges)
       .then((layoutedNodes) => {
         if (cancelled) return;
         setNodes(layoutedNodes);
-        setEdges(rawGraph.edges);
-        setGraphStats(layoutedNodes.length, rawGraph.edges.length);
+        setEdges(displayGraph.edges);
+        setGraphStats(layoutedNodes.length, displayGraph.edges.length);
+        // Populate field dropdown: collect unique column/output-column labels
+        const fields = layoutedNodes
+          .filter((n) => n.data.nodeType === 'DaliColumn' || n.data.nodeType === 'DaliOutputColumn')
+          .map((n) => n.data.label)
+          .filter((label, idx, arr) => arr.indexOf(label) === idx)
+          .sort();
+        setAvailableFields(fields);
       })
       .catch((err) => {
         console.error('[LOOM] ELK layout failed', err);
@@ -94,14 +174,14 @@ const LoomCanvasInner = memo(() => {
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawGraph]);
+  }, [displayGraph, viewLevel, expandedDbs]);
 
   // ── Status message key for error / empty states ─────────────────────────
   const statusKey: string | null = (() => {
     if (activeQuery.isError) {
       return isUnauthorized(activeQuery.error) ? 'status.unauthorized' : 'status.error';
     }
-    if (!activeQuery.isLoading && !layouting && rawGraph?.nodes.length === 0) {
+    if (!activeQuery.isLoading && !layouting && displayGraph?.nodes.length === 0) {
       return 'status.empty';
     }
     return null;
@@ -114,12 +194,19 @@ const LoomCanvasInner = memo(() => {
     selectNode(node.id);
   }, [selectNode]);
 
-  // Double-click drills down into nodes that have children (Schema → L2, Table → L3)
+  // Double-click:
+  //   Application / Service on L1 → scope filter (stays on L1)
+  //   Database / Schema / Package  → drillDown (L1 → L2)
+  //   Table                        → drillDown (L2 → L3)
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
-    if (node.data.childrenAvailable && viewLevel !== 'L3') {
-      drillDown(node.id, node.data.label);
+    if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {
+      pushL1Scope(node.id, node.data.label, node.data.nodeType);
+      return;
     }
-  }, [drillDown, viewLevel]);
+    if (node.data.childrenAvailable && viewLevel !== 'L3') {
+      drillDown(node.id, node.data.label, node.data.nodeType);
+    }
+  }, [viewLevel, pushL1Scope, drillDown]);
 
   // ── Zoom tracking for status bar ────────────────────────────────────────
   const onMoveEnd: OnMoveEnd = useCallback((_: unknown, viewport) => {
@@ -129,12 +216,14 @@ const LoomCanvasInner = memo(() => {
   // ── Minimap node colour ─────────────────────────────────────────────────
   const minimapNodeColor = useCallback((node: LoomNode) => {
     switch (node.type) {
-      case 'tableNode':   return '#A8B860';
-      case 'routineNode': return '#7DBF78';
-      case 'columnNode':  return '#88B8A8';
-      case 'atomNode':    return '#D4922A';
+      case 'applicationNode': return '#A8B860';
+      case 'databaseNode':    return '#a89a7a';
+      case 'tableNode':       return '#A8B860';
+      case 'routineNode':     return '#7DBF78';
+      case 'columnNode':      return '#88B8A8';
+      case 'atomNode':        return '#D4922A';
       case 'packageNode':
-      default:            return '#665c48';
+      default:                return '#665c48';
     }
   }, []);
 
@@ -194,6 +283,12 @@ const LoomCanvasInner = memo(() => {
         minZoom={0.1}
         maxZoom={3}
         proOptions={{ hideAttribution: true }}
+        /* ── LOOM-023: read-only canvas ── */
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        panOnDrag={true}
+        zoomOnScroll={true}
       >
         {/* Dot-grid: 24px gap, Amber Forest --bd at opacity 0.3 */}
         <Background

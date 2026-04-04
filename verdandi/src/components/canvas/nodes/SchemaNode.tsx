@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { FolderTree, Database } from 'lucide-react';
+import { FolderTree } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData } from '../../../types/domain';
@@ -10,7 +10,6 @@ export type SchemaNodeType = Node<DaliNodeData>;
 export const SchemaNode = memo(({ data, selected, id }: NodeProps<SchemaNodeType>) => {
   const { drillDown, selectNode } = useLoomStore();
   const { t } = useTranslation();
-  const isDatabase = data.nodeType === 'DaliDatabase';
 
   return (
     <div
@@ -24,7 +23,7 @@ export const SchemaNode = memo(({ data, selected, id }: NodeProps<SchemaNodeType
       }}
       onClick={() => selectNode(id)}
       onDoubleClick={() => {
-        if (data.childrenAvailable) drillDown(id, data.label);
+        if (data.childrenAvailable) drillDown(id, data.label, data.nodeType);
       }}
     >
       <Handle type="target" position={Position.Left}  style={{ background: 'var(--bd)' }} />
@@ -32,10 +31,7 @@ export const SchemaNode = memo(({ data, selected, id }: NodeProps<SchemaNodeType
       <div style={{ padding: 'var(--seer-space-3) var(--seer-space-3)' }}>
         {/* Icon + label row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-2)', marginBottom: 'var(--seer-space-1)' }}>
-          {isDatabase
-            ? <Database size={14} color="var(--t3)" strokeWidth={1.5} />
-            : <FolderTree size={14} color="var(--t3)" strokeWidth={1.5} />
-          }
+          <FolderTree size={14} color="var(--t3)" strokeWidth={1.5} />
           <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--t1)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {data.label}
           </span>
@@ -48,11 +44,6 @@ export const SchemaNode = memo(({ data, selected, id }: NodeProps<SchemaNodeType
           )}
           {data.routinesCount !== undefined && (
             <span>{data.routinesCount} {t('nodes.routines')}</span>
-          )}
-          {isDatabase && (
-            <span style={{ color: 'var(--bd)', fontSize: '11px', letterSpacing: '0.07em' }}>
-              {String(data.metadata?.engine ?? 'DB')}
-            </span>
           )}
         </div>
 

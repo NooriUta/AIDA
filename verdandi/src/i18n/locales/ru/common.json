@@ -26,12 +26,6 @@
     "zoom": "Масштаб",
     "computingLayout": "вычисляется граф…"
   },
-  "nodes": {
-    "tables": "таблиц",
-    "routines": "процедур",
-    "columns": "колонок",
-    "moreColumns": "+{{count}} ещё"
-  },
   "breadcrumb": { "overview": "Обзор" },
   "theme": { "dark": "Тёмная", "light": "Светлая" },
   "palette": {
@@ -47,6 +41,265 @@
     "loading": "Загрузка…",
     "error": "Не удалось загрузить данные",
     "empty": "Узлы не найдены",
-    "unauthorized": "Сессия истекла. Войдите снова."
+    "unauthorized": "Сессия истекла. Войдите снова.",
+    "forbidden": "Доступ запрещён",
+    "graphLoading": "Строится граф…",
+    "noData": "Нет данных линейки для этого объекта"
+  },
+
+  "toolbar": {
+    "startObject":     "Начальный объект",
+    "changeObject":    "Изменить",
+    "field":           "Поле",
+    "allColumns":      "все колонки",
+    "depth":           "Глубина",
+    "upstream":        "Источники",
+    "downstream":      "Приёмники",
+    "tableLevelView":  "На уровне таблиц",
+    "columnLevelView": "На уровне колонок",
+    "clearFilter":     "Сбросить",
+    "depthSteps":      "{{n}} шагов",
+    "depthInfinity":   "∞ шагов"
+  },
+
+  "search": {
+    "placeholder": "таблицы, колонки, процедуры…",
+    "noResults": "Ничего не найдено",
+    "resultCount": "{{count}} результатов",
+    "filters": {
+      "all": "Все",
+      "tables": "Таблицы",
+      "routines": "Процедуры",
+      "columns": "Колонки",
+      "statements": "Стейтменты"
+    },
+    "sections": {
+      "sources": "Источники",
+      "transformation": "Трансформация",
+      "target": "Целевая таблица",
+      "statements": "Корневые стейтменты",
+      "hidden": "Скрытые ноды"
+    },
+    "hidden": {
+      "label": "скрыт",
+      "restore": "Восстановить"
+    },
+    "openLevel": "Открыть на {{level}}",
+    "notOnCanvas": "Находится на {{level}} · {{scope}}",
+    "goToLevel": "Перейти →"
+  },
+
+  "nodes": {
+    "tables": "таблиц",
+    "routines": "процедур",
+    "columns": "колонок",
+    "moreColumns": "+{{count}} ещё",
+    "statements": "стейтментов",
+    "services": "сервисов",
+    "databases": "баз данных",
+    "nestedStmts": "{{count}} вложенных",
+    "outputColumns": "{{count}} выходных колонок",
+    "filterColumns": "фильтр колонок…",
+    "sourceTable": "источник",
+    "targetTable": "цель",
+    "depth": "глубина {{n}}"
+  },
+
+  "nodeTypes": {
+    "DaliApplication": "Приложение",
+    "DaliService":     "Сервис",
+    "DaliDatabase":    "База данных",
+    "DaliSchema":      "Схема",
+    "DaliPackage":     "Пакет",
+    "DaliTable":       "Таблица",
+    "DaliColumn":      "Колонка",
+    "DaliRoutine":     "Процедура",
+    "DaliStatement":   "Стейтмент",
+    "DaliAtom":        "Атом",
+    "DaliOutputColumn":"Выходная колонка",
+    "DaliJoin":        "JOIN",
+    "DaliParameter":   "Параметр",
+    "DaliVariable":    "Переменная",
+    "DaliSession":     "Сессия"
+  },
+
+  "mapping": {
+    "title": "Маппинг колонок",
+    "allMappings": "Все {{count}} маппингов",
+    "types": {
+      "passthrough": "напрямую",
+      "computed": "вычисляемое",
+      "subquery": "подзапрос",
+      "literal": "литерал",
+      "caseWhen": "CASE WHEN",
+      "window": "оконная функция",
+      "null": "null"
+    },
+    "nullable": "nullable",
+    "expression": "Выражение",
+    "drilldownHint": "+{{count}} ещё — drill-down L3"
+  },
+
+  "tableNode": {
+    "collapse": "Свернуть",
+    "expand": "Развернуть",
+    "hide": "Убрать с canvas",
+    "moreColumns": "+{{count}} колонок",
+    "allMapped": "все mapped 1:1",
+    "filterPlaceholder": "фильтр колонок…",
+    "pkLabel": "PK",
+    "fkLabel": "FK"
+  },
+
+  "expand": {
+    "upstream": "Источники",
+    "downstream": "Приёмники",
+    "loading": "Загрузка…",
+    "partialCount": "+{{shown}}/{{total}}",
+    "allLoaded": "Все загружены",
+    "collapseUpstream": "Свернуть источники",
+    "collapseDownstream": "Свернуть приёмники",
+    "noNeighbors": "Нет соседей"
+  },
+
+  "statement": {
+    "types": {
+      "query": "Запрос",
+      "insert": "Insert",
+      "update": "Update",
+      "delete": "Delete",
+      "cursor": "Курсор",
+      "refcursor": "RefCursor",
+      "merge": "Merge",
+      "call": "Вызов"
+    },
+    "rootStatement": "корневой стейтмент",
+    "nestedStatements": "{{count}} вложенных",
+    "reads": "Читает",
+    "writes": "Пишет",
+    "expandStatements": "Развернуть стейтменты",
+    "collapseGroup": "Свернуть",
+    "groupLabel": "{{name}} — scope стейтментов"
+  },
+
+  "subquery": {
+    "types": {
+      "from": "FROM",
+      "where": "WHERE",
+      "select": "SELECT",
+      "exists": "EXISTS",
+      "scalar": "scalar"
+    },
+    "badge": "{{type}} ⊂",
+    "levels": "{{count}} уровней",
+    "tables": "{{count}} таблиц",
+    "drilldown": "Drill-down в подзапрос →",
+    "cte": "CTE"
+  },
+
+  "impact": {
+    "title": "Анализ влияния",
+    "upstream": "Источники ({{count}})",
+    "downstream": "Приёмники ({{count}})",
+    "traceUpstream": "↑ Трассировать источники",
+    "traceDownstream": "↓ Влияние на приёмники",
+    "clearHighlight": "Сбросить подсветку",
+    "depth": "Глубина",
+    "depthWarning": "Более {{limit}} нод — возможны тормоза",
+    "affected": {
+      "tables": "{{count}} таблиц затронуто",
+      "columns": "{{count}} колонок затронуто",
+      "routines": "{{count}} процедур затронуто",
+      "statements": "{{count}} стейтментов затронуто"
+    },
+    "depthLabel": "глубина {{n}}"
+  },
+
+  "knot": {
+    "title": "KNOT Inspector",
+    "empty": "Кликни на ноду для инспекции",
+    "sections": {
+      "node": "Нода",
+      "field": "Линейка поля",
+      "impact": "Влияние",
+      "upstream": "Источники",
+      "downstream": "Приёмники",
+      "stats": "Статистика",
+      "mappings": "Маппинги",
+      "subqueryChain": "Цепочка подзапросов",
+      "actions": "Действия"
+    },
+    "fields": {
+      "type": "Тип",
+      "schema": "Схема",
+      "columns": "Колонки",
+      "level": "Уровень",
+      "language": "Язык",
+      "expression": "Выражение",
+      "dataType": "Тип данных",
+      "mappingType": "Маппинг",
+      "readsFrom": "Читает из",
+      "writtenBy": "Записывает",
+      "usedIn": "Используется в",
+      "subqueries": "Подзапросы",
+      "currentView": "Текущий вид"
+    }
+  },
+
+  "atom": {
+    "operations": {
+      "SUM": "SUM",
+      "AVG": "AVG",
+      "COUNT": "COUNT",
+      "MIN": "MIN",
+      "MAX": "MAX",
+      "RANK": "RANK",
+      "ROW_NUMBER": "ROW_NUMBER",
+      "DENSE_RANK": "DENSE_RANK",
+      "FILTER": "FILTER",
+      "JOIN": "JOIN",
+      "EXTRACT": "EXTRACT",
+      "CASE": "CASE WHEN",
+      "COALESCE": "COALESCE",
+      "CAST": "CAST",
+      "GROUP_BY": "GROUP BY",
+      "ORDER_BY": "ORDER BY",
+      "UNION_ALL": "UNION ALL",
+      "UNION": "UNION",
+      "PASSTHROUGH": "напрямую",
+      "CTE_REF": "CTE ссылка"
+    },
+    "partitionBy": "PARTITION BY {{cols}}",
+    "orderBy": "ORDER BY {{cols}}"
+  },
+
+  "roles": {
+    "viewer": "наблюдатель",
+    "editor": "редактор",
+    "admin": "администратор",
+    "readOnly": "только чтение",
+    "readWrite": "чтение и запись"
+  },
+
+  "l1": {
+    "schemas":         "схемы",
+    "dbUnit":          "СУБД",
+    "appBadge":        "App",
+    "allSystems":      "все системы",
+    "clearScope":      "Сбросить скоуп",
+    "systemLevel":     "Системный вид",
+    "systemLevelHint": "Показать только приложения, скрыть СУБД"
+  },
+
+  "actions": {
+    "drilldownL3": "Drill-down L3",
+    "fullChain": "Полная цепочка",
+    "impactAnalysis": "Анализ влияния",
+    "showDiff": "Показать diff",
+    "fitView": "Вписать в экран",
+    "exportPng": "Экспорт PNG",
+    "copyId": "Скопировать ID",
+    "openInSource": "Открыть в источнике",
+    "setAsStart": "Установить как стартовый"
   }
 }

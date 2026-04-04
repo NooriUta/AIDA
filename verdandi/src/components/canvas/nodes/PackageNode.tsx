@@ -23,7 +23,7 @@ export const PackageNode = memo(({ data, selected, id }: NodeProps<PackageNodeTy
       }}
       onClick={() => selectNode(id)}
       onDoubleClick={() => {
-        if (data.childrenAvailable) drillDown(id, data.label);
+        if (data.childrenAvailable) drillDown(id, data.label, data.nodeType);
       }}
     >
       <Handle type="target" position={Position.Left}  style={{ background: 'var(--bd)' }} />

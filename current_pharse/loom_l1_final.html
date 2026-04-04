@@ -1,0 +1,486 @@
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --b0:#141108;--b1:#1c1810;--b2:#252019;--b3:#302a20;
+  --bd:#42382a;--bdh:#584c38;
+  --t1:#ede5d0;--t2:#9a8c6e;--t3:#665c48;
+  --acc:#A8B860;--suc:#7DBF78;--wrn:#D4922A;--inf:#88B8A8;
+  --ec:#c87f3c;
+  --sans:'DM Sans',system-ui,sans-serif;--mono:'Fira Code',monospace;
+}
+.shell{font-family:var(--sans);background:var(--b1);border:0.5px solid var(--bd);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;}
+
+/* ── HEADER ── */
+.hdr{background:var(--b0);border-bottom:0.5px solid var(--bd);height:40px;display:flex;align-items:center;gap:0;padding:0;flex-shrink:0;}
+.hdr-logo{display:flex;align-items:center;gap:6px;padding:0 12px;border-right:0.5px solid var(--bd);height:100%;}
+.ldot{width:8px;height:8px;border-radius:50%;background:var(--acc);}
+.ltxt{font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--t1);}
+.hdr-tabs{display:flex;height:100%;}
+.htab{display:flex;align-items:center;gap:5px;padding:0 12px;font-size:11px;color:var(--t3);border-right:0.5px solid var(--bd);cursor:pointer;white-space:nowrap;}
+.htab.on{color:var(--acc);background:rgba(168,184,96,.07);border-bottom:2px solid var(--acc);}
+.htab.dis{opacity:.28;cursor:default;}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:5px;padding:0 12px;}
+.hbtn{width:26px;height:26px;border-radius:4px;border:0.5px solid var(--bd);background:transparent;color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.avatar{width:26px;height:26px;border-radius:50%;background:rgba(168,184,96,.18);border:0.5px solid var(--acc);font-size:10px;font-weight:600;color:var(--acc);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+
+/* ── FILTER TOOLBAR ── */
+.ftb{background:var(--b0);border-bottom:0.5px solid var(--bd);height:32px;display:flex;align-items:center;gap:5px;padding:0 10px;flex-shrink:0;}
+.start-pill{display:flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;border:0.5px solid var(--acc);background:rgba(168,184,96,.07);font-size:10px;color:var(--acc);cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.start-pill:hover{background:rgba(168,184,96,.13);}
+.start-change{font-size:9px;color:var(--t3);margin-left:2px;}
+.tb-sep{width:0.5px;height:16px;background:var(--bd);flex-shrink:0;margin:0 2px;}
+.tb-lbl{font-size:10px;color:var(--t3);white-space:nowrap;}
+.dep-btns{display:flex;gap:2px;}
+.dbn{padding:2px 6px;border-radius:3px;border:0.5px solid var(--bd);font-size:9px;color:var(--t3);cursor:pointer;background:transparent;font-family:var(--sans);}
+.dbn.on{border-color:var(--acc);color:var(--acc);background:rgba(168,184,96,.08);}
+.dbn:hover:not(.on){border-color:var(--bdh);color:var(--t2);}
+.dir-btn{padding:2px 7px;border-radius:3px;border:0.5px solid var(--bd);font-size:10px;cursor:pointer;background:transparent;font-family:var(--sans);color:var(--t3);display:flex;align-items:center;gap:3px;}
+.dir-btn.up{border-color:var(--inf);color:var(--inf);background:rgba(136,184,168,.08);}
+.dir-btn.dn{border-color:var(--wrn);color:var(--wrn);background:rgba(212,146,42,.08);}
+.sl-btn{padding:2px 8px;border-radius:3px;border:0.5px solid var(--bd);font-size:9px;color:var(--t3);cursor:pointer;background:transparent;font-family:var(--sans);white-space:nowrap;display:flex;align-items:center;gap:4px;}
+.sl-btn.on{border-color:var(--wrn);color:var(--wrn);background:rgba(212,146,42,.07);}
+.tb-right{margin-left:auto;flex-shrink:0;}
+.lbg{font-size:9px;padding:2px 7px;border:0.5px solid var(--bd);border-radius:3px;color:var(--t3);font-family:var(--mono);white-space:nowrap;}
+
+/* ── CANVAS ── */
+.cwrap{overflow-x:auto;overflow-y:auto;flex:1;min-height:220px;}
+.canvas{position:relative;width:920px;min-height:220px;}
+.dot-bg{position:absolute;inset:0;background-image:radial-gradient(circle,var(--bd) 1px,transparent 1px);background-size:20px 20px;opacity:.35;pointer-events:none;}
+.esv{position:absolute;left:0;top:0;width:920px;height:900px;pointer-events:none;overflow:visible;}
+
+/* ── LEVEL 1: APPLICATION NODE ── */
+.app-nd{position:absolute;border-radius:8px;border:2px dashed;transition:opacity .18s,height .18s;cursor:pointer;}
+.app-nd.dim{opacity:.14;pointer-events:none;}
+.app-hdr{padding:7px 10px 5px;border-bottom:1px dashed rgba(255,255,255,.06);display:flex;align-items:center;gap:7px;}
+.app-ico{width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);flex-shrink:0;}
+.app-name{font-size:12px;font-weight:600;color:var(--t1);flex:1;}
+.atag{font-size:8px;padding:1px 5px;border-radius:2px;font-family:var(--mono);border:0.5px solid;opacity:.7;}
+.app-meta{font-size:9px;color:var(--t3);padding:3px 10px 0;margin-bottom:5px;}
+
+/* ── LEVEL 2: DATABASE NODE ── */
+.db-grp{border-radius:5px;border:1.5px dashed;margin:0 8px 6px;position:relative;background:rgba(12,10,5,.5);transition:opacity .15s;}
+.db-grp:last-child{margin-bottom:8px;}
+.db-hdr{padding:5px 8px;display:flex;align-items:center;gap:5px;border-bottom:1px dashed rgba(255,255,255,.05);}
+.db-st{width:3px;border-radius:1px;align-self:stretch;flex-shrink:0;}
+.db-nm{font-size:11px;font-weight:600;color:var(--t1);flex:1;font-family:var(--mono);}
+.db-cn{font-size:9px;color:var(--t3);font-family:var(--mono);}
+.sh{font-size:8px;padding:1px 4px;border-radius:2px;background:rgba(168,184,96,.08);border:0.5px solid rgba(168,184,96,.3);color:var(--acc);}
+.db-ft{padding:3px 8px 4px;display:flex;align-items:center;justify-content:space-between;}
+.eng{font-size:9px;color:var(--t3);font-family:var(--mono);}
+.tog{font-size:9px;color:var(--t2);padding:1px 5px;border-radius:3px;border:0.5px solid var(--bd);background:transparent;cursor:pointer;font-family:var(--sans);}
+.tog:hover{border-color:var(--bdh);color:var(--t1);}
+
+/* ── LEVEL 3: SCHEMA NODE (leaf) — single column ── */
+.sch-grid{display:none;padding:5px;grid-template-columns:1fr;gap:3px;border-top:1px dashed rgba(255,255,255,.05);max-height:156px;overflow-y:auto;}
+.sch-grid::-webkit-scrollbar{width:3px;}
+.sch-grid::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px;}
+.sch-grid.open{display:grid;}
+.sch-nd{position:relative;border-radius:3px;border:0.5px solid;background:var(--b0);padding:4px 8px;display:flex;align-items:center;gap:5px;cursor:pointer;transition:opacity .12s;}
+.sch-nd:hover{z-index:3;}
+.sdot{width:4px;height:4px;border-radius:50%;flex-shrink:0;}
+.sname{font-size:10px;font-family:var(--mono);color:var(--t1);}
+.sch-nd.in-flow .sname{font-weight:500;}
+.sch-grid.has-flow.open .sch-nd:not(.in-flow){opacity:.22;}
+.sch-nd:hover::after{content:'';position:absolute;right:-4px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--b0);border:1.5px solid var(--acc);z-index:5;}
+
+/* USES ref */
+.uses-ref{margin:0 8px 8px;border:1px dashed rgba(101,92,72,.5);border-radius:4px;padding:5px 8px;display:flex;align-items:center;gap:5px;}
+.ur-nm{font-size:10px;color:var(--t3);font-family:var(--mono);flex:1;}
+.ur-tag{font-size:8px;padding:1px 4px;border-radius:2px;background:rgba(101,92,72,.15);border:0.5px solid var(--t3);color:var(--t3);font-family:var(--mono);}
+
+/* Handles */
+.hd{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--b0);border:1.5px solid var(--bdh);pointer-events:none;z-index:10;}
+.hd.t{top:-5px;left:50%;transform:translateX(-50%);}
+.hd.b{bottom:-5px;left:50%;transform:translateX(-50%);}
+.hd.l{left:-5px;top:50%;transform:translateY(-50%);}
+.hd.r{right:-5px;top:50%;transform:translateY(-50%);}
+
+/* ETL */
+.etl-nd{position:absolute;border:0.5px solid var(--ec);border-radius:6px;background:var(--b3);cursor:pointer;transition:opacity .18s;z-index:5;}
+.etl-nd.dim{opacity:.14;pointer-events:none;}
+.etl-h{padding:5px 9px;border-bottom:0.5px solid rgba(200,127,60,.25);border-left:3px solid var(--ec);border-radius:5px 5px 0 0;display:flex;align-items:center;gap:5px;}
+.et-ic{color:var(--ec);flex-shrink:0;}
+.et-nm{font-size:11px;font-weight:600;color:var(--t1);flex:1;}
+.et-tg{font-size:8px;padding:1px 4px;border-radius:2px;background:rgba(200,127,60,.1);border:0.5px solid rgba(200,127,60,.3);color:var(--ec);font-family:var(--mono);}
+.etl-b{padding:4px 9px 5px;}
+.er{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--t3);margin:2px 0;}
+.edot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+
+/* Legend */
+.lgnd{position:absolute;top:8px;right:8px;background:rgba(20,17,8,.92);border:0.5px solid var(--bd);border-radius:5px;padding:5px 8px;z-index:20;display:flex;flex-direction:column;gap:2px;}
+.lr{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--t3);}
+
+/* Statusbar */
+.sb{background:var(--b0);border-top:0.5px solid var(--bd);height:26px;display:flex;align-items:center;gap:10px;padding:0 12px;font-size:10px;color:var(--t3);flex-shrink:0;}
+.sdo{width:5px;height:5px;border-radius:50%;background:var(--suc);}
+.ssep{width:0.5px;height:12px;background:var(--bd);}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js"></script>
+<div class="shell">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-logo"><div class="ldot"></div><span class="ltxt">SEER</span></div>
+  <div class="hdr-tabs">
+    <div class="htab on"><i data-lucide="network" style="width:11px;height:11px;"></i>LOOM</div>
+    <div class="htab dis">ANVIL</div><div class="htab dis">SHUTTLE</div><div class="htab dis">KNOT</div>
+  </div>
+  <div class="hdr-r">
+    <button class="hbtn"><i data-lucide="command" style="width:11px;height:11px;"></i></button>
+    <button class="hbtn"><i data-lucide="globe" style="width:11px;height:11px;"></i></button>
+    <button class="hbtn"><i data-lucide="sun" style="width:11px;height:11px;"></i></button>
+    <div class="avatar">AD</div>
+  </div>
+</div>
+
+<!-- FILTER TOOLBAR -->
+<div class="ftb">
+  <!-- Start object -->
+  <div class="start-pill" id="start-pill" onclick="clearScope()">
+    <i data-lucide="scan" style="width:10px;height:10px;"></i>
+    <span id="start-label">все системы</span>
+    <span class="start-change" id="start-change" style="display:none;">⇄</span>
+  </div>
+  <div class="tb-sep"></div>
+  <!-- Depth -->
+  <span class="tb-lbl">Глубина:</span>
+  <div class="dep-btns">
+    <button class="dbn" onclick="setDepth(1,this)">1</button>
+    <button class="dbn on" onclick="setDepth(2,this)">2</button>
+    <button class="dbn" onclick="setDepth(3,this)">3</button>
+    <button class="dbn" onclick="setDepth(99,this)">∞</button>
+  </div>
+  <div class="tb-sep"></div>
+  <!-- Direction -->
+  <button class="dir-btn up" id="dir-up" onclick="toggleDir('up')">↑ Upstream</button>
+  <button class="dir-btn dn" id="dir-dn" onclick="toggleDir('dn')">↓ Downstream</button>
+  <div class="tb-sep"></div>
+  <!-- System-level view toggle -->
+  <button class="sl-btn" id="sl-btn" onclick="toggleSystemLevel()">
+    <i data-lucide="layers" style="width:10px;height:10px;"></i>
+    System-level
+  </button>
+  <!-- Right: level badge -->
+  <div class="tb-right">
+    <span class="lbg" id="lbg">L1 · depth 2</span>
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div class="cwrap">
+<div class="canvas" id="canvas">
+<div class="dot-bg"></div>
+<svg class="esv" id="esv" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="ae" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#c87f3c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <marker id="au" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#665c48" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+<g id="eg1"></g><g id="eg2"></g><g id="eg3"></g><g id="egu"></g>
+</svg>
+
+<!-- ETL — top center -->
+<div class="etl-nd" id="etl" style="left:378px;top:15px;width:158px;" onclick="scopeETL()">
+  <div class="etl-h">
+    <i data-lucide="workflow" class="et-ic" style="width:12px;height:12px;"></i>
+    <span class="et-nm">Airflow ETL</span>
+    <span class="et-tg">pipeline</span>
+  </div>
+  <div class="etl-b">
+    <div class="er"><div class="edot" style="background:var(--acc)"></div>reads OrderSystem</div>
+    <div class="er"><div class="edot" style="background:var(--wrn)"></div>writes DataWarehouse</div>
+    <div class="er"><div class="edot" style="background:var(--suc)"></div>writes BillingSystem</div>
+  </div>
+  <div class="hd b"></div>
+</div>
+
+<!-- s1: OrderSystem -->
+<div class="app-nd" id="s1" style="left:10px;top:130px;width:215px;border-color:rgba(168,184,96,.55);background:rgba(168,184,96,.03);" onclick="setScope(event,'s1')">
+  <div class="app-hdr">
+    <div class="app-ico" style="color:var(--acc);"><i data-lucide="shopping-cart" style="width:13px;height:13px;"></i></div>
+    <span class="app-name">OrderSystem</span>
+    <span class="atag" style="color:var(--acc);border-color:rgba(168,184,96,.4);">App</span>
+  </div>
+  <div class="app-meta">2 СУБД · 3 сервиса</div>
+  <div class="db-grp" style="border-color:rgba(168,184,96,.5);">
+    <div class="db-hdr"><div class="db-st" style="background:var(--acc);"></div><i data-lucide="database" style="width:11px;height:11px;color:var(--acc);flex-shrink:0;"></i><span class="db-nm">orders_db</span><span class="db-cn">20</span><span class="sh">shared</span></div>
+    <div class="db-ft"><span class="eng">PostgreSQL</span><button class="tog" id="b1" onclick="tog(event,'g1','b1')">схемы ↓</button></div>
+    <div class="sch-grid" id="g1" data-dc="#A8B860" data-flow="g1"></div>
+    <div class="hd r" style="top:18px;right:-6px;"></div>
+  </div>
+  <div class="db-grp" style="border-color:rgba(168,184,96,.5);">
+    <div class="db-hdr"><div class="db-st" style="background:var(--acc);"></div><i data-lucide="database" style="width:11px;height:11px;color:var(--acc);flex-shrink:0;"></i><span class="db-nm">analytics_db</span><span class="db-cn">3</span></div>
+    <div class="db-ft"><span class="eng">ClickHouse</span><button class="tog" id="b2" onclick="tog(event,'g2','b2')">схемы ↓</button></div>
+    <div class="sch-grid" id="g2" data-dc="#A8B860"></div>
+  </div>
+  <div class="hd t"></div><div class="hd b"></div>
+</div>
+
+<!-- s2: CRMSystem -->
+<div class="app-nd" id="s2" style="left:235px;top:130px;width:178px;border-color:rgba(136,184,168,.55);background:rgba(136,184,168,.03);" onclick="setScope(event,'s2')">
+  <div class="app-hdr">
+    <div class="app-ico" style="color:var(--inf);"><i data-lucide="users" style="width:13px;height:13px;"></i></div>
+    <span class="app-name">CRMSystem</span>
+    <span class="atag" style="color:var(--inf);border-color:rgba(136,184,168,.4);">App</span>
+  </div>
+  <div class="app-meta">1 СУБД · shared · 2 сервиса</div>
+  <div class="db-grp" style="border-color:rgba(136,184,168,.5);">
+    <div class="db-hdr"><div class="db-st" style="background:var(--inf);"></div><i data-lucide="database" style="width:11px;height:11px;color:var(--inf);flex-shrink:0;"></i><span class="db-nm">crm_db</span><span class="db-cn">4</span></div>
+    <div class="db-ft"><span class="eng">PostgreSQL</span><button class="tog" id="b3" onclick="tog(event,'g3','b3')">схемы ↓</button></div>
+    <div class="sch-grid" id="g3" data-dc="#88B8A8"></div>
+  </div>
+  <div class="uses-ref">
+    <div class="hd l" style="position:relative;left:auto;top:auto;transform:none;margin-right:2px;flex-shrink:0;"></div>
+    <i data-lucide="database" style="width:10px;height:10px;color:var(--t3);flex-shrink:0;"></i>
+    <span class="ur-nm">orders_db</span><span class="ur-tag">USES →</span>
+  </div>
+  <div class="hd l" style="top:28px;"></div>
+</div>
+
+<!-- s3: DataWarehouse -->
+<div class="app-nd" id="s3" style="left:423px;top:130px;width:215px;border-color:rgba(212,146,42,.55);background:rgba(212,146,42,.03);" onclick="setScope(event,'s3')">
+  <div class="app-hdr">
+    <div class="app-ico" style="color:var(--wrn);"><i data-lucide="layers" style="width:13px;height:13px;"></i></div>
+    <span class="app-name">DataWarehouse</span>
+    <span class="atag" style="color:var(--wrn);border-color:rgba(212,146,42,.4);">App</span>
+  </div>
+  <div class="app-meta">1 СУБД · 1 сервис</div>
+  <div class="db-grp" style="border-color:rgba(212,146,42,.5);">
+    <div class="db-hdr"><div class="db-st" style="background:var(--wrn);"></div><i data-lucide="database" style="width:11px;height:11px;color:var(--wrn);flex-shrink:0;"></i><span class="db-nm">dwh_db</span><span class="db-cn">8</span></div>
+    <div class="db-ft"><span class="eng">Redshift</span><button class="tog" id="b4" onclick="tog(event,'g4','b4')">схемы ↓</button></div>
+    <div class="sch-grid" id="g4" data-dc="#D4922A" data-flow="g4"></div>
+  </div>
+  <div class="hd t"></div>
+</div>
+
+<!-- s4: BillingSystem -->
+<div class="app-nd" id="s4" style="left:648px;top:130px;width:255px;border-color:rgba(125,191,120,.55);background:rgba(125,191,120,.03);" onclick="setScope(event,'s4')">
+  <div class="app-hdr">
+    <div class="app-ico" style="color:var(--suc);"><i data-lucide="credit-card" style="width:13px;height:13px;"></i></div>
+    <span class="app-name">BillingSystem</span>
+    <span class="atag" style="color:var(--suc);border-color:rgba(125,191,120,.4);">App</span>
+  </div>
+  <div class="app-meta">2 СУБД · 2 сервиса</div>
+  <div class="db-grp" style="border-color:rgba(125,191,120,.5);">
+    <div class="db-hdr"><div class="db-st" style="background:var(--suc);"></div><i data-lucide="database" style="width:11px;height:11px;color:var(--suc);flex-shrink:0;"></i><span class="db-nm">billing_db</span><span class="db-cn">3</span></div>
+    <div class="db-ft"><span class="eng">PostgreSQL</span><button class="tog" id="b5" onclick="tog(event,'g5','b5')">схемы ↓</button></div>
+    <div class="sch-grid" id="g5" data-dc="#7DBF78" data-flow="g5"></div>
+  </div>
+  <div class="db-grp" style="border-color:rgba(125,191,120,.5);">
+    <div class="db-hdr"><div class="db-st" style="background:var(--suc);"></div><i data-lucide="database" style="width:11px;height:11px;color:var(--suc);flex-shrink:0;"></i><span class="db-nm">payment_db</span><span class="db-cn">5</span></div>
+    <div class="db-ft"><span class="eng">Oracle</span><button class="tog" id="b6" onclick="tog(event,'g6','b6')">схемы ↓</button></div>
+    <div class="sch-grid" id="g6" data-dc="#7DBF78"></div>
+  </div>
+  <div class="hd t"></div>
+</div>
+
+<!-- Legend -->
+<div class="lgnd">
+  <div class="lr"><svg width="18" height="10"><rect x="1" y="1" width="16" height="8" rx="2" fill="none" stroke="rgba(168,184,96,.6)" stroke-width="2" stroke-dasharray="3 2"/></svg>ApplicationNode</div>
+  <div class="lr"><svg width="18" height="10"><rect x="1" y="1" width="16" height="8" rx="2" fill="none" stroke="rgba(168,184,96,.5)" stroke-width="1.5" stroke-dasharray="3 2"/></svg>DatabaseNode</div>
+  <div class="lr"><svg width="18" height="10"><rect x="1" y="1" width="16" height="8" rx="2" fill="none" stroke="rgba(168,184,96,.6)" stroke-width="0.5"/></svg>SchemaNode</div>
+  <div class="lr"><svg width="18" height="4"><line x1="0" y1="2" x2="18" y2="2" stroke="#c87f3c" stroke-width="1.5" stroke-dasharray="4 2"/></svg>ETL</div>
+  <div class="lr"><svg width="18" height="4"><line x1="0" y1="2" x2="18" y2="2" stroke="#665c48" stroke-width="1.2" stroke-dasharray="3 2"/></svg>USES_DB</div>
+</div>
+</div></div>
+
+<!-- STATUSBAR -->
+<div class="sb">
+  <div class="sdo"></div>
+  <span>4 App · 6 DB · 41 Schema · 1 ETL</span>
+  <div class="ssep"></div>
+  <span id="sbsc" style="color:var(--acc);display:none;"></span>
+  <span style="margin-left:auto;color:var(--t3);">схемы ↓ → edge reroute</span>
+</div>
+</div>
+
+<script>
+lucide.createIcons();
+
+/* ── Schema data: только названия схем, без таблиц ── */
+const DATA = {
+  g1:['public','reporting','staging','audit','archive','raw',
+      'processed','history','cdc','snapshot','config','export',
+      'import','lookup','metrics','aggregates','temp','backup',
+      'partitioned','workspace'],
+  g2:['main','aggregates','staging'],
+  g3:['core','campaigns','integrations','audit'],
+  g4:['staging','facts','dimensions','marts','raw','aggregates','work','archive'],
+  g5:['billing','reporting','archive'],
+  g6:['payments','fraud','settlements','audit','archive'],
+};
+
+/* Flow: какие схемы участвуют в Dataflow */
+const FLOW = {
+  g1:{ role:'src', schemas:['public','raw','staging'] },
+  g4:{ role:'dst', schemas:['staging','facts','marts'] },
+  g5:{ role:'dst', schemas:['billing','reporting'] },
+};
+const USES_SCH = ['public','reporting'];
+
+/* Build schema nodes */
+Object.entries(DATA).forEach(([gid,schemas])=>{
+  const el=document.getElementById(gid); if(!el) return;
+  const dc=el.dataset.dc||'#665c48';
+  el.innerHTML=schemas.map(s=>
+    `<div class="sch-nd" style="border-color:${dc}55;" onclick="event.stopPropagation();sendPrompt('L2 · схема ${s}')">
+      <span class="sdot" style="background:${dc};"></span>
+      <span class="sname">${s}</span>
+    </div>`
+  ).join('');
+});
+
+/* ── Edge drawing ── */
+function pos(el){
+  const cr=document.getElementById('canvas').getBoundingClientRect();
+  const r=el.getBoundingClientRect();
+  return{
+    cx:r.left-cr.left+r.width/2, cy:r.top-cr.top+r.height/2,
+    tx:r.left-cr.left+r.width/2, ty:r.top-cr.top,
+    bx:r.left-cr.left+r.width/2, by:r.top-cr.top+r.height,
+    lx:r.left-cr.left, rx:r.right-cr.left,
+  };
+}
+
+function ePath(f,t,w,op,col,rev){
+  const my=(f.y+t.y)/2;
+  const d=`M${f.x},${f.y} C${f.x},${my} ${t.x},${my} ${t.x},${t.y}`;
+  const mk=rev?'marker-start="url(#ae)"':'marker-end="url(#ae)"';
+  return `<path d="${d}" stroke="${col||'#c87f3c'}" stroke-width="${w}" stroke-dasharray="5 2.5" fill="none" opacity="${op}" ${mk}/>`;
+}
+function uPath(f,t,w){
+  const mx=(f.x+t.x)/2;
+  return `<path d="M${f.x},${f.y} C${mx},${f.y} ${mx},${t.y} ${t.x},${t.y}" stroke="#665c48" stroke-width="${w}" stroke-dasharray="4 3" fill="none" opacity="0.9" marker-end="url(#au)"/>`;
+}
+
+let sysLvl=false;
+
+function redraw(){
+  const etlEl=document.getElementById('etl');
+  const etlP=pos(etlEl);
+
+  /* eg1: g1 schemas → ETL (reads: arrow at ETL) */
+  const g1=document.getElementById('g1'), g1o=g1.classList.contains('open')&&!sysLvl;
+  let srcs=[];
+  if(g1o) g1.querySelectorAll('.sch-nd.in-flow').forEach(n=>{const p=pos(n);srcs.push({x:p.cx,y:p.ty});});
+  if(!srcs.length){const p=pos(document.getElementById('s1'));srcs=[{x:p.cx,y:p.ty}];}
+  const w1=srcs.length>1?'1':'1.5', o1=srcs.length>1?'.6':'.9';
+  document.getElementById('eg1').innerHTML=srcs.map(s=>ePath({x:s.x,y:s.y},{x:etlP.bx,y:etlP.by},w1,o1,'#c87f3c',false)).join('');
+
+  /* eg2: ETL → g4 schemas (writes) */
+  const g4=document.getElementById('g4'), g4o=g4.classList.contains('open')&&!sysLvl;
+  let d4=[];
+  if(g4o) g4.querySelectorAll('.sch-nd.in-flow').forEach(n=>{const p=pos(n);d4.push({x:p.cx,y:p.ty});});
+  if(!d4.length){const p=pos(document.getElementById('s3'));d4=[{x:p.cx,y:p.ty}];}
+  const w4=d4.length>1?'1':'1.5', o4=d4.length>1?'.6':'.9';
+  document.getElementById('eg2').innerHTML=d4.map(t=>ePath({x:etlP.bx,y:etlP.by},{x:t.x,y:t.y},w4,o4)).join('');
+
+  /* eg3: ETL → g5 schemas */
+  const g5=document.getElementById('g5'), g5o=g5.classList.contains('open')&&!sysLvl;
+  let d5=[];
+  if(g5o) g5.querySelectorAll('.sch-nd.in-flow').forEach(n=>{const p=pos(n);d5.push({x:p.cx,y:p.ty});});
+  if(!d5.length){const p=pos(document.getElementById('s4'));d5=[{x:p.cx,y:p.ty}];}
+  const w5=d5.length>1?'1':'1.5', o5=d5.length>1?'.6':'.9';
+  document.getElementById('eg3').innerHTML=d5.map(t=>ePath({x:etlP.bx,y:etlP.by},{x:t.x,y:t.y},w5,o5)).join('');
+
+  /* egu: orders_db schemas → CRM (USES) */
+  const s2p=pos(document.getElementById('s2'));
+  const to={x:s2p.lx,y:s2p.cy};
+  let us=[];
+  if(g1o) g1.querySelectorAll('.sch-nd').forEach(n=>{
+    if(USES_SCH.includes(n.querySelector('.sname')?.textContent)){const p=pos(n);us.push({x:p.rx,y:p.cy});}
+  });
+  if(!us.length){const p=pos(document.getElementById('s1'));us=[{x:p.rx,y:p.cy}];}
+  document.getElementById('egu').innerHTML=us.map(s=>uPath({x:s.x,y:s.y},to,us.length>1?'1':'1.2')).join('');
+}
+
+/* Toggle schemas */
+function tog(e,gid,bid){
+  e.stopPropagation();
+  const grid=document.getElementById(gid);
+  const open=grid.classList.toggle('open');
+  document.getElementById(bid).textContent=open?'схемы ↑':'схемы ↓';
+  const fid=grid.dataset.flow;
+  if(open&&fid&&FLOW[fid]){
+    const fs=FLOW[fid].schemas;
+    grid.classList.add('has-flow');
+    grid.querySelectorAll('.sch-nd').forEach(n=>{
+      n.classList.toggle('in-flow',fs.includes(n.querySelector('.sname')?.textContent));
+    });
+  } else {
+    grid.classList.remove('has-flow');
+    grid.querySelectorAll('.sch-nd').forEach(n=>n.classList.remove('in-flow'));
+  }
+  requestAnimationFrame(redraw);
+}
+
+/* System-level view toggle */
+function toggleSystemLevel(){
+  sysLvl=!sysLvl;
+  document.getElementById('sl-btn').classList.toggle('on',sysLvl);
+  document.querySelectorAll('.db-grp,.app-meta,.uses-ref').forEach(el=>{
+    el.style.display=sysLvl?'none':'';
+  });
+  document.getElementById('lbg').textContent=sysLvl?'L1 · system-level':`L1 · depth ${curDepth===99?'∞':curDepth}`;
+  requestAnimationFrame(redraw);
+}
+
+/* Toolbar controls */
+let curDepth=2;
+function setDepth(d,btn){
+  curDepth=d;
+  document.querySelectorAll('.dbn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if(!sysLvl) document.getElementById('lbg').textContent=`L1 · depth ${d===99?'∞':d}`;
+}
+function toggleDir(dir){
+  document.getElementById('dir-'+dir).classList.toggle(dir==='up'?'up':'dn');
+}
+
+/* Scope filter */
+let cur=null;
+const ETL_S=new Set(['s1','s3','s4']);
+const NAMES={s1:'OrderSystem',s2:'CRMSystem',s3:'DataWarehouse',s4:'BillingSystem'};
+
+function setScope(e,id){
+  e.stopPropagation();
+  if(cur===id){clearScope();return;}
+  cur=id;
+  ['s1','s2','s3','s4'].forEach(s=>document.getElementById(s).classList.toggle('dim',s!==id));
+  document.getElementById('etl').classList.toggle('dim',!ETL_S.has(id));
+  ['eg1','eg2','eg3','egu'].forEach(g=>{
+    const rel={eg1:['s1','s2'],eg2:['s3'],eg3:['s4'],egu:['s1','s2']};
+    document.getElementById(g).style.opacity=rel[g].includes(id)?'1':'0.05';
+  });
+  document.getElementById('start-label').textContent=NAMES[id];
+  document.getElementById('start-change').style.display='inline';
+  const sb=document.getElementById('sbsc');sb.textContent=NAMES[id]+' selected';sb.style.display='inline';
+}
+function scopeETL(){
+  if(cur==='etl'){clearScope();return;}
+  cur='etl';
+  ['s1','s2','s3','s4'].forEach(s=>document.getElementById(s).classList.toggle('dim',!ETL_S.has(s)));
+  ['eg1','eg2','eg3'].forEach(g=>document.getElementById(g).style.opacity='1');
+  document.getElementById('egu').style.opacity='0.05';
+  document.getElementById('start-label').textContent='Airflow ETL';
+  document.getElementById('start-change').style.display='inline';
+}
+function clearScope(){
+  cur=null;
+  ['s1','s2','s3','s4'].forEach(s=>document.getElementById(s).classList.remove('dim'));
+  document.getElementById('etl').classList.remove('dim');
+  ['eg1','eg2','eg3','egu'].forEach(g=>document.getElementById(g).style.opacity='1');
+  document.getElementById('start-label').textContent='все системы';
+  document.getElementById('start-change').style.display='none';
+  document.getElementById('sbsc').style.display='none';
+}
+
+requestAnimationFrame(redraw);
+window.addEventListener('resize',redraw);
+</script>
