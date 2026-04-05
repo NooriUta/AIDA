@@ -12,6 +12,7 @@ const queryClient = new QueryClient({
       staleTime: 30_000,
       retry: 1,
       refetchOnWindowFocus: false,
+      networkMode: 'always',   // don't pause on navigator.onLine=false (dev/isolated envs)
     },
   },
   // Fire meta.onError if defined — used by hooks to trigger logout on 401

@@ -228,24 +228,38 @@ export const SearchPanel = memo(() => {
   const handleSelect = useCallback((result: SearchResult) => {
     const type = result.type as string;
     if (type === 'DaliTable') {
-      // L2: explore table context (columns, routines, statements)
-      jumpTo('L2', result.id, result.label, 'DaliTable');
-    } else if (type === 'DaliColumn' || type === 'DaliOutputColumn') {
-      // L2: explore column context
-      jumpTo('L2', result.id, result.label, 'DaliColumn');
+      // L2: schema explore — same curated view as L1→double-click
+      jumpTo('L2', 'schema-' + result.scope, result.scope, 'DaliSchema');
+    } else if (type === 'DaliColumn') {
+      // L2: schema explore — parent schema (column renders inline in table card)
+      jumpTo('L2', 'schema-' + result.scope, result.scope, 'DaliSchema');
+    } else if (type === 'DaliOutputColumn') {
+      // L2: parent statement via exploreByRid (sibling output cols shown inline)
+      jumpTo('L2', result.id, result.label, 'DaliOutputColumn');
     } else if (type === 'DaliSchema') {
-      // L1: overview, highlight schema node
+      // L1: overview, highlight schema node + auto-expand parent DB
       jumpTo('L1', null, result.label);
       selectNode(result.id);
     } else if (type === 'DaliPackage') {
-      // L2: explore package by RID
-      jumpTo('L2', result.id, result.label, 'DaliPackage');
-    } else if (type === 'DaliRoutine' || type === 'DaliSession') {
-      // L2: explore by RID — shows the routine's statements and tables
-      jumpTo('L2', result.id, result.label, 'DaliRoutine');
+      // L2: package explore — scope = package_name
+      jumpTo('L2', 'pkg-' + result.scope, result.scope, 'DaliPackage');
+    } else if (type === 'DaliRoutine') {
+      // L2: package explore — scope = package_name (from Cypher join)
+      jumpTo('L2', 'pkg-' + result.scope, result.scope, 'DaliPackage');
+    } else if (type === 'DaliSession') {
+      // L2: exploreByRid — session shows its routines and their connections
+      jumpTo('L2', result.id, result.label, 'DaliSession');
     } else if (type === 'DaliStatement') {
-      // L3: lineage for this statement
-      jumpTo('L3', result.id, result.label, 'DaliStatement');
+      // Root statement (scope = package_name) → L2 package view
+      // Sub-statement or session-based (scope = session_id) → L3 lineage
+      const isPackageScope = result.scope
+        && !result.scope.startsWith('session-')
+        && !result.scope.startsWith('#');
+      if (isPackageScope) {
+        jumpTo('L2', 'pkg-' + result.scope, result.scope, 'DaliPackage');
+      } else {
+        jumpTo('L3', result.id, result.label, 'DaliStatement');
+      }
     } else if (type === 'DaliParameter' || type === 'DaliVariable') {
       // L3: lineage for this parameter/variable
       jumpTo('L3', result.id, result.label, type as never);

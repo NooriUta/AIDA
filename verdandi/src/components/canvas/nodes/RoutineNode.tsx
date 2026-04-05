@@ -26,7 +26,7 @@ export const RoutineNode = memo(({ data, selected, id }: NodeProps<RoutineNodeTy
       <div style={{ padding: 'var(--seer-space-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-2)', marginBottom: 'var(--seer-space-1)' }}>
           <Workflow size={13} color="var(--suc)" strokeWidth={1.5} />
-          <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--t1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span title={data.label} style={{ fontWeight: 600, fontSize: '13px', color: 'var(--t1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {data.label}
           </span>
         </div>

@@ -77,14 +77,17 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       }}>
         <FileCode size={13} color="var(--suc)" strokeWidth={1.5} />
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <div style={{
-            fontWeight:   600,
-            fontSize:     '13px',
-            color:        'var(--t1)',
-            overflow:     'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace:   'nowrap',
-          }}>
+          <div
+            title={data.label || 'Statement'}
+            style={{
+              fontWeight:   600,
+              fontSize:     '13px',
+              color:        'var(--t1)',
+              overflow:     'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace:   'nowrap',
+            }}
+          >
             {data.label || 'Statement'}
           </div>
           {columns.length > 0 && (

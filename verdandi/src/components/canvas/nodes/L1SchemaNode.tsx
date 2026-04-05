@@ -49,7 +49,7 @@ export const L1SchemaNode = memo(({ data, selected, id }: NodeProps<L1SchemaNode
       }} />
 
       {/* Schema name */}
-      <span style={{
+      <span title={data.label} style={{
         fontSize:     9,
         color:        selected ? 'var(--t1)' : 'var(--t2)',
         fontFamily:   'monospace',

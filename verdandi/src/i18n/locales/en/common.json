@@ -288,6 +288,8 @@
     "dbUnit":          "DB",
     "appBadge":        "App",
     "allSystems":      "all systems",
+    "allDbs":          "all DBs",
+    "allSchemas":      "all schemas",
     "clearScope":      "Clear scope",
     "systemLevel":     "System-level",
     "systemLevelHint": "Show applications only, hide databases"

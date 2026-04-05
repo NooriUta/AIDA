@@ -1,9 +1,11 @@
 import { GraphQLClient, ClientError } from 'graphql-request';
 
 // ── Endpoint ──────────────────────────────────────────────────────────────────
-// All requests go through rbac-proxy (3000) — JWT cookie is sent automatically.
-// rbac-proxy verifies auth and forwards to lineage-api (8080) with X-Seer headers.
-const ENDPOINT = import.meta.env.VITE_GRAPHQL_URL ?? 'http://localhost:3000/graphql';
+// Production: requests go through rbac-proxy (absolute URL via VITE_GRAPHQL_URL).
+// Dev: graphql-request v7 requires an absolute URL; build from location.origin
+//      so the Vite dev-server proxy (/graphql → localhost:8080) still applies.
+const ENDPOINT = import.meta.env.VITE_GRAPHQL_URL
+  ?? `${location.origin}/graphql`;
 
 const gqlClient = new GraphQLClient(ENDPOINT, {
   credentials: 'include',  // send httpOnly JWT cookie cross-origin

@@ -3,7 +3,7 @@ import type { ApiGraphResponse } from '../types/api';
 import type { DaliNodeType, DaliEdgeType, ColumnInfo } from '../types/domain';
 import type { LoomNode, LoomEdge } from '../types/graph';
 import type { ExploreResult, SchemaNode } from '../services/lineage';
-import { L1_APP_HEADER, L1_APP_PAD_BOT, L1_DB_BASE_H, L1_DB_GAP, schemaChipY } from './layoutL1';
+import { L1_APP_HEADER, L1_APP_PAD_BOT, L1_DB_BASE_H, L1_DB_GAP, schemaChipY, schemaChipX, schemaChipW, schemaGridCols } from './layoutL1';
 
 // ─── Map Dali node type → React Flow node type string ───────────────────────
 const NODE_TYPE_MAP: Record<DaliNodeType, string> = {
@@ -64,8 +64,11 @@ function getEdgeStyle(type: DaliEdgeType): CSSProperties {
     case 'ATOM_PRODUCES':   return { stroke: '#A8B860', strokeWidth: 1.5 };
     case 'ATOM_REF_COLUMN': return { stroke: '#88B8A8', strokeWidth: 1 };
     case 'HAS_ATOM':        return { stroke: '#88B8A8', strokeWidth: 1 };
-    case 'HAS_COLUMN':      return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 3' };
-    default:                return { stroke: '#42382a', strokeWidth: 1, strokeDasharray: '4 3' };
+    case 'HAS_COLUMN':        return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 3' };
+    case 'CONTAINS_ROUTINE':  return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '6 3' };
+    case 'CONTAINS_STMT':     return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 2' };
+    case 'BELONGS_TO_SESSION':return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '6 3' };
+    default:                  return { stroke: '#42382a', strokeWidth: 1, strokeDasharray: '4 3' };
   }
 }
 
@@ -165,6 +168,20 @@ function transformSchemaExplore(result: ExploreResult): {
     }
   }
 
+  // ── Output column data: group DaliOutputColumn nodes by their parent statement ─
+  // HAS_OUTPUT_COL edges: source = stmtId, target = outputColumnId
+  const outputColsByStmt = new Map<string, ColumnInfo[]>();
+  for (const e of result.edges) {
+    if (e.type !== 'HAS_OUTPUT_COL') continue;
+    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliOutputColumn');
+    if (!colNode) continue;
+    if (!outputColsByStmt.has(e.source)) outputColsByStmt.set(e.source, []);
+    const cols = outputColsByStmt.get(e.source)!;
+    if (cols.length < L2_MAX_COLS) {
+      cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
+    }
+  }
+
   // ── Per-table cell heights (variable: depends on column count) ───────────
   const childList = result.nodes.filter((nd) => childIds.has(nd.id));
 
@@ -207,6 +224,8 @@ function transformSchemaExplore(result: ExploreResult): {
     id:       schemaId,
     type:     'schemaGroupNode',
     position: { x: 0, y: 0 },
+    width:    groupW,
+    height:   groupH,
     style:    { width: groupW, height: groupH },
     data: {
       label:             schemaNode.label,
@@ -233,6 +252,8 @@ function transformSchemaExplore(result: ExploreResult): {
       },
       parentId: schemaId,
       extent:   'parent' as const,
+      width:    L2_CHILD_W,
+      height:   ch,
       style:    { width: L2_CHILD_W, height: ch },
       data: {
         label,
@@ -245,7 +266,7 @@ function transformSchemaExplore(result: ExploreResult): {
     });
   });
 
-  // ── External nodes (tables accessed from outside the schema group) ─────────
+  // ── External nodes (Package, Routine, Statement, Session outside schema group) ─
   // DaliColumn + DaliOutputColumn skipped — they're inline in table/statement cards.
   for (const nd of result.nodes) {
     if (nd.id === schemaId || childIds.has(nd.id) || nd.type === 'DaliColumn' || nd.type === 'DaliOutputColumn') continue;
@@ -262,13 +283,17 @@ function transformSchemaExplore(result: ExploreResult): {
         childrenAvailable: DRILLABLE_TYPES.has(nodeType),
         metadata:          { scope: nd.scope },
         schema:            nd.scope || undefined,
+        // Statement nodes carry their output columns inline
+        columns:           outputColsByStmt.get(nd.id),
       },
     });
   }
 
-  // ── Edges: suppress containment + inline-column edges ────────────────────
+  // ── Edges: suppress only CONTAINS_TABLE (implicit via parentId) and inline-column edges ─
+  // CONTAINS_ROUTINE (pkg→routine), CONTAINS_STMT (routine→stmt), BELONGS_TO_SESSION
+  // are real structural edges — keep them for graph display and ELK layout.
   const rfEdges: LoomEdge[] = result.edges
-    .filter((e) => e.type !== 'CONTAINS_TABLE' && e.type !== 'CONTAINS_ROUTINE' && e.type !== 'HAS_COLUMN' && e.type !== 'HAS_OUTPUT_COL')
+    .filter((e) => e.type !== 'CONTAINS_TABLE' && e.type !== 'HAS_COLUMN' && e.type !== 'HAS_OUTPUT_COL')
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
       return {
@@ -293,7 +318,21 @@ export function transformGqlExplore(result: ExploreResult): {
     return transformSchemaExplore(result);
   }
 
-  // Build output-column map: DaliStatement id → ColumnInfo[] (from HAS_OUTPUT_COL edges)
+  // Build column inline maps from containment edges
+  // HAS_COLUMN: table → column (columns render inline in TableNode)
+  const columnsByTable = new Map<string, ColumnInfo[]>();
+  for (const e of result.edges) {
+    if (e.type !== 'HAS_COLUMN') continue;
+    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliColumn');
+    if (!colNode) continue;
+    if (!columnsByTable.has(e.source)) columnsByTable.set(e.source, []);
+    const cols = columnsByTable.get(e.source)!;
+    if (cols.length < L2_MAX_COLS) {
+      cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
+    }
+  }
+
+  // HAS_OUTPUT_COL: statement → output column (columns render inline in StatementNode)
   const outputColsByStmt = new Map<string, ColumnInfo[]>();
   for (const e of result.edges) {
     if (e.type !== 'HAS_OUTPUT_COL') continue;
@@ -307,9 +346,9 @@ export function transformGqlExplore(result: ExploreResult): {
   }
 
   // Flat explore (package, rid-based, lineage)
-  // DaliOutputColumn nodes are skipped — they render inline inside StatementNode.
+  // DaliColumn and DaliOutputColumn render inline — skip them as standalone nodes.
   const nodes: LoomNode[] = result.nodes
-    .filter((n) => n.type !== 'DaliOutputColumn')
+    .filter((n) => n.type !== 'DaliOutputColumn' && n.type !== 'DaliColumn')
     .map((n) => {
       const nodeType = n.type as DaliNodeType;
       return {
@@ -322,14 +361,22 @@ export function transformGqlExplore(result: ExploreResult): {
           childrenAvailable: DRILLABLE_TYPES.has(nodeType),
           metadata:          { scope: n.scope },
           schema:            n.scope || undefined,
-          columns:           outputColsByStmt.get(n.id),
+          // Tables get HAS_COLUMN inline; statements get HAS_OUTPUT_COL inline
+          columns:           outputColsByStmt.get(n.id) ?? columnsByTable.get(n.id),
         },
       };
     });
 
-  // HAS_OUTPUT_COL edges are implicit (inline in StatementNode); suppress them.
+  const nodeIds = new Set(nodes.map((n) => n.id));
+
+  // HAS_COLUMN and HAS_OUTPUT_COL are implicit (inline); also drop dangling edges.
   const edges: LoomEdge[] = result.edges
-    .filter((e) => e.type !== 'HAS_OUTPUT_COL')
+    .filter((e) =>
+      e.type !== 'HAS_OUTPUT_COL' &&
+      e.type !== 'HAS_COLUMN' &&
+      nodeIds.has(e.source) &&
+      nodeIds.has(e.target),
+    )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
       return {
@@ -360,8 +407,6 @@ export function transformGqlExplore(result: ExploreResult): {
 const L1_APP_COLORS      = ['#A8B860', '#88B8A8', '#D4922A', '#7DBF78', '#c87f3c'];
 const L1_APP_WIDTH       = 220;
 const L1_DB_WIDTH        = 204;  // L1_APP_WIDTH - 8*2 margins
-const L1_SCH_MARGIN      = 4;
-const L1_SCH_WIDTH       = L1_DB_WIDTH - L1_SCH_MARGIN * 2; // 196px
 const L1_APP_X_GAP       = 32;
 const L1_SCHEMAS_PER_DB  = 5;
 const L1_SCHEMAS_PER_APP = L1_SCHEMAS_PER_DB * 2; // 10
@@ -375,15 +420,18 @@ function pushSchemaChip(
   dbId:   string,
   idx:    number,
   color:  string,
+  cols:   number,
 ): void {
   nodes.push({
     id:       schema.id,
     type:     'l1SchemaNode',
-    position: { x: L1_SCH_MARGIN, y: schemaChipY(idx) },
+    position: { x: schemaChipX(idx, cols), y: schemaChipY(idx, cols) },
     parentId: dbId,
     extent:   'parent' as const,
     hidden:   true,
-    style:    { width: L1_SCH_WIDTH, height: 20 },
+    width:    schemaChipW(cols),
+    height:   20,
+    style:    { width: schemaChipW(cols), height: 20 },
     data: {
       label:             schema.name,
       nodeType:          'DaliSchema' as DaliNodeType,
@@ -412,6 +460,8 @@ function pushStandaloneDb(
     id:       dbId,
     type:     'databaseNode',
     position: { x: curX, y: 20 },
+    width:    L1_DB_WIDTH,
+    height:   L1_DB_BASE_H,
     style:    { width: L1_DB_WIDTH },
     data: {
       label:             dbLabel,
@@ -421,7 +471,8 @@ function pushStandaloneDb(
       tablesCount:       totalTables,
     },
   });
-  schemas.forEach((sch, i) => pushSchemaChip(nodes, sch, dbId, i, color));
+  const cols = schemaGridCols(schemas.length);
+  schemas.forEach((sch, i) => pushSchemaChip(nodes, sch, dbId, i, color, cols));
   return curX + L1_DB_WIDTH + L1_APP_X_GAP;
 }
 
@@ -445,6 +496,8 @@ function pushGroupedDb(
     position: { x: 8, y: dbY },
     parentId,
     extent:   'parent' as const,
+    width:    L1_DB_WIDTH,
+    height:   L1_DB_BASE_H,
     style:    { width: L1_DB_WIDTH },
     data: {
       label:             dbLabel,
@@ -454,7 +507,8 @@ function pushGroupedDb(
       tablesCount:       totalTables,
     },
   });
-  schemas.forEach((sch, i) => pushSchemaChip(nodes, sch, dbId, i, color));
+  const cols = schemaGridCols(schemas.length);
+  schemas.forEach((sch, i) => pushSchemaChip(nodes, sch, dbId, i, color, cols));
 }
 
 // ── Real L1 builder — uses databaseGeoid / applicationGeoid from SHUTTLE ───────
@@ -518,6 +572,8 @@ function buildRealL1(schemas: SchemaNode[]): { nodes: LoomNode[]; edges: LoomEdg
         id:       appGeoid,
         type:     'applicationNode',
         position: { x: curX, y: 20 },
+        width:    L1_APP_WIDTH,
+        height:   appH,
         style:    { width: L1_APP_WIDTH, height: appH },
         data: {
           label:             app.name,
@@ -579,6 +635,8 @@ function buildSyntheticL1(schemas: SchemaNode[]): { nodes: LoomNode[]; edges: Lo
       id:       appId,
       type:     'applicationNode',
       position: { x: curX, y: 20 },
+      width:    L1_APP_WIDTH,
+      height:   appH,
       style:    { width: L1_APP_WIDTH, height: appH },
       data: {
         label:             `System-${appIndex + 1}`,

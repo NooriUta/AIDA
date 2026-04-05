@@ -288,6 +288,8 @@
     "dbUnit":          "СУБД",
     "appBadge":        "App",
     "allSystems":      "все системы",
+    "allDbs":          "все БД",
+    "allSchemas":      "все схемы",
     "clearScope":      "Сбросить скоуп",
     "systemLevel":     "Системный вид",
     "systemLevelHint": "Показать только приложения, скрыть СУБД"

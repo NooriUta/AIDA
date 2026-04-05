@@ -173,14 +173,17 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         <Table2 size={13} color="var(--acc)" strokeWidth={1.5} style={{ flexShrink: 0 }} />
 
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <div style={{
-            fontWeight:   600,
-            fontSize:     '13px',
-            color:        'var(--t1)',
-            overflow:     'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace:   'nowrap',
-          }}>
+          <div
+            title={data.label}
+            style={{
+              fontWeight:   600,
+              fontSize:     '13px',
+              color:        'var(--t1)',
+              overflow:     'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace:   'nowrap',
+            }}
+          >
             {data.label}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>

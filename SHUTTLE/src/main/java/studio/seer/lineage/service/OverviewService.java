@@ -25,22 +25,18 @@ public class OverviewService {
     ArcadeGateway arcade;
 
     public Uni<List<SchemaNode>> overview() {
-        // Traversal chain (confirmed against hound DB 2026-04-04):
-        //   DaliSchema  <-[CONTAINS_SCHEMA]-  DaliDatabase  <-[HAS_DATABASE]-  DaliApplication
-        //   DaliDatabase properties: db_name, db_geoid  (no db_engine)
-        //   DaliApplication properties: app_name, app_geoid
-        //   Schemas without CONTAINS_SCHEMA edge → databaseGeoid/applicationGeoid = null
+        // Traversal chain:
+        //   DaliSchema  <-[CONTAINS_SCHEMA]-  DaliDatabase
+        //   DaliDatabase properties: db_geoid, db_name
+        //   Schemas without CONTAINS_SCHEMA edge → databaseGeoid/databaseName = null
+        //   applicationGeoid/applicationName — не заполняем (BELONGS_TO_APP после HOUND-DB-001)
         String sql = """
             SELECT
-                @rid                                                       AS rid,
+                @rid                                                 AS rid,
                 schema_name,
-                out('CONTAINS_TABLE').size()                               AS tableCount,
-                out('CONTAINS_PACKAGE').size()                             AS packageCount,
-                out('CONTAINS_ROUTINE').size()                             AS routineCount,
-                in('CONTAINS_SCHEMA')[0].@rid                              AS databaseGeoid,
-                in('CONTAINS_SCHEMA')[0].db_name                           AS databaseName,
-                in('CONTAINS_SCHEMA')[0].in('HAS_DATABASE')[0].@rid        AS applicationGeoid,
-                in('CONTAINS_SCHEMA')[0].in('HAS_DATABASE')[0].app_name    AS applicationName
+                out('CONTAINS_TABLE').size()                         AS tableCount,
+                in('CONTAINS_SCHEMA')[0].db_geoid                    AS databaseGeoid,
+                in('CONTAINS_SCHEMA')[0].db_name                     AS databaseName
             FROM DaliSchema
             ORDER BY schema_name
             """;

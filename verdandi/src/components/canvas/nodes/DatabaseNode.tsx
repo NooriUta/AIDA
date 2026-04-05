@@ -10,7 +10,6 @@
 // Double-click with no schema children → drillDown directly.
 
 import { memo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData } from '../../../types/domain';
@@ -19,7 +18,6 @@ export type DatabaseNodeType = Node<DaliNodeData>;
 
 export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNodeType>) => {
   const { expandedDbs, toggleDbExpansion } = useLoomStore();
-  const { t } = useTranslation();
 
   const color      = (data.metadata?.color      as string  | undefined) ?? 'var(--t3)';
   const engine     = (data.metadata?.engine     as string  | undefined) ?? '';
@@ -60,7 +58,7 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
         borderBottom: '0.5px solid var(--bd)',
       }}>
         <DbIcon color={color} />
-        <span style={{
+        <span title={data.label} style={{
           fontSize:     11,
           fontWeight:   600,
           color:        'var(--t1)',
@@ -96,6 +94,28 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
             shared
           </span>
         )}
+        {hasSchemas && (
+          <span
+            role="button"
+            onClick={(e) => { e.stopPropagation(); toggleDbExpansion(id); }}
+            style={{
+              fontSize:    9,
+              color:       isExpanded ? color : 'var(--t3)',
+              fontFamily:  'monospace',
+              cursor:      'pointer',
+              flexShrink:  0,
+              lineHeight:  1,
+              padding:     '1px 3px',
+              borderRadius: 2,
+              background:  isExpanded ? color + '18' : 'transparent',
+              border:      `0.5px solid ${isExpanded ? color + '40' : 'transparent'}`,
+              transition:  'all 0.12s',
+              userSelect:  'none',
+            }}
+          >
+            {isExpanded ? '▾' : '▸'} {schemaCount}
+          </span>
+        )}
       </div>
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
@@ -115,30 +135,6 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
           {engine || (drillableNode ? '↓ L2 →' : '')}
         </span>
 
-        {/* Schema expand toggle — dispatches to store, not local state */}
-        {hasSchemas && (
-          <button
-            style={{
-              fontSize:    9,
-              color:       isExpanded ? color : 'var(--t2)',
-              padding:     '1px 5px',
-              borderRadius: 3,
-              border:      `0.5px solid ${isExpanded ? color + '60' : 'var(--bd)'}`,
-              background:  'transparent',
-              cursor:      'pointer',
-              fontFamily:  'var(--sans)',
-              lineHeight:  1.2,
-              whiteSpace:  'nowrap',
-              transition:  'color 0.1s, border-color 0.1s',
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleDbExpansion(id);
-            }}
-          >
-            {t('l1.schemas')} {isExpanded ? '↑' : '↓'}
-          </button>
-        )}
       </div>
 
       {/* ── Handles ────────────────────────────────────────────────────────── */}

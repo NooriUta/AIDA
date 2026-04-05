@@ -17,4 +17,13 @@ export default defineConfig({
     // Pre-bundle the browser-compatible ELK (CJS → ESM transform)
     include: ['elkjs/lib/elk.bundled.js'],
   },
+  server: {
+    // Dev proxy: forward /graphql → SHUTTLE on 8080 (bypasses rbac-proxy which isn't running locally)
+    proxy: {
+      '/graphql': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
+  },
 });

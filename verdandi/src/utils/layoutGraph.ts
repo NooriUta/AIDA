@@ -10,6 +10,10 @@ function getNodeHeight(node: LoomNode): number {
     const cols = node.data.columns?.length ?? 0;
     return NODE_HEIGHT_BASE + Math.min(cols, 7) * COLUMN_ROW_HEIGHT + 24;
   }
+  if (node.type === 'statementNode') {
+    const cols = node.data.columns?.length ?? 0;
+    return NODE_HEIGHT_BASE + Math.min(cols, 5) * COLUMN_ROW_HEIGHT + (cols > 0 ? 24 : 0);
+  }
   return NODE_HEIGHT_BASE;
 }
 
@@ -127,14 +131,16 @@ export async function applyELKLayout(
       width:  typeof n.style?.width  === 'number' ? n.style.width  : NODE_WIDTH,
       height: typeof n.style?.height === 'number' ? n.style.height : getNodeHeight(n),
     })),
-    // Edges: skip containment edges (implicit via parentId) and edges from child nodes.
-    // Cross-hierarchy edges (extRoutine → child) are reversed so ELK places
-    // external routines to the RIGHT of the schema group.
+    // Edges: skip CONTAINS_TABLE (implicit via parentId) and edges from child nodes.
+    // CONTAINS_ROUTINE (pkg→routine), CONTAINS_STMT (routine→stmt), BELONGS_TO_SESSION
+    // are real structural edges — keep them so ELK can use them for positioning.
+    // Cross-hierarchy edges (stmt → child table) are reversed so ELK places
+    // external nodes to the LEFT of the schema group (ELK direction = RIGHT).
     edges: edges
       .filter((e) => {
         if (childIds.has(e.source)) return false;
         const type = e.data?.edgeType;
-        return type !== 'CONTAINS_TABLE' && type !== 'CONTAINS_ROUTINE';
+        return type !== 'CONTAINS_TABLE';
       })
       .map((e) => {
         const tgtIsChild = childIds.has(e.target);

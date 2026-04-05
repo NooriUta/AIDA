@@ -58,16 +58,21 @@ const LoomCanvasInner = memo(() => {
     l1ScopeStack,
     expandedDbs,
     l1Filter,
+    l1HierarchyFilter,
     filter,
     hiddenNodeIds,
     theme,
     setGraphStats,
     setZoom,
     selectNode,
+    selectedNodeId,
     drillDown,
     pushL1Scope,
     setAvailableFields,
     setAvailableApps,
+    setAvailableDbs,
+    setAvailableSchemas,
+    toggleDbExpansion,
   } = useLoomStore();
   const { t } = useTranslation();
 
@@ -93,17 +98,42 @@ const LoomCanvasInner = memo(() => {
     return null;
   }, [viewLevel, overviewQ.data, exploreQ.data, lineageQ.data]);
 
-  // ── Populate availableApps for the L1 scope selector ───────────────────────
+  // ── Populate App/DB/Schema lists for L1 filter panel ──────────────────────
   useEffect(() => {
     if (viewLevel !== 'L1' || !rawGraph) {
       setAvailableApps([]);
+      setAvailableDbs([]);
+      setAvailableSchemas([]);
       return;
     }
-    const apps = rawGraph.nodes
-      .filter((n) => n.type === 'applicationNode')
-      .map((n) => ({ id: n.id, label: n.data.label }));
-    setAvailableApps(apps);
-  }, [viewLevel, rawGraph, setAvailableApps]);
+    setAvailableApps(
+      rawGraph.nodes
+        .filter((n) => n.type === 'applicationNode')
+        .map((n) => ({ id: n.id, label: n.data.label })),
+    );
+    setAvailableDbs(
+      rawGraph.nodes
+        .filter((n) => n.type === 'databaseNode')
+        .map((n) => ({ id: n.id, label: n.data.label, appId: n.parentId ?? null })),
+    );
+    setAvailableSchemas(
+      rawGraph.nodes
+        .filter((n) => n.type === 'l1SchemaNode')
+        .map((n) => ({ id: n.id, label: n.data.label, dbId: n.parentId ?? '' })),
+    );
+  }, [viewLevel, rawGraph, setAvailableApps, setAvailableDbs, setAvailableSchemas]);
+
+  // ── Auto-expand parent DB when navigating to a schema chip from search ───────
+  // rawGraph always has l1SchemaNode.hidden=true (initial state), so we check
+  // expandedDbs instead of node.hidden to avoid toggling an already-open DB
+  // when the user simply clicks a visible schema chip.
+  useEffect(() => {
+    if (viewLevel !== 'L1' || !selectedNodeId || !rawGraph) return;
+    const node = rawGraph.nodes.find((n) => n.id === selectedNodeId);
+    if (node?.type === 'l1SchemaNode' && node.parentId && !expandedDbs.has(node.parentId)) {
+      toggleDbExpansion(node.parentId);
+    }
+  }, [selectedNodeId, viewLevel, rawGraph, expandedDbs, toggleDbExpansion]);
 
   // ── L1 scope filter: dim nodes outside selected app (3-level parentId-aware) ─
   const scopedGraph = useMemo(() => {
@@ -148,11 +178,13 @@ const LoomCanvasInner = memo(() => {
     [],
   );
 
-  // ── displayGraph: 4-phase transform pipeline ─────────────────────────────────
+  // ── displayGraph: 6-phase transform pipeline ─────────────────────────────────
   //   Phase 1: L1 system-level (hide DB/Schema nodes)
   //   Phase 2: Hide nodes marked via 🔴 button (LOOM-026)
   //   Phase 3: tableLevelView — suppress column-level edges (LOOM-025)
   //   Phase 4: fieldFilter — dim edges/nodes unrelated to selected field (LOOM-025)
+  //   Phase 5: L1 hierarchy filter (App → DB → Schema) — dim out-of-scope nodes
+  //   Phase 6: L1 schema chip selection — dim other visible schema chips
   const displayGraph = useMemo(() => {
     if (!scopedGraph) return null;
 
@@ -223,8 +255,66 @@ const LoomCanvasInner = memo(() => {
       };
     }
 
+    // Phase 5 — L1 hierarchy filter (DB → Schema): dim nodes outside selected DB/Schema.
+    // App-level scope is already handled by scopedGraph (l1ScopeStack).
+    if (viewLevel === 'L1') {
+      const { dbId, schemaId } = l1HierarchyFilter;
+      if (dbId || schemaId) {
+        const DIM_H = 0.12;
+        const inScope = new Set<string>();
+
+        if (schemaId) {
+          // Schema chip + parent DB + grandparent App (keep parents at full opacity)
+          inScope.add(schemaId);
+          const sn = base.nodes.find((n) => n.id === schemaId);
+          if (sn?.parentId) {
+            inScope.add(sn.parentId);
+            const dn = base.nodes.find((n) => n.id === sn.parentId);
+            if (dn?.parentId) inScope.add(dn.parentId);
+          }
+        } else {
+          // DB + all its schema chips + parent App
+          inScope.add(dbId!);
+          for (const n of base.nodes) {
+            if (n.type === 'l1SchemaNode' && n.parentId === dbId) inScope.add(n.id);
+          }
+          const dn = base.nodes.find((n) => n.id === dbId);
+          if (dn?.parentId) inScope.add(dn.parentId);
+        }
+
+        base = {
+          nodes: base.nodes.map((n) =>
+            inScope.has(n.id)
+              ? n
+              : { ...n, style: { ...n.style, opacity: DIM_H, pointerEvents: 'none' as const } },
+          ),
+          edges: base.edges,
+        };
+      }
+    }
+
+    // Phase 6 — L1 schema chip selection: dim other visible schema chips
+    if (viewLevel === 'L1' && selectedNodeId) {
+      const selNode = base.nodes.find((n) => n.id === selectedNodeId);
+      // Only dim when the selected node is a visible schema chip (its parent DB is open)
+      if (
+        selNode?.type === 'l1SchemaNode' &&
+        selNode.parentId &&
+        expandedDbs.has(selNode.parentId)
+      ) {
+        const DIM_CHIP = 0.2;
+        base = {
+          nodes: base.nodes.map((n) => {
+            if (n.type !== 'l1SchemaNode' || n.id === selectedNodeId) return n;
+            return { ...n, style: { ...n.style, opacity: DIM_CHIP } };
+          }),
+          edges: base.edges,
+        };
+      }
+    }
+
     return base;
-  }, [scopedGraph, viewLevel, l1Filter.systemLevel, hiddenNodeIds, filter.tableLevelView, filter.fieldFilter, COLUMN_EDGE_TYPES]);
+  }, [scopedGraph, viewLevel, l1Filter.systemLevel, hiddenNodeIds, filter.tableLevelView, filter.fieldFilter, COLUMN_EDGE_TYPES, l1HierarchyFilter, selectedNodeId, expandedDbs]);
 
   // ── Layout: L1 = pre-computed + applyL1Layout; L2/L3 = ELK ─────────────────
   useEffect(() => {
@@ -288,9 +378,11 @@ const LoomCanvasInner = memo(() => {
   }, [selectNode]);
 
   // Double-click:
-  //   Application / Service on L1 → scope filter (stays on L1)
-  //   Database / Schema / Package  → drillDown (L1 → L2)
-  //   Table                        → drillDown (L2 → L3)
+  //   Application on L1      → scope filter (stays on L1, dims other apps)
+  //   Database on L1         → drillDown to DB-scope L2 (expand/collapse is in header)
+  //   Schema chip on L1      → drillDown to schema L2
+  //   Schema / Package on L2 → drillDown (L2 → L3)
+  //   Table on L2            → drillDown (L2 → L3)
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {
       pushL1Scope(node.id, node.data.label, node.data.nodeType);
@@ -298,7 +390,6 @@ const LoomCanvasInner = memo(() => {
     }
     if (!node.data.childrenAvailable || viewLevel === 'L3') return;
     // DaliSchema: use name-based scope so SHUTTLE dispatches to exploreSchema()
-    // DaliDatabase in real mode: node.id is a real @rid → exploreByRid() works
     const scope = node.data.nodeType === 'DaliSchema'
       ? `schema-${node.data.label}`
       : node.id;

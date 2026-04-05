@@ -5,7 +5,9 @@ import { config } from '../config';
 const COOKIE_OPTS = {
   httpOnly: true,
   path:     '/',
-  sameSite: 'strict' as const,
+  // 'lax' allows cross-port requests on localhost (5173 → 3000 in dev).
+  // 'strict' blocks the cookie entirely when origin differs from request host.
+  sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
   secure:   process.env.NODE_ENV === 'production',
   maxAge:   8 * 60 * 60, // 8 h in seconds
 };

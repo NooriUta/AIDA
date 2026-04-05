@@ -33,6 +33,17 @@ export interface L1FilterState {
   systemLevel: boolean;          // hide DB/Schema nodes, show only App nodes
 }
 
+// ─── L1 hierarchy filter (DB → Schema cascading) ─────────────────────────────
+// App-level filtering is handled by the Scope selector (l1ScopeStack).
+export interface L1HierarchyFilter {
+  dbId:     string | null;
+  schemaId: string | null;
+}
+
+const L1_HIERARCHY_DEFAULTS: L1HierarchyFilter = {
+  dbId: null, schemaId: null,
+};
+
 interface LoomStore {
   // ── View state ────────────────────────────────────────────────────────────
   viewLevel: ViewLevel;
@@ -101,11 +112,21 @@ interface LoomStore {
   toggleL1DirDown:     () => void;
   toggleL1SystemLevel: () => void;
 
-  // ── Available app list for L1 scope selector (LOOM-024b) ─────────────────────
-  availableApps: { id: string; label: string }[];
-  setAvailableApps: (apps: { id: string; label: string }[]) => void;
+  // ── Available App/DB/Schema lists for L1 filter panel ────────────────────────
+  availableApps:    { id: string; label: string }[];
+  availableDbs:     { id: string; label: string; appId: string | null }[];
+  availableSchemas: { id: string; label: string; dbId: string }[];
+  setAvailableApps:    (apps: { id: string; label: string }[]) => void;
+  setAvailableDbs:     (dbs: { id: string; label: string; appId: string | null }[]) => void;
+  setAvailableSchemas: (schemas: { id: string; label: string; dbId: string }[]) => void;
   /** Replace the entire L1 scope stack with a single entry, or clear it (null). */
   setL1Scope: (nodeId: string | null, label?: string) => void;
+
+  // ── L1 hierarchy filter (DB → Schema) ────────────────────────────────────────
+  l1HierarchyFilter: L1HierarchyFilter;
+  setL1HierarchyDb:       (dbId:     string | null) => void;
+  setL1HierarchySchema:   (schemaId: string | null) => void;
+  clearL1HierarchyFilter: () => void;
 
   // ── Node expansion / visibility (LOOM-026) ───────────────────────────────
   nodeExpansionState: Record<string, 'collapsed' | 'partial' | 'expanded'>;
@@ -144,7 +165,10 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   l1ScopeStack: [],
   expandedDbs: new Set<string>(),
   l1Filter: { depth: 2, dirUp: true, dirDown: true, systemLevel: false },
+  l1HierarchyFilter: { ...L1_HIERARCHY_DEFAULTS },
   availableApps: [],
+  availableDbs: [],
+  availableSchemas: [],
   selectedNodeId: null,
   highlightedNodes: new Set<string>(),
   highlightedEdges: new Set<string>(),
@@ -195,6 +219,7 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
       navigationStack:    [],
       l1ScopeStack:       [],
       expandedDbs:        new Set<string>(),
+      l1HierarchyFilter:  { ...L1_HIERARCHY_DEFAULTS },
       selectedNodeId:     null,
       availableFields:    [],
       filter: {
@@ -237,6 +262,7 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
       l1ScopeStack: [],
       expandedDbs: new Set<string>(),
       l1Filter: { depth: 2, dirUp: true, dirDown: true, systemLevel: false },
+      l1HierarchyFilter: { ...L1_HIERARCHY_DEFAULTS },
       selectedNodeId: null,
       availableFields: [],
       filter: { ...FILTER_DEFAULTS },
@@ -363,7 +389,18 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
     }));
   },
 
-  setAvailableApps: (apps) => set({ availableApps: apps }),
+  setAvailableApps:    (apps)    => set({ availableApps: apps }),
+  setAvailableDbs:     (dbs)     => set({ availableDbs: dbs }),
+  setAvailableSchemas: (schemas) => set({ availableSchemas: schemas }),
+
+  // ── L1 hierarchy filter actions ───────────────────────────────────────────
+  // Selecting DB resets Schema; App-level scope is handled by l1ScopeStack.
+  setL1HierarchyDb: (dbId) =>
+    set({ l1HierarchyFilter: { dbId, schemaId: null } }),
+  setL1HierarchySchema: (schemaId) =>
+    set((s) => ({ l1HierarchyFilter: { ...s.l1HierarchyFilter, schemaId } })),
+  clearL1HierarchyFilter: () =>
+    set({ l1HierarchyFilter: { ...L1_HIERARCHY_DEFAULTS } }),
 
   // ── Node expansion / visibility (LOOM-026) ───────────────────────────────
   setNodeExpansion: (nodeId, state) => {

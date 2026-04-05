@@ -14,28 +14,59 @@ export const L1_APP_PAD_BOT   = 8;   // padding below last DB inside App group
 export const L1_DB_GAP        = 6;   // vertical gap between stacked DB nodes
 export const L1_DB_BASE_H     = 46;  // collapsed DatabaseNode height (header ~24px + footer ~22px)
 
-export const L1_SCH_AREA_PAD  = 5;   // top padding of schema area inside DB
-export const L1_SCH_HEIGHT    = 20;  // height of each L1SchemaNode
-export const L1_SCH_GAP       = 2;   // gap between schema chips
+export const L1_SCH_AREA_PAD  = 5;   // top/bottom padding of schema area inside DB
+export const L1_SCH_HEIGHT    = 20;  // height of each L1SchemaNode chip
+export const L1_SCH_GAP       = 2;   // gap between schema chips (horizontal + vertical)
 
-/** Height of a DatabaseNode expanded with `n` schema children. */
-export function dbExpandedH(schemaCount: number): number {
-  if (schemaCount === 0) return L1_DB_BASE_H;
-  return (
-    L1_DB_BASE_H +
-    L1_SCH_AREA_PAD +
-    schemaCount * (L1_SCH_HEIGHT + L1_SCH_GAP) -
-    L1_SCH_GAP +
-    L1_SCH_AREA_PAD
-  );
+// ─── Multi-column chip grid ───────────────────────────────────────────────────
+// ≤ 3 schemas → 1 column, chip width = 196 px (DB interior = 204 − 2×4 margins)
+// > 3 schemas → 2 columns, each chip = 97 px (2×97 + 2 gap + 8 margins = 204)
+// Threshold and widths can be tuned without touching component code.
+
+const L1_SCH_MARGIN      = 4;   // left margin of chip area inside DB (x offset of col-0)
+const L1_SCH_COL_THRESHOLD = 3; // switch to 2 cols when schemaCount > this
+const L1_SCH_COL1_W      = 196; // chip width in 1-column layout
+const L1_SCH_COL2_W      = 97;  // chip width in 2-column layout
+
+/** Number of chip columns based on schema count. */
+export function schemaGridCols(schemaCount: number): number {
+  return schemaCount > L1_SCH_COL_THRESHOLD ? 2 : 1;
+}
+
+/** Width of each schema chip for a given column count. */
+export function schemaChipW(cols: number): number {
+  return cols === 1 ? L1_SCH_COL1_W : L1_SCH_COL2_W;
 }
 
 /**
- * Y position of schema node at `index` within its parent DatabaseNode
- * (relative to DB's top-left corner).
+ * X position of schema chip at `index` within its parent DatabaseNode
+ * (relative to DB top-left corner).
  */
-export function schemaChipY(index: number): number {
-  return L1_DB_BASE_H + L1_SCH_AREA_PAD + index * (L1_SCH_HEIGHT + L1_SCH_GAP);
+export function schemaChipX(index: number, cols: number): number {
+  const col = index % cols;
+  return L1_SCH_MARGIN + col * (L1_SCH_COL2_W + L1_SCH_GAP);
+}
+
+/**
+ * Y position of schema chip at `index` within its parent DatabaseNode
+ * (relative to DB top-left corner).
+ */
+export function schemaChipY(index: number, cols: number = 1): number {
+  const row = Math.floor(index / cols);
+  return L1_DB_BASE_H + L1_SCH_AREA_PAD + row * (L1_SCH_HEIGHT + L1_SCH_GAP);
+}
+
+/** Height of a DatabaseNode expanded with `n` schema children laid out in `cols` columns. */
+export function dbExpandedH(schemaCount: number, cols: number = 1): number {
+  if (schemaCount === 0) return L1_DB_BASE_H;
+  const rows = Math.ceil(schemaCount / cols);
+  return (
+    L1_DB_BASE_H +
+    L1_SCH_AREA_PAD +
+    rows * (L1_SCH_HEIGHT + L1_SCH_GAP) -
+    L1_SCH_GAP +
+    L1_SCH_AREA_PAD
+  );
 }
 
 // ─── Main layout function ─────────────────────────────────────────────────────
@@ -48,8 +79,8 @@ export function schemaChipY(index: number): number {
  * so results are deterministic and idempotent.
  *
  * Changes per node type:
- *   l1SchemaNode  → hidden = !expandedDbs.has(parentDbId)
- *   databaseNode  → position.y recalculated; style.height set explicitly
+ *   l1SchemaNode    → hidden = !expandedDbs.has(parentDbId)
+ *   databaseNode    → position.y recalculated; style.height set to fit schema grid
  *   applicationNode → style.height grows to contain all expanded children
  */
 export function applyL1Layout(
@@ -105,8 +136,9 @@ export function applyL1Layout(
       targetDbY.set(db.id, y);
 
       const schemas = schemasByDb.get(db.id) ?? [];
+      const cols    = schemaGridCols(schemas.length);
       const dbH     = expandedDbs.has(db.id)
-        ? dbExpandedH(schemas.length)
+        ? dbExpandedH(schemas.length, cols)
         : L1_DB_BASE_H;
 
       targetDbH.set(db.id, dbH);
@@ -119,12 +151,13 @@ export function applyL1Layout(
     );
   }
 
-  // Standalone DBs: only their height changes (position is absolute, never moves)
+  // Standalone DBs: only height changes (position is absolute, never moves)
   for (const db of standaloneDbs) {
     const schemas = schemasByDb.get(db.id) ?? [];
+    const cols    = schemaGridCols(schemas.length);
     targetDbH.set(
       db.id,
-      expandedDbs.has(db.id) ? dbExpandedH(schemas.length) : L1_DB_BASE_H,
+      expandedDbs.has(db.id) ? dbExpandedH(schemas.length, cols) : L1_DB_BASE_H,
     );
   }
 
@@ -133,7 +166,7 @@ export function applyL1Layout(
   // against stale RF state. ReactFlow reconciles efficiently on its end.
   return nodes.map((node): LoomNode => {
 
-    // Schema nodes: flip hidden flag only
+    // Schema nodes: flip hidden flag only — positions pre-computed in transformGraph
     if (node.type === 'l1SchemaNode' && node.parentId) {
       const hidden = !expandedDbs.has(node.parentId);
       return { ...node, hidden };
@@ -146,6 +179,7 @@ export function applyL1Layout(
       if (y === undefined || h === undefined) return node;
       return {
         ...node,
+        height:   h,
         position: { x: node.position.x, y },
         style:    { ...node.style, height: h },
       };
@@ -155,14 +189,14 @@ export function applyL1Layout(
     if (node.type === 'databaseNode' && !node.parentId) {
       const h = targetDbH.get(node.id);
       if (h === undefined) return node;
-      return { ...node, style: { ...node.style, height: h } };
+      return { ...node, height: h, style: { ...node.style, height: h } };
     }
 
     // App group nodes: update height to contain all expanded children
     if (node.type === 'applicationNode') {
       const h = targetAppH.get(node.id);
       if (h === undefined) return node;
-      return { ...node, style: { ...node.style, height: h } };
+      return { ...node, height: h, style: { ...node.style, height: h } };
     }
 
     return node;
