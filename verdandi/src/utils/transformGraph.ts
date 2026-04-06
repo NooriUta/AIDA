@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { ApiGraphResponse } from '../types/api';
 import type { DaliNodeType, DaliEdgeType, ColumnInfo } from '../types/domain';
 import type { LoomNode, LoomEdge } from '../types/graph';
-import type { ExploreResult, SchemaNode } from '../services/lineage';
+import type { ExploreResult, SchemaNode, GraphNode } from '../services/lineage';
 import { L1_APP_HEADER, L1_APP_PAD_BOT, L1_DB_BASE_H, L1_DB_GAP, schemaChipY, schemaChipX, schemaChipW, schemaGridCols } from './layoutL1';
 
 // ─── Map Dali node type → React Flow node type string ───────────────────────
@@ -15,6 +15,7 @@ const NODE_TYPE_MAP: Record<DaliNodeType, string> = {
   DaliTable:        'tableNode',
   DaliColumn:       'columnNode',
   DaliOutputColumn: 'columnNode',
+  DaliAffectedColumn: 'columnNode',
   DaliAtom:         'atomNode',
   DaliRoutine:      'routineNode',
   DaliStatement:    'statementNode',
@@ -107,23 +108,155 @@ export function transformGraph(response: ApiGraphResponse): {
 //   — CONTAINS_TABLE/CONTAINS_ROUTINE edges suppressed (implicit via parentId).
 //   See layoutGraph.ts → applyELKLayout compound mode for positioning logic.
 
-// Grid layout constants for schema group children
-const L2_CHILD_W     = 240;
-const L2_CHILD_H_BASE= 80;   // table header height (no columns)
-const L2_COL_ROW_H   = 22;   // height of one column row in TableNode
-const L2_COL_EXTRA   = 24;   // TableNode bottom padding when columns are shown
-const L2_MAX_COLS    = 5;    // max column rows shown per table in L2
-const L2_GAP_X       = 16;
-const L2_GAP_Y       = 12;
-const L2_GROUP_HDR   = 44;   // schema group header height
-const L2_GROUP_PAD_S = 20;   // left / right padding
-const L2_GROUP_PAD_B = 20;   // bottom padding
+// Max inline columns shown per table / statement at L2
+const L2_MAX_COLS = 5;
+
+// ─── Group layout constants ─────────────────────────────────────────────────
+const GRP_W       = 420;   // inner width available for children
+const GRP_HDR     = 36;    // group header height
+const GRP_PAD     = 12;    // side + bottom padding inside group
+const GRP_GAP     = 6;     // vertical gap between children
+const NODE_W      = 400;   // leaf node width
+const NODE_H_BASE = 80;    // base height (header only, no columns)
+const COL_ROW_H   = 22;    // height per inline column row
+
+// ─── Nesting edges: used to build visual hierarchy (Schema → Routine → Stmt) ─
+// CONTAINS_ROUTINE is dual-purpose: Schema→Routine AND Routine→Routine.
+// CHILD_OF / USES_SUBQUERY / NESTED_IN are NOT included — sub-statements are
+// invisible at L2 (they can be explored by drilling into a statement at L3).
+const NESTING_EDGES = new Set<string>([
+  'CONTAINS_ROUTINE', 'CONTAINS_STMT', 'CONTAINS_PACKAGE',
+  'CONTAINS_TABLE', 'BELONGS_TO_SESSION',
+  'HAS_COLUMN', 'HAS_OUTPUT_COL', 'HAS_AFFECTED_COL', 'HAS_PARAMETER', 'HAS_VARIABLE',
+]);
+
+// ─── Suppressed edges: ALL structural/containment edges hidden from arrows ───
+// Superset of NESTING_EDGES.  Includes sub-statement links that are NOT rendered
+// at L2 but whose targets must still be excluded from the "external nodes" list.
+const SUPPRESSED_EDGES = new Set<string>([
+  ...NESTING_EDGES,
+  'CONTAINS_PACKAGE',                        // legacy — suppressed if present
+  'CHILD_OF', 'USES_SUBQUERY', 'NESTED_IN', // sub-statement links
+]);
+
+/** Build parent → children[] map from edges matching the given type set. */
+function buildContainmentChildren(
+  edges: { source: string; target: string; type: string }[],
+  edgeTypes: Set<string>,
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!edgeTypes.has(e.type)) continue;
+    if (!map.has(e.source)) map.set(e.source, []);
+    map.get(e.source)!.push(e.target);
+  }
+  return map;
+}
+
+/** Collect all transitive descendants of rootId via containment tree. */
+function collectAllDescendants(
+  rootId: string,
+  tree: Map<string, string[]>,
+): Set<string> {
+  const visited = new Set<string>();
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    const children = tree.get(id);
+    if (!children) continue;
+    for (const child of children) {
+      if (!visited.has(child)) {
+        visited.add(child);
+        stack.push(child);
+      }
+    }
+  }
+  return visited;
+}
+
+/** Extract SQL statement type (INSERT, SELECT, …) from label.
+ *
+ * Handles two label formats:
+ *   1. Path: "PKG:PROCEDURE:LOAD:MERGE:159:SELECT:159" → first SQL keyword = MERGE
+ *   2. SQL snippet: "INSERT INTO table ..." → first word = INSERT
+ */
+const SQL_KEYWORDS = new Set([
+  'INSERT', 'SELECT', 'UPDATE', 'DELETE', 'MERGE',
+  'CREATE', 'DROP', 'ALTER', 'TRUNCATE', 'CALL',
+  'OPEN', 'FETCH', 'CLOSE', 'CTE', 'WITH', 'SQ',
+  'CURSOR', 'DINAMIC_CURSOR', 'DYNAMIC_CURSOR',
+]);
+
+function extractStatementType(label: string): string | undefined {
+  for (const part of label.split(/[\s:]+/)) {
+    const upper = part.toUpperCase();
+    if (SQL_KEYWORDS.has(upper)) return upper;
+  }
+  return undefined;
+}
+
+/** Extract short routine kind badge from label path segments.
+ *  Label format: "SCHEMA.PKG:PROCEDURE:NAME:..." or "SCHEMA.PKG:FUNCTION:NAME:..."
+ */
+const ROUTINE_KINDS: Record<string, string> = {
+  FUNCTION:  'FUNC',
+  PROCEDURE: 'PROC',
+};
+
+function extractRoutineKind(label: string, nodeType: DaliNodeType): string {
+  if (nodeType === 'DaliPackage') return 'PKG';
+  if (nodeType === 'DaliSession') return 'SESSION';
+  for (const part of label.split(/[\s:.]+/)) {
+    const short = ROUTINE_KINDS[part.toUpperCase()];
+    if (short) return short;
+  }
+  return 'ROUTINE';
+}
+
+/** Parse statement label path into hierarchy + short display label.
+ *
+ * Full format: "SCHEMA.PACKAGE:PROCEDURE:ROUTINE_NAME:STMT_TYPE:LINE[:STMT_TYPE:LINE...]"
+ *
+ * Example: "BUDM_RMS_TMD.DM_LOADER_...:PROCEDURE:LOAD_..._REG:DELETE:687"
+ *   → label: "DELETE:687"
+ *   → groupPath: ["BUDM_RMS_TMD", "DM_LOADER_...", "LOAD_..._REG"]
+ */
+const ROUTINE_TYPE_KEYWORDS = new Set(['PROCEDURE', 'FUNCTION']);
+
+function parseStmtLabel(label: string): { shortLabel: string; groupPath: string[] } {
+  if (!label.includes(':')) return { shortLabel: label, groupPath: [] };
+
+  const parts = label.split(':');
+  const groupPath: string[] = [];
+
+  // Find the routine type keyword index
+  let routineIdx = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (ROUTINE_TYPE_KEYWORDS.has(parts[i].toUpperCase())) { routineIdx = i; break; }
+  }
+
+  if (routineIdx >= 0) {
+    // parts[0] = "SCHEMA.PACKAGE" → split by dot
+    const schemaPkg = parts[0].split('.');
+    groupPath.push(...schemaPkg);                      // schema, package
+    if (routineIdx + 1 < parts.length) {
+      groupPath.push(parts[routineIdx + 1]);           // routine name
+    }
+    // Statement part: everything after routine name (STMT_TYPE:LINE[:...])
+    const stmtParts = parts.slice(routineIdx + 2);
+    return { shortLabel: stmtParts.join(':') || label, groupPath };
+  }
+
+  // No routine type found — return last 2 segments as label
+  return { shortLabel: parts.slice(-2).join(':'), groupPath: [] };
+}
 
 function isSchemaExploreResult(result: ExploreResult): boolean {
   if (!result.nodes.some((n) => n.type === 'DaliSchema')) return false;
-  return result.edges.some(
-    (e) => e.type === 'CONTAINS_TABLE' || e.type === 'CONTAINS_ROUTINE',
-  );
+  // Use table-group layout only when the result contains actual tables.
+  // Pure-package schemas (ODS, ODS_TMD — tableCount=0) have no CONTAINS_TABLE
+  // edges, so route them to the flat explore path where packages render as nodes.
+  return result.edges.some((e) => e.type === 'CONTAINS_TABLE');
 }
 
 /**
@@ -146,160 +279,133 @@ function transformSchemaExplore(result: ExploreResult): {
 } {
   const schemaNode = result.nodes.find((n) => n.type === 'DaliSchema')!;
   const schemaId   = schemaNode.id;
+  const schemaName = schemaNode.label;
 
-  // IDs of nodes directly owned by the schema (tables + own routines)
-  const childIds = new Set(
-    result.edges
-      .filter((e) => e.source === schemaId && (e.type === 'CONTAINS_TABLE' || e.type === 'CONTAINS_ROUTINE'))
-      .map((e) => e.target),
-  );
+  const nestTree = buildContainmentChildren(result.edges, NESTING_EDGES);
+  const nodeById = new Map(result.nodes.map((n) => [n.id, n]));
 
-  // ── Column data: group DaliColumn nodes by their parent table ─────────────
-  // HAS_COLUMN edges: source = tableId, target = columnId
-  const columnsByTable = new Map<string, ColumnInfo[]>();
+
+  // ── Collect columns: DaliColumn → table only (stmt columns arrive via applyStmtColumns) ────
+  const columnsByParent = new Map<string, ColumnInfo[]>();
   for (const e of result.edges) {
     if (e.type !== 'HAS_COLUMN') continue;
     const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliColumn');
     if (!colNode) continue;
-    if (!columnsByTable.has(e.source)) columnsByTable.set(e.source, []);
-    const cols = columnsByTable.get(e.source)!;
+    if (!columnsByParent.has(e.source)) columnsByParent.set(e.source, []);
+    const cols = columnsByParent.get(e.source)!;
     if (cols.length < L2_MAX_COLS) {
       cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
     }
   }
 
-  // ── Output column data: group DaliOutputColumn nodes by their parent statement ─
-  // HAS_OUTPUT_COL edges: source = stmtId, target = outputColumnId
-  const outputColsByStmt = new Map<string, ColumnInfo[]>();
+  // ── Walk containment tree: collect tables and statements ─────────────────
+  const schemaTables: GraphNode[] = [];
+  const schemaTableIds = new Set<string>();
+  const schemaStmtIds = new Set<string>();
+
+  function walkTree(parentId: string) {
+    const children = nestTree.get(parentId);
+    if (!children) return;
+    for (const childId of children) {
+      const child = nodeById.get(childId);
+      if (!child) continue;
+      switch (child.type) {
+        case 'DaliTable':
+          schemaTables.push(child);
+          schemaTableIds.add(child.id);
+          break;
+        case 'DaliStatement':
+          schemaStmtIds.add(child.id);
+          break;
+        case 'DaliPackage':
+        case 'DaliRoutine':
+        case 'DaliSession':
+          walkTree(child.id);   // recurse into containers
+          break;
+        default:
+          walkTree(childId);
+          break;
+      }
+    }
+  }
+  walkTree(schemaId);
+
+  // ── Phase 1b: Statements connected to tables via READS_FROM / WRITES_TO ──
+  const DATA_FLOW_TYPES = new Set(['READS_FROM', 'WRITES_TO']);
+  const connectedStmtIds = new Set<string>();
   for (const e of result.edges) {
-    if (e.type !== 'HAS_OUTPUT_COL') continue;
-    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliOutputColumn');
-    if (!colNode) continue;
-    if (!outputColsByStmt.has(e.source)) outputColsByStmt.set(e.source, []);
-    const cols = outputColsByStmt.get(e.source)!;
-    if (cols.length < L2_MAX_COLS) {
-      cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
+    if (!DATA_FLOW_TYPES.has(e.type)) continue;
+    const stmtId = schemaTableIds.has(e.target) ? e.source
+                 : schemaTableIds.has(e.source) ? e.target
+                 : null;
+    if (stmtId && nodeById.get(stmtId)?.type === 'DaliStatement') {
+      connectedStmtIds.add(stmtId);
     }
   }
 
-  // ── Per-table cell heights (variable: depends on column count) ───────────
-  const childList = result.nodes.filter((nd) => childIds.has(nd.id));
+  // Merge: all schema statements + connected external statements
+  const allStmtIds = new Set([...schemaStmtIds, ...connectedStmtIds]);
 
-  function cellHeight(nodeId: string, nodeType: string): number {
-    if (nodeType !== 'DaliTable') return L2_CHILD_H_BASE;
-    const colCount = Math.min(columnsByTable.get(nodeId)?.length ?? 0, L2_MAX_COLS);
-    return L2_CHILD_H_BASE + colCount * L2_COL_ROW_H + (colCount > 0 ? L2_COL_EXTRA : 0);
-  }
-
-  // ── Grid layout ───────────────────────────────────────────────────────────
-  const childCount = childIds.size;
-  const gridCols   = childCount <= 3 ? 1 : childCount <= 8 ? 2 : childCount <= 15 ? 3 : 4;
-  const gridRows   = Math.ceil(childCount / gridCols);
-  const groupW     = L2_GROUP_PAD_S * 2 + gridCols * L2_CHILD_W + (gridCols - 1) * L2_GAP_X;
-
-  // Per-row max heights (so each row accommodates its tallest cell)
-  const rowMaxH: number[] = Array.from({ length: gridRows }, (_, row) => {
-    let maxH = L2_CHILD_H_BASE;
-    for (let gc = 0; gc < gridCols; gc++) {
-      const idx = row * gridCols + gc;
-      if (idx >= childList.length) break;
-      maxH = Math.max(maxH, cellHeight(childList[idx].id, childList[idx].type));
-    }
-    return maxH;
-  });
-
-  // Cumulative Y offsets for each row
-  const rowY: number[] = [];
-  let yAcc = L2_GROUP_HDR;
-  for (let row = 0; row < gridRows; row++) {
-    rowY.push(yAcc);
-    yAcc += rowMaxH[row] + L2_GAP_Y;
-  }
-  const groupH = yAcc - L2_GAP_Y + L2_GROUP_PAD_B;
-
+  // ── Build flat React Flow nodes (no groups) ──────────────────────────────
   const rfNodes: LoomNode[] = [];
+  const renderedIds = new Set<string>();
 
-  // ── Schema group node ─────────────────────────────────────────────────────
-  rfNodes.push({
-    id:       schemaId,
-    type:     'schemaGroupNode',
-    position: { x: 0, y: 0 },
-    width:    groupW,
-    height:   groupH,
-    style:    { width: groupW, height: groupH },
-    data: {
-      label:             schemaNode.label,
-      nodeType:          'DaliSchema',
-      childrenAvailable: false,
-      metadata:          {},
-    },
-  });
-
-  // ── Children: tables + own routines + sessions inside the group ─────────
-  childList.forEach((nd, idx) => {
-    const gc       = idx % gridCols;
-    const gr       = Math.floor(idx / gridCols);
-    const nodeType = nd.type as DaliNodeType;
-    const ch       = cellHeight(nd.id, nd.type);
-    // DaliSession labels are raw file paths — extract filename for display
-    const label = nodeType === 'DaliSession' ? sessionLabel(nd.label) : nd.label;
+  // Tables
+  for (const table of schemaTables) {
     rfNodes.push({
-      id:       nd.id,
-      type:     NODE_TYPE_MAP[nodeType] ?? 'tableNode',
-      position: {
-        x: L2_GROUP_PAD_S + gc * (L2_CHILD_W + L2_GAP_X),
-        y: rowY[gr],
-      },
-      parentId: schemaId,
-      extent:   'parent' as const,
-      width:    L2_CHILD_W,
-      height:   ch,
-      style:    { width: L2_CHILD_W, height: ch },
-      data: {
-        label,
-        nodeType,
-        childrenAvailable: DRILLABLE_TYPES.has(nodeType),
-        metadata:          { scope: nd.scope },
-        schema:            nd.scope || undefined,
-        columns:           columnsByTable.get(nd.id),
-      },
-    });
-  });
-
-  // ── External nodes (Package, Routine, Statement, Session outside schema group) ─
-  // DaliColumn + DaliOutputColumn skipped — they're inline in table/statement cards.
-  for (const nd of result.nodes) {
-    if (nd.id === schemaId || childIds.has(nd.id) || nd.type === 'DaliColumn' || nd.type === 'DaliOutputColumn') continue;
-    const nodeType = nd.type as DaliNodeType;
-    // DaliSession labels are raw file paths — extract filename for display
-    const label = nodeType === 'DaliSession' ? sessionLabel(nd.label) : nd.label;
-    rfNodes.push({
-      id:       nd.id,
-      type:     NODE_TYPE_MAP[nodeType] ?? 'routineNode',
+      id:       table.id,
+      type:     'tableNode',
       position: { x: 0, y: 0 },
       data: {
-        label,
-        nodeType,
-        childrenAvailable: DRILLABLE_TYPES.has(nodeType),
-        metadata:          { scope: nd.scope },
-        schema:            nd.scope || undefined,
-        // Statement nodes carry their output columns inline
-        columns:           outputColsByStmt.get(nd.id),
+        label:             table.label,
+        nodeType:          'DaliTable' as DaliNodeType,
+        childrenAvailable: true,
+        metadata:          { scope: table.scope },
+        schema:            schemaName,
+        columns:           columnsByParent.get(table.id),
       },
     });
+    renderedIds.add(table.id);
   }
 
-  // ── Edges: suppress only CONTAINS_TABLE (implicit via parentId) and inline-column edges ─
-  // CONTAINS_ROUTINE (pkg→routine), CONTAINS_STMT (routine→stmt), BELONGS_TO_SESSION
-  // are real structural edges — keep them for graph display and ELK layout.
+  // Statements
+  for (const stmtId of allStmtIds) {
+    const nd = nodeById.get(stmtId);
+    if (!nd) continue;
+    const { shortLabel, groupPath } = parseStmtLabel(nd.label);
+    rfNodes.push({
+      id:       stmtId,
+      type:     'statementNode',
+      position: { x: 0, y: 0 },
+      data: {
+        label:             shortLabel,
+        nodeType:          'DaliStatement' as DaliNodeType,
+        childrenAvailable: false,
+        metadata:          { scope: nd.scope, groupPath, fullLabel: nd.label },
+        operation:         extractStatementType(nd.label),
+        columns:           columnsByParent.get(stmtId),
+      },
+    });
+    renderedIds.add(stmtId);
+  }
+
+  // ── Edges: data-flow between rendered nodes only ──────────────────────────
   const rfEdges: LoomEdge[] = result.edges
-    .filter((e) => e.type !== 'CONTAINS_TABLE' && e.type !== 'HAS_COLUMN' && e.type !== 'HAS_OUTPUT_COL')
+    .filter((e) =>
+      !SUPPRESSED_EDGES.has(e.type) &&
+      renderedIds.has(e.source) &&
+      renderedIds.has(e.target),
+    )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
+      // Flip READS_FROM so data flows Table → Statement (left → right).
+      // In the DB both READS_FROM and WRITES_TO are stored as Statement → Table.
+      const flip = edgeType === 'READS_FROM';
       return {
         id:       e.id,
-        source:   e.source,
-        target:   e.target,
+        source:   flip ? e.target : e.source,
+        target:   flip ? e.source : e.target,
+        type:     'smoothstep',
         animated: ANIMATED_EDGES.has(edgeType),
         style:    getEdgeStyle(edgeType),
         data:     { edgeType },
@@ -307,6 +413,99 @@ function transformSchemaExplore(result: ExploreResult): {
     });
 
   return { nodes: rfNodes, edges: rfEdges };
+}
+
+// ─── Subquery READS_FROM hoisting ────────────────────────────────────────────
+//
+// Root DaliStatement nodes can own sub-statements linked via:
+//   USES_SUBQUERY  source=rootStmt   → target=subStmt  (parent "uses" child)
+//   CHILD_OF       source=subStmt    → target=parentStmt
+//   NESTED_IN      source=subStmt    → target=parentStmt
+//
+// Sub-statements are not rendered on the canvas.  Their READS_FROM edges are
+// hoisted to the nearest visible ancestor so the root statement exposes every
+// table it — and its sub-queries — touch.
+//
+// Returns:
+//   subqueryIds    — ids to exclude from the node list
+//   syntheticEdges — new READS_FROM edges to append (root → table)
+function hoistSubqueryReads(result: ExploreResult): {
+  subqueryIds:    Set<string>;
+  syntheticEdges: LoomEdge[];
+} {
+  const SUBQ_TYPES = new Set(['USES_SUBQUERY', 'CHILD_OF', 'NESTED_IN']);
+  const stmtIds   = new Set(
+    result.nodes.filter((n) => n.type === 'DaliStatement').map((n) => n.id),
+  );
+
+  // Build parent → [children] tree for sub-statement containment.
+  const subqTree = new Map<string, string[]>();
+  for (const e of result.edges) {
+    if (!SUBQ_TYPES.has(e.type)) continue;
+    // Normalise direction: parentId is always the "outer" statement.
+    const parentId = e.type === 'USES_SUBQUERY' ? e.source : e.target;
+    const childId  = e.type === 'USES_SUBQUERY' ? e.target : e.source;
+    if (!stmtIds.has(parentId) || !stmtIds.has(childId)) continue;
+    if (!subqTree.has(parentId)) subqTree.set(parentId, []);
+    subqTree.get(parentId)!.push(childId);
+  }
+
+  if (subqTree.size === 0) return { subqueryIds: new Set(), syntheticEdges: [] };
+
+  // Collect all sub-statement ids (direct + transitive).
+  // A statement is a subquery if it appears as a child in the tree.
+  const immediateSubqIds = new Set<string>();
+  for (const children of subqTree.values()) {
+    for (const c of children) immediateSubqIds.add(c);
+  }
+  const allSubqIds = new Set<string>(immediateSubqIds);
+  for (const id of immediateSubqIds) {
+    for (const d of collectAllDescendants(id, subqTree)) allSubqIds.add(d);
+  }
+
+  // Map every sub-query id → its root (top-level, non-subquery) ancestor.
+  const subqToRoot = new Map<string, string>();
+  for (const [parentId, children] of subqTree) {
+    if (allSubqIds.has(parentId)) continue;  // parent is itself a child elsewhere
+    for (const childId of children) {
+      subqToRoot.set(childId, parentId);
+      for (const d of collectAllDescendants(childId, subqTree)) {
+        subqToRoot.set(d, parentId);
+      }
+    }
+  }
+
+  // Pre-populate seen with direct root-stmt → table READS_FROM so we never
+  // create a duplicate synthetic edge.
+  const seen = new Set<string>();
+  for (const e of result.edges) {
+    if (e.type !== 'READS_FROM') continue;
+    if (stmtIds.has(e.source) && !allSubqIds.has(e.source)) {
+      seen.add(`${e.source}\x00${e.target}`);
+    }
+  }
+
+  // Build synthetic edges: root → table for each unique pair from subquery reads.
+  const syntheticEdges: LoomEdge[] = [];
+  let idx = 0;
+  for (const e of result.edges) {
+    if (e.type !== 'READS_FROM') continue;
+    const rootId = subqToRoot.get(e.source);
+    if (!rootId) continue;
+    const key = `${rootId}\x00${e.target}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    syntheticEdges.push({
+      id:       `__sqrf_${idx++}`,
+      source:   rootId,
+      target:   e.target,
+      animated: false,
+      style:    getEdgeStyle('READS_FROM'),
+      data:     { edgeType: 'READS_FROM' as DaliEdgeType },
+    });
+  }
+
+  return { subqueryIds: allSubqIds, syntheticEdges };
 }
 
 export function transformGqlExplore(result: ExploreResult): {
@@ -332,11 +531,11 @@ export function transformGqlExplore(result: ExploreResult): {
     }
   }
 
-  // HAS_OUTPUT_COL: statement → output column (columns render inline in StatementNode)
+  // HAS_OUTPUT_COL / HAS_AFFECTED_COL: statement → columns (render inline in StatementNode)
   const outputColsByStmt = new Map<string, ColumnInfo[]>();
   for (const e of result.edges) {
-    if (e.type !== 'HAS_OUTPUT_COL') continue;
-    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliOutputColumn');
+    if (e.type !== 'HAS_OUTPUT_COL' && e.type !== 'HAS_AFFECTED_COL') continue;
+    const colNode = result.nodes.find((nd) => nd.id === e.target && (nd.type === 'DaliOutputColumn' || nd.type === 'DaliColumn' || nd.type === 'DaliAffectedColumn'));
     if (!colNode) continue;
     if (!outputColsByStmt.has(e.source)) outputColsByStmt.set(e.source, []);
     const cols = outputColsByStmt.get(e.source)!;
@@ -345,12 +544,23 @@ export function transformGqlExplore(result: ExploreResult): {
     }
   }
 
+  // ── Subquery hoisting: hide sub-statements, promote their READS_FROM ────────
+  const { subqueryIds, syntheticEdges } = hoistSubqueryReads(result);
+
   // Flat explore (package, rid-based, lineage)
-  // DaliColumn and DaliOutputColumn render inline — skip them as standalone nodes.
+  // DaliColumn, DaliOutputColumn, DaliAffectedColumn render inline — skip as standalone nodes.
+  // Sub-statement nodes (subqueryIds) are also excluded: their READS_FROM edges
+  // have been promoted to the root statement by hoistSubqueryReads().
   const nodes: LoomNode[] = result.nodes
-    .filter((n) => n.type !== 'DaliOutputColumn' && n.type !== 'DaliColumn')
+    .filter((n) =>
+      n.type !== 'DaliOutputColumn' &&
+      n.type !== 'DaliColumn'       &&
+      n.type !== 'DaliAffectedColumn' &&
+      !subqueryIds.has(n.id),
+    )
     .map((n) => {
       const nodeType = n.type as DaliNodeType;
+      const isFlatRoutine = nodeType === 'DaliRoutine' || nodeType === 'DaliSession' || nodeType === 'DaliPackage';
       return {
         id: n.id,
         type: NODE_TYPE_MAP[nodeType] ?? 'schemaNode',
@@ -359,20 +569,25 @@ export function transformGqlExplore(result: ExploreResult): {
           label:             n.label,
           nodeType,
           childrenAvailable: DRILLABLE_TYPES.has(nodeType),
-          metadata:          { scope: n.scope },
+          metadata:          { scope: n.scope, routineKind: isFlatRoutine ? extractRoutineKind(n.label, nodeType) : undefined },
           schema:            n.scope || undefined,
-          // Tables get HAS_COLUMN inline; statements get HAS_OUTPUT_COL inline
+          // Tables get HAS_COLUMN inline; statements get HAS_OUTPUT_COL/HAS_AFFECTED_COL inline
           columns:           outputColsByStmt.get(n.id) ?? columnsByTable.get(n.id),
+          operation:         nodeType === 'DaliStatement' ? extractStatementType(n.label) : undefined,
         },
       };
     });
 
   const nodeIds = new Set(nodes.map((n) => n.id));
 
-  // HAS_COLUMN and HAS_OUTPUT_COL are implicit (inline); also drop dangling edges.
-  const edges: LoomEdge[] = result.edges
+  // HAS_COLUMN, HAS_OUTPUT_COL, HAS_AFFECTED_COL are implicit (inline); drop dangling edges.
+  // Subquery nodes were removed from nodeIds, so their outgoing/incoming edges
+  // (including USES_SUBQUERY, CHILD_OF, NESTED_IN, and their own READS_FROM)
+  // are automatically dropped by the nodeIds.has() guard below.
+  const regularEdges: LoomEdge[] = result.edges
     .filter((e) =>
       e.type !== 'HAS_OUTPUT_COL' &&
+      e.type !== 'HAS_AFFECTED_COL' &&
       e.type !== 'HAS_COLUMN' &&
       nodeIds.has(e.source) &&
       nodeIds.has(e.target),
@@ -389,7 +604,127 @@ export function transformGqlExplore(result: ExploreResult): {
       };
     });
 
+  // Append promoted subquery READS_FROM edges (both endpoints must be rendered).
+  const edges: LoomEdge[] = [
+    ...regularEdges,
+    ...syntheticEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)),
+  ];
+
   return { nodes, edges };
+}
+
+// ─── Statement column enrichment (second-pass) ───────────────────────────────
+//
+// Called after schema explore + layout, with the result of fetchStmtColumns().
+// Builds a stmtId → ColumnInfo[] map and patches existing LoomNodes in-place.
+// No re-layout needed: only node.data is updated.
+
+export function applyStmtColumns(
+  nodes: LoomNode[],
+  baseEdges: LoomEdge[],
+  colResult: ExploreResult,
+): { nodes: LoomNode[]; cfEdges: LoomEdge[] } {
+  if (colResult.edges.length === 0) return { nodes, cfEdges: [] };
+
+  const nodeById = new Map(colResult.nodes.map((n) => [n.id, n]));
+  const colsByParent = new Map<string, ColumnInfo[]>();
+
+  // tableId → UPPER(colName) → colId
+  const tableColMap = new Map<string, Map<string, string>>();
+  // stmtId  → UPPER(colName) → stmtColId
+  const stmtColMap  = new Map<string, Map<string, string>>();
+
+  for (const e of colResult.edges) {
+    const col = nodeById.get(e.target);
+    if (!col) continue;
+
+    if (e.type === 'HAS_COLUMN') {
+      if (!tableColMap.has(e.source)) tableColMap.set(e.source, new Map());
+      tableColMap.get(e.source)!.set(col.label.toUpperCase(), col.id);
+      if (!colsByParent.has(e.source)) colsByParent.set(e.source, []);
+      const cols = colsByParent.get(e.source)!;
+      if (cols.length < L2_MAX_COLS)
+        cols.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+    } else if (e.type === 'HAS_OUTPUT_COL' || e.type === 'HAS_AFFECTED_COL') {
+      if (!stmtColMap.has(e.source)) stmtColMap.set(e.source, new Map());
+      stmtColMap.get(e.source)!.set(col.label.toUpperCase(), col.id);
+      if (!colsByParent.has(e.source)) colsByParent.set(e.source, []);
+      const cols = colsByParent.get(e.source)!;
+      if (cols.length < L2_MAX_COLS)
+        cols.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+    }
+  }
+
+  const enrichedNodes = colsByParent.size === 0
+    ? nodes
+    : nodes.map((n) => {
+        const cols = colsByParent.get(n.id);
+        return cols ? { ...n, data: { ...n.data, columns: cols } } : n;
+      });
+
+  // ── Column-level flow edges ────────────────────────────────────────────────
+  // baseEdges has WRITES_TO  (source=stmtId,  target=tableId)
+  //           and READS_FROM (source=tableId, target=stmtId)  — flipped for display.
+  const renderedIds = new Set(nodes.map((n) => n.id));
+  const cfEdges: LoomEdge[] = [];
+  const cfSeen  = new Set<string>();
+
+  for (const e of baseEdges) {
+    const edgeType = e.data?.edgeType as string | undefined;
+    if (edgeType !== 'WRITES_TO' && edgeType !== 'READS_FROM') continue;
+
+    // Recover stmtId / tableId regardless of display orientation
+    const stmtId  = edgeType === 'WRITES_TO' ? e.source : e.target;
+    const tableId = edgeType === 'WRITES_TO' ? e.target : e.source;
+    if (!renderedIds.has(stmtId) || !renderedIds.has(tableId)) continue;
+
+    const tableCols = tableColMap.get(tableId);
+    const stmtCols  = stmtColMap.get(stmtId);
+    if (!tableCols || !stmtCols) continue;
+
+    for (const [name, sColId] of stmtCols) {
+      const tColId = tableCols.get(name);
+      if (!tColId) continue;
+
+      if (edgeType === 'WRITES_TO') {
+        // stmt.affectedCol (right) → table.col (left)
+        const cfId = `cf-w-${sColId}-${tColId}`;
+        if (!cfSeen.has(cfId)) {
+          cfSeen.add(cfId);
+          cfEdges.push({
+            id:           cfId,
+            source:       stmtId,
+            target:       tableId,
+            sourceHandle: `src-${sColId}`,
+            targetHandle: `tgt-${tColId}`,
+            type:         'smoothstep',
+            animated:     false,
+            style:        { stroke: '#D4922A', strokeWidth: 1.5 },
+            data:         { edgeType: 'HAS_AFFECTED_COL', parentStmtId: stmtId },
+          });
+        }
+      } else {
+        // READS_FROM display: table (left) → stmt (right)
+        const cfId = `cf-r-${tColId}-${sColId}`;
+        if (!cfSeen.has(cfId)) {
+          cfSeen.add(cfId);
+          cfEdges.push({
+            id:           cfId,
+            source:       tableId,
+            target:       stmtId,
+            sourceHandle: `src-${tColId}`,
+            targetHandle: `tgt-${sColId}`,
+            type:         'smoothstep',
+            animated:     false,
+            style:        { stroke: '#88B8A8', strokeWidth: 1.5 },
+            data:         { edgeType: 'HAS_OUTPUT_COL', parentStmtId: stmtId },
+          });
+        }
+      }
+    }
+  }
+
+  return { nodes: enrichedNodes, cfEdges };
 }
 
 // ─── LOOM-024 v3: L1 three-level grouped layout ───────────────────────────────
@@ -436,8 +771,9 @@ function pushSchemaChip(
       label:             schema.name,
       nodeType:          'DaliSchema' as DaliNodeType,
       childrenAvailable: true,
-      metadata:          { color },
+      metadata:          { color, databaseName: schema.databaseName ?? null },
       tablesCount:       schema.tableCount,
+      routinesCount:     schema.packageCount,  // CONTAINS_ROUTINE → DaliPackage count
     },
   });
 }

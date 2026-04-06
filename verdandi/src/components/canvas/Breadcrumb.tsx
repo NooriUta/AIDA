@@ -32,7 +32,7 @@ export const Breadcrumb = memo(() => {
       alignItems: 'center',
       gap: '2px',
       padding: '4px var(--seer-space-3)',
-      background: 'rgba(20,17,8,0.88)',
+      background: 'color-mix(in srgb, var(--bg1) 92%, transparent)',
       backdropFilter: 'blur(8px)',
       border: '1px solid var(--bd)',
       borderRadius: 'var(--seer-radius-md)',

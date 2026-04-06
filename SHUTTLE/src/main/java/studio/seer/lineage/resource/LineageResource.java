@@ -47,6 +47,18 @@ public class LineageResource {
         return exploreService.explore(scope);
     }
 
+    // ── L2+: Statement column enrichment ─────────────────────────────────────
+
+    @Query("stmtColumns")
+    @Description("Bulk HAS_OUTPUT_COL + HAS_AFFECTED_COL for a list of statement @rids. Role: viewer+")
+    public Uni<ExploreResult> stmtColumns(
+        @Name("ids")
+        @Description("List of statement @rids returned by explore")
+        List<String> ids
+    ) {
+        return exploreService.exploreStmtColumns(ids);
+    }
+
     // ── L3: Column lineage ────────────────────────────────────────────────────
 
     @Query("lineage")

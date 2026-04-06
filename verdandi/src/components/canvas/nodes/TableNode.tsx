@@ -156,7 +156,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
       onClick={() => selectNode(id)}
     >
       <NodeExpandButtons nodeId={id} show={selected ?? false} />
-      <Handle type="target" position={Position.Left} style={{ background: 'var(--inf)', zIndex: 5 }} />
+      <Handle type="target" position={Position.Left} style={{ background: 'var(--inf)', zIndex: 5, top: '22px' }} />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div
@@ -175,6 +175,12 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         <Table2 size={13} color="var(--acc)" strokeWidth={1.5} style={{ flexShrink: 0 }} />
 
         <div style={{ flex: 1, overflow: 'hidden' }}>
+          {/* Hierarchy breadcrumb (Schema → …) */}
+          {Array.isArray(data.metadata?.groupPath) && (data.metadata.groupPath as string[]).length > 0 && (
+            <div style={{ fontSize: '9px', color: 'var(--t3)', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '1px', letterSpacing: '0.02em' }}>
+              {(data.metadata.groupPath as string[]).join(' › ')}
+            </div>
+          )}
           <div
             title={data.label}
             style={{
@@ -189,7 +195,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
             {data.label}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>
-            {data.schema ?? 'public'} · {columns.length} {t('nodes.columns')}
+            {columns.length} {t('nodes.columns')}
           </div>
         </div>
 
@@ -271,7 +277,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} style={{ background: 'var(--acc)', zIndex: 5 }} />
+      <Handle type="source" position={Position.Right} style={{ background: 'var(--acc)', zIndex: 5, top: '22px' }} />
     </div>
   );
 });

@@ -5,6 +5,7 @@ import {
   fetchLineage,
   fetchUpstream,
   fetchDownstream,
+  fetchStmtColumns,
   fetchSearch,
   isUnauthorized,
 } from './lineage';
@@ -85,6 +86,20 @@ export function useDownstream(nodeId: string | null) {
     queryKey: qk.downstream(nodeId ?? ''),
     queryFn:  () => fetchDownstream(nodeId!),
     enabled:  !!nodeId,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+// ── L2+: Statement column enrichment ─────────────────────────────────────────
+
+export function useStmtColumns(ids: string[]) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: ['stmtColumns', ids],
+    queryFn:  () => fetchStmtColumns(ids),
+    enabled:  ids.length > 0,
+    staleTime: 60_000,
     throwOnError: false,
     meta: { onError },
   });

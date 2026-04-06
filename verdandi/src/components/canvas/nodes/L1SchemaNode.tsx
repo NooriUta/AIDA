@@ -74,6 +74,19 @@ export const L1SchemaNode = memo(({ data, selected, id }: NodeProps<L1SchemaNode
         </span>
       )}
 
+      {/* Package count (if available) — CONTAINS_ROUTINE → DaliPackage */}
+      {data.routinesCount !== undefined && data.routinesCount > 0 && (
+        <span style={{
+          fontSize:   8,
+          color:      'var(--inf)',  // #88B8A8 teal — structural/package colour
+          fontFamily: 'monospace',
+          flexShrink: 0,
+          opacity:    0.8,
+        }}>
+          {data.routinesCount}p
+        </span>
+      )}
+
       {/* Handles for Dataflow edges (schema participates in data flows) */}
       <Handle
         type="target"

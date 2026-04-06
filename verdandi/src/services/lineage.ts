@@ -110,6 +110,15 @@ const DOWNSTREAM = /* GraphQL */ `
   }
 `;
 
+const STMT_COLUMNS = /* GraphQL */ `
+  query StmtColumns($ids: [String]!) {
+    stmtColumns(ids: $ids) {
+      nodes { id type label scope }
+      edges { id source target type }
+    }
+  }
+`;
+
 const SEARCH = /* GraphQL */ `
   query Search($query: String!, $limit: Int) {
     search(query: $query, limit: $limit) {
@@ -143,6 +152,12 @@ export async function fetchUpstream(nodeId: string): Promise<ExploreResult> {
 export async function fetchDownstream(nodeId: string): Promise<ExploreResult> {
   const data = await gqlClient.request<{ downstream: ExploreResult }>(DOWNSTREAM, { nodeId });
   return data.downstream;
+}
+
+export async function fetchStmtColumns(ids: string[]): Promise<ExploreResult> {
+  if (ids.length === 0) return { nodes: [], edges: [] };
+  const data = await gqlClient.request<{ stmtColumns: ExploreResult }>(STMT_COLUMNS, { ids });
+  return data.stmtColumns;
 }
 
 export async function fetchSearch(query: string, limit = 20): Promise<SearchResult[]> {

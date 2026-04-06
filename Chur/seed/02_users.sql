@@ -6,15 +6,15 @@
 
 INSERT INTO User SET
   username      = 'admin',
-  password_hash = '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/Lewdg9a9X1zmL0KXa',
+  password_hash = '$2a$12$ef3RxN2n5jjea7.wOnqFQ.MamxaQuip5QOcp2xR0eDOnOwyPoQOwS',
   role          = 'admin';
 
 INSERT INTO User SET
   username      = 'editor',
-  password_hash = '$2a$12$Yj7vAQb3GnF5X9mK8zPtWODoHhLmS6uCsJqEVN2x4T1gBpRd0wIXe',
+  password_hash = '$2a$12$KELCp6a40cqWG/IPD97IpOUgPUoBcFuoPKMthM2qre9TxgfwqlyZ6',
   role          = 'editor';
 
 INSERT INTO User SET
   username      = 'viewer',
-  password_hash = '$2a$12$MnK8pR3QsT6vXwY1zBcDaOeN9fGuJhLmP4rSwA7tV0iCqEkXdFyHz',
+  password_hash = '$2a$12$RJOGEwUZviLAQ5.SR0kRrexlpEkZi2jqRd2hJwuSd5Z3801kSj776',
   role          = 'viewer';

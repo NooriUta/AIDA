@@ -14,7 +14,8 @@ export type DaliNodeType =
   | 'DaliAtom'
   | 'DaliOutputColumn'
   | 'DaliParameter'
-  | 'DaliVariable';
+  | 'DaliVariable'
+  | 'DaliAffectedColumn';
 
 // ─── Dali Edge Types ─────────────────────────────────────────────────────────
 export type DaliEdgeType =
@@ -39,6 +40,7 @@ export type DaliEdgeType =
   | 'USES_SUBQUERY'
   | 'NESTED_IN'
   | 'HAS_OUTPUT_COL'
+  | 'HAS_AFFECTED_COL'
   | 'HAS_PARAMETER'
   | 'HAS_VARIABLE'
   | 'DATA_FLOW'

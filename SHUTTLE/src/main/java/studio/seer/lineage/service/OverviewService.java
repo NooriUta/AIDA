@@ -12,11 +12,12 @@ import java.util.Map;
 /**
  * L1 — aggregated schema overview.
  *
- * Confirmed against hound DB (2026-04-04):
+ * Confirmed against hound DB (2026-04-05):
  *   DaliSchema properties: schema_name, schema_geoid, database_geoid
- *   CONTAINS_TABLE  → DaliTable  (active)
- *   CONTAINS_PACKAGE → DaliPackage (edge type exists; count depends on data)
- *   CONTAINS_ROUTINE → DaliRoutine (edge type exists)
+ *   CONTAINS_TABLE   → DaliTable   (active)
+ *   CONTAINS_ROUTINE → DaliPackage (edge name is misleading — targets are always DaliPackage)
+ *   CONTAINS_ROUTINE → DaliRoutine (theoretically; currently 0 in data — routines live in packages)
+ *   CONTAINS_PACKAGE edge type does NOT exist in the schema.
  */
 @ApplicationScoped
 public class OverviewService {
@@ -32,11 +33,13 @@ public class OverviewService {
         //   applicationGeoid/applicationName — не заполняем (BELONGS_TO_APP после HOUND-DB-001)
         String sql = """
             SELECT
-                @rid                                                 AS rid,
+                @rid                                                          AS rid,
                 schema_name,
-                out('CONTAINS_TABLE').size()                         AS tableCount,
-                in('CONTAINS_SCHEMA')[0].db_geoid                    AS databaseGeoid,
-                in('CONTAINS_SCHEMA')[0].db_name                     AS databaseName
+                out('CONTAINS_TABLE').size()                                  AS tableCount,
+                out('CONTAINS_ROUTINE')[@type = 'DaliRoutine'].size()         AS routineCount,
+                out('CONTAINS_ROUTINE')[@type = 'DaliPackage'].size()         AS packageCount,
+                in('CONTAINS_SCHEMA')[0].db_geoid                             AS databaseGeoid,
+                in('CONTAINS_SCHEMA')[0].db_name                              AS databaseName
             FROM DaliSchema
             ORDER BY schema_name
             """;

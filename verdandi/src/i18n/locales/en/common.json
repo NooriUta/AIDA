@@ -50,6 +50,10 @@
   "toolbar": {
     "startObject":     "Start object",
     "changeObject":    "Change",
+    "table":           "Table",
+    "allTables":       "all tables",
+    "stmt":            "Transform",
+    "allStmts":        "all transforms",
     "field":           "Field",
     "allColumns":      "all columns",
     "depth":           "Depth",
@@ -305,5 +309,43 @@
     "copyId": "Copy ID",
     "openInSource": "Open in source",
     "setAsStart": "Set as start object"
+  },
+
+  "legend": {
+    "title": "Legend",
+    "open":  "Show legend",
+    "close": "Hide legend",
+    "section": {
+      "edges": "Edges",
+      "nodes": "Nodes"
+    },
+    "edge": {
+      "readsFrom":     "READS_FROM",
+      "writesTo":      "WRITES_TO",
+      "dataFlow":      "DATA_FLOW",
+      "filterFlow":    "FILTER_FLOW",
+      "joinFlow":      "JOIN_FLOW",
+      "containsStmt":  "CONTAINS_STMT",
+      "atomProduces":  "ATOM_PRODUCES",
+      "atomRefCol":    "ATOM_REF_COLUMN",
+      "hasDatabase":   "HAS_DATABASE",
+      "containsSchema":"CONTAINS_SCHEMA",
+      "usesDatabase":  "USES_DATABASE"
+    },
+    "node": {
+      "application": "Application",
+      "database":    "Database",
+      "schema":      "Schema",
+      "table":       "Table",
+      "package":     "Package",
+      "routine":     "Routine",
+      "statement":   "Statement",
+      "column":      "Column",
+      "atom":        "Atom"
+    },
+    "hint": {
+      "dblclick": "drill-down",
+      "click":    "select / highlight"
+    }
   }
 }

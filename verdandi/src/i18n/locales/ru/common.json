@@ -50,6 +50,10 @@
   "toolbar": {
     "startObject":     "Начальный объект",
     "changeObject":    "Изменить",
+    "table":           "Таблица",
+    "allTables":       "все таблицы",
+    "stmt":            "Трансформация",
+    "allStmts":        "все трансформации",
     "field":           "Поле",
     "allColumns":      "все колонки",
     "depth":           "Глубина",
@@ -305,5 +309,43 @@
     "copyId": "Скопировать ID",
     "openInSource": "Открыть в источнике",
     "setAsStart": "Установить как стартовый"
+  },
+
+  "legend": {
+    "title": "Легенда",
+    "open":  "Показать легенду",
+    "close": "Скрыть легенду",
+    "section": {
+      "edges": "Рёбра",
+      "nodes": "Узлы"
+    },
+    "edge": {
+      "readsFrom":     "READS_FROM",
+      "writesTo":      "WRITES_TO",
+      "dataFlow":      "DATA_FLOW",
+      "filterFlow":    "FILTER_FLOW",
+      "joinFlow":      "JOIN_FLOW",
+      "containsStmt":  "CONTAINS_STMT",
+      "atomProduces":  "ATOM_PRODUCES",
+      "atomRefCol":    "ATOM_REF_COLUMN",
+      "hasDatabase":   "HAS_DATABASE",
+      "containsSchema":"CONTAINS_SCHEMA",
+      "usesDatabase":  "USES_DATABASE"
+    },
+    "node": {
+      "application": "Приложение",
+      "database":    "База данных",
+      "schema":      "Схема",
+      "table":       "Таблица",
+      "package":     "Пакет",
+      "routine":     "Процедура",
+      "statement":   "Стейтмент",
+      "column":      "Колонка",
+      "atom":        "Атом"
+    },
+    "hint": {
+      "dblclick": "drill-down",
+      "click":    "выбрать / выделить"
+    }
   }
 }

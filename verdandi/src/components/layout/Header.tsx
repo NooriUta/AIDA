@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 import { useAuthStore } from '../../stores/authStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { LegendButton }    from './LegendButton';
 
 type TabId = 'LOOM' | 'ANVIL' | 'SHUTTLE' | 'KNOT';
 
@@ -227,6 +228,9 @@ export const Header = memo(() => {
           </div>
         )}
       </div>
+
+      {/* Legend */}
+      <LegendButton />
 
       {/* Theme toggle */}
       <button

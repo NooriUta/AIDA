@@ -1,7 +1,7 @@
 import type { LoomNode, LoomEdge } from '../types/graph';
 
 // ─── Node dimension hints for ELK ────────────────────────────────────────────
-const NODE_WIDTH  = 240;
+const NODE_WIDTH  = 400;
 const NODE_HEIGHT_BASE = 80;
 const COLUMN_ROW_HEIGHT = 22;
 
@@ -13,6 +13,10 @@ function getNodeHeight(node: LoomNode): number {
   if (node.type === 'statementNode') {
     const cols = node.data.columns?.length ?? 0;
     return NODE_HEIGHT_BASE + Math.min(cols, 5) * COLUMN_ROW_HEIGHT + (cols > 0 ? 24 : 0);
+  }
+  // Routine group: height is pre-computed and stored in style
+  if (node.type === 'routineGroupNode') {
+    return typeof node.style?.height === 'number' ? node.style.height : NODE_HEIGHT_BASE;
   }
   return NODE_HEIGHT_BASE;
 }
@@ -53,13 +57,14 @@ interface ElkApi {
 }
 
 // ─── Shared layout options (flat layered, LEFT → RIGHT) ──────────────────────
-const FLAT_LAYOUT_OPTIONS: Record<string, string> = {
+const LAYERED_OPTIONS: Record<string, string> = {
   'elk.algorithm':                             'layered',
   'elk.direction':                             'RIGHT',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '100',
-  'elk.spacing.nodeNode':                      '50',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '120',
+  'elk.spacing.nodeNode':                      '60',
   'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-  'elk.layered.nodePlacement.strategy':        'BRANDES_KOEPF',
+  'elk.layered.nodePlacement.strategy':        'LINEAR_SEGMENTS',
+  'elk.layered.unnecessaryBendpoints':         'true',
 };
 
 // Singleton ELK instance (lazy-initialised)
@@ -101,7 +106,7 @@ export async function applyELKLayout(
   if (childNodes.length === 0) {
     const graph: ElkGraph = {
       id: 'root',
-      layoutOptions: { ...FLAT_LAYOUT_OPTIONS },
+      layoutOptions: { ...LAYERED_OPTIONS },
       children: nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: getNodeHeight(n) })),
       edges:    edges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
     };
@@ -117,40 +122,50 @@ export async function applyELKLayout(
     }
   }
 
-  // ── Compound layout ───────────────────────────────────────────────────────
-  const childIds      = new Set(childNodes.map((n) => n.id));
-  const parentOfChild = new Map(childNodes.map((n) => [n.id, n.parentId as string]));
-  const topNodes      = nodes.filter((n) => !n.parentId);
+  // ── Compound layout (supports multi-level nesting: Schema → Routine → Stmt) ─
+  const childIds  = new Set(childNodes.map((n) => n.id));
+  const parentOf  = new Map(childNodes.map((n) => [n.id, n.parentId as string]));
+  const topNodes  = nodes.filter((n) => !n.parentId);
+
+  // Map each child to its top-level ancestor (handles arbitrary nesting depth)
+  const topAncestorOf = new Map<string, string>();
+  for (const n of childNodes) {
+    let cur = n.id;
+    while (parentOf.has(cur)) cur = parentOf.get(cur)!;
+    topAncestorOf.set(n.id, cur);
+  }
+
+  const topNodeIds = new Set(topNodes.map((n) => n.id));
 
   const graph: ElkGraph = {
     id: 'root',
-    layoutOptions: { ...FLAT_LAYOUT_OPTIONS },
+    layoutOptions: { ...LAYERED_OPTIONS },
     children: topNodes.map((n) => ({
       id:     n.id,
       // Use pre-computed style dimensions for compound (group) nodes
       width:  typeof n.style?.width  === 'number' ? n.style.width  : NODE_WIDTH,
       height: typeof n.style?.height === 'number' ? n.style.height : getNodeHeight(n),
     })),
-    // Edges: skip CONTAINS_TABLE (implicit via parentId) and edges from child nodes.
-    // CONTAINS_ROUTINE (pkg→routine), CONTAINS_STMT (routine→stmt), BELONGS_TO_SESSION
-    // are real structural edges — keep them so ELK can use them for positioning.
-    // Cross-hierarchy edges (stmt → child table) are reversed so ELK places
-    // external nodes to the LEFT of the schema group (ELK direction = RIGHT).
-    edges: edges
-      .filter((e) => {
-        if (childIds.has(e.source)) return false;
-        const type = e.data?.edgeType;
-        return type !== 'CONTAINS_TABLE';
-      })
-      .map((e) => {
+    // Cross-group edges only — internal edges and containment edges are skipped.
+    // When one endpoint is inside a group, we remap it to the top-level ancestor
+    // so ELK can position the group relative to external nodes.
+    edges: (() => {
+      const seen = new Set<string>();
+      const elkEdges: ElkEdge[] = [];
+      for (const e of edges) {
+        const srcIsChild = childIds.has(e.source);
         const tgtIsChild = childIds.has(e.target);
-        return {
-          id:      e.id,
-          // Reverse: schemaGroup → extRoutine so ELK puts extRoutine on the right
-          sources: tgtIsChild ? [parentOfChild.get(e.target) ?? e.target] : [e.source],
-          targets: tgtIsChild ? [e.source]                                : [e.target],
-        };
-      }),
+        const elkSrc = srcIsChild ? topAncestorOf.get(e.source)! : e.source;
+        const elkTgt = tgtIsChild ? topAncestorOf.get(e.target)! : e.target;
+        if (elkSrc === elkTgt) continue;                        // internal edge
+        if (!topNodeIds.has(elkSrc) || !topNodeIds.has(elkTgt)) continue;
+        const key = `${elkSrc}→${elkTgt}`;
+        if (seen.has(key)) continue;                            // deduplicate
+        seen.add(key);
+        elkEdges.push({ id: e.id, sources: [elkSrc], targets: [elkTgt] });
+      }
+      return elkEdges;
+    })(),
   };
 
   try {

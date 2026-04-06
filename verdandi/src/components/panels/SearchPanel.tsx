@@ -162,7 +162,7 @@ function SectionLabel({ label }: { label: string }) {
 
 export const SearchPanel = memo(() => {
   const { t } = useTranslation();
-  const { jumpTo, selectNode, hiddenNodeIds, restoreNode, showAllNodes } = useLoomStore();
+  const { jumpTo, selectNode, requestFocusNode, hiddenNodeIds, restoreNode, showAllNodes } = useLoomStore();
 
   const [query, setQuery]              = useState('');
   const [debouncedQuery, setDebounced] = useState('');
@@ -237,9 +237,10 @@ export const SearchPanel = memo(() => {
       // L2: parent statement via exploreByRid (sibling output cols shown inline)
       jumpTo('L2', result.id, result.label, 'DaliOutputColumn');
     } else if (type === 'DaliSchema') {
-      // L1: overview, highlight schema node + auto-expand parent DB
+      // L1: overview, highlight schema node + auto-expand parent DB + zoom to it
       jumpTo('L1', null, result.label);
       selectNode(result.id);
+      requestFocusNode(result.id);
     } else if (type === 'DaliPackage') {
       // L2: package explore — scope = package_name
       jumpTo('L2', 'pkg-' + result.scope, result.scope, 'DaliPackage');
@@ -264,13 +265,14 @@ export const SearchPanel = memo(() => {
       // L3: lineage for this parameter/variable
       jumpTo('L3', result.id, result.label, type as never);
     } else if (type === 'DaliDatabase' || type === 'DaliApplication') {
-      // L1: overview, highlight that node
+      // L1: overview, highlight that node + zoom to it
       jumpTo('L1', null, result.label);
       selectNode(result.id);
+      requestFocusNode(result.id);
     } else {
       selectNode(result.id);
     }
-  }, [jumpTo, selectNode]);
+  }, [jumpTo, selectNode, requestFocusNode]);
 
   const tabs: { key: string; label: string }[] = [
     { key: 'all',          label: t('search.filters.all') },

@@ -1,9 +1,10 @@
 // src/components/layout/FilterToolbar.tsx
-// LOOM-023b: Filter Toolbar — connects to loomStore filter state
-// Visible only on L2 and L3 (when a scope is active).
-// Layout: [Start pill] | [Field select] [✕] | [Depth 1 2 3 5 ∞] | [↑ ↓] — [Table view] [badge]
+// LOOM-023b: Filter Toolbar — L2/L3 filter controls
+//
+// L2 order: [Schema pill] | [Table ▾] [Stmt ▾] [Column ▾] | [Depth 1 2 3 5 ∞] | [↑ ↓] — [Table view] [badge]
+// L3 order: same but Table/Stmt selects hidden (no table/stmt context)
 
-import { memo, useCallback, type ChangeEvent } from 'react';
+import { memo, useCallback, useMemo, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 
@@ -73,6 +74,63 @@ function Divider() {
   );
 }
 
+// ─── Compact select with label ────────────────────────────────────────────────
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+  onClear,
+  maxWidth = 150,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+  onClear?: () => void;
+  maxWidth?: number;
+}) {
+  const active = value !== '';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+      <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>{label}:</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          background:   'var(--bg3)',
+          border:       `1px solid ${active ? 'var(--acc)' : 'var(--bd)'}`,
+          borderRadius: 6,
+          color:        active ? 'var(--acc)' : 'var(--t2)',
+          fontSize:     12,
+          padding:      '3px 6px',
+          outline:      'none',
+          cursor:       'pointer',
+          maxWidth,
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      {active && onClear && (
+        <button
+          onClick={onClear}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 18, height: 18,
+            border: 'none', background: 'transparent',
+            color: 'var(--wrn)', fontSize: 12,
+            cursor: 'pointer', borderRadius: 3, padding: 0, flexShrink: 0,
+          }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── FilterToolbar ────────────────────────────────────────────────────────────
 export const FilterToolbar = memo(() => {
   const { t } = useTranslation();
@@ -81,6 +139,11 @@ export const FilterToolbar = memo(() => {
     currentScopeLabel,
     filter,
     availableFields,
+    availableTables,
+    availableStmts,
+    availableColumns,
+    setTableFilter,
+    setStmtFilter,
     setFieldFilter,
     setDepth,
     setDirection,
@@ -95,6 +158,8 @@ export const FilterToolbar = memo(() => {
   const {
     startObjectLabel,
     startObjectType,
+    tableFilter,
+    stmtFilter,
     fieldFilter,
     depth,
     upstream,
@@ -122,14 +187,40 @@ export const FilterToolbar = memo(() => {
     ? IconRoutine
     : IconGeneric;
 
-  const handleFieldChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => {
-      setFieldFilter(e.target.value || null);
-    },
-    [setFieldFilter],
-  );
+  const hasActiveFilter = tableFilter !== null || stmtFilter !== null || fieldFilter !== null
+    || depth !== Infinity || !upstream || !downstream;
 
-  const hasActiveFilter = fieldFilter !== null || depth !== Infinity || !upstream || !downstream;
+  // ── Table options ─────────────────────────────────────────────────────────
+  const tableOptions = useMemo(() => [
+    { value: '', label: t('toolbar.allTables') },
+    ...availableTables.map((t) => ({ value: t.id, label: t.label })),
+  ], [availableTables, t]);
+
+  // ── Transformation options — cascade: filter by selected table ───────────
+  const stmtOptions = useMemo(() => {
+    const list = tableFilter
+      ? availableStmts.filter((s) => s.connectedTableIds.includes(tableFilter))
+      : availableStmts;
+    return [
+      { value: '', label: t('toolbar.allStmts') },
+      ...list.map((s) => ({ value: s.id, label: s.label })),
+    ];
+  }, [availableStmts, tableFilter, t]);
+
+  // ── Column options: cascade from selected table/stmt; fall back to global ──
+  // Priority: availableColumns (from selected node) > availableFields (global)
+  const columnOptions = useMemo(() => {
+    const source = availableColumns.length > 0
+      ? availableColumns.map((c) => ({ value: c.name, label: c.name }))
+      : availableFields.map((f) => ({ value: f, label: f }));
+    return [{ value: '', label: t('toolbar.allColumns') }, ...source];
+  }, [availableColumns, availableFields, t]);
+
+  const showColumnDropdown = availableColumns.length > 0 || availableFields.length > 0;
+
+  const handleTableChange = useCallback((v: string) => setTableFilter(v || null), [setTableFilter]);
+  const handleStmtChange  = useCallback((v: string) => setStmtFilter(v || null),  [setStmtFilter]);
+  const handleFieldChange = useCallback((v: string) => setFieldFilter(v || null), [setFieldFilter]);
 
   return (
     <div style={{
@@ -183,56 +274,43 @@ export const FilterToolbar = memo(() => {
 
       <Divider />
 
-      {/* ── Field select ───────────────────────────────────────────────────── */}
-      <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>
-        {t('toolbar.field')}:
-      </span>
-      <select
-        value={fieldFilter ?? ''}
-        onChange={handleFieldChange}
-        disabled={tableLevelView}
-        style={{
-          background: 'var(--bg3)',
-          border: `1px solid ${fieldFilter ? 'var(--acc)' : 'var(--bd)'}`,
-          borderRadius: 6,
-          color: fieldFilter ? 'var(--acc)' : 'var(--t2)',
-          fontSize: 12,
-          padding: '3px 8px',
-          outline: 'none',
-          cursor: tableLevelView ? 'not-allowed' : 'pointer',
-          opacity: tableLevelView ? 0.4 : 1,
-          maxWidth: 160,
-        }}
-      >
-        <option value="">{t('toolbar.allColumns')}</option>
-        {availableFields.map((f) => (
-          <option key={f} value={f}>{f}</option>
-        ))}
-      </select>
-
-      {/* ✕ clear field filter */}
-      {fieldFilter && (
-        <button
-          onClick={() => setFieldFilter(null)}
-          title={t('toolbar.clearFilter')}
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 20, height: 20,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--wrn)',
-            fontSize: 13,
-            cursor: 'pointer',
-            borderRadius: 4,
-            padding: 0,
-            flexShrink: 0,
-          }}
-        >
-          ✕
-        </button>
+      {/* ── Table / Stmt selects (L2 only) ────────────────────────────────── */}
+      {viewLevel === 'L2' && availableTables.length > 0 && (
+        <>
+          <FilterSelect
+            label={t('toolbar.table')}
+            value={tableFilter ?? ''}
+            options={tableOptions}
+            onChange={handleTableChange}
+            onClear={() => setTableFilter(null)}
+            maxWidth={140}
+          />
+          <FilterSelect
+            label={t('toolbar.stmt')}
+            value={stmtFilter ?? ''}
+            options={stmtOptions}
+            onChange={handleStmtChange}
+            onClear={() => setStmtFilter(null)}
+            maxWidth={140}
+          />
+          <Divider />
+        </>
       )}
 
-      <Divider />
+      {/* ── Column cascade: columns of selected table/stmt (or global list) ── */}
+      {showColumnDropdown && (
+        <>
+          <FilterSelect
+            label={t('toolbar.field')}
+            value={fieldFilter ?? ''}
+            options={columnOptions}
+            onChange={handleFieldChange}
+            onClear={() => setFieldFilter(null)}
+            maxWidth={150}
+          />
+          <Divider />
+        </>
+      )}
 
       {/* ── Depth buttons ──────────────────────────────────────────────────── */}
       <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>
@@ -332,10 +410,12 @@ export const FilterToolbar = memo(() => {
         marginLeft: 4,
       }}>
         <span>{viewLevel}</span>
+        {tableFilter && <span>· ⊞</span>}
+        {stmtFilter  && <span>· ≡</span>}
         {fieldFilter && <span>· {fieldFilter}</span>}
         <span>· {depthLabel}</span>
         <span>· {dirLabel}</span>
-        {tableLevelView && <span>· ⊞</span>}
+        {tableLevelView && <span>· ⊟</span>}
       </div>
 
     </div>
