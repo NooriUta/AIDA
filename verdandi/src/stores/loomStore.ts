@@ -28,6 +28,8 @@ export interface FilterState {
   downstream: boolean;
   /** Show only table-level graph (hide column rows + column-level edges) */
   tableLevelView: boolean;
+  /** Show column-flow edges (HAS_AFFECTED_COL / HAS_OUTPUT_COL dashed bezier lines) */
+  showCfEdges: boolean;
 }
 
 // ─── L1 scope filter item (LOOM-024) ─────────────────────────────────────────
@@ -180,6 +182,7 @@ interface LoomStore {
   setDepth: (depth: number) => void;
   setDirection: (upstream: boolean, downstream: boolean) => void;
   toggleTableLevelView: () => void;
+  toggleCfEdges: () => void;
   clearFilter: () => void;
   setAvailableTables:  (tables: { id: string; label: string }[]) => void;
   setAvailableStmts:   (stmts: { id: string; label: string; connectedTableIds: string[] }[]) => void;
@@ -207,6 +210,7 @@ const FILTER_DEFAULTS: FilterState = {
   upstream:         true,
   downstream:       true,
   tableLevelView:   false,
+  showCfEdges:      true,
 };
 
 export const useLoomStore = create<LoomStore>((set, get) => ({
@@ -248,7 +252,6 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   drillDown: (nodeId, label, nodeType) => {
     const { viewLevel, currentScope, navigationStack } = get();
     const nextLevel: ViewLevel = viewLevel === 'L1' ? 'L2' : 'L3';
-    console.log(`[LOOM] drillDown → ${nextLevel}, scope=${nodeId}, label=${label}`);
     set({
       viewLevel: nextLevel,
       currentScope: nodeId,
@@ -276,7 +279,6 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
 
   // ── jumpTo: direct navigation from search results (no level dependency) ───
   jumpTo: (level, scope, label, nodeType) => {
-    console.log(`[LOOM] jumpTo → ${level}, scope=${scope}, label=${label}`);
     set({
       viewLevel:          level,
       currentScope:       scope,
@@ -306,7 +308,6 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
     const { navigationStack } = get();
     const item = navigationStack[index];
     if (!item) return;
-    console.log(`[LOOM] navigateBack → level=${item.level}, scope=${item.scope}`);
     set({
       viewLevel: item.level,
       currentScope: item.scope,
@@ -353,7 +354,6 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
 
   // ── selectNode ────────────────────────────────────────────────────────────
   selectNode: (nodeId) => {
-    console.log(`[LOOM] selectNode → ${nodeId}`);
     set({ selectedNodeId: nodeId });
   },
 
@@ -479,6 +479,12 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   toggleTableLevelView: () => {
     set((s) => ({
       filter: { ...s.filter, tableLevelView: !s.filter.tableLevelView },
+    }));
+  },
+
+  toggleCfEdges: () => {
+    set((s) => ({
+      filter: { ...s.filter, showCfEdges: !s.filter.showCfEdges },
     }));
   },
 

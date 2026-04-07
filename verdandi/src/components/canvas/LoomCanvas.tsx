@@ -102,6 +102,7 @@ const LoomCanvasInner = memo(() => {
   const [nodes, setNodes, onNodesChange] = useNodesState<LoomNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<LoomEdge>([]);
   const [layouting, setLayouting] = useState(false);
+  const [layoutError, setLayoutError] = useState(false);
 
   // ── Real data queries ───────────────────────────────────────────────────
   // All three are always called (Rules of Hooks); enabled flags prevent firing.
@@ -131,8 +132,8 @@ const LoomCanvasInner = memo(() => {
   // ── LOOM-027: upstream / downstream expand queries ────────────────────────
   const upstreamExpandId   = expandRequest?.direction === 'upstream'   ? expandRequest.nodeId : null;
   const downstreamExpandId = expandRequest?.direction === 'downstream' ? expandRequest.nodeId : null;
-  const { data: upstreamExpandData,   isSuccess: upstreamOk   } = useUpstream(upstreamExpandId);
-  const { data: downstreamExpandData, isSuccess: downstreamOk } = useDownstream(downstreamExpandId);
+  const { data: upstreamExpandData,   isSuccess: upstreamOk,   isError: upstreamExpandError   } = useUpstream(upstreamExpandId);
+  const { data: downstreamExpandData, isSuccess: downstreamOk, isError: downstreamExpandError } = useDownstream(downstreamExpandId);
 
   useEffect(() => {
     if (upstreamOk && upstreamExpandData && upstreamExpandId) {
@@ -149,6 +150,17 @@ const LoomCanvasInner = memo(() => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downstreamOk, downstreamExpandData, downstreamExpandId]);
+
+  // S-05: clear stuck expandRequest when expand query fails (button would freeze in loading state)
+  useEffect(() => {
+    if (upstreamExpandError && upstreamExpandId) clearExpandRequest();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upstreamExpandError, upstreamExpandId]);
+
+  useEffect(() => {
+    if (downstreamExpandError && downstreamExpandId) clearExpandRequest();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downstreamExpandError, downstreamExpandId]);
 
   // ── Transform raw GraphQL data → RF nodes / edges ───────────────────────
   // After transform, merge any expansion data fetched via LOOM-027 expand buttons.
@@ -318,18 +330,22 @@ const LoomCanvasInner = memo(() => {
   }, [rawGraph, viewLevel, l1ScopeStack]);
 
   // ── Column-level edge types suppressed by tableLevelView (LOOM-025) ─────────
+  // Includes cf edge types (HAS_AFFECTED_COL / HAS_OUTPUT_COL) so that
+  // tableLevelView also hides column-flow dashed bezier edges.
   const COLUMN_EDGE_TYPES = useMemo(
-    () => new Set(['HAS_COLUMN', 'ATOM_REF_COLUMN', 'HAS_ATOM', 'ATOM_PRODUCES']),
+    () => new Set(['HAS_COLUMN', 'ATOM_REF_COLUMN', 'HAS_ATOM', 'ATOM_PRODUCES',
+                   'HAS_AFFECTED_COL', 'HAS_OUTPUT_COL']),
     [],
   );
 
-  // ── displayGraph: 8-phase transform pipeline ─────────────────────────────────
+  // ── displayGraph: 9-phase transform pipeline ─────────────────────────────────
   //   Phase 1:  L1 system-level / depth filter (hide DB/Schema nodes by depth)
   //   Phase 2:  Hide nodes marked via 🔴 button (LOOM-026)
   //   Phase 3:  tableLevelView — strip column rows + column-level edges (LOOM-025)
   //   Phase 3b: direction filter — hide READS_FROM / WRITES_TO edges by ↑↓ toggle
-  //   Phase 3c: tableFilter — dim stmts not connected to selected table (L2)
-  //   Phase 3d: stmtFilter — dim nodes not connected to selected stmt (L2)
+  //   Phase 3c: cf edge toggle — hide HAS_AFFECTED_COL / HAS_OUTPUT_COL when showCfEdges=false
+  //   Phase 3d: tableFilter — dim stmts not connected to selected table (L2)
+  //   Phase 3e: stmtFilter — dim nodes not connected to selected stmt (L2)
   //   Phase 4:  fieldFilter — dim edges/nodes unrelated to selected field (LOOM-025)
   //   Phase 5:  L1 hierarchy filter (App → DB → Schema) — dim out-of-scope nodes
   //   Phase 6:  L1 schema chip selection — dim other visible schema chips
@@ -409,6 +425,19 @@ const LoomCanvasInner = memo(() => {
             : n,
         ),
         edges: filteredEdges,
+      };
+    }
+
+    // Phase 3c — cf edge toggle: hide column-flow edges when showCfEdges=false
+    // tableLevelView (phase 3) already hides them via COLUMN_EDGE_TYPES, so this
+    // phase only acts when tableLevelView is off.
+    if (!filter.showCfEdges && !filter.tableLevelView && viewLevel !== 'L1') {
+      base = {
+        nodes: base.nodes,
+        edges: base.edges.filter((e) => {
+          const et = e.data?.edgeType as string;
+          return et !== 'HAS_AFFECTED_COL' && et !== 'HAS_OUTPUT_COL';
+        }),
       };
     }
 
@@ -505,7 +534,7 @@ const LoomCanvasInner = memo(() => {
     }
 
     return base;
-  }, [scopedGraph, viewLevel, l1Filter.systemLevel, l1Filter.depth, hiddenNodeIds, filter.tableLevelView, filter.fieldFilter, filter.upstream, filter.downstream, COLUMN_EDGE_TYPES, l1HierarchyFilter, selectedNodeId, expandedDbs]);
+  }, [scopedGraph, viewLevel, l1Filter.systemLevel, l1Filter.depth, hiddenNodeIds, filter.tableLevelView, filter.showCfEdges, filter.fieldFilter, filter.upstream, filter.downstream, COLUMN_EDGE_TYPES, l1HierarchyFilter, selectedNodeId, expandedDbs]);
 
   // ── Layout: L1 = pre-computed + applyL1Layout; L2/L3 = ELK ─────────────────
   useEffect(() => {
@@ -538,6 +567,7 @@ const LoomCanvasInner = memo(() => {
     }
 
     setLayouting(true);
+    setLayoutError(false);
 
     applyELKLayout(displayGraph.nodes, displayGraph.edges)
       .then((layoutedNodes) => {
@@ -555,6 +585,7 @@ const LoomCanvasInner = memo(() => {
       })
       .catch((err) => {
         console.error('[LOOM] ELK layout failed', err);
+        if (!cancelled) setLayoutError(true);
       })
       .finally(() => {
         if (!cancelled) setLayouting(false);
@@ -638,6 +669,7 @@ const LoomCanvasInner = memo(() => {
     if (activeQuery.isError) {
       return isUnauthorized(activeQuery.error) ? 'status.unauthorized' : 'status.error';
     }
+    if (layoutError) return 'status.error';
     if (!activeQuery.isLoading && !layouting && displayGraph?.nodes.length === 0) {
       return 'status.empty';
     }
@@ -749,7 +781,7 @@ const LoomCanvasInner = memo(() => {
         <div style={{
           position: 'absolute', inset: 0, zIndex: 200,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(20,17,8,0.75)', backdropFilter: 'blur(3px)',
+          background: 'color-mix(in srgb, var(--bg0) 85%, transparent)', backdropFilter: 'blur(3px)',
           pointerEvents: 'none',
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>

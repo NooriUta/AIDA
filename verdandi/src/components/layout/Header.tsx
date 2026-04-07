@@ -1,6 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { Sun, Moon, Command, LogOut, Paintbrush } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useLoomStore } from '../../stores/loomStore';
 import { useAuthStore } from '../../stores/authStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -8,11 +9,11 @@ import { LegendButton }    from './LegendButton';
 
 type TabId = 'LOOM' | 'ANVIL' | 'SHUTTLE' | 'KNOT';
 
-const TABS: { id: TabId; key: string; active: boolean }[] = [
-  { id: 'LOOM',    key: 'nav.loom',    active: true  },
-  { id: 'ANVIL',   key: 'nav.anvil',   active: false },
-  { id: 'SHUTTLE', key: 'nav.shuttle', active: false },
-  { id: 'KNOT',    key: 'nav.knot',    active: false },
+const TABS: { id: TabId; key: string; route: string | null }[] = [
+  { id: 'LOOM',    key: 'nav.loom',    route: '/'     },
+  { id: 'ANVIL',   key: 'nav.anvil',   route: null    },
+  { id: 'SHUTTLE', key: 'nav.shuttle', route: null    },
+  { id: 'KNOT',    key: 'nav.knot',    route: '/knot' },
 ];
 
 const PALETTES: { id: string; key: string }[] = [
@@ -27,6 +28,10 @@ export const Header = memo(() => {
   const { theme, toggleTheme, palette, setPalette } = useLoomStore();
   const { user, logout } = useAuthStore();
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const activeTab: TabId = pathname.startsWith('/knot') ? 'KNOT' : 'LOOM';
 
   const [userMenuOpen, setUserMenuOpen]       = useState(false);
   const [paletteMenuOpen, setPaletteMenuOpen] = useState(false);
@@ -86,29 +91,34 @@ export const Header = memo(() => {
 
       {/* Tabs */}
       <nav style={{ display: 'flex', gap: '2px', flex: 1 }}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            disabled={!tab.active}
-            style={{
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: tab.active ? 500 : 400,
-              borderRadius: 'var(--seer-radius-sm)',
-              border: 'none',
-              cursor: tab.active ? 'pointer' : 'not-allowed',
-              background: tab.active
-                ? 'color-mix(in srgb, var(--acc) 12%, transparent)'
-                : 'transparent',
-              color: tab.active ? 'var(--acc)' : 'var(--t3)',
-              opacity: tab.active ? 1 : 0.5,
-              transition: 'background 0.12s, color 0.12s',
-              letterSpacing: '0.06em',
-            }}
-          >
-            {t(tab.key)}
-          </button>
-        ))}
+        {TABS.map((tab) => {
+          const isActive = tab.id === activeTab;
+          const isEnabled = tab.route !== null;
+          return (
+            <button
+              key={tab.id}
+              disabled={!isEnabled}
+              onClick={() => isEnabled && tab.route && navigate(tab.route)}
+              style={{
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: isActive ? 500 : 400,
+                borderRadius: 'var(--seer-radius-sm)',
+                border: 'none',
+                cursor: isEnabled ? 'pointer' : 'not-allowed',
+                background: isActive
+                  ? 'color-mix(in srgb, var(--acc) 12%, transparent)'
+                  : 'transparent',
+                color: isActive ? 'var(--acc)' : isEnabled ? 'var(--t2)' : 'var(--t3)',
+                opacity: isEnabled ? 1 : 0.4,
+                transition: 'background 0.12s, color 0.12s',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {t(tab.key)}
+            </button>
+          );
+        })}
       </nav>
 
       {/* Command palette */}
