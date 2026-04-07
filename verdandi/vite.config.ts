@@ -14,6 +14,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  worker: {
+    format: 'es',  // emit ES module workers (Vite 8 default; explicit for clarity)
+  },
   optimizeDeps: {
     // Pre-bundle the browser-compatible ELK (CJS → ESM transform)
     include: ['elkjs/lib/elk.bundled.js'],

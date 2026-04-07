@@ -101,19 +101,70 @@ export function clearLayoutCache(): void {
   layoutCache = null;
 }
 
-// Singleton ELK instance (lazy-initialised)
-let elkInstance: ElkApi | null = null;
+// ─── ELK Web Worker (S6-T5 spike) ────────────────────────────────────────────
+// In browser environments ELK runs in a dedicated worker so layout never blocks
+// the main thread. In Node.js (tests, SSR) Worker is unavailable — falls back to
+// the bundled synchronous ELK running on the main thread.
 
-async function getElk(): Promise<ElkApi | null> {
-  if (elkInstance) return elkInstance;
+let _worker: Worker | null = null;
+let _workerFailed = false;
+let _nextId = 0;
+const _pending = new Map<number, { resolve: (g: ElkGraph & { children: ElkNode[] }) => void; reject: (e: Error) => void }>();
+
+function getWorker(): Worker | null {
+  if (_workerFailed || typeof Worker === 'undefined') return null;
+  if (_worker) return _worker;
   try {
-    // elk.bundled.js = no web workers, runs in main thread
+    _worker = new Worker(new URL('../workers/elkWorker.ts', import.meta.url), { type: 'module' });
+    _worker.onmessage = (e: MessageEvent<{ id: number; result?: ElkGraph & { children: ElkNode[] }; error?: string }>) => {
+      const { id, result, error } = e.data;
+      const cb = _pending.get(id);
+      if (!cb) return;
+      _pending.delete(id);
+      if (error) cb.reject(new Error(error));
+      else       cb.resolve(result!);
+    };
+    _worker.onerror = () => {
+      // Worker crashed — reject all pending, fall back to bundled ELK
+      _workerFailed = true;
+      for (const cb of _pending.values()) cb.reject(new Error('[LOOM] ELK worker crashed'));
+      _pending.clear();
+      _worker = null;
+    };
+    return _worker;
+  } catch {
+    _workerFailed = true;
+    return null;
+  }
+}
+
+function layoutWithWorker(graph: ElkGraph): Promise<ElkGraph & { children: ElkNode[] }> {
+  const worker = getWorker()!;
+  const id = _nextId++;
+  return new Promise((resolve, reject) => {
+    _pending.set(id, { resolve, reject });
+    worker.postMessage({ id, graph });
+  });
+}
+
+// Singleton bundled-ELK (main-thread fallback for Node / test / worker-unavailable)
+let _elkMain: ElkApi | null = null;
+
+async function layoutWithMain(graph: ElkGraph): Promise<ElkGraph & { children: ElkNode[] }> {
+  if (!_elkMain) {
     const mod = await import('elkjs/lib/elk.bundled.js');
     const ELK = (mod.default as unknown) as new () => ElkApi;
-    elkInstance = new ELK();
-    return elkInstance;
+    _elkMain = new ELK();
+  }
+  return _elkMain.layout(graph) as Promise<ElkGraph & { children: ElkNode[] }>;
+}
+
+async function runElkLayout(graph: ElkGraph): Promise<(ElkGraph & { children: ElkNode[] }) | null> {
+  try {
+    const worker = getWorker();
+    return worker ? await layoutWithWorker(graph) : await layoutWithMain(graph);
   } catch (err) {
-    console.warn('[LOOM] ELK load failed, using grid layout fallback.', err);
+    console.warn('[LOOM] ELK layout failed', err);
     return null;
   }
 }
@@ -138,9 +189,6 @@ export async function applyELKLayout(
     return layoutCache.result;
   }
 
-  const elk = await getElk();
-  if (!elk) return applyGridLayout(nodes);
-
   // ── Flat layout (no compound nodes) ──────────────────────────────────────
   const childNodes = nodes.filter((n) => n.parentId);
   if (childNodes.length === 0) {
@@ -157,18 +205,14 @@ export async function applyELKLayout(
         })
         .map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
     };
-    try {
-      const result = await elk.layout(graph);
-      const laid = nodes.map((node) => {
-        const c = result.children.find((r) => r.id === node.id);
-        return c ? { ...node, position: { x: c.x ?? 0, y: c.y ?? 0 } } : node;
-      });
-      layoutCache = { fingerprint: fp, result: laid };
-      return laid;
-    } catch (err) {
-      console.warn('[LOOM] ELK layout error, using grid layout fallback.', err);
-      return applyGridLayout(nodes);
-    }
+    const result = await runElkLayout(graph);
+    if (!result) return applyGridLayout(nodes);
+    const laid = nodes.map((node) => {
+      const c = result.children.find((r) => r.id === node.id);
+      return c ? { ...node, position: { x: c.x ?? 0, y: c.y ?? 0 } } : node;
+    });
+    layoutCache = { fingerprint: fp, result: laid };
+    return laid;
   }
 
   // ── Compound layout (supports multi-level nesting: Schema → Routine → Stmt) ─
@@ -217,21 +261,19 @@ export async function applyELKLayout(
     })(),
   };
 
-  try {
-    const result = await elk.layout(graph);
-    const posMap = new Map(result.children.map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
-    const laid = nodes.map((node) => {
-      if (node.parentId) return node; // keep pre-computed relative positions
-      const pos = posMap.get(node.id);
-      return pos ? { ...node, position: pos } : node;
-    });
-    layoutCache = { fingerprint: fp, result: laid };
-    return laid;
-  } catch (err) {
-    console.warn('[LOOM] ELK compound layout error.', err);
+  const result = await runElkLayout(graph);
+  if (!result) {
     // Grid-position top-level nodes; children keep pre-computed relative positions.
     const gridTop = applyGridLayout(topNodes);
     const gridIds = new Set(gridTop.map((n) => n.id));
     return [...gridTop, ...nodes.filter((n) => !gridIds.has(n.id))];
   }
+  const posMap = new Map(result.children.map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
+  const laid = nodes.map((node) => {
+    if (node.parentId) return node; // keep pre-computed relative positions
+    const pos = posMap.get(node.id);
+    return pos ? { ...node, position: pos } : node;
+  });
+  layoutCache = { fingerprint: fp, result: laid };
+  return laid;
 }
