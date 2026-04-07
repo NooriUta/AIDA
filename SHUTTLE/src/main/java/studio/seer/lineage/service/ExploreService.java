@@ -121,7 +121,7 @@ public class ExploreService {
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
-            LIMIT 200
+            LIMIT 3000
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
@@ -130,7 +130,7 @@ public class ExploreService {
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'READS_FROM' AS edgeType
-            LIMIT 200
+            LIMIT 3000
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
@@ -179,7 +179,11 @@ public class ExploreService {
     /**
      * Explores all schemas within a database.
      * Equivalent to running exploreSchema for every DaliSchema where db_name = $dbName,
-     * but in a single set of queries. No LIMIT — the result can be large.
+     * but in a single set of queries.
+     *
+     * LIMITs mirror exploreSchema — DB-level aggregation across multiple schemas
+     * can produce 8000+ unbounded rows (verified: ODS 10 schemas → 4476 CHILD_OF
+     * hoisted reads alone). The frontend ELK layout and browser cannot handle this.
      *
      * The frontend transformSchemaExplore handles multi-schema results by walking
      * all DaliSchema nodes found in the result.
@@ -192,6 +196,7 @@ public class ExploreService {
             RETURN id(s) AS srcId, s.schema_name AS srcLabel, 'DaliSchema' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'CONTAINS_TABLE' AS edgeType
+            LIMIT 500
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -201,6 +206,7 @@ public class ExploreService {
                    id(child) AS tgtId,
                    coalesce(child.package_name, child.routine_name, '') AS tgtLabel,
                    '' AS tgtScope, labels(child)[0] AS tgtType, 'CONTAINS_ROUTINE' AS edgeType
+            LIMIT 300
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -209,6 +215,7 @@ public class ExploreService {
             RETURN DISTINCT id(r) AS srcId, r.routine_name AS srcLabel, 'DaliRoutine' AS srcType,
                    id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
                    'DaliStatement' AS tgtType, 'CONTAINS_STMT' AS edgeType
+            LIMIT 500
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -216,6 +223,7 @@ public class ExploreService {
             RETURN DISTINCT id(pkg) AS srcId, pkg.package_name AS srcLabel, 'DaliPackage' AS srcType,
                    id(r) AS tgtId, r.routine_name AS tgtLabel, '' AS tgtScope,
                    'DaliRoutine' AS tgtType, 'CONTAINS_ROUTINE' AS edgeType
+            LIMIT 300
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -225,6 +233,7 @@ public class ExploreService {
             RETURN DISTINCT id(r) AS srcId, r.routine_name AS srcLabel, 'DaliRoutine' AS srcType,
                    id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
                    'DaliStatement' AS tgtType, 'CONTAINS_STMT' AS edgeType
+            LIMIT 500
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -233,6 +242,7 @@ public class ExploreService {
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
+            LIMIT 3000
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -241,6 +251,7 @@ public class ExploreService {
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'READS_FROM' AS edgeType
+            LIMIT 3000
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -250,6 +261,7 @@ public class ExploreService {
             RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'READS_FROM' AS edgeType
+            LIMIT 500
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
@@ -259,6 +271,7 @@ public class ExploreService {
             RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
+            LIMIT 500
             """;
 
         return arcade.cypher(cypher, Map.of("dbName", dbName))
@@ -494,16 +507,17 @@ public class ExploreService {
             LIMIT 200
             """;
 
+        // Each sub-query recovers independently so one failure doesn't kill the whole explore.
         return Uni.combine().all()
             .unis(List.of(
-                arcade.cypher(outQ, params),
-                arcade.cypher(inQ, params),
-                arcade.cypher(outColQ, params),
-                arcade.cypher(sibColQ, params),
-                arcade.cypher(sibOutColQ, params),
-                arcade.cypher(stmtOutColQ, params),
-                arcade.cypher(hoistReadsQ, params),
-                arcade.cypher(hoistWritesQ, params)
+                arcade.cypher(outQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(inQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(outColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(sibColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(sibOutColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(stmtOutColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(hoistReadsQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(hoistWritesQ, params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 var all = new ArrayList<Map<String, Object>>();

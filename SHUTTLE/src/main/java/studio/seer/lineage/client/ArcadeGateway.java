@@ -44,7 +44,8 @@ public class ArcadeGateway {
     public Uni<List<Map<String, Object>>> sql(String query, Map<String, Object> params) {
         log.debug("[ArcadeDB SQL] {}", query);
         return client.command(db, basicAuth(), new ArcadeCommand("sql", query, params))
-            .map(ArcadeResponse::result);
+            .map(ArcadeResponse::result)
+            .onFailure().invoke(ex -> log.error("[ArcadeDB SQL FAILED] {}: {}", query.lines().findFirst().orElse("?"), ex.getMessage()));
     }
 
     public Uni<List<Map<String, Object>>> cypher(String query) {
@@ -54,7 +55,8 @@ public class ArcadeGateway {
     public Uni<List<Map<String, Object>>> cypher(String query, Map<String, Object> params) {
         log.debug("[ArcadeDB Cypher] {}", query);
         return client.command(db, basicAuth(), new ArcadeCommand("cypher", query, params))
-            .map(ArcadeResponse::result);
+            .map(ArcadeResponse::result)
+            .onFailure().invoke(ex -> log.error("[ArcadeDB Cypher FAILED] {}: {}", query.lines().findFirst().orElse("?"), ex.getMessage()));
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
