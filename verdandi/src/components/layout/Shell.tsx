@@ -6,6 +6,7 @@ import { StatusBar } from './StatusBar';
 import { ResizablePanel } from './ResizablePanel';
 import { LoomCanvas } from '../canvas/LoomCanvas';
 import { SearchPanel } from '../panels/SearchPanel';
+import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLoomStore } from '../../stores/loomStore';
 
 export const Shell = memo(() => {
@@ -39,7 +40,7 @@ export const Shell = memo(() => {
 
         {/* Right panel — KNOT Inspector */}
         <ResizablePanel side="right" defaultWidth={300} minWidth={200} maxWidth={480} title="KNOT Inspector">
-          <KnotPanelPlaceholder />
+          <InspectorPanel />
         </ResizablePanel>
 
       </div>
@@ -51,18 +52,3 @@ export const Shell = memo(() => {
 });
 
 Shell.displayName = 'Shell';
-
-// ── Placeholder panels ────────────────────────────────────────────────────────
-
-function KnotPanelPlaceholder() {
-  return (
-    <div style={{ padding: '4px' }}>
-      <p style={{ fontSize: '11px', color: 'var(--seer-text-muted)', margin: 0 }}>
-        Select a node to inspect its details.
-      </p>
-      <p style={{ fontSize: '11px', color: 'var(--seer-border-2)', margin: '8px 0 0' }}>
-        KNOT Inspector — Phase 2
-      </p>
-    </div>
-  );
-}

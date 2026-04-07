@@ -24,7 +24,8 @@
     "edges": "рёбер",
     "level": "Уровень",
     "zoom": "Масштаб",
-    "computingLayout": "вычисляется граф…"
+    "computingLayout": "вычисляется граф…",
+    "nodeCount": "{{count}} узлов"
   },
   "breadcrumb": { "overview": "Обзор" },
   "theme": { "dark": "Тёмная", "light": "Светлая" },
@@ -189,7 +190,8 @@
     "writes": "Пишет",
     "expandStatements": "Развернуть стейтменты",
     "collapseGroup": "Свернуть",
-    "groupLabel": "{{name}} — scope стейтментов"
+    "groupLabel":   "{{name}} — scope стейтментов",
+    "noColMapping": "нет маппинга колонок"
   },
 
   "subquery": {
@@ -447,6 +449,26 @@
     "json": "JSON",
     "png": "PNG",
     "svg": "SVG"
+  },
+
+  "inspector": {
+    "empty":         "Выберите ноду для просмотра деталей",
+    "properties":    "Свойства",
+    "columns":       "Колонки",
+    "outputColumns": "Выходные колонки",
+    "stats":         "Статистика",
+    "label":         "Имя",
+    "type":          "Тип",
+    "schema":        "Схема",
+    "id":            "ID",
+    "path":          "Путь",
+    "kind":          "Вид",
+    "language":      "Язык",
+    "tables":        "Таблицы",
+    "routines":      "Процедуры",
+    "noColumns":     "Нет колонок",
+    "schemas":       "Схемы",
+    "drillDown":     "Drill-down →"
   },
 
   "legend": {

@@ -24,7 +24,8 @@
     "edges": "edges",
     "level": "Level",
     "zoom": "Zoom",
-    "computingLayout": "computing layout…"
+    "computingLayout": "computing layout…",
+    "nodeCount": "{{count}} nodes"
   },
   "breadcrumb": { "overview": "Overview" },
   "theme": { "dark": "Dark", "light": "Light" },
@@ -189,7 +190,8 @@
     "writes": "Writes",
     "expandStatements": "Expand statements",
     "collapseGroup": "Collapse",
-    "groupLabel": "{{name}} — statement scope"
+    "groupLabel":    "{{name}} — statement scope",
+    "noColMapping":  "no col mapping"
   },
 
   "subquery": {
@@ -447,6 +449,26 @@
     "json": "JSON",
     "png": "PNG",
     "svg": "SVG"
+  },
+
+  "inspector": {
+    "empty":         "Select a node to inspect its details",
+    "properties":    "Properties",
+    "columns":       "Columns",
+    "outputColumns": "Output columns",
+    "stats":         "Stats",
+    "label":         "Name",
+    "type":          "Type",
+    "schema":        "Schema",
+    "id":            "ID",
+    "path":          "Path",
+    "kind":          "Kind",
+    "language":      "Language",
+    "tables":        "Tables",
+    "routines":      "Routines",
+    "noColumns":     "No columns",
+    "schemas":       "Schemas",
+    "drillDown":     "Drill-down →"
   },
 
   "legend": {

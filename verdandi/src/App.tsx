@@ -21,11 +21,6 @@ const FilterToolbarProtoRu = lazy(() =>
     default: m.FilterToolbarProtoRu,
   })),
 );
-const L1NodesProto = lazy(() =>
-  import('./components/canvas/nodes/proto/L1NodesProto').then((m) => ({
-    default: m.L1NodesProto,
-  })),
-);
 const FilterToolbarL1Proto = lazy(() =>
   import('./components/layout/proto/FilterToolbarL1Proto').then((m) => ({
     default: m.FilterToolbarL1Proto,
@@ -60,14 +55,6 @@ export default function App() {
               element={
                 <Suspense fallback={null}>
                   <FilterToolbarProtoRu />
-                </Suspense>
-              }
-            />
-            <Route
-              path="/__proto__/l1-nodes"
-              element={
-                <Suspense fallback={null}>
-                  <L1NodesProto />
                 </Suspense>
               }
             />

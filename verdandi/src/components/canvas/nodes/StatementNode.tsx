@@ -1,9 +1,12 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps, type Node, useUpdateNodeInternals } from '@xyflow/react';
 import { FileCode } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData, ColumnInfo } from '../../../types/domain';
 import { NodeExpandButtons } from './NodeExpandButtons';
+
+const WRITE_OPS = new Set(['INSERT', 'UPDATE', 'MERGE']);
 
 export type StatementNodeType = Node<DaliNodeData>;
 
@@ -69,6 +72,7 @@ function OutputColRow({ col }: { col: ColumnInfo }) {
 }
 
 export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNodeType>) => {
+  const { t } = useTranslation();
   const { selectNode } = useLoomStore();
   const updateNodeInternals = useUpdateNodeInternals();
   const columns  = data.columns ?? [];
@@ -190,6 +194,28 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
           color:     'var(--acc)',
         }}>
           +{overflow} more
+        </div>
+      )}
+
+      {/* "no col mapping" badge — write ops with no output columns mapped */}
+      {!isCompact && stmtType && WRITE_OPS.has(stmtType) && columns.length === 0 && (
+        <div style={{
+          padding:   '3px var(--seer-space-3)',
+          borderTop: '1px solid var(--bd)',
+          display:   'flex',
+          alignItems: 'center',
+        }}>
+          <span style={{
+            fontSize:   '9px',
+            color:      'var(--t3)',
+            background: 'color-mix(in srgb, var(--t3) 10%, transparent)',
+            border:     '1px solid color-mix(in srgb, var(--t3) 25%, transparent)',
+            borderRadius: 3,
+            padding:    '1px 5px',
+            letterSpacing: '0.04em',
+          }}>
+            {t('statement.noColMapping')}
+          </span>
         </div>
       )}
 

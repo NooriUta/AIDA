@@ -112,8 +112,11 @@ export function useExpandDeep(nodeId: string | null, depth: number) {
 
 export function useStmtColumns(ids: string[]) {
   const onError = useOnUnauthorized();
+  // Stable string key: sorted IDs joined so cache is invalidated whenever the set changes
+  // (array reference changes each render, React Query deep-equals but a string is more robust)
+  const key = [...ids].sort().join(',');
   return useQuery({
-    queryKey: ['stmtColumns', ids],
+    queryKey: ['stmtColumns', key],
     queryFn:  () => fetchStmtColumns(ids),
     enabled:  ids.length > 0,
     staleTime: 60_000,

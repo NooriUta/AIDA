@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ReactFlow,
@@ -10,51 +10,52 @@ import {
   Panel,
   useNodesState,
   useEdgesState,
-  useReactFlow,
   type NodeTypes,
-  type OnMoveEnd,
 } from '@xyflow/react';
 
-import { SchemaNode }      from './nodes/SchemaNode';
-import { SchemaGroupNode } from './nodes/SchemaGroupNode';
-import { PackageNode }     from './nodes/PackageNode';
-import { TableNode }       from './nodes/TableNode';
-import { RoutineNode }     from './nodes/RoutineNode';
-import { ColumnNode }      from './nodes/ColumnNode';
-import { StatementNode }     from './nodes/StatementNode';
+import { SchemaNode }       from './nodes/SchemaNode';
+import { SchemaGroupNode }  from './nodes/SchemaGroupNode';
+import { PackageNode }      from './nodes/PackageNode';
+import { TableNode }        from './nodes/TableNode';
+import { RoutineNode }      from './nodes/RoutineNode';
+import { ColumnNode }       from './nodes/ColumnNode';
+import { StatementNode }    from './nodes/StatementNode';
 import { RoutineGroupNode } from './nodes/RoutineGroupNode';
 import { ApplicationNode }  from './nodes/ApplicationNode';
-import { DatabaseNode }    from './nodes/DatabaseNode';
-import { L1SchemaNode }    from './nodes/L1SchemaNode';
-import { Breadcrumb }      from './Breadcrumb';
-import { NodeContextMenu } from './NodeContextMenu';
-import { ExportPanel }     from './ExportPanel';
+import { DatabaseNode }     from './nodes/DatabaseNode';
+import { L1SchemaNode }     from './nodes/L1SchemaNode';
+import { Breadcrumb }       from './Breadcrumb';
+import { NodeContextMenu }  from './NodeContextMenu';
+import { ExportPanel }      from './ExportPanel';
 import type { ContextMenuState } from './NodeContextMenu';
 
-import { useLoomStore }                              from '../../stores/loomStore';
-import { transformGqlOverview, transformGqlExplore, applyStmtColumns } from '../../utils/transformGraph';
-import { applyELKLayout, clearLayoutCache }          from '../../utils/layoutGraph';
-import { applyL1Layout }                             from '../../utils/layoutL1';
-import { useOverview, useExplore, useLineage, useUpstream, useDownstream, useStmtColumns, useExpandDeep } from '../../services/hooks';
-import { isUnauthorized }                            from '../../services/lineage';
-import { SCOPE_FILTER_TYPES }                        from '../../utils/transformGraph';
-import type { LoomNode, LoomEdge }                   from '../../types/graph';
-import type { ColumnInfo }                            from '../../types/domain';
+import { useLoomStore }            from '../../stores/loomStore';
+import { clearLayoutCache }        from '../../utils/layoutGraph';
+import { isUnauthorized }          from '../../services/lineage';
+import { SCOPE_FILTER_TYPES }      from '../../utils/transformGraph';
+import type { LoomNode }           from '../../types/graph';
+
+import { useGraphData }    from '../../hooks/canvas/useGraphData';
+import { useExpansion }    from '../../hooks/canvas/useExpansion';
+import { useDisplayGraph } from '../../hooks/canvas/useDisplayGraph';
+import { useLoomLayout }   from '../../hooks/canvas/useLoomLayout';
+import { useFitView }      from '../../hooks/canvas/useFitView';
+import { useFilterSync }   from '../../hooks/canvas/useFilterSync';
 
 // ─── nodeTypes must be defined OUTSIDE the render function ───────────────────
 const NODE_TYPES: NodeTypes = {
   schemaNode:       SchemaNode       as NodeTypes[string],
-  schemaGroupNode:  SchemaGroupNode  as NodeTypes[string], // L2 schema group container
+  schemaGroupNode:  SchemaGroupNode  as NodeTypes[string],
   packageNode:      PackageNode      as NodeTypes[string],
   tableNode:        TableNode        as NodeTypes[string],
   routineNode:      RoutineNode      as NodeTypes[string],
-  routineGroupNode: RoutineGroupNode as NodeTypes[string], // L2 routine container (Schema → Routine → Stmt)
+  routineGroupNode: RoutineGroupNode as NodeTypes[string],
   statementNode:    StatementNode    as NodeTypes[string],
   columnNode:       ColumnNode       as NodeTypes[string],
   atomNode:         ColumnNode       as NodeTypes[string], // reuse ColumnNode for atoms
   applicationNode:  ApplicationNode  as NodeTypes[string],
   databaseNode:     DatabaseNode     as NodeTypes[string],
-  l1SchemaNode:     L1SchemaNode     as NodeTypes[string], // compact schema chip for L1
+  l1SchemaNode:     L1SchemaNode     as NodeTypes[string],
 };
 
 // ─── Inner canvas (needs ReactFlowProvider to already be mounted) ─────────────
@@ -62,679 +63,36 @@ const LoomCanvasInner = memo(() => {
   const {
     viewLevel,
     currentScope,
-    l1ScopeStack,
-    expandedDbs,
-    l1Filter,
-    l1HierarchyFilter,
-    filter,
-    hiddenNodeIds,
     theme,
-    setGraphStats,
-    setZoom,
     selectNode,
-    selectedNodeId,
     drillDown,
     pushL1Scope,
-    setAvailableFields,
-    setAvailableTables,
-    setAvailableStmts,
-    setAvailableColumns,
-    setAvailableApps,
-    setAvailableDbs,
-    setAvailableSchemas,
-    toggleDbExpansion,
-    // LOOM-027: expand
-    expandRequest,
-    expansionGqlNodes,
-    expansionGqlEdges,
-    addExpansionData,
-    clearExpandRequest,
-    // Viewport focus
-    fitViewRequest,
-    clearFitViewRequest,
-    pendingFocusNodeId,
-    requestFocusNode,
-    clearPendingFocus,
-    pendingDeepExpand,
-    activatePendingDeepExpand,
-    deepExpandRequest,
-    clearDeepExpandRequest,
-    // Canvas → FilterToolbarL1 sync
     setL1HierarchyDb,
     setL1HierarchySchema,
     clearL1HierarchyFilter,
-    // Node expansion (column rows)
-    nodeExpansionState,
-    setNodeExpansion,
   } = useLoomStore();
   const { t } = useTranslation();
-  const { fitView, getEdges, getNodes } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<LoomNode>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<LoomEdge>([]);
-  const [layouting,    setLayouting]    = useState(false);
-  const [layoutError,  setLayoutError]  = useState(false);
-  const [contextMenu,  setContextMenu]  = useState<ContextMenuState>(null);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
   /** Points to the outer wrapper div — passed to ExportPanel for PNG/SVG capture. */
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ── Real data queries ───────────────────────────────────────────────────
-  // All three are always called (Rules of Hooks); enabled flags prevent firing.
-  const overviewQ = useOverview();
-  const exploreQ  = useExplore(viewLevel === 'L2' ? currentScope : null);
-  const lineageQ  = useLineage(viewLevel === 'L3' ? currentScope : null);
-
-  const activeQuery = viewLevel === 'L1' ? overviewQ
-                    : viewLevel === 'L2' ? exploreQ
-                    : lineageQ;
-
-  // ── Statement column enrichment (second-pass after schema explore) ──────────
-  // Extract DaliStatement @rids from the explore result so we can fetch their
-  // HAS_OUTPUT_COL / HAS_AFFECTED_COL columns in a separate targeted query.
-  // This avoids the LIMIT collision between CONTAINS_STMT and HAS_OUTPUT_COL.
-  // Send both DaliTable and DaliStatement IDs — backend handles HAS_COLUMN,
-  // HAS_OUTPUT_COL, HAS_AFFECTED_COL in one query based on node type matching.
-  const stmtIds = useMemo(() => {
-    if (viewLevel !== 'L2') return [] as string[];
-    const ENRICHABLE = new Set(['DaliStatement', 'DaliTable']);
-    const ids = new Set<string>();
-    if (exploreQ.data) {
-      for (const n of exploreQ.data.nodes) {
-        if (ENRICHABLE.has(n.type)) ids.add(n.id);
-      }
-    }
-    // Include expanded nodes (upstream/downstream/deepExpand) so their columns are fetched too
-    for (const n of expansionGqlNodes) {
-      if (ENRICHABLE.has(n.type)) ids.add(n.id);
-    }
-    return [...ids];
-  }, [viewLevel, exploreQ.data, expansionGqlNodes]);
-
-  const stmtColsQ = useStmtColumns(stmtIds);
-
-  // ── LOOM-027: upstream / downstream expand queries ────────────────────────
-  const upstreamExpandId   = expandRequest?.direction === 'upstream'   ? expandRequest.nodeId : null;
-  const downstreamExpandId = expandRequest?.direction === 'downstream' ? expandRequest.nodeId : null;
-  const { data: upstreamExpandData,   isSuccess: upstreamOk,   isError: upstreamExpandError   } = useUpstream(upstreamExpandId);
-  const { data: downstreamExpandData, isSuccess: downstreamOk, isError: downstreamExpandError } = useDownstream(downstreamExpandId);
-
-  useEffect(() => {
-    if (upstreamOk && upstreamExpandData && upstreamExpandId) {
-      addExpansionData(upstreamExpandId, 'upstream', upstreamExpandData.nodes, upstreamExpandData.edges);
-      clearExpandRequest();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [upstreamOk, upstreamExpandData, upstreamExpandId]);
-
-  useEffect(() => {
-    if (downstreamOk && downstreamExpandData && downstreamExpandId) {
-      addExpansionData(downstreamExpandId, 'downstream', downstreamExpandData.nodes, downstreamExpandData.edges);
-      clearExpandRequest();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [downstreamOk, downstreamExpandData, downstreamExpandId]);
-
-  // S-05: clear stuck expandRequest when expand query fails (button would freeze in loading state)
-  useEffect(() => {
-    if (upstreamExpandError && upstreamExpandId) clearExpandRequest();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [upstreamExpandError, upstreamExpandId]);
-
-  useEffect(() => {
-    if (downstreamExpandError && downstreamExpandId) clearExpandRequest();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [downstreamExpandError, downstreamExpandId]);
-
-  // ── Deep expand (search auto-expand: multi-hop READS_FROM/WRITES_TO) ────────
-  const deepExpandNodeId = deepExpandRequest?.nodeId ?? null;
-  const deepExpandDepth  = deepExpandRequest?.depth  ?? 5;
-  const { data: deepExpandData, isSuccess: deepExpandOk, isError: deepExpandError } =
-    useExpandDeep(deepExpandNodeId, deepExpandDepth);
-
-  useEffect(() => {
-    if (deepExpandOk && deepExpandData && deepExpandNodeId) {
-      addExpansionData(deepExpandNodeId, 'upstream', deepExpandData.nodes, deepExpandData.edges);
-      clearDeepExpandRequest();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepExpandOk, deepExpandData, deepExpandNodeId]);
-
-  useEffect(() => {
-    if (deepExpandError && deepExpandNodeId) clearDeepExpandRequest();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepExpandError, deepExpandNodeId]);
-
-  // ── Transform raw GraphQL data → RF nodes / edges ───────────────────────
-  // After transform, merge any expansion data fetched via LOOM-027 expand buttons.
-  // stmtColsQ.data is applied here so ELK re-layouts with correct node heights.
-  const rawGraph = useMemo(() => {
-    let base: { nodes: LoomNode[]; edges: LoomEdge[] } | null = null;
-    if (viewLevel === 'L1' && overviewQ.data) base = transformGqlOverview(overviewQ.data);
-    else if (viewLevel === 'L2' && exploreQ.data)  base = transformGqlExplore(exploreQ.data);
-    else if (viewLevel === 'L3' && lineageQ.data)  base = transformGqlExplore(lineageQ.data);
-    if (!base) return null;
-
-    // LOOM-027: merge expansion nodes/edges (de-duplicated by id)
-    if (expansionGqlNodes.length > 0 || expansionGqlEdges.length > 0) {
-      const expansionGraph = transformGqlExplore({ nodes: expansionGqlNodes, edges: expansionGqlEdges });
-      const existingNodeIds = new Set(base.nodes.map((n) => n.id));
-      const existingEdgeIds = new Set(base.edges.map((e) => e.id));
-      // L2: only allow table/statement nodes from expansion — suppress routines, packages, etc.
-      const L2_ALLOWED = new Set(['tableNode', 'statementNode']);
-      const allowedExpNodes = viewLevel === 'L2'
-        ? expansionGraph.nodes.filter((n) => L2_ALLOWED.has(n.type))
-        : expansionGraph.nodes;
-      const allowedExpIds = new Set(allowedExpNodes.map((n) => n.id));
-      const allowedExpEdges = viewLevel === 'L2'
-        ? expansionGraph.edges.filter((e) => allowedExpIds.has(e.source) && allowedExpIds.has(e.target))
-        : expansionGraph.edges;
-      base = {
-        nodes: [...base.nodes, ...allowedExpNodes.filter((n) => !existingNodeIds.has(n.id))],
-        edges: [...base.edges, ...allowedExpEdges.filter((e) => !existingEdgeIds.has(e.id))],
-      };
-    }
-
-    // Second-pass stmt column enrichment: apply before ELK so node heights are correct.
-    if (viewLevel === 'L2' && stmtColsQ.data && stmtColsQ.data.edges.length > 0) {
-      const { nodes: enrichedNodes, cfEdges } = applyStmtColumns(base.nodes, base.edges, stmtColsQ.data);
-      base = { nodes: enrichedNodes, edges: [...base.edges, ...cfEdges] };
-    }
-
-    return base;
-  }, [viewLevel, overviewQ.data, exploreQ.data, lineageQ.data, expansionGqlNodes, expansionGqlEdges, stmtColsQ.data]);
-
-  // ── Populate App/DB/Schema lists for L1 filter panel ──────────────────────
-  useEffect(() => {
-    if (viewLevel !== 'L1' || !rawGraph) {
-      setAvailableApps([]);
-      setAvailableDbs([]);
-      setAvailableSchemas([]);
-      return;
-    }
-    setAvailableApps(
-      rawGraph.nodes
-        .filter((n) => n.type === 'applicationNode')
-        .map((n) => ({ id: n.id, label: n.data.label })),
-    );
-    setAvailableDbs(
-      rawGraph.nodes
-        .filter((n) => n.type === 'databaseNode')
-        .map((n) => ({ id: n.id, label: n.data.label, appId: n.parentId ?? null })),
-    );
-    setAvailableSchemas(
-      rawGraph.nodes
-        .filter((n) => n.type === 'l1SchemaNode')
-        .map((n) => ({ id: n.id, label: n.data.label, dbId: n.parentId ?? '' })),
-    );
-  }, [viewLevel, rawGraph, setAvailableApps, setAvailableDbs, setAvailableSchemas]);
-
-  // ── Populate Table/Stmt lists for L2 filter dropdowns ────────────────────────
-  useEffect(() => {
-    if (viewLevel !== 'L2' || !rawGraph) {
-      setAvailableTables([]);
-      setAvailableStmts([]);
-      return;
-    }
-    const tables = rawGraph.nodes
-      .filter((n) => n.type === 'tableNode')
-      .map((n) => ({ id: n.id, label: n.data.label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-    setAvailableTables(tables);
-
-    const tableIds = new Set(tables.map((t) => t.id));
-    // Build map: stmtId → Set of connected tableIds (via READS_FROM / WRITES_TO)
-    const stmtToTables = new Map<string, Set<string>>();
-    for (const e of rawGraph.edges) {
-      const et = e.data?.edgeType as string;
-      if (et !== 'READS_FROM' && et !== 'WRITES_TO') continue;
-      const [stmtId, tableId] = tableIds.has(e.target)
-        ? [e.source, e.target]
-        : tableIds.has(e.source)
-        ? [e.target, e.source]
-        : [null, null];
-      if (!stmtId || !tableId) continue;
-      if (!stmtToTables.has(stmtId)) stmtToTables.set(stmtId, new Set());
-      stmtToTables.get(stmtId)!.add(tableId);
-    }
-    const stmts = rawGraph.nodes
-      .filter((n) => n.type === 'statementNode')
-      .map((n) => ({
-        id:                n.id,
-        label:             n.data.label,
-        connectedTableIds: Array.from(stmtToTables.get(n.id) ?? []),
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-    setAvailableStmts(stmts);
-  }, [viewLevel, rawGraph, setAvailableTables, setAvailableStmts]);
-
-  // ── Populate Column cascade: columns of the selected table or stmt ─────────
-  // Cascades: table selected → show DaliColumn list; stmt selected → output cols list.
-  // Re-runs when stmtColsQ.data arrives so stmt cols appear after second-pass fetch.
-  useEffect(() => {
-    if (viewLevel !== 'L2' || !rawGraph) { setAvailableColumns([]); return; }
-    const activeId = filter.stmtFilter ?? filter.tableFilter;
-    if (!activeId) { setAvailableColumns([]); return; }
-    const node = rawGraph.nodes.find((n) => n.id === activeId);
-    const cols = (node?.data.columns as ColumnInfo[] | undefined) ?? [];
-    setAvailableColumns(cols.map((c) => ({ id: c.id, name: c.name })));
-  }, [viewLevel, rawGraph, filter.tableFilter, filter.stmtFilter, setAvailableColumns]);
+  // ── Hooks ────────────────────────────────────────────────────────────────────
+  const { rawGraph, activeQuery, stmtColsReady } = useGraphData();
+  useExpansion();
+  const { displayGraph }           = useDisplayGraph(rawGraph);
+  const { layouting, layoutError } = useLoomLayout(displayGraph, setNodes, setEdges, stmtColsReady);
+  const { onMoveEnd }              = useFitView(layouting);
+  useFilterSync(rawGraph);
 
   // ── Close context menu on level change; clear ELK cache on scope change ──────
   useEffect(() => { setContextMenu(null); }, [viewLevel]);
   useEffect(() => { clearLayoutCache(); }, [currentScope]);
 
-  // ── Auto-expand parent DB when navigating to a schema chip from search ───────
-  // rawGraph always has l1SchemaNode.hidden=true (initial state), so we check
-  // expandedDbs instead of node.hidden to avoid toggling an already-open DB
-  // when the user simply clicks a visible schema chip.
-  useEffect(() => {
-    if (viewLevel !== 'L1' || !selectedNodeId || !rawGraph) return;
-    const node = rawGraph.nodes.find((n) => n.id === selectedNodeId);
-    if (node?.type === 'l1SchemaNode' && node.parentId && !expandedDbs.has(node.parentId)) {
-      toggleDbExpansion(node.parentId);
-    }
-  }, [selectedNodeId, viewLevel, rawGraph, expandedDbs, toggleDbExpansion]);
-
-  // ── Auto-expand table columns on L2 load ─────────────────────────────────────
-  // Column-flow edges need column handles in the DOM — ensure tables are at least partial.
-  useEffect(() => {
-    if (viewLevel !== 'L2' || !rawGraph) return;
-    for (const n of rawGraph.nodes) {
-      if (n.data.nodeType !== 'DaliTable') continue;
-      if ((nodeExpansionState[n.id] ?? 'partial') === 'collapsed') {
-        setNodeExpansion(n.id, 'partial');
-      }
-    }
-  }, [viewLevel, rawGraph, nodeExpansionState, setNodeExpansion]);
-
-  // ── L1 scope filter: dim nodes outside selected app (3-level parentId-aware) ─
-  const scopedGraph = useMemo(() => {
-    if (!rawGraph) return null;
-    if (viewLevel !== 'L1' || l1ScopeStack.length === 0) return rawGraph;
-
-    const scopeId = l1ScopeStack[l1ScopeStack.length - 1].nodeId;
-
-    // L1 has 3 levels: App (group) → DB (child) → Schema (grandchild).
-    // Build a set of all DB IDs that are direct children of the selected App,
-    // so we can also include their L1SchemaNode grandchildren in scope.
-    const scopedDbIds = new Set(
-      rawGraph.nodes
-        .filter((n) => n.type === 'databaseNode' && n.parentId === scopeId)
-        .map((n) => n.id),
-    );
-
-    const nodes = rawGraph.nodes.map((node) => {
-      const inScope =
-        node.id === scopeId ||                                                    // the App itself
-        (node.parentId === scopeId) ||                                            // DB children
-        (node.parentId != null && scopedDbIds.has(node.parentId));               // Schema grandchildren
-
-      return inScope
-        ? node
-        : {
-            ...node,
-            style: {
-              ...node.style,
-              opacity:       0.15,
-              pointerEvents: 'none' as const,
-            },
-          };
-    });
-
-    return { nodes, edges: rawGraph.edges };
-  }, [rawGraph, viewLevel, l1ScopeStack]);
-
-  // ── Column-level edge types suppressed by tableLevelView (LOOM-025) ─────────
-  // Includes cf edge types (HAS_AFFECTED_COL / HAS_OUTPUT_COL) so that
-  // tableLevelView also hides column-flow dashed bezier edges.
-  const COLUMN_EDGE_TYPES = useMemo(
-    () => new Set(['HAS_COLUMN', 'ATOM_REF_COLUMN', 'HAS_ATOM', 'ATOM_PRODUCES',
-                   'HAS_AFFECTED_COL', 'HAS_OUTPUT_COL']),
-    [],
-  );
-
-  // ── displayGraph: 9-phase transform pipeline ─────────────────────────────────
-  //   Phase 1:  L1 system-level / depth filter (hide DB/Schema nodes by depth)
-  //   Phase 2:  Hide nodes marked via 🔴 button (LOOM-026)
-  //   Phase 3:  tableLevelView — strip column rows + column-level edges (LOOM-025)
-  //   Phase 3b: direction filter — hide READS_FROM / WRITES_TO edges by ↑↓ toggle
-  //   Phase 3c: cf edge toggle — hide HAS_AFFECTED_COL / HAS_OUTPUT_COL when showCfEdges=false
-  //   Phase 3d: tableFilter — dim stmts not connected to selected table (L2)
-  //   Phase 3e: stmtFilter — dim nodes not connected to selected stmt (L2)
-  //   Phase 4:  fieldFilter — dim edges/nodes unrelated to selected field (LOOM-025)
-  //   Phase 5:  L1 hierarchy filter (App → DB → Schema) — dim out-of-scope nodes
-  //   Phase 6:  L1 schema chip selection — dim other visible schema chips
-  const displayGraph = useMemo(() => {
-    if (!scopedGraph) return null;
-
-    // Phase 1 — L1 system-level + depth filter
-    //   systemLevel / depth=1 → hide DB + Schema
-    //   depth=2                → hide Schema chips only (DBs stay)
-    //   depth=3 / ∞            → show all (default expand behaviour)
-    let base = scopedGraph;
-    if (viewLevel === 'L1') {
-      const hideDb     = l1Filter.systemLevel || l1Filter.depth === 1;
-      const hideSchema = hideDb || l1Filter.depth === 2;
-      if (hideDb || hideSchema) {
-        base = {
-          nodes: base.nodes.map((n) => {
-            if (hideDb && n.type === 'databaseNode')  return { ...n, hidden: true };
-            if (hideSchema && n.type === 'l1SchemaNode') return { ...n, hidden: true };
-            return n;
-          }),
-          edges: base.edges,
-        };
-      }
-    }
-
-    // Phase 2 — Hidden nodes (LOOM-026 🔴 button)
-    if (hiddenNodeIds.size > 0) {
-      base = {
-        nodes: base.nodes.map((n) =>
-          hiddenNodeIds.has(n.id) ? { ...n, hidden: true } : n,
-        ),
-        edges: base.edges,
-      };
-    }
-
-    // Phase 3 — Table-level view: strip column rows from nodes + column-level edges (LOOM-025)
-    if (filter.tableLevelView && viewLevel !== 'L1') {
-      base = {
-        nodes: base.nodes.map((n) => ({ ...n, data: { ...n.data, columns: [] } })),
-        edges: base.edges.filter(
-          (e) => !COLUMN_EDGE_TYPES.has(e.data?.edgeType as string),
-        ),
-      };
-    }
-
-    // Phase 3b — Direction filter: hide READS_FROM / WRITES_TO by ↑↓ toggle
-    if (viewLevel !== 'L1' && (!filter.upstream || !filter.downstream)) {
-      const filteredEdges = base.edges.filter((e) => {
-        const et = e.data?.edgeType as string;
-        if (!filter.upstream  && et === 'READS_FROM') return false;
-        if (!filter.downstream && et === 'WRITES_TO')  return false;
-        return true;
-      });
-      // Dim nodes that lost all data-flow edges (became isolated)
-      const connectedIds = new Set<string>();
-      for (const e of filteredEdges) {
-        const et = e.data?.edgeType as string;
-        if (et === 'READS_FROM' || et === 'WRITES_TO') {
-          connectedIds.add(e.source);
-          connectedIds.add(e.target);
-        }
-      }
-      // Keep a node visible if it still has any data-flow connection OR if it had none to begin with
-      const hadFlow = new Set<string>();
-      for (const e of base.edges) {
-        const et = e.data?.edgeType as string;
-        if (et === 'READS_FROM' || et === 'WRITES_TO') {
-          hadFlow.add(e.source);
-          hadFlow.add(e.target);
-        }
-      }
-      base = {
-        nodes: base.nodes.map((n) =>
-          hadFlow.has(n.id) && !connectedIds.has(n.id)
-            ? { ...n, style: { ...n.style, opacity: 0.12, pointerEvents: 'none' as const } }
-            : n,
-        ),
-        edges: filteredEdges,
-      };
-    }
-
-    // Phase 3c — cf edge toggle: hide column-flow edges when showCfEdges=false
-    // tableLevelView (phase 3) already hides them via COLUMN_EDGE_TYPES, so this
-    // phase only acts when tableLevelView is off.
-    if (!filter.showCfEdges && !filter.tableLevelView && viewLevel !== 'L1') {
-      base = {
-        nodes: base.nodes,
-        edges: base.edges.filter((e) => {
-          const et = e.data?.edgeType as string;
-          return et !== 'HAS_AFFECTED_COL' && et !== 'HAS_OUTPUT_COL';
-        }),
-      };
-    }
-
-    // Phase 4 — Field filter moved to post-layout effect (LOOM-031):
-    // fieldFilter dimming no longer triggers ELK re-layout.
-
-    // Phase 5 — L1 hierarchy filter (DB → Schema): dim nodes outside selected DB/Schema.
-    // App-level scope is already handled by scopedGraph (l1ScopeStack).
-    if (viewLevel === 'L1') {
-      const { dbId, schemaId } = l1HierarchyFilter;
-      if (dbId || schemaId) {
-        const DIM_H = 0.12;
-        const inScope = new Set<string>();
-
-        if (schemaId) {
-          // Schema chip + parent DB + grandparent App (keep parents at full opacity)
-          inScope.add(schemaId);
-          const sn = base.nodes.find((n) => n.id === schemaId);
-          if (sn?.parentId) {
-            inScope.add(sn.parentId);
-            const dn = base.nodes.find((n) => n.id === sn.parentId);
-            if (dn?.parentId) inScope.add(dn.parentId);
-          }
-        } else {
-          // DB + all its schema chips + parent App
-          inScope.add(dbId!);
-          for (const n of base.nodes) {
-            if (n.type === 'l1SchemaNode' && n.parentId === dbId) inScope.add(n.id);
-          }
-          const dn = base.nodes.find((n) => n.id === dbId);
-          if (dn?.parentId) inScope.add(dn.parentId);
-        }
-
-        base = {
-          nodes: base.nodes.map((n) =>
-            inScope.has(n.id)
-              ? n
-              : { ...n, style: { ...n.style, opacity: DIM_H, pointerEvents: 'none' as const } },
-          ),
-          edges: base.edges,
-        };
-      }
-    }
-
-    // Phase 6 — L1 schema chip selection: dim other visible schema chips
-    if (viewLevel === 'L1' && selectedNodeId) {
-      const selNode = base.nodes.find((n) => n.id === selectedNodeId);
-      // Only dim when the selected node is a visible schema chip (its parent DB is open)
-      if (
-        selNode?.type === 'l1SchemaNode' &&
-        selNode.parentId &&
-        expandedDbs.has(selNode.parentId)
-      ) {
-        const DIM_CHIP = 0.2;
-        base = {
-          nodes: base.nodes.map((n) => {
-            if (n.type !== 'l1SchemaNode' || n.id === selectedNodeId) return n;
-            return { ...n, style: { ...n.style, opacity: DIM_CHIP } };
-          }),
-          edges: base.edges,
-        };
-      }
-    }
-
-    return base;
-  // filter.fieldFilter intentionally omitted — handled in the post-layout effect (LOOM-031)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopedGraph, viewLevel, l1Filter.systemLevel, l1Filter.depth, hiddenNodeIds, filter.tableLevelView, filter.showCfEdges, filter.upstream, filter.downstream, COLUMN_EDGE_TYPES, l1HierarchyFilter, selectedNodeId, expandedDbs]);
-
-  // ── Layout: L1 = pre-computed + applyL1Layout; L2/L3 = ELK ─────────────────
-  useEffect(() => {
-    if (!displayGraph) return;
-    let cancelled = false;
-
-    // L1 grouped layout: positions set by transformGqlOverview, dynamically
-    // adjusted by applyL1Layout whenever expandedDbs changes.
-    if (viewLevel === 'L1') {
-      let laid = applyL1Layout(displayGraph.nodes, expandedDbs);
-
-      // applyL1Layout always re-sets l1SchemaNode.hidden based on expandedDbs,
-      // which undoes any depth filter applied earlier in displayGraph.
-      // Re-apply depth/system filter here as a post-pass.
-      const hideDb     = l1Filter.systemLevel || l1Filter.depth === 1;
-      const hideSchema = hideDb || l1Filter.depth === 2;
-      if (hideDb || hideSchema) {
-        laid = laid.map((n) => {
-          if (hideDb     && n.type === 'databaseNode')   return { ...n, hidden: true };
-          if (hideSchema && n.type === 'l1SchemaNode')   return { ...n, hidden: true };
-          return n;
-        });
-      }
-
-      setNodes(laid);
-      setEdges(displayGraph.edges);
-      setGraphStats(laid.length, displayGraph.edges.length);
-      setAvailableFields([]);
-      return;
-    }
-
-    setLayouting(true);
-    setLayoutError(false);
-
-    applyELKLayout(displayGraph.nodes, displayGraph.edges)
-      .then((layoutedNodes) => {
-        if (cancelled) return;
-        setNodes(layoutedNodes);
-        setEdges(displayGraph.edges);
-        setGraphStats(layoutedNodes.length, displayGraph.edges.length);
-        // Populate field dropdown: collect unique column/output-column labels
-        const fields = layoutedNodes
-          .filter((n) => n.data.nodeType === 'DaliColumn' || n.data.nodeType === 'DaliOutputColumn')
-          .map((n) => n.data.label)
-          .filter((label, idx, arr) => arr.indexOf(label) === idx)
-          .sort();
-        setAvailableFields(fields);
-      })
-      .catch((err) => {
-        console.error('[LOOM] ELK layout failed', err);
-        if (!cancelled) setLayoutError(true);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLayouting(false);
-          // Back-nav zoom / search focus: fire AFTER layout so fitViewRequest
-          // doesn't race against an empty/stale graph
-          if (pendingFocusNodeId) {
-            requestFocusNode(pendingFocusNodeId);
-            clearPendingFocus();
-          }
-          // Search auto-expand: promote pending → active request now that graph exists
-          if (pendingDeepExpand) {
-            activatePendingDeepExpand();
-          }
-        }
-      });
-
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayGraph, viewLevel, expandedDbs, l1Filter.depth, l1Filter.systemLevel]);
-
-  // ── Post-layout dimming — tableFilter, stmtFilter + fieldFilter (LOOM-031) ───
-  // These phases are intentionally absent from displayGraph to avoid ELK re-runs.
-  // fieldFilter (phase 4) moved here from displayGraph so field selection changes
-  // no longer trigger ELK for L2/L3 graphs — only opacity overlay updates.
-  useEffect(() => {
-    if (layouting || viewLevel !== 'L2') return;
-    const { tableFilter, stmtFilter, fieldFilter } = filter;
-    const activeId = stmtFilter ?? tableFilter;
-    const DIM_TABLE = 0.18;
-    const DIM_FIELD = 0.08;
-
-    // Helper: strip opacity/pointerEvents overrides we may have added
-    const stripNodeDim = (n: LoomNode): LoomNode => {
-      if (!n.style?.opacity && !n.style?.pointerEvents) return n;
-      const s = { ...n.style };
-      delete s.opacity;
-      delete s.pointerEvents;
-      return { ...n, style: s };
-    };
-    const stripEdgeDim = (e: LoomEdge): LoomEdge => {
-      if (!e.style?.opacity) return e;
-      const s = { ...e.style };
-      delete s.opacity;
-      return { ...e, style: s };
-    };
-
-    if (!activeId && !fieldFilter) {
-      setNodes((ns) => ns.map(stripNodeDim));
-      setEdges((es) => es.map(stripEdgeDim));
-      return;
-    }
-
-    const currentEdges = getEdges();
-
-    // ── Table / stmt filter: one-hop connected set ────────────────────────
-    let tableConnected: Set<string> | null = null;
-    if (activeId) {
-      tableConnected = new Set([activeId]);
-      for (const e of currentEdges) {
-        if (e.source === activeId) tableConnected.add(e.target);
-        if (e.target === activeId) tableConnected.add(e.source);
-      }
-    }
-
-    // ── Field filter: label match + one-hop neighbours ────────────────────
-    let fieldRelevant: Set<string> | null = null;
-    if (fieldFilter) {
-      const fieldName = fieldFilter.toLowerCase();
-      const relevant  = new Set<string>();
-      for (const n of (getNodes() as unknown) as LoomNode[]) {
-        const byLabel = n.data.label?.toLowerCase() === fieldName;
-        const byCol   = (n.data.columns as ColumnInfo[] | undefined)?.some(
-          (c) => c.name.toLowerCase() === fieldName,
-        );
-        if (byLabel || byCol) relevant.add(n.id);
-      }
-      for (const e of currentEdges) {
-        if (relevant.has(e.source) || relevant.has(e.target)) {
-          relevant.add(e.source);
-          relevant.add(e.target);
-        }
-      }
-      fieldRelevant = relevant;
-    }
-
-    // ── Apply combined dim ────────────────────────────────────────────────
-    setNodes((ns) => ns.map((n) => {
-      const inTable = !tableConnected || tableConnected.has(n.id);
-      const inField = !fieldRelevant  || fieldRelevant.has(n.id);
-      if (inTable && inField) return stripNodeDim(n);
-      const opacity = inField ? DIM_TABLE : DIM_FIELD;
-      return { ...n, style: { ...n.style, opacity, pointerEvents: 'none' as const } };
-    }));
-    setEdges((es) => es.map((e) => {
-      const inTable = !tableConnected || (tableConnected.has(e.source) && tableConnected.has(e.target));
-      const inField = !fieldRelevant  || (fieldRelevant.has(e.source) && fieldRelevant.has(e.target));
-      if (inTable && inField) return stripEdgeDim(e);
-      return { ...e, style: { ...e.style, opacity: inField ? DIM_TABLE : DIM_FIELD } };
-    }));
-
-    // Fly to the table/stmt focal node after style update settles.
-    if (activeId) {
-      let raf1: number;
-      let raf2: number;
-      raf1 = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => {
-          fitView({
-            nodes:   [{ id: activeId }],
-            duration: 600,
-            padding:  0.08,
-            maxZoom:  1.8,
-            minZoom:  0.15,
-          });
-        });
-      });
-      return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter.tableFilter, filter.stmtFilter, filter.fieldFilter, viewLevel, layouting, getEdges, getNodes, fitView]);
-
-  // ── Status message key for error / empty states ─────────────────────────
+  // ── Status message key for error / empty states ─────────────────────────────
   const statusKey: string | null = (() => {
     if (activeQuery.isError) {
       return isUnauthorized(activeQuery.error) ? 'status.unauthorized' : 'status.error';
@@ -746,20 +104,23 @@ const LoomCanvasInner = memo(() => {
     return null;
   })();
 
-  const isLoading = activeQuery.isLoading || layouting;
+  // Show loading while: primary query fetches, column enrichment settles, or ELK runs.
+  // The stmtColsReady guard prevents a blank canvas between data arrival and ELK start.
+  const isLoading = activeQuery.isLoading || !stmtColsReady || layouting;
 
-  // ── Node interactions ───────────────────────────────────────────────────
+  // Rough node count estimate for the large-graph loading hint (visible nodes in display graph).
+  const pendingNodeCount = displayGraph?.nodes.filter((n) => !n.hidden).length ?? 0;
+  const isLargeGraph = pendingNodeCount > 100;
+
+  // ── Node interactions ────────────────────────────────────────────────────────
   const onNodeClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
-    selectNode(node.id);
+    selectNode(node.id, node.data);
 
     // Canvas → FilterToolbarL1 sync (L1 only).
-    // Clicking a DB node highlights it in the DB cascade dropdown.
-    // Clicking a Schema chip highlights both DB and Schema dropdowns.
     if (viewLevel === 'L1') {
       if (node.type === 'databaseNode') {
         setL1HierarchyDb(node.id);
       } else if (node.type === 'l1SchemaNode' && node.parentId) {
-        // Schema chip lives inside a DB → set parent DB first, then schema.
         setL1HierarchyDb(node.parentId);
         setL1HierarchySchema(node.id);
       }
@@ -768,7 +129,7 @@ const LoomCanvasInner = memo(() => {
 
   // Double-click:
   //   Application on L1      → scope filter (stays on L1, dims other apps)
-  //   Database on L1         → drillDown to DB-scope L2 (expand/collapse is in header)
+  //   Database on L1         → drillDown to DB-scope L2
   //   Schema chip on L1      → drillDown to schema L2
   //   Schema / Package on L2 → drillDown (L2 → L3)
   //   Table on L2            → drillDown (L2 → L3)
@@ -778,9 +139,6 @@ const LoomCanvasInner = memo(() => {
       return;
     }
     if (!node.data.childrenAvailable || viewLevel === 'L3') return;
-    // DaliSchema: name-based scope so SHUTTLE dispatches to exploreSchema().
-    // Append |DB_NAME when available (l1SchemaNode chips carry it in metadata)
-    // so ExploreService can filter by db_name and resolve multi-DB collisions.
     let scope: string;
     if (node.data.nodeType === 'DaliSchema') {
       const dbName = node.data.metadata?.databaseName as string | null | undefined;
@@ -795,42 +153,13 @@ const LoomCanvasInner = memo(() => {
     drillDown(scope, node.data.label, node.data.nodeType);
   }, [viewLevel, pushL1Scope, drillDown]);
 
-  // ── Zoom tracking for status bar ────────────────────────────────────────
-  const onMoveEnd: OnMoveEnd = useCallback((_: unknown, viewport) => {
-    setZoom(viewport.zoom);
-  }, [setZoom]);
-
-  // ── Context menu (LOOM-029) ──────────────────────────────────────────────
+  // ── Context menu (LOOM-029) ──────────────────────────────────────────────────
   const onNodeContextMenu = useCallback((e: React.MouseEvent, node: LoomNode) => {
     e.preventDefault();
     setContextMenu({ nodeId: node.id, data: node.data, x: e.clientX, y: e.clientY });
   }, []);
 
-  // ── Programmatic fitView: triggered by search (focus node) or L1 return ──
-  useEffect(() => {
-    if (!fitViewRequest || layouting) return;
-    const req = fitViewRequest;
-    // Small delay: let React Flow finish painting the new nodes before fitting
-    const timer = setTimeout(() => {
-      if (req.type === 'full') {
-        fitView({ duration: 500, padding: 0.15 });
-      } else {
-        // Fit the selected node tightly in the viewport so it "fills the window"
-        fitView({
-          nodes:   [{ id: req.nodeId }],
-          duration: 600,
-          padding:  0.08,
-          maxZoom:  1.8,
-          minZoom:  0.15,
-        });
-      }
-      clearFitViewRequest();
-    }, 200);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitViewRequest, layouting]);
-
-  // ── Minimap node colour ─────────────────────────────────────────────────
+  // ── Minimap node colour ──────────────────────────────────────────────────────
   const minimapNodeColor = useCallback((node: LoomNode) => {
     switch (node.type) {
       case 'applicationNode':  return '#A8B860';
@@ -862,11 +191,19 @@ const LoomCanvasInner = memo(() => {
           background: 'color-mix(in srgb, var(--bg0) 85%, transparent)', backdropFilter: 'blur(3px)',
           pointerEvents: 'none',
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-            <SpinnerSVG />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+            <SpinnerSVG size={isLargeGraph ? 36 : 28} />
             <span style={{ fontSize: '11px', color: 'var(--t3)', letterSpacing: '0.07em' }}>
               {t(activeQuery.isLoading ? 'status.loading' : 'canvas.computingLayout')}
             </span>
+            {isLargeGraph && layouting && (
+              <>
+                <span style={{ fontSize: '10px', color: 'var(--t4)', letterSpacing: '0.05em' }}>
+                  {t('canvas.nodeCount', { count: pendingNodeCount })}
+                </span>
+                <LoadingDots />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -900,7 +237,6 @@ const LoomCanvasInner = memo(() => {
         onPaneClick={() => {
           selectNode(null);
           setContextMenu(null);
-          // Clear canvas-driven hierarchy filter so toolbar dropdowns reset to "all"
           if (viewLevel === 'L1') clearL1HierarchyFilter();
         }}
         colorMode={rfTheme}
@@ -917,7 +253,6 @@ const LoomCanvasInner = memo(() => {
         zoomOnScroll={true}
         zoomOnDoubleClick={false}
       >
-        {/* Dot-grid: 24px gap, Amber Forest --bd at opacity 0.3 */}
         <Background
           variant={BackgroundVariant.Dots}
           gap={24}
@@ -931,7 +266,6 @@ const LoomCanvasInner = memo(() => {
           maskColor={theme === 'dark' ? 'rgba(20,17,8,0.72)' : 'rgba(245,243,238,0.72)'}
           style={{ border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)' }}
         />
-        {/* Export panel (LOOM-030) */}
         <Panel position="top-right" style={{ margin: '8px' }}>
           <ExportPanel containerRef={containerRef} />
         </Panel>
@@ -955,13 +289,37 @@ export const LoomCanvas = memo(() => (
 LoomCanvas.displayName = 'LoomCanvas';
 
 // ─── Spinner SVG (no dependency) ─────────────────────────────────────────────
-function SpinnerSVG() {
+function SpinnerSVG({ size = 28 }: { size?: number }) {
+  const half = size / 2;
+  const r    = half - 3;
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none"
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none"
       style={{ animation: 'spin 0.8s linear infinite' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-      <circle cx="14" cy="14" r="11" stroke="var(--seer-border-2)" strokeWidth="2.5" />
-      <path d="M14 3 A11 11 0 0 1 25 14" stroke="var(--seer-accent)" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx={half} cy={half} r={r} stroke="var(--seer-border-2)" strokeWidth="2.5" />
+      <path d={`M${half} ${half - r} A${r} ${r} 0 0 1 ${half + r} ${half}`}
+        stroke="var(--seer-accent)" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
+  );
+}
+
+// ─── Pulsing dots for large-graph wait hint ───────────────────────────────────
+function LoadingDots() {
+  return (
+    <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+      <style>{`
+        @keyframes dotPulse {
+          0%, 80%, 100% { opacity: 0.2; transform: scale(0.75); }
+          40%            { opacity: 1;   transform: scale(1);    }
+        }
+      `}</style>
+      {[0, 1, 2].map((i) => (
+        <div key={i} style={{
+          width: 5, height: 5, borderRadius: '50%',
+          background: 'var(--seer-accent)',
+          animation: `dotPulse 1.4s ease-in-out ${i * 0.22}s infinite`,
+        }} />
+      ))}
+    </div>
   );
 }

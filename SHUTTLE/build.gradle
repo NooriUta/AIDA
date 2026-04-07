@@ -3,6 +3,14 @@ plugins {
     id 'io.quarkus' version "${quarkusPlatformVersion}"
 }
 
+group   = 'studio.seer.shuttle'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
 repositories {
     mavenCentral()
 }
@@ -31,13 +39,5 @@ dependencies {
     testImplementation 'io.quarkus:quarkus-junit5'
 }
 
-group 'studio.seer.shuttle'
-version '1.0.0-SNAPSHOT'
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
-
-compileJava.options.encoding = 'UTF-8'
+compileJava.options.encoding     = 'UTF-8'
 compileTestJava.options.encoding = 'UTF-8'

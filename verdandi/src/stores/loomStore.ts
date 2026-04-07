@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BreadcrumbItem, DaliNodeType, ViewLevel } from '../types/domain';
+import type { BreadcrumbItem, DaliNodeData, DaliNodeType, ViewLevel } from '../types/domain';
 
 // ─── Expansion types (LOOM-027) ───────────────────────────────────────────────
 export interface ExpansionGqlNode {
@@ -79,6 +79,8 @@ interface LoomStore {
 
   // ── Selection / highlight ─────────────────────────────────────────────────
   selectedNodeId: string | null;
+  /** Data of the selected node — written by LoomCanvas onNodeClick, cleared on pane click */
+  selectedNodeData: DaliNodeData | null;
   highlightedNodes: Set<string>;
   highlightedEdges: Set<string>;
 
@@ -119,7 +121,7 @@ interface LoomStore {
   ) => void;
   navigateBack: (index: number) => void;
   navigateToLevel: (level: ViewLevel) => void;
-  selectNode: (nodeId: string | null) => void;
+  selectNode: (nodeId: string | null, data?: DaliNodeData) => void;
   clearHighlight: () => void;
   setGraphStats: (nodeCount: number, edgeCount: number) => void;
   setZoom: (zoom: number) => void;
@@ -261,6 +263,7 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   availableDbs: [],
   availableSchemas: [],
   selectedNodeId: null,
+  selectedNodeData: null,
   highlightedNodes: new Set<string>(),
   highlightedEdges: new Set<string>(),
   filter: { ...FILTER_DEFAULTS },
@@ -400,8 +403,8 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   },
 
   // ── selectNode ────────────────────────────────────────────────────────────
-  selectNode: (nodeId) => {
-    set({ selectedNodeId: nodeId });
+  selectNode: (nodeId, data) => {
+    set({ selectedNodeId: nodeId, selectedNodeData: data ?? null });
   },
 
   // ── clearHighlight ────────────────────────────────────────────────────────

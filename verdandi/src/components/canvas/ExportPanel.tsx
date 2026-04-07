@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useReactFlow, getNodesBounds, getViewportForBounds } from '@xyflow/react';
 import { Download, FileJson, ImageDown, Loader2 } from 'lucide-react';
+import { useLoomStore } from '../../stores/loomStore';
 
 interface Props {
   /** Ref to the outermost canvas wrapper — used to locate .react-flow__viewport */
@@ -13,6 +14,7 @@ const SPIN: React.CSSProperties = { animation: 'spin 0.8s linear infinite' };
 export const ExportPanel = memo(({ containerRef }: Props) => {
   const { t } = useTranslation();
   const { getNodes, getEdges, getViewport } = useReactFlow();
+  const viewLevel = useLoomStore((s) => s.viewLevel);
 
   const [open,      setOpen]      = useState(false);
   const [exporting, setExporting] = useState<'json' | 'png' | 'svg' | null>(null);
@@ -50,7 +52,7 @@ export const ExportPanel = memo(({ containerRef }: Props) => {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `loom-graph-${Date.now()}.json`;
+      a.download = `seer-loom-${viewLevel.toLowerCase()}-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -83,7 +85,7 @@ export const ExportPanel = memo(({ containerRef }: Props) => {
       });
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `loom-graph-${Date.now()}.png`;
+      a.download = `seer-loom-${viewLevel.toLowerCase()}-${Date.now()}.png`;
       a.click();
     } catch (err) {
       console.error('[LOOM] PNG export failed', err);
@@ -117,7 +119,7 @@ export const ExportPanel = memo(({ containerRef }: Props) => {
       });
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `loom-graph-${Date.now()}.svg`;
+      a.download = `seer-loom-${viewLevel.toLowerCase()}-${Date.now()}.svg`;
       a.click();
     } catch (err) {
       console.error('[LOOM] SVG export failed', err);

@@ -19,7 +19,7 @@ interface AuthStore {
   clearError: () => void;
 }
 
-const AUTH_BASE = import.meta.env.VITE_AUTH_URL ?? 'http://localhost:3000/auth';
+const AUTH_BASE = import.meta.env.VITE_AUTH_URL ?? '/auth';
 
 export const useAuthStore = create<AuthStore>()(
   persist(
