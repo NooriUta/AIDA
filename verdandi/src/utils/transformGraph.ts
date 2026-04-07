@@ -874,6 +874,7 @@ function pushStandaloneDb(
       childrenAvailable: drillable,
       metadata:          { color, engine: dbEngine, tableCount: totalTables, schemaCount: schemas.length },
       tablesCount:       totalTables,
+      schemas:           schemas.map(s => ({ id: s.id, name: s.name, tableCount: s.tableCount })),
     },
   });
   const cols = schemaGridCols(schemas.length);
@@ -910,6 +911,7 @@ function pushGroupedDb(
       childrenAvailable: drillable,
       metadata:          { color, engine: dbEngine, tableCount: totalTables, schemaCount: schemas.length },
       tablesCount:       totalTables,
+      schemas:           schemas.map(s => ({ id: s.id, name: s.name, tableCount: s.tableCount })),
     },
   });
   const cols = schemaGridCols(schemas.length);

@@ -466,6 +466,7 @@
     "tables":        "Таблицы",
     "routines":      "Процедуры",
     "noColumns":     "Нет колонок",
+    "schemas":       "Схемы",
     "drillDown":     "Drill-down →"
   },
 

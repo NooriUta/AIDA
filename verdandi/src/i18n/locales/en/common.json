@@ -466,6 +466,7 @@
     "tables":        "Tables",
     "routines":      "Routines",
     "noColumns":     "No columns",
+    "schemas":       "Schemas",
     "drillDown":     "Drill-down →"
   },
 
