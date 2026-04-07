@@ -1,5 +1,5 @@
-import { memo, useState } from 'react';
-import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Handle, Position, type NodeProps, type Node, useUpdateNodeInternals } from '@xyflow/react';
 import { Table2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../../stores/loomStore';
@@ -112,6 +112,14 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
   const { drillDown, selectNode, nodeExpansionState, setNodeExpansion, hideNode } = useLoomStore();
   const { t } = useTranslation();
   const [colFilter, setColFilter] = useState('');
+  const updateNodeInternals = useUpdateNodeInternals();
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [handleTop, setHandleTop] = useState('22px');
+  useLayoutEffect(() => {
+    const h = headerRef.current?.offsetHeight;
+    if (h && h > 0) setHandleTop(`${Math.round(h / 2)}px`);
+  }, [data.schema, data.columns?.length]);
+  useEffect(() => { updateNodeInternals(id); }, [id, handleTop, updateNodeInternals]);
 
   // Current expansion state — default is 'partial'
   const expState = nodeExpansionState[id] ?? 'partial';
@@ -151,15 +159,16 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         padding:         0,
         overflow:        'hidden',
         // Collapsed: clamp to header height only
-        maxHeight:       expState === 'collapsed' ? '44px' : 'none',
+        maxHeight:       expState === 'collapsed' ? headerRef.current?.offsetHeight ?? 44 : 'none',
       }}
       onClick={() => selectNode(id)}
     >
       <NodeExpandButtons nodeId={id} show={selected ?? false} />
-      <Handle type="target" position={Position.Left} style={{ background: 'var(--inf)', zIndex: 5, top: '22px' }} />
+      <Handle type="target" position={Position.Left} style={{ background: 'var(--inf)', zIndex: 5, top: handleTop }} />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div
+        ref={headerRef}
         style={{
           padding:      'var(--seer-space-2) var(--seer-space-3)',
           display:      'flex',
@@ -167,7 +176,6 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
           gap:          'var(--seer-space-2)',
           background:   'var(--bg3)',
           borderBottom: expState !== 'collapsed' ? '1px solid var(--bd)' : 'none',
-          height:       '44px',
           boxSizing:    'border-box',
         }}
         onDoubleClick={handleHeaderDblClick}
@@ -175,10 +183,10 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         <Table2 size={13} color="var(--acc)" strokeWidth={1.5} style={{ flexShrink: 0 }} />
 
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          {/* Hierarchy breadcrumb (Schema → …) */}
-          {Array.isArray(data.metadata?.groupPath) && (data.metadata.groupPath as string[]).length > 0 && (
+          {/* Schema label */}
+          {data.schema && (
             <div style={{ fontSize: '9px', color: 'var(--t3)', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '1px', letterSpacing: '0.02em' }}>
-              {(data.metadata.groupPath as string[]).join(' › ')}
+              {data.schema}
             </div>
           )}
           <div
@@ -277,7 +285,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} style={{ background: 'var(--acc)', zIndex: 5, top: '22px' }} />
+      <Handle type="source" position={Position.Right} style={{ background: 'var(--acc)', zIndex: 5, top: handleTop }} />
     </div>
   );
 });

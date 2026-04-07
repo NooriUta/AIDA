@@ -14,8 +14,8 @@ import java.util.Map;
  * Full-text search across all Dali vertex types.
  *
  * ArcadeDB does not support UNION ALL — queries run in parallel, merged in Java.
- * LIKE '%q%' is used because built-in FULL_TEXT doesn't tokenise on '_'.
- * For Lucene ENGINE LUCENE, FT indexes are needed on the fields below (see comment).
+ * LIKE :q uses named parameter binding to prevent SQL injection.
+ * The :q parameter value includes leading/trailing % wildcards (set in search()).
  *
  * Covered types (12 parallel queries):
  *   DaliTable       table_name     scope=schema_name (1-hop traversal)   score=1.0
@@ -30,10 +30,6 @@ import java.util.Map;
  *   DaliDatabase    db_name        scope=db_name       score=0.7
  *   DaliApplication app_name       scope=''            score=0.7
  *   DaliSession     file_path      scope=db_name       score=0.5
- *
- * FT indexes missing (needed for future Lucene ENGINE LUCENE migration):
- *   DaliApplication(app_name), DaliOutputColumn(name),
- *   DaliSession(file_path),    DaliStatement(stmt_geoid)
  */
 @ApplicationScoped
 public class SearchService {
@@ -43,31 +39,34 @@ public class SearchService {
 
     @SuppressWarnings("unchecked")
     public Uni<List<SearchResult>> search(String query, int limit) {
-        String like = "%" + esc(query) + "%";
+        // % wildcards are added here; the parameter binding handles all escaping.
+        String like = "%" + query + "%";
         int n = Math.max(limit / 2, 10);
 
         // Scope values are used by the frontend for navigation:
         //   DaliTable/DaliColumn  → scope = schema_name  → jumpTo L2 "schema-<scope>"
         //   DaliRoutine/DaliStatement/DaliPackage → scope = package_name → jumpTo L2 "pkg-<scope>"
         //   Others                → scope used for display only
+        //
+        // :q is the named parameter for the LIKE value; %d is the LIMIT integer (safe — not user input).
         List<Uni<List<Map<String, Object>>>> unis = List.of(
             // Tables: scope = schema_name via 1-hop CONTAINS_TABLE traversal
-            q("SELECT @rid AS rid, @type AS type, table_name AS label, in('CONTAINS_TABLE')[0].schema_name AS scope, 1.0 AS score FROM DaliTable WHERE table_name LIKE '%s' LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, table_name AS label, in('CONTAINS_TABLE')[0].schema_name AS scope, 1.0 AS score FROM DaliTable WHERE table_name LIKE :q LIMIT %d", like, n),
             // Columns: scope = schema_name via 2-hop HAS_COLUMN→CONTAINS_TABLE traversal
-            q("SELECT @rid AS rid, @type AS type, column_name AS label, in('HAS_COLUMN')[0].in('CONTAINS_TABLE')[0].schema_name AS scope, 0.9 AS score FROM DaliColumn WHERE column_name LIKE '%s' LIMIT %d", like, n),
-            q("SELECT @rid AS rid, @type AS type, name           AS label, session_id   AS scope, 0.9  AS score FROM DaliOutputColumn WHERE name           LIKE '%s' LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, column_name AS label, in('HAS_COLUMN')[0].in('CONTAINS_TABLE')[0].schema_name AS scope, 0.9 AS score FROM DaliColumn WHERE column_name LIKE :q LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, name           AS label, session_id   AS scope, 0.9  AS score FROM DaliOutputColumn WHERE name           LIKE :q LIMIT %d", like, n),
             // Package: scope = package_name (same as label — used as key for pkg-<name> scope)
-            q("SELECT @rid AS rid, @type AS type, package_name   AS label, package_name AS scope, 0.8  AS score FROM DaliPackage      WHERE package_name   LIKE '%s' LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, package_name   AS label, package_name AS scope, 0.8  AS score FROM DaliPackage      WHERE package_name   LIKE :q LIMIT %d", like, n),
             // Routine: scope = package_name via 1-hop CONTAINS_ROUTINE traversal
-            q("SELECT @rid AS rid, @type AS type, routine_name AS label, in('CONTAINS_ROUTINE')[0].package_name AS scope, 0.8 AS score FROM DaliRoutine WHERE routine_name LIKE '%s' LIMIT %d", like, n),
-            q("SELECT @rid AS rid, @type AS type, param_name     AS label, session_id   AS scope, 0.75 AS score FROM DaliParameter    WHERE param_name     LIKE '%s' LIMIT %d", like, n),
-            q("SELECT @rid AS rid, @type AS type, var_name       AS label, session_id   AS scope, 0.75 AS score FROM DaliVariable     WHERE var_name       LIKE '%s' LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, routine_name AS label, in('CONTAINS_ROUTINE')[0].package_name AS scope, 0.8 AS score FROM DaliRoutine WHERE routine_name LIKE :q LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, param_name     AS label, session_id   AS scope, 0.75 AS score FROM DaliParameter    WHERE param_name     LIKE :q LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, var_name       AS label, session_id   AS scope, 0.75 AS score FROM DaliVariable     WHERE var_name       LIKE :q LIMIT %d", like, n),
             // Statement: scope = package_name via 2-hop CONTAINS_STMT→CONTAINS_ROUTINE traversal; fallback session_id
-            q("SELECT @rid AS rid, @type AS type, stmt_geoid AS label, coalesce(in('CONTAINS_STMT')[0].in('CONTAINS_ROUTINE')[0].package_name, session_id, '') AS scope, 0.6 AS score FROM DaliStatement WHERE stmt_geoid LIKE '%s' LIMIT %d", like, n),
-            q("SELECT @rid AS rid, @type AS type, schema_name    AS label, db_name      AS scope, 0.7  AS score FROM DaliSchema       WHERE schema_name    LIKE '%s' LIMIT %d", like, n),
-            q("SELECT @rid AS rid, @type AS type, db_name        AS label, db_name      AS scope, 0.7  AS score FROM DaliDatabase     WHERE db_name        LIKE '%s' LIMIT %d", like, n),
-            q("SELECT @rid AS rid, @type AS type, app_name       AS label, ''           AS scope, 0.7  AS score FROM DaliApplication  WHERE app_name       LIKE '%s' LIMIT %d", like, n),
-            q("SELECT @rid AS rid, @type AS type, file_path      AS label, db_name      AS scope, 0.5  AS score FROM DaliSession      WHERE file_path      LIKE '%s' LIMIT %d", like, n)
+            q("SELECT @rid AS rid, @type AS type, stmt_geoid AS label, coalesce(in('CONTAINS_STMT')[0].in('CONTAINS_ROUTINE')[0].package_name, session_id, '') AS scope, 0.6 AS score FROM DaliStatement WHERE stmt_geoid LIKE :q LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, schema_name    AS label, db_name      AS scope, 0.7  AS score FROM DaliSchema       WHERE schema_name    LIKE :q LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, db_name        AS label, db_name      AS scope, 0.7  AS score FROM DaliDatabase     WHERE db_name        LIKE :q LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, app_name       AS label, ''           AS scope, 0.7  AS score FROM DaliApplication  WHERE app_name       LIKE :q LIMIT %d", like, n),
+            q("SELECT @rid AS rid, @type AS type, file_path      AS label, db_name      AS scope, 0.5  AS score FROM DaliSession      WHERE file_path      LIKE :q LIMIT %d", like, n)
         );
 
         return Uni.combine().all()
@@ -83,8 +82,16 @@ public class SearchService {
             });
     }
 
+    /**
+     * Execute a parameterized SQL query.
+     * template: SQL with :q as the named parameter placeholder and %d for the LIMIT integer.
+     * like: user search string with % wildcards, passed as a bound parameter (not interpolated).
+     * n: integer LIMIT — safe to format directly since it is derived from a validated int.
+     */
     private Uni<List<Map<String, Object>>> q(String template, String like, int n) {
-        return arcade.sql(String.format(template, like, n));
+        String sql = String.format(template, n);
+        return arcade.sql(sql, Map.of("q", like))
+            .onFailure().recoverWithItem(List.of());
     }
 
     private static SearchResult toResult(Map<String, Object> row) {
@@ -102,9 +109,5 @@ public class SearchService {
     private static String str(Map<String, Object> row, String key) {
         Object v = row.get(key);
         return v != null ? v.toString() : "";
-    }
-
-    private static String esc(String input) {
-        return input.replace("'", "''");
     }
 }

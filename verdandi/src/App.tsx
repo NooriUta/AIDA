@@ -5,6 +5,10 @@ import { LoginPage } from './components/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { useAuthStore } from './stores/authStore';
 
+const KnotPage = lazy(() =>
+  import('./components/knot/KnotPage').then((m) => ({ default: m.KnotPage })),
+);
+
 // ── Dev-only proto routes ─────────────────────────────────────────────────────
 // lazy() keeps proto code out of the main chunk; Vite tree-shakes on build.
 const FilterToolbarProto = lazy(() =>
@@ -77,6 +81,17 @@ export default function App() {
             />
           </>
         )}
+
+        <Route
+          path="/knot"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={null}>
+                <KnotPage />
+              </Suspense>
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/*"

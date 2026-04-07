@@ -38,10 +38,12 @@ export const SCOPE_FILTER_TYPES = new Set<DaliNodeType>([
 ]);
 
 // ─── SEER Design System v1.1 — Amber Forest edge colours ────────────────────
-//   --inf #88B8A8  READS_FROM   solid 1.5px
-//   --wrn #D4922A  WRITES_TO    dashed 5 3  1.5px
-//   --acc #A8B860  DATA_FLOW    animated dashed
-//   --t3  #665c48  HAS_COLUMN   dashed 1px
+//   --inf #88B8A8  READS_FROM        solid 1.5px  smoothstep (node→node)
+//   --wrn #D4922A  WRITES_TO         dashed 5 3   1.5px smoothstep (node→node)
+//   --inf #88B8A8  HAS_OUTPUT_COL    bezier dashed 3 2  1px opacity 0.75 (col→col)
+//   --wrn #D4922A  HAS_AFFECTED_COL  bezier dashed 3 2  1px opacity 0.75 (col→col)
+//   --acc #A8B860  DATA_FLOW         animated dashed
+//   --t3  #665c48  HAS_COLUMN        dashed 1px
 
 const ANIMATED_EDGES = new Set<DaliEdgeType>([
   'DATA_FLOW', 'ATOM_PRODUCES', 'FILTER_FLOW',
@@ -497,8 +499,9 @@ function hoistSubqueryReads(result: ExploreResult): {
     seen.add(key);
     syntheticEdges.push({
       id:       `__sqrf_${idx++}`,
-      source:   rootId,
-      target:   e.target,
+      source:   e.target,   // flip: Table → rootStmt (matches schema path display direction)
+      target:   rootId,
+      type:     'smoothstep',
       animated: false,
       style:    getEdgeStyle('READS_FROM'),
       data:     { edgeType: 'READS_FROM' as DaliEdgeType },
@@ -561,19 +564,26 @@ export function transformGqlExplore(result: ExploreResult): {
     .map((n) => {
       const nodeType = n.type as DaliNodeType;
       const isFlatRoutine = nodeType === 'DaliRoutine' || nodeType === 'DaliSession' || nodeType === 'DaliPackage';
+      const { shortLabel, groupPath } = nodeType === 'DaliStatement'
+        ? parseStmtLabel(n.label)
+        : { shortLabel: n.label, groupPath: [] as string[] };
       return {
         id: n.id,
         type: NODE_TYPE_MAP[nodeType] ?? 'schemaNode',
         position: { x: 0, y: 0 },
         data: {
-          label:             n.label,
+          label:             shortLabel,
           nodeType,
           childrenAvailable: DRILLABLE_TYPES.has(nodeType),
-          metadata:          { scope: n.scope, routineKind: isFlatRoutine ? extractRoutineKind(n.label, nodeType) : undefined },
-          schema:            n.scope || undefined,
-          // Tables get HAS_COLUMN inline; statements get HAS_OUTPUT_COL/HAS_AFFECTED_COL inline
-          columns:           outputColsByStmt.get(n.id) ?? columnsByTable.get(n.id),
-          operation:         nodeType === 'DaliStatement' ? extractStatementType(n.label) : undefined,
+          metadata: {
+            scope:       n.scope,
+            groupPath:   groupPath.length > 0 ? groupPath : undefined,
+            fullLabel:   nodeType === 'DaliStatement' ? n.label : undefined,
+            routineKind: isFlatRoutine ? extractRoutineKind(n.label, nodeType) : undefined,
+          },
+          schema:    n.scope || undefined,
+          columns:   outputColsByStmt.get(n.id) ?? columnsByTable.get(n.id),
+          operation: nodeType === 'DaliStatement' ? extractStatementType(n.label) : undefined,
         },
       };
     });
@@ -594,13 +604,15 @@ export function transformGqlExplore(result: ExploreResult): {
     )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
+      const flip = edgeType === 'READS_FROM';
       return {
-        id: e.id,
-        source: e.source,
-        target: e.target,
+        id:       e.id,
+        source:   flip ? e.target : e.source,
+        target:   flip ? e.source : e.target,
+        type:     'smoothstep',
         animated: ANIMATED_EDGES.has(edgeType),
-        style: getEdgeStyle(edgeType),
-        data: { edgeType },
+        style:    getEdgeStyle(edgeType),
+        data:     { edgeType },
       };
     });
 
@@ -697,9 +709,9 @@ export function applyStmtColumns(
             target:       tableId,
             sourceHandle: `src-${sColId}`,
             targetHandle: `tgt-${tColId}`,
-            type:         'smoothstep',
+            type:         'default',
             animated:     false,
-            style:        { stroke: '#D4922A', strokeWidth: 1.5 },
+            style:        { stroke: '#D4922A', strokeWidth: 1, strokeDasharray: '3 2', opacity: 0.75 },
             data:         { edgeType: 'HAS_AFFECTED_COL', parentStmtId: stmtId },
           });
         }
@@ -714,9 +726,9 @@ export function applyStmtColumns(
             target:       stmtId,
             sourceHandle: `src-${tColId}`,
             targetHandle: `tgt-${sColId}`,
-            type:         'smoothstep',
+            type:         'default',
             animated:     false,
-            style:        { stroke: '#88B8A8', strokeWidth: 1.5 },
+            style:        { stroke: '#88B8A8', strokeWidth: 1, strokeDasharray: '3 2', opacity: 0.75 },
             data:         { edgeType: 'HAS_OUTPUT_COL', parentStmtId: stmtId },
           });
         }

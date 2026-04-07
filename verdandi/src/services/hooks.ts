@@ -7,6 +7,8 @@ import {
   fetchDownstream,
   fetchStmtColumns,
   fetchSearch,
+  fetchKnotSessions,
+  fetchKnotReport,
   isUnauthorized,
 } from './lineage';
 import { useAuthStore } from '../stores/authStore';
@@ -14,12 +16,14 @@ import { useAuthStore } from '../stores/authStore';
 // ── Query keys ────────────────────────────────────────────────────────────────
 
 export const qk = {
-  overview:   ()           => ['overview']          as const,
-  explore:    (scope: string) => ['explore', scope] as const,
-  lineage:    (nodeId: string) => ['lineage', nodeId] as const,
-  upstream:   (nodeId: string) => ['upstream', nodeId] as const,
-  downstream: (nodeId: string) => ['downstream', nodeId] as const,
-  search:     (q: string)  => ['search', q]         as const,
+  overview:     ()               => ['overview']               as const,
+  explore:      (scope: string)  => ['explore', scope]         as const,
+  lineage:      (nodeId: string) => ['lineage', nodeId]        as const,
+  upstream:     (nodeId: string) => ['upstream', nodeId]       as const,
+  downstream:   (nodeId: string) => ['downstream', nodeId]     as const,
+  search:       (q: string)      => ['search', q]              as const,
+  knotSessions: ()               => ['knotSessions']           as const,
+  knotReport:   (sid: string)    => ['knotReport', sid]        as const,
 };
 
 // ── 401 handler — auto-logout when session expires ────────────────────────────
@@ -114,6 +118,31 @@ export function useSearch(query: string, limit = 20) {
     queryFn:  () => fetchSearch(query, limit),
     enabled:  query.trim().length >= 2,   // don't fire on empty/single char
     staleTime: 60_000,                    // search results stay fresh 60s
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+// ── KNOT: Session list + full report ──────────────────────────────────────────
+
+export function useKnotSessions() {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.knotSessions(),
+    queryFn:  fetchKnotSessions,
+    staleTime: 30_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+export function useKnotReport(sessionId: string | null) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.knotReport(sessionId ?? ''),
+    queryFn:  () => fetchKnotReport(sessionId!),
+    enabled:  !!sessionId,
+    staleTime: 60_000,
     throwOnError: false,
     meta: { onError },
   });

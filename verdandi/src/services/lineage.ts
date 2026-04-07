@@ -165,6 +165,239 @@ export async function fetchSearch(query: string, limit = 20): Promise<SearchResu
   return data.search;
 }
 
+// ── KNOT types ────────────────────────────────────────────────────────────────
+
+export interface KnotSession {
+  id: string;
+  sessionId: string;
+  sessionName: string;
+  dialect: string;
+  filePath: string;
+  processingMs: number;
+  // Counts
+  tableCount: number;
+  columnCount: number;
+  schemaCount: number;
+  packageCount: number;
+  routineCount: number;
+  parameterCount: number;
+  variableCount: number;
+  // Statement breakdown
+  stmtSelect: number;
+  stmtInsert: number;
+  stmtUpdate: number;
+  stmtDelete: number;
+  stmtMerge: number;
+  stmtCursor: number;
+  stmtOther: number;
+  // Atoms
+  atomTotal: number;
+  atomResolved: number;
+  atomFailed: number;
+  atomConstant: number;
+  atomFuncCall: number;
+  // Edge counts
+  edgeReadsFrom: number;
+  edgeWritesTo: number;
+  edgeAtomRefColumn: number;
+  edgeDataFlow: number;
+}
+
+export interface KnotColumn {
+  id: string;
+  name: string;
+  dataType: string;
+  position: number;
+  atomRefCount: number;
+  alias: string;
+}
+
+export interface KnotTable {
+  id: string;
+  geoid: string;
+  name: string;
+  schema: string;
+  tableType: string;
+  columnCount: number;
+  sourceCount: number;
+  targetCount: number;
+  columns: KnotColumn[];
+  aliases: string[];
+}
+
+export interface KnotStatement {
+  id: string;
+  geoid: string;
+  stmtType: string;
+  lineNumber: number;
+  routineName: string;
+  packageName: string;
+  routineType: string;
+  sourceTables: string[];
+  targetTables: string[];
+  stmtAliases: string[];
+  atomTotal: number;
+  atomResolved: number;
+  atomFailed: number;
+  atomConstant: number;
+  children: KnotStatement[];
+}
+
+export interface KnotSnippet {
+  stmtGeoid: string;
+  snippet: string;
+}
+
+export interface KnotAtom {
+  stmtGeoid: string;
+  atomText: string;
+  columnName: string;
+  tableGeoid: string;
+  tableName: string;
+  status: string;
+  atomContext: string;
+  parentContext: string;
+  outputColumnSequence: number | null;
+  columnReference: boolean;
+  functionCall: boolean;
+  constant: boolean;
+  complex: boolean;
+  routineParam: boolean;
+  routineVar: boolean;
+  nestedAtomsCount: number | null;
+  atomLine: number;
+  atomPos: number;
+}
+
+export interface KnotOutputColumn {
+  stmtGeoid: string;
+  name: string;
+  expression: string;
+  alias: string;
+  colOrder: number;
+  sourceType: string;
+  tableRef: string;
+}
+
+export interface KnotCall {
+  callerName: string;
+  callerPackage: string;
+  calleeName: string;
+  lineStart: number;
+}
+
+export interface KnotParameter {
+  routineName: string;
+  paramName: string;
+  dataType: string;
+  direction: string;  // IN, OUT, IN OUT
+}
+
+export interface KnotVariable {
+  routineName: string;
+  varName: string;
+  dataType: string;
+}
+
+export interface KnotReport {
+  session: KnotSession;
+  tables: KnotTable[];
+  statements: KnotStatement[];
+  snippets: KnotSnippet[];
+  atoms: KnotAtom[];
+  outputColumns: KnotOutputColumn[];
+  calls: KnotCall[];
+  parameters: KnotParameter[];
+  variables: KnotVariable[];
+}
+
+// ── KNOT queries ──────────────────────────────────────────────────────────────
+
+const KNOT_SESSIONS = /* GraphQL */ `
+  query KnotSessions {
+    knotSessions {
+      id sessionId sessionName dialect filePath processingMs
+      tableCount columnCount schemaCount packageCount routineCount
+      parameterCount variableCount
+      stmtSelect stmtInsert stmtUpdate stmtDelete stmtMerge stmtCursor stmtOther
+      atomTotal atomResolved atomFailed atomConstant atomFuncCall
+      edgeReadsFrom edgeWritesTo edgeAtomRefColumn edgeDataFlow
+    }
+  }
+`;
+
+const KNOT_REPORT = /* GraphQL */ `
+  query KnotReport($sessionId: String!) {
+    knotReport(sessionId: $sessionId) {
+      session {
+        id sessionId sessionName dialect filePath processingMs
+        tableCount columnCount schemaCount packageCount routineCount
+        parameterCount variableCount
+        stmtSelect stmtInsert stmtUpdate stmtDelete stmtMerge stmtCursor stmtOther
+        atomTotal atomResolved atomFailed atomConstant atomFuncCall
+        edgeReadsFrom edgeWritesTo edgeAtomRefColumn edgeDataFlow
+      }
+      tables {
+        id geoid name schema tableType columnCount sourceCount targetCount aliases
+        columns { id name dataType position atomRefCount alias }
+      }
+      statements {
+        id geoid stmtType lineNumber routineName packageName routineType stmtAliases
+        sourceTables targetTables
+        atomTotal atomResolved atomFailed atomConstant
+        children {
+          id geoid stmtType lineNumber routineName packageName routineType stmtAliases
+          sourceTables targetTables atomTotal atomResolved atomFailed atomConstant
+          children {
+            id geoid stmtType lineNumber routineName packageName routineType stmtAliases
+            sourceTables targetTables atomTotal atomResolved atomFailed atomConstant
+            children {
+              id geoid stmtType lineNumber routineName packageName routineType stmtAliases
+              sourceTables targetTables atomTotal atomResolved atomFailed atomConstant
+              children {
+                id geoid stmtType lineNumber sourceTables targetTables atomTotal
+              }
+            }
+          }
+        }
+      }
+      snippets {
+        stmtGeoid snippet
+      }
+      atoms {
+        stmtGeoid atomText columnName tableGeoid tableName
+        status atomContext parentContext outputColumnSequence
+        columnReference functionCall constant
+        complex routineParam routineVar nestedAtomsCount atomLine atomPos
+      }
+      outputColumns {
+        stmtGeoid name expression alias colOrder sourceType tableRef
+      }
+      calls {
+        callerName callerPackage calleeName lineStart
+      }
+      parameters {
+        routineName paramName dataType direction
+      }
+      variables {
+        routineName varName dataType
+      }
+    }
+  }
+`;
+
+// ── KNOT service functions ────────────────────────────────────────────────────
+
+export async function fetchKnotSessions(): Promise<KnotSession[]> {
+  const data = await gqlClient.request<{ knotSessions: KnotSession[] }>(KNOT_SESSIONS);
+  return data.knotSessions;
+}
+
+export async function fetchKnotReport(sessionId: string): Promise<KnotReport> {
+  const data = await gqlClient.request<{ knotReport: KnotReport }>(KNOT_REPORT, { sessionId });
+  return data.knotReport;
+}
+
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
 /** Returns true if the error is a 401 (session expired) */

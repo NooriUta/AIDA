@@ -22,16 +22,27 @@ function getNodeHeight(node: LoomNode): number {
 }
 
 // ─── Fallback grid layout (used if ELK fails) ────────────────────────────────
+// Tracks per-column Y so tall nodes (table with many columns) don't overlap.
 function applyGridLayout(nodes: LoomNode[]): LoomNode[] {
-  const cols = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
-  return nodes.map((node, i) => ({
-    ...node,
-    position: {
-      x: (i % cols) * (NODE_WIDTH + 60),
-      y: Math.floor(i / cols) * (NODE_HEIGHT_BASE + 60),
-    },
-  }));
+  const colCount = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
+  const colY = new Array<number>(colCount).fill(0);
+  return nodes.map((node, i) => {
+    const col = i % colCount;
+    const y = colY[col];
+    colY[col] += getNodeHeight(node) + 60;
+    return { ...node, position: { x: col * (NODE_WIDTH + 60), y } };
+  });
 }
+
+// ─── Data-flow edge types used for ELK layout (flat path) ────────────────────
+// Containment edges (CONTAINS_ROUTINE, CONTAINS_STMT, etc.) are kept for
+// visual rendering but excluded from ELK: they create deep hierarchical chains
+// that, combined with cyclic data-flow edges, confuse the layered algorithm
+// and can produce degenerate (all-at-origin) layouts.
+const DATA_FLOW_FOR_LAYOUT = new Set([
+  'READS_FROM', 'WRITES_TO', 'DATA_FLOW',
+  'FILTER_FLOW', 'JOIN_FLOW', 'UNION_FLOW', 'ATOM_PRODUCES',
+]);
 
 // ─── ELK types (minimal, avoids dependency on @types/elkjs) ──────────────────
 interface ElkNode {
@@ -62,6 +73,8 @@ const LAYERED_OPTIONS: Record<string, string> = {
   'elk.direction':                             'RIGHT',
   'elk.layered.spacing.nodeNodeBetweenLayers': '120',
   'elk.spacing.nodeNode':                      '60',
+  'elk.separateConnectedComponents':           'true',   // properly space isolated subgraphs
+  'elk.spacing.componentComponent':            '80',     // gap between disconnected components
   'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
   'elk.layered.nodePlacement.strategy':        'LINEAR_SEGMENTS',
   'elk.layered.unnecessaryBendpoints':         'true',
@@ -108,7 +121,14 @@ export async function applyELKLayout(
       id: 'root',
       layoutOptions: { ...LAYERED_OPTIONS },
       children: nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: getNodeHeight(n) })),
-      edges:    edges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
+      // Only data-flow edges — containment edges are filtered out so ELK receives
+      // a clean DAG (or near-DAG) without CONTAINS_ROUTINE/CONTAINS_STMT chains.
+      edges: edges
+        .filter((e) => {
+          const et = (e.data as { edgeType?: string } | undefined)?.edgeType;
+          return !et || DATA_FLOW_FOR_LAYOUT.has(et);
+        })
+        .map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
     };
     try {
       const result = await elk.layout(graph);
@@ -178,6 +198,9 @@ export async function applyELKLayout(
     });
   } catch (err) {
     console.warn('[LOOM] ELK compound layout error.', err);
-    return nodes; // children keep relative positions; top-level nodes at (0,0)
+    // Grid-position top-level nodes; children keep pre-computed relative positions.
+    const gridTop = applyGridLayout(topNodes);
+    const gridIds = new Set(gridTop.map((n) => n.id));
+    return [...gridTop, ...nodes.filter((n) => !gridIds.has(n.id))];
   }
 }

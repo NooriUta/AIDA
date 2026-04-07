@@ -1,0 +1,271 @@
+import { memo, useEffect, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Header } from '../layout/Header';
+import { KnotSummary } from './KnotSummary';
+import { KnotStructure } from './KnotStructure';
+import { KnotRoutines } from './KnotRoutines';
+import { KnotStatements } from './KnotStatements';
+import { KnotAtoms } from './KnotAtoms';
+import { useKnotSessions, useKnotReport } from '../../services/hooks';
+import type { KnotSession } from '../../services/lineage';
+
+type TabId = 'summary' | 'structure' | 'routines' | 'statements' | 'atoms';
+
+export const KnotPage = memo(() => {
+  const { t } = useTranslation();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>('summary');
+
+  const { data: sessions, isLoading: sessionsLoading, isError: sessionsError } = useKnotSessions();
+  const { data: report, isLoading: reportLoading, isError: reportError } = useKnotReport(selectedId);
+
+  // Auto-select first session
+  useEffect(() => {
+    if (sessions && sessions.length > 0 && !selectedId) {
+      setSelectedId(sessions[0].sessionId);
+    }
+  }, [sessions, selectedId]);
+
+  const tabCounts = useMemo(() => {
+    if (!report) return {};
+    const s = report.session;
+    const stmtTotal = s.stmtSelect + s.stmtInsert + s.stmtUpdate +
+      s.stmtDelete + s.stmtMerge + s.stmtCursor + s.stmtOther;
+    return {
+      structure: s.tableCount || report.tables.length,
+      routines: s.routineCount,
+      statements: stmtTotal || report.statements.length,
+      atoms: s.atomTotal,
+    };
+  }, [report]);
+
+  const TABS: { id: TabId; key: string; count?: number }[] = [
+    { id: 'summary',    key: 'knot.tabs.summary' },
+    { id: 'structure',  key: 'knot.tabs.structure',  count: tabCounts.structure },
+    { id: 'routines',   key: 'knot.tabs.routines',   count: tabCounts.routines },
+    { id: 'statements', key: 'knot.tabs.statements', count: tabCounts.statements },
+    { id: 'atoms',      key: 'knot.tabs.atoms',      count: tabCounts.atoms },
+  ];
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateRows: '48px 1fr',
+      height: '100vh',
+      overflow: 'hidden',
+      background: 'var(--bg0)',
+    }}>
+      <Header />
+
+      <div style={{ display: 'flex', overflow: 'hidden' }}>
+
+        {/* ── Sessions sidebar ─────────────────────────────────────────────── */}
+        <aside style={{
+          width: 220,
+          flexShrink: 0,
+          background: 'var(--bg0)',
+          borderRight: '1px solid var(--bd)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '10px 14px',
+            fontSize: 10,
+            fontWeight: 500,
+            letterSpacing: '0.1em',
+            color: 'var(--t3)',
+            textTransform: 'uppercase',
+            borderBottom: '1px solid var(--bd)',
+            flexShrink: 0,
+          }}>
+            {t('knot.sessions')}
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+            {sessionsLoading && (
+              <div style={{ padding: '16px 10px', fontSize: 12, color: 'var(--t3)' }}>
+                {t('knot.loading')}
+              </div>
+            )}
+            {sessionsError && (
+              <div style={{ padding: '16px 10px', fontSize: 12, color: 'var(--dan, #C06060)' }}>
+                {t('knot.error')}
+              </div>
+            )}
+            {!sessionsLoading && sessions?.length === 0 && (
+              <div style={{ padding: '16px 10px', fontSize: 12, color: 'var(--t3)' }}>
+                {t('knot.emptyList')}
+              </div>
+            )}
+            {sessions?.map((sess) => (
+              <SessionCard
+                key={sess.sessionId}
+                session={sess}
+                selected={selectedId === sess.sessionId}
+                onClick={() => setSelectedId(sess.sessionId)}
+              />
+            ))}
+          </div>
+        </aside>
+
+        {/* ── Main area ───────────────────────────────────────────────────── */}
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Tab bar */}
+          <div style={{
+            background: 'var(--bg0)',
+            borderBottom: '1px solid var(--bd)',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 16px',
+            gap: 2,
+            flexShrink: 0,
+            height: 40,
+            overflowX: 'auto',
+            minWidth: 0,
+          }}>
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '0 14px',
+                  height: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  border: 'none',
+                  background: 'transparent',
+                  color: activeTab === tab.id ? 'var(--t1)' : 'var(--t3)',
+                  cursor: 'pointer',
+                  borderBottom: activeTab === tab.id
+                    ? '2px solid var(--acc)'
+                    : '2px solid transparent',
+                  transition: 'color 0.12s',
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {t(tab.key)}
+                {tab.count != null && tab.count > 0 && (
+                  <span style={{
+                    padding: '1px 6px',
+                    borderRadius: 10,
+                    fontSize: 10,
+                    background: activeTab === tab.id
+                      ? 'color-mix(in srgb, var(--acc) 12%, transparent)'
+                      : 'var(--bg3)',
+                    color: activeTab === tab.id ? 'var(--acc)' : 'var(--t3)',
+                  }}>
+                    {tab.count.toLocaleString()}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            {!selectedId && (
+              <EmptyState message={t('knot.noSession')} />
+            )}
+            {selectedId && reportLoading && (
+              <EmptyState message={t('status.loading')} />
+            )}
+            {selectedId && reportError && (
+              <EmptyState message={t('knot.error')} error />
+            )}
+            {selectedId && report && !reportLoading && (
+              <>
+                {activeTab === 'summary'    && <KnotSummary    session={report.session} tables={report.tables} statements={report.statements} />}
+                {activeTab === 'structure'  && <KnotStructure  tables={report.tables} statements={report.statements} />}
+                {activeTab === 'routines'   && <KnotRoutines   session={report.session} statements={report.statements} calls={report.calls ?? []} parameters={report.parameters ?? []} variables={report.variables ?? []} />}
+                {activeTab === 'statements' && <KnotStatements statements={report.statements} snippets={report.snippets} atoms={report.atoms} outputColumns={report.outputColumns} />}
+                {activeTab === 'atoms'      && <KnotAtoms      session={report.session} atoms={report.atoms} />}
+              </>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+});
+
+KnotPage.displayName = 'KnotPage';
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function SessionCard({
+  session, selected, onClick,
+}: {
+  session: KnotSession;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '8px 12px',
+        borderRadius: 6,
+        cursor: 'pointer',
+        background: selected ? 'var(--bg2)' : 'transparent',
+        border: selected ? '1px solid var(--bd)' : '1px solid transparent',
+        marginBottom: 2,
+        transition: 'background 0.1s',
+      }}
+      onMouseEnter={(e) => {
+        if (!selected) (e.currentTarget as HTMLElement).style.background = 'var(--bg2)';
+      }}
+      onMouseLeave={(e) => {
+        if (!selected) (e.currentTarget as HTMLElement).style.background = 'transparent';
+      }}
+    >
+      <div style={{
+        fontSize: 12,
+        fontWeight: selected ? 500 : 400,
+        color: 'var(--t1)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        marginBottom: 3,
+      }}>
+        {session.sessionName}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 10, color: 'var(--t3)' }}>
+        <span style={{
+          padding: '1px 5px',
+          borderRadius: 3,
+          background: 'var(--bg3)',
+          fontFamily: "'Fira Code', monospace",
+          fontSize: 9,
+          color: 'var(--t2)',
+        }}>
+          {session.dialect.toUpperCase()}
+        </span>
+        {session.processingMs > 0 && (
+          <span>{session.processingMs.toLocaleString()} ms</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ message, error = false }: { message: string; error?: boolean }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      fontSize: 13,
+      color: error ? 'var(--dan, #C06060)' : 'var(--t3)',
+    }}>
+      {message}
+    </div>
+  );
+}

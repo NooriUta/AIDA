@@ -53,6 +53,10 @@ actions.*          — общие кнопки действий
   "toolbar": {
     "startObject":       "Start object",
     "changeObject":      "Change",
+    "table":             "Table",
+    "allTables":         "all tables",
+    "stmt":              "Transform",
+    "allStmts":          "all transforms",
     "field":             "Field",
     "allColumns":        "all columns",
     "depth":             "Depth",
@@ -60,6 +64,10 @@ actions.*          — общие кнопки действий
     "downstream":        "Downstream",
     "tableLevelView":    "Table-level view",
     "columnLevelView":   "Column-level view",
+    "showCfEdges":       "Column flow",
+    "hideCfEdges":       "Column flow",
+    "searchPlaceholder": "Search…",
+    "noMatches":         "No matches",
     "clearFilter":       "Clear filter",
     "depthSteps":        "{{n}} steps",
     "depthInfinity":     "∞ steps"
@@ -74,7 +82,9 @@ actions.*          — общие кнопки действий
       "tables":          "Tables",
       "routines":        "Routines",
       "columns":         "Columns",
-      "statements":      "Statements"
+      "statements":      "Statements",
+      "databases":       "Databases",
+      "applications":    "Applications"
     },
     "sections": {
       "sources":         "Sources",
@@ -284,6 +294,18 @@ actions.*          — общие кнопки действий
     "readWrite":         "read-write"
   },
 
+  "l1": {
+    "schemas":           "schemas",
+    "dbUnit":            "DB",
+    "appBadge":          "App",
+    "allSystems":        "all systems",
+    "allDbs":            "all DBs",
+    "allSchemas":        "all schemas",
+    "clearScope":        "Clear scope",
+    "systemLevel":       "System-level",
+    "systemLevelHint":   "Show applications only, hide databases"
+  },
+
   "actions": {
     "drilldownL3":       "Drill-down L3",
     "fullChain":         "Full lineage chain",
@@ -294,6 +316,41 @@ actions.*          — общие кнопки действий
     "copyId":            "Copy ID",
     "openInSource":      "Open in source",
     "setAsStart":        "Set as start object"
+  },
+
+  "legend": {
+    "title":             "Legend",
+    "open":              "Show legend",
+    "close":             "Hide legend",
+    "section":           { "edges": "Edges", "nodes": "Nodes" },
+    "edge": {
+      "readsFrom":       "READS_FROM",
+      "writesTo":        "WRITES_TO",
+      "dataFlow":        "DATA_FLOW",
+      "filterFlow":      "FILTER_FLOW",
+      "joinFlow":        "JOIN_FLOW",
+      "containsStmt":    "CONTAINS_STMT",
+      "atomProduces":    "ATOM_PRODUCES",
+      "atomRefCol":      "ATOM_REF_COLUMN",
+      "hasDatabase":     "HAS_DATABASE",
+      "containsSchema":  "CONTAINS_SCHEMA",
+      "usesDatabase":    "USES_DATABASE"
+    },
+    "node": {
+      "application":     "Application",
+      "database":        "Database",
+      "schema":          "Schema",
+      "table":           "Table",
+      "package":         "Package",
+      "routine":         "Routine",
+      "statement":       "Statement",
+      "column":          "Column",
+      "atom":            "Atom"
+    },
+    "hint": {
+      "dblclick":        "drill-down",
+      "click":           "select / highlight"
+    }
   },
 
   "status": {
@@ -317,13 +374,21 @@ actions.*          — общие кнопки действий
   "toolbar": {
     "startObject":       "Начальный объект",
     "changeObject":      "Изменить",
+    "table":             "Таблица",
+    "allTables":         "все таблицы",
+    "stmt":              "Трансформация",
+    "allStmts":          "все трансформации",
     "field":             "Поле",
     "allColumns":        "все колонки",
     "depth":             "Глубина",
-    "upstream":          "Upstream",
-    "downstream":        "Downstream",
+    "upstream":          "Источники",
+    "downstream":        "Приёмники",
     "tableLevelView":    "На уровне таблиц",
     "columnLevelView":   "На уровне колонок",
+    "showCfEdges":       "Колонки CF",
+    "hideCfEdges":       "Колонки CF",
+    "searchPlaceholder": "Поиск…",
+    "noMatches":         "Не найдено",
     "clearFilter":       "Сбросить",
     "depthSteps":        "{{n}} шагов",
     "depthInfinity":     "∞ шагов"
@@ -338,7 +403,9 @@ actions.*          — общие кнопки действий
       "tables":          "Таблицы",
       "routines":        "Процедуры",
       "columns":         "Колонки",
-      "statements":      "Стейтменты"
+      "statements":      "Трансформации",
+      "databases":       "СУБД",
+      "applications":    "Приложения"
     },
     "sections": {
       "sources":         "Источники",
@@ -548,26 +615,73 @@ actions.*          — общие кнопки действий
     "readWrite":         "чтение и запись"
   },
 
+  "l1": {
+    "schemas":           "схемы",
+    "dbUnit":            "СУБД",
+    "appBadge":          "App",
+    "allSystems":        "все системы",
+    "allDbs":            "все БД",
+    "allSchemas":        "все схемы",
+    "clearScope":        "Сбросить скоуп",
+    "systemLevel":       "Системный вид",
+    "systemLevelHint":   "Показать только приложения, скрыть СУБД"
+  },
+
   "actions": {
     "drilldownL3":       "Drill-down L3",
     "fullChain":         "Полная цепочка lineage",
     "impactAnalysis":    "Анализ влияния",
     "showDiff":          "Показать diff",
-    "fitView":           "По размеру экрана",
+    "fitView":           "Вписать в экран",
     "exportPng":         "Экспорт PNG",
-    "copyId":            "Копировать ID",
+    "copyId":            "Скопировать ID",
     "openInSource":      "Открыть в источнике",
-    "setAsStart":        "Сделать начальным объектом"
+    "setAsStart":        "Установить как стартовый"
+  },
+
+  "legend": {
+    "title":             "Легенда",
+    "open":              "Показать легенду",
+    "close":             "Скрыть легенду",
+    "section":           { "edges": "Рёбра", "nodes": "Узлы" },
+    "edge": {
+      "readsFrom":       "READS_FROM",
+      "writesTo":        "WRITES_TO",
+      "dataFlow":        "DATA_FLOW",
+      "filterFlow":      "FILTER_FLOW",
+      "joinFlow":        "JOIN_FLOW",
+      "containsStmt":    "CONTAINS_STMT",
+      "atomProduces":    "ATOM_PRODUCES",
+      "atomRefCol":      "ATOM_REF_COLUMN",
+      "hasDatabase":     "HAS_DATABASE",
+      "containsSchema":  "CONTAINS_SCHEMA",
+      "usesDatabase":    "USES_DATABASE"
+    },
+    "node": {
+      "application":     "Приложение",
+      "database":        "База данных",
+      "schema":          "Схема",
+      "table":           "Таблица",
+      "package":         "Пакет",
+      "routine":         "Процедура",
+      "statement":       "Стейтмент",
+      "column":          "Колонка",
+      "atom":            "Атом"
+    },
+    "hint": {
+      "dblclick":        "drill-down",
+      "click":           "выбрать / выделить"
+    }
   },
 
   "status": {
     "loading":           "Загрузка…",
     "error":             "Не удалось загрузить данные",
-    "empty":             "Нет нод для отображения",
+    "empty":             "Узлы не найдены",
     "unauthorized":      "Сессия истекла. Войдите снова.",
     "forbidden":         "Доступ запрещён",
     "graphLoading":      "Строится граф…",
-    "noData":            "Нет данных lineage для этого объекта"
+    "noData":            "Нет данных линейки для этого объекта"
   }
 }
 ```
