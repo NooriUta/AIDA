@@ -26,7 +26,8 @@
     "level": "Level",
     "zoom": "Zoom",
     "computingLayout": "computing layout…",
-    "nodeCount": "{{count}} nodes"
+    "nodeCount": "{{count}} nodes",
+    "hasMore": "Graph truncated — showing first 500 nodes. Narrow your filter."
   },
   "breadcrumb": { "overview": "Overview" },
   "theme": { "dark": "Dark", "light": "Light" },
@@ -330,7 +331,7 @@
       "sourceSets": "Source sets (tables & queries)",
       "targetTables": "Target tables",
       "targetCols": "Affected columns",
-      "tableGeoid": "Table geoid",
+      "tableGeoid": "Source table",
       "subqueries": "Subqueries",
       "nestedSubq": "Nested subqueries",
       "details": "Details",
@@ -346,14 +347,19 @@
       "tableRef": "Table",
       "atomText": "Atom",
       "affectedCol": "Affects col",
-      "refSource": "Source ref",
+      "refSource": "Source field",
       "status": "Status",
       "context": "Context",
       "moreAtoms": "more atoms",
       "subqueriesCount": "Subq.",
       "routineType": "Routine type",
       "aliases": "Aliases",
-      "sourceAtoms": "Source atoms"
+      "sourceAtoms": "Source atoms",
+      "mainInfo": "Main info",
+      "sourceType": "Source type",
+      "sourceRef": "Table / Query",
+      "refCol": "Column",
+      "outputCol": "Output col"
     },
     "structure": {
       "usedAsSource": "Used as source",

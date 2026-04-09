@@ -45,6 +45,7 @@ export interface GraphEdge {
 export interface ExploreResult {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  hasMore: boolean;
 }
 
 export interface SearchResult {
@@ -79,6 +80,7 @@ const EXPLORE = /* GraphQL */ `
     explore(scope: $scope) {
       nodes { id type label scope }
       edges { id source target type }
+      hasMore
     }
   }
 `;
@@ -88,6 +90,7 @@ const LINEAGE = /* GraphQL */ `
     lineage(nodeId: $nodeId) {
       nodes { id type label scope }
       edges { id source target type }
+      hasMore
     }
   }
 `;
@@ -97,6 +100,7 @@ const UPSTREAM = /* GraphQL */ `
     upstream(nodeId: $nodeId) {
       nodes { id type label scope }
       edges { id source target type }
+      hasMore
     }
   }
 `;
@@ -106,6 +110,7 @@ const DOWNSTREAM = /* GraphQL */ `
     downstream(nodeId: $nodeId) {
       nodes { id type label scope }
       edges { id source target type }
+      hasMore
     }
   }
 `;
@@ -115,6 +120,7 @@ const EXPAND_DEEP = /* GraphQL */ `
     expandDeep(nodeId: $nodeId, depth: $depth) {
       nodes { id type label scope }
       edges { id source target type }
+      hasMore
     }
   }
 `;
@@ -124,6 +130,7 @@ const STMT_COLUMNS = /* GraphQL */ `
     stmtColumns(ids: $ids) {
       nodes { id type label scope }
       edges { id source target type }
+      hasMore
     }
   }
 `;
@@ -193,7 +200,7 @@ export async function fetchExpandDeep(nodeId: string, depth: number): Promise<Ex
 }
 
 export async function fetchStmtColumns(ids: string[]): Promise<ExploreResult> {
-  if (ids.length === 0) return { nodes: [], edges: [] };
+  if (ids.length === 0) return { nodes: [], edges: [], hasMore: false };
   const data = await gqlClient.request<{ stmtColumns: ExploreResult }>(STMT_COLUMNS, { ids });
   return data.stmtColumns;
 }
@@ -263,6 +270,13 @@ export interface KnotTable {
   aliases: string[];
 }
 
+export interface KnotSourceRef {
+  name:     string;
+  geoid:    string;
+  aliases:  string[];
+  nodeType: 'TABLE' | 'STMT';  // TABLE = DaliTable, STMT = DaliStatement (CTE/subquery)
+}
+
 export interface KnotStatement {
   id: string;
   geoid: string;
@@ -271,13 +285,14 @@ export interface KnotStatement {
   routineName: string;
   packageName: string;
   routineType: string;
-  sourceTables: string[];
-  targetTables: string[];
+  sourceTables: KnotSourceRef[];
+  targetTables: KnotSourceRef[];
   stmtAliases: string[];
   atomTotal: number;
   atomResolved: number;
   atomFailed: number;
   atomConstant: number;
+  atomFuncCall: number;
   children: KnotStatement[];
 }
 
@@ -297,7 +312,11 @@ export interface KnotAtom {
   parentContext: string;
   outputColumnSequence: number | null;
   outputColName: string;
-  refSourceName: string;
+  refSourceName: string;    // ATOM_REF_OUTPUT_COL → DaliOutputColumn.output_col_name
+  refStmtGeoid: string;     // ATOM_REF_STMT        → DaliStatement.stmt_geoid
+  refColEdge: string;       // ATOM_REF_COLUMN      → DaliColumn.column_name
+  refTblEdge: string;       // ATOM_REF_TABLE       → DaliTable.table_name
+  refTblGeoidEdge: string;  // ATOM_REF_TABLE       → DaliTable.table_geoid (NOT @rid!)
   columnReference: boolean;
   functionCall: boolean;
   constant: boolean;
@@ -309,6 +328,13 @@ export interface KnotAtom {
   atomPos: number;
 }
 
+export interface KnotOutputColumnAtom {
+  text:   string;
+  col:    string;
+  tbl:    string;
+  status: string;
+}
+
 export interface KnotOutputColumn {
   stmtGeoid: string;
   name: string;
@@ -317,6 +343,7 @@ export interface KnotOutputColumn {
   colOrder: number;
   sourceType: string;
   tableRef: string;
+  atoms: KnotOutputColumnAtom[];
 }
 
 export interface KnotCall {
@@ -346,9 +373,16 @@ export interface KnotAffectedColumn {
   position: number;
 }
 
+export interface KnotRoutine {
+  routineName: string;
+  routineType: string;
+  packageGeoid: string;
+}
+
 export interface KnotReport {
   session: KnotSession;
   tables: KnotTable[];
+  routines: KnotRoutine[];
   statements: KnotStatement[];
   snippets: KnotSnippet[];
   atoms: KnotAtom[];
@@ -389,21 +423,34 @@ const KNOT_REPORT = /* GraphQL */ `
         id geoid name schema tableType columnCount sourceCount targetCount aliases
         columns { id name dataType position atomRefCount alias }
       }
+      routines {
+        routineName routineType packageGeoid
+      }
       statements {
         id geoid stmtType lineNumber routineName packageName routineType stmtAliases
-        sourceTables targetTables
-        atomTotal atomResolved atomFailed atomConstant
+        sourceTables { name geoid aliases nodeType }
+        targetTables { name geoid aliases nodeType }
+        atomTotal atomResolved atomFailed atomConstant atomFuncCall
         children {
           id geoid stmtType lineNumber routineName packageName routineType stmtAliases
-          sourceTables targetTables atomTotal atomResolved atomFailed atomConstant
+          sourceTables { name geoid aliases nodeType }
+          targetTables { name geoid aliases nodeType }
+          atomTotal atomResolved atomFailed atomConstant atomFuncCall
           children {
             id geoid stmtType lineNumber routineName packageName routineType stmtAliases
-            sourceTables targetTables atomTotal atomResolved atomFailed atomConstant
+            sourceTables { name geoid aliases }
+            targetTables { name geoid aliases }
+            atomTotal atomResolved atomFailed atomConstant atomFuncCall
             children {
               id geoid stmtType lineNumber routineName packageName routineType stmtAliases
-              sourceTables targetTables atomTotal atomResolved atomFailed atomConstant
+              sourceTables { name geoid aliases }
+              targetTables { name geoid aliases }
+              atomTotal atomResolved atomFailed atomConstant atomFuncCall
               children {
-                id geoid stmtType lineNumber sourceTables targetTables atomTotal
+                id geoid stmtType lineNumber
+                sourceTables { name geoid aliases }
+                targetTables { name geoid aliases }
+                atomTotal atomFuncCall
               }
             }
           }
@@ -415,11 +462,13 @@ const KNOT_REPORT = /* GraphQL */ `
       atoms {
         stmtGeoid atomText columnName tableGeoid tableName
         status atomContext parentContext outputColumnSequence outputColName refSourceName
+        refStmtGeoid refColEdge refTblEdge refTblGeoidEdge
         columnReference functionCall constant
         complex routineParam routineVar nestedAtomsCount atomLine atomPos
       }
       outputColumns {
         stmtGeoid name expression alias colOrder sourceType tableRef
+        atoms { text col tbl status }
       }
       affectedColumns {
         stmtGeoid columnName tableName position

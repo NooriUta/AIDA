@@ -26,7 +26,8 @@
     "level": "Уровень",
     "zoom": "Масштаб",
     "computingLayout": "вычисляется граф…",
-    "nodeCount": "{{count}} узлов"
+    "nodeCount": "{{count}} узлов",
+    "hasMore": "Граф усечён — показаны первые 500 узлов. Уточните фильтр."
   },
   "breadcrumb": { "overview": "Обзор" },
   "theme": { "dark": "Тёмная", "light": "Светлая" },
@@ -330,7 +331,7 @@
       "sourceSets": "Наборы-источники (таблицы и запросы)",
       "targetTables": "Целевые таблицы",
       "targetCols": "Целевые колонки",
-      "tableGeoid": "Geoid таблицы",
+      "tableGeoid": "Таблица источника",
       "subqueries": "Подзапросы",
       "nestedSubq": "Вложенные подзапросы",
       "details": "Детали",
@@ -346,14 +347,19 @@
       "tableRef": "Таблица",
       "atomText": "Атом",
       "affectedCol": "Вых. колонка",
-      "refSource": "Источник (ребро)",
+      "refSource": "Поле источника",
       "status": "Статус",
       "context": "Контекст",
       "moreAtoms": "ещё атомов",
       "subqueriesCount": "Подзапр.",
       "routineType": "Тип процедуры",
       "aliases": "Псевдонимы",
-      "sourceAtoms": "Атомы-источники"
+      "sourceAtoms": "Атомы-источники",
+      "mainInfo": "Основная информация",
+      "sourceType": "Тип источника",
+      "sourceRef": "Таблица / Запрос",
+      "refCol": "Колонка",
+      "outputCol": "Вых. колонка"
     },
     "structure": {
       "usedAsSource": "Используется как источник",

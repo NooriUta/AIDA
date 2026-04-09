@@ -6,5 +6,6 @@ import java.util.List;
 @Description("Graph payload for L2 explore and L3 column lineage views")
 public record ExploreResult(
     List<GraphNode> nodes,
-    List<GraphEdge> edges
+    List<GraphEdge> edges,
+    boolean hasMore
 ) {}

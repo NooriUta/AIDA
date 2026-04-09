@@ -1,9 +1,10 @@
 import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { KnotSession, KnotStatement, KnotCall, KnotParameter, KnotVariable } from '../../services/lineage';
+import type { KnotSession, KnotStatement, KnotRoutine, KnotCall, KnotParameter, KnotVariable } from '../../services/lineage';
 
 interface Props {
   session: KnotSession;
+  routines: KnotRoutine[];
   statements: KnotStatement[];
   calls: KnotCall[];
   parameters: KnotParameter[];
@@ -37,7 +38,7 @@ function truncGeoid(geoid: string | undefined): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export const KnotRoutines = memo(({ session: s, statements, calls, parameters, variables }: Props) => {
+export const KnotRoutines = memo(({ session: s, routines, statements, calls, parameters, variables }: Props) => {
   const { t } = useTranslation();
   const [expandedRoutine, setExpandedRoutine] = useState<string | null>(null);
 
@@ -74,24 +75,38 @@ export const KnotRoutines = memo(({ session: s, statements, calls, parameters, v
     return m;
   }, [variables]);
 
-  // Derive routines from statements
+  // Build routine list: base from routines[] (full DB list), enrich with statement data
   const { packages, standalone } = useMemo(() => {
     const routineMap = new Map<string, RoutineInfo>();
 
+    // 1. Initialise from complete routines list (includes routines with 0 statements)
+    for (const r of routines) {
+      const key = `${r.packageGeoid}:${r.routineName}`;
+      routineMap.set(key, {
+        key,
+        name: r.routineName,
+        packageName: r.packageGeoid,
+        routineType: r.routineType,
+        stmtCount: 0,
+        tables: new Set(),
+        stmtList: [],
+      });
+    }
+
+    // 2. Enrich with statement data (stmtCount, tables, stmtList)
     const collect = (stmts: KnotStatement[]) => {
       for (const st of stmts) {
         const rName = st.routineName || 'UNKNOWN';
-        const pkg = st.packageName || '';
-        const rType = st.routineType || '';
-        const key = `${pkg}:${rName}`;
-        if (!routineMap.has(key)) {
-          routineMap.set(key, { key, name: rName, packageName: pkg, routineType: rType, stmtCount: 0, tables: new Set(), stmtList: [] });
+        const pkg   = st.packageName || '';
+        const key   = `${pkg}:${rName}`;
+        // Try exact key first, then standalone (empty package) fallback
+        const r = routineMap.get(key) ?? routineMap.get(`:${rName}`);
+        if (r) {
+          r.stmtCount++;
+          r.stmtList.push({ geoid: st.geoid, stmtType: st.stmtType, lineNumber: st.lineNumber });
+          st.sourceTables?.forEach(ref => r.tables.add(ref.name));
+          st.targetTables?.forEach(ref => r.tables.add(ref.name));
         }
-        const r = routineMap.get(key)!;
-        r.stmtCount++;
-        r.stmtList.push({ geoid: st.geoid, stmtType: st.stmtType, lineNumber: st.lineNumber });
-        st.sourceTables?.forEach(tbl => r.tables.add(tbl));
-        st.targetTables?.forEach(tbl => r.tables.add(tbl));
         if (st.children?.length) collect(st.children);
       }
     };
@@ -113,7 +128,7 @@ export const KnotRoutines = memo(({ session: s, statements, calls, parameters, v
       packages: Array.from(pkgMap.entries()),
       standalone: standaloneList,
     };
-  }, [statements]);
+  }, [routines, statements]);
 
   const toggleRoutine = (key: string) => {
     setExpandedRoutine(prev => prev === key ? null : key);

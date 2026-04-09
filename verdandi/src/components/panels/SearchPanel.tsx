@@ -1,9 +1,10 @@
-import { memo, useState, useRef, useCallback, useEffect } from 'react';
+import { memo, useState, useRef, useCallback } from 'react';
 import { Search, X, Table2, Code2, Columns3, Eye, Database, AppWindow, Variable, Braces } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 import { useSearch } from '../../services/hooks';
 import type { SearchResult } from '../../services/lineage';
+import { ToolbarScrollTabs } from '../ui/ToolbarPrimitives';
 
 // ─── Type icon ─────────────────────────────────────────────────────────────────
 
@@ -167,10 +168,7 @@ export const SearchPanel = memo(() => {
   const [query, setQuery]              = useState('');
   const [debouncedQuery, setDebounced] = useState('');
   const [typeFilters, setTypeFilters]  = useState<Set<string>>(new Set());
-  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const tabsRef   = useRef<HTMLDivElement>(null);
 
   // Debounced input: fire search 300ms after last keystroke
   const handleInput = useCallback((value: string) => {
@@ -187,20 +185,6 @@ export const SearchPanel = memo(() => {
 
   const searchQ = useSearch(debouncedQuery.length >= 2 ? debouncedQuery : '');
 
-  // Track tab-bar overflow to show/hide "<<" / ">>" scroll buttons
-  useEffect(() => {
-    const el = tabsRef.current;
-    if (!el) return;
-    const check = () => {
-      setCanScrollLeft(el.scrollLeft > 2);
-      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
-    };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    el.addEventListener('scroll', check);
-    return () => { ro.disconnect(); el.removeEventListener('scroll', check); };
-  }, []);
 
   // Toggle a type filter; 'all' clears the entire set
   const toggleFilter = useCallback((key: string) => {
@@ -292,11 +276,6 @@ export const SearchPanel = memo(() => {
     { key: 'applications', label: t('search.filters.applications') },
   ];
 
-  const isAllActive = typeFilters.size === 0;
-
-  const scrollTabsLeft  = () => tabsRef.current?.scrollBy({ left: -80, behavior: 'smooth' });
-  const scrollTabsRight = () => tabsRef.current?.scrollBy({ left:  80, behavior: 'smooth' });
-
   const hiddenIds = [...hiddenNodeIds];
   const showHiddenSection = hiddenIds.length > 0 && debouncedQuery.length < 2;
 
@@ -342,96 +321,11 @@ export const SearchPanel = memo(() => {
       </div>
 
       {/* ── Type filter tabs ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, position: 'relative' }}>
-
-        {/* "«" scroll arrow — appears when tabs are scrolled right */}
-        {canScrollLeft && (
-          <button
-            onClick={scrollTabsLeft}
-            title="Назад"
-            style={{
-              flexShrink:   0,
-              padding:      '2px 5px',
-              background:   'linear-gradient(to left, transparent, var(--bg2) 40%)',
-              border:       'none',
-              cursor:       'pointer',
-              fontSize:     '10px',
-              color:        'var(--t3)',
-              position:     'absolute',
-              left:         0,
-              top:          0,
-              bottom:       0,
-              zIndex:       1,
-              display:      'flex',
-              alignItems:   'center',
-            }}
-          >
-            «
-          </button>
-        )}
-
-        <div
-          ref={tabsRef}
-          style={{
-            display:    'flex',
-            gap:        '2px',
-            padding:    '2px 4px',
-            flex:       1,
-            overflowX:  'auto',
-            scrollbarWidth: 'none',
-          }}
-        >
-          {tabs.map((tab) => {
-            const active = tab.key === 'all' ? isAllActive : typeFilters.has(tab.key);
-            return (
-              <button
-                key={tab.key}
-                onClick={() => toggleFilter(tab.key)}
-                style={{
-                  padding:      '2px 7px',
-                  borderRadius: '4px',
-                  border:       'none',
-                  cursor:       'pointer',
-                  fontSize:     '10px',
-                  fontWeight:   active ? 600 : 400,
-                  background:   active ? 'var(--acc)' : 'transparent',
-                  color:        active ? 'var(--bg1)' : 'var(--t3)',
-                  whiteSpace:   'nowrap',
-                  transition:   'background 0.1s, color 0.1s',
-                  flexShrink:   0,
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* "»" scroll arrow — appears when tabs overflow right */}
-        {canScrollRight && (
-          <button
-            onClick={scrollTabsRight}
-            title="Ещё фильтры"
-            style={{
-              flexShrink:   0,
-              padding:      '2px 5px',
-              background:   'linear-gradient(to right, transparent, var(--bg2) 40%)',
-              border:       'none',
-              cursor:       'pointer',
-              fontSize:     '10px',
-              color:        'var(--t3)',
-              position:     'absolute',
-              right:        0,
-              top:          0,
-              bottom:       0,
-              display:      'flex',
-              alignItems:   'center',
-            }}
-          >
-            »
-          </button>
-        )}
-      </div>
+      <ToolbarScrollTabs
+        tabs={tabs}
+        activeKeys={typeFilters.size === 0 ? 'all' : typeFilters as Set<string>}
+        onToggle={toggleFilter}
+      />
 
       {/* ── Results / empty states ────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '2px 0' }}>

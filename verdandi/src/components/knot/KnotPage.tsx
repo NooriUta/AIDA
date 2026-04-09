@@ -366,7 +366,7 @@ export const KnotPage = memo(() => {
               <>
                 {activeTab === 'summary'    && <KnotSummary    session={report.session} tables={report.tables} statements={report.statements} />}
                 {activeTab === 'structure'  && <KnotStructure  tables={report.tables} statements={report.statements} />}
-                {activeTab === 'routines'   && <KnotRoutines   session={report.session} statements={report.statements} calls={report.calls ?? []} parameters={report.parameters ?? []} variables={report.variables ?? []} />}
+                {activeTab === 'routines'   && <KnotRoutines   session={report.session} routines={report.routines ?? []} statements={report.statements} calls={report.calls ?? []} parameters={report.parameters ?? []} variables={report.variables ?? []} />}
                 {activeTab === 'statements' && <KnotStatements statements={report.statements} snippets={report.snippets} atoms={report.atoms} outputColumns={report.outputColumns} affectedColumns={report.affectedColumns} />}
                 {activeTab === 'atoms'      && <KnotAtoms      session={report.session} atoms={report.atoms} />}
               </>

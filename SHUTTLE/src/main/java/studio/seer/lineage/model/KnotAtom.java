@@ -14,7 +14,11 @@ public record KnotAtom(
     String  parentContext,
     Integer outputColumnSequence,
     String  outputColName,
-    String  refSourceName,
+    String  refSourceName,        // out('ATOM_REF_OUTPUT_COL') → DaliOutputColumn.output_col_name
+    String  refStmtGeoid,        // out('ATOM_REF_STMT')       → DaliStatement.stmt_geoid
+    String  refColEdge,          // out('ATOM_REF_COLUMN')     → DaliColumn.column_name
+    String  refTblEdge,          // out('ATOM_REF_TABLE')      → DaliTable.table_name
+    String  refTblGeoidEdge,     // out('ATOM_REF_TABLE')      → DaliTable.table_geoid (NOT @rid!)
     boolean isColumnReference,
     boolean isFunctionCall,
     boolean isConstant,

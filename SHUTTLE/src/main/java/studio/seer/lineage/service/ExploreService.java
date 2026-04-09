@@ -27,6 +27,9 @@ import java.util.*;
 @ApplicationScoped
 public class ExploreService {
 
+    /** Node count threshold above which the result is considered truncated. */
+    static final int NODE_LIMIT = 500;
+
     @Inject
     ArcadeGateway arcade;
 
@@ -295,7 +298,7 @@ public class ExploreService {
      */
     public Uni<ExploreResult> exploreStmtColumns(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
-            return Uni.createFrom().item(new ExploreResult(List.of(), List.of()));
+            return Uni.createFrom().item(new ExploreResult(List.of(), List.of(), false));
         }
         String cypher = """
             MATCH (t:DaliTable)-[:HAS_COLUMN]->(col:DaliColumn)
@@ -568,7 +571,8 @@ public class ExploreService {
             }
         }
 
-        return new ExploreResult(new ArrayList<>(nodesById.values()), edges);
+        boolean hasMore = nodesById.size() >= NODE_LIMIT || rows.size() >= NODE_LIMIT;
+        return new ExploreResult(new ArrayList<>(nodesById.values()), edges, hasMore);
     }
 
     // ── toExploreResult: used by LineageService (node/edge result rows) ──────────
@@ -604,7 +608,8 @@ public class ExploreService {
             edges.add(new GraphEdge(edgeId, srcId, tgtId, edgeType));
         }
 
-        return new ExploreResult(new ArrayList<>(nodesById.values()), edges);
+        boolean hasMore = nodesById.size() >= NODE_LIMIT || rows.size() >= NODE_LIMIT;
+        return new ExploreResult(new ArrayList<>(nodesById.values()), edges, hasMore);
     }
 
     /** Best-effort human label from any vertex property map. */

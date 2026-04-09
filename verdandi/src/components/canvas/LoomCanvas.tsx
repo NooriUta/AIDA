@@ -128,6 +128,9 @@ const LoomCanvasInner = memo(() => {
   const pendingNodeCount = displayGraph?.nodes.filter((n) => !n.hidden).length ?? 0;
   const isLargeGraph = pendingNodeCount > 100;
 
+  // hasMore: backend signalled that the graph was truncated at NODE_LIMIT.
+  const hasMore = (activeQuery.data as { hasMore?: boolean } | undefined)?.hasMore ?? false;
+
   // ── Node interactions ────────────────────────────────────────────────────────
   const onNodeClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     selectNode(node.id, node.data);
@@ -241,6 +244,23 @@ const LoomCanvasInner = memo(() => {
 
       {/* Breadcrumb */}
       <Breadcrumb />
+
+      {/* hasMore banner — graph was truncated at NODE_LIMIT on the backend */}
+      {hasMore && !isLoading && (
+        <div style={{
+          position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 150, display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 14px', borderRadius: 6,
+          background: 'color-mix(in srgb, var(--wrn) 15%, var(--bg2))',
+          border: '1px solid color-mix(in srgb, var(--wrn) 40%, transparent)',
+          pointerEvents: 'none',
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--wrn)' }}>⚠</span>
+          <span style={{ fontSize: 11, color: 'var(--t2)' }}>
+            {t('canvas.hasMore')}
+          </span>
+        </div>
+      )}
 
       <ReactFlow
         nodes={nodes}
