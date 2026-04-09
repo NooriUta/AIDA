@@ -180,7 +180,7 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
           </div>
           {!isCompact && columns.length > 0 && (
             <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>
-              {columns.length} output col{columns.length !== 1 ? 's' : ''}
+              {t('nodes.outputColumns', { count: columns.length })}
             </div>
           )}
         </div>
