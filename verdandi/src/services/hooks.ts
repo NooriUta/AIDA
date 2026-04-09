@@ -44,6 +44,8 @@ export function useOverview() {
   return useQuery({
     queryKey: qk.overview(),
     queryFn:  fetchOverview,
+    staleTime: 30_000,
+    retry: 2,
     throwOnError: false,
     meta: { onError },
   });
@@ -57,6 +59,8 @@ export function useExplore(scope: string | null) {
     queryKey: qk.explore(scope ?? ''),
     queryFn:  () => fetchExplore(scope!),
     enabled:  !!scope,
+    staleTime: 30_000,
+    retry: 2,
     throwOnError: false,
     meta: { onError },
   });
@@ -70,6 +74,8 @@ export function useLineage(nodeId: string | null) {
     queryKey: qk.lineage(nodeId ?? ''),
     queryFn:  () => fetchLineage(nodeId!),
     enabled:  !!nodeId,
+    staleTime: 30_000,
+    retry: 2,
     throwOnError: false,
     meta: { onError },
   });
@@ -81,6 +87,8 @@ export function useUpstream(nodeId: string | null) {
     queryKey: qk.upstream(nodeId ?? ''),
     queryFn:  () => fetchUpstream(nodeId!),
     enabled:  !!nodeId,
+    staleTime: 30_000,
+    retry: 2,
     throwOnError: false,
     meta: { onError },
   });
@@ -92,6 +100,8 @@ export function useDownstream(nodeId: string | null) {
     queryKey: qk.downstream(nodeId ?? ''),
     queryFn:  () => fetchDownstream(nodeId!),
     enabled:  !!nodeId,
+    staleTime: 30_000,
+    retry: 2,
     throwOnError: false,
     meta: { onError },
   });
@@ -103,6 +113,8 @@ export function useExpandDeep(nodeId: string | null, depth: number) {
     queryKey: qk.expandDeep(nodeId ?? '', depth),
     queryFn:  () => fetchExpandDeep(nodeId!, depth),
     enabled:  !!nodeId,
+    staleTime: 30_000,
+    retry: 2,
     throwOnError: false,
     meta: { onError },
   });

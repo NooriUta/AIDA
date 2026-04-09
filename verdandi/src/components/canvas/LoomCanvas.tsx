@@ -11,7 +11,10 @@ import {
   useNodesState,
   useEdgesState,
   type NodeTypes,
+  type OnMove,
 } from '@xyflow/react';
+
+import { ZoomLevelProvider, LOD_COMPACT_ZOOM } from './ZoomLevelContext';
 
 import { SchemaNode }       from './nodes/SchemaNode';
 import { SchemaGroupNode }  from './nodes/SchemaGroupNode';
@@ -78,6 +81,18 @@ const LoomCanvasInner = memo(() => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
+  // ── LOD: track zoom level for compact rendering ─────────────────────────────
+  // Only re-render when crossing the LOD threshold, not on every pixel of zoom.
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const onMove: OnMove = useCallback((_: unknown, viewport) => {
+    setZoomLevel((prev) => {
+      const isCompactNow  = prev < LOD_COMPACT_ZOOM;
+      const isCompactNext = viewport.zoom < LOD_COMPACT_ZOOM;
+      // Only update state when crossing the LOD boundary
+      return isCompactNow !== isCompactNext ? viewport.zoom : prev;
+    });
+  }, []);
+
   /** Points to the outer wrapper div — passed to ExportPanel for PNG/SVG capture. */
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -117,16 +132,17 @@ const LoomCanvasInner = memo(() => {
   const onNodeClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     selectNode(node.id, node.data);
 
-    // Canvas → FilterToolbarL1 sync (L1 only).
     if (viewLevel === 'L1') {
       if (node.type === 'databaseNode') {
-        setL1HierarchyDb(node.id);
+        // Single-click on DB → drill down to L2 showing all schemas
+        const scope = `db-${node.data.label}`;
+        drillDown(scope, node.data.label, node.data.nodeType);
       } else if (node.type === 'l1SchemaNode' && node.parentId) {
         setL1HierarchyDb(node.parentId);
         setL1HierarchySchema(node.id);
       }
     }
-  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema]);
+  }, [selectNode, viewLevel, drillDown, setL1HierarchyDb, setL1HierarchySchema]);
 
   // Double-click:
   //   Application on L1      → scope filter (stays on L1, dims other apps)
@@ -183,6 +199,7 @@ const LoomCanvasInner = memo(() => {
   );
 
   return (
+    <ZoomLevelProvider value={zoomLevel}>
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       {/* Loading overlay */}
       {isLoading && (
@@ -234,6 +251,7 @@ const LoomCanvasInner = memo(() => {
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
+        onMove={onMove}
         onMoveEnd={onMoveEnd}
         onPaneClick={() => {
           selectNode(null);
@@ -266,6 +284,8 @@ const LoomCanvasInner = memo(() => {
           nodeColor={minimapNodeColor as (node: unknown) => string}
           maskColor={theme === 'dark' ? 'rgba(20,17,8,0.72)' : 'rgba(245,243,238,0.72)'}
           style={{ border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)' }}
+          pannable
+          zoomable
         />
         <Panel position="top-right" style={{ margin: '8px' }}>
           <ExportPanel containerRef={containerRef} />
@@ -275,6 +295,7 @@ const LoomCanvasInner = memo(() => {
       {/* Context menu (LOOM-029) — rendered outside ReactFlow to avoid RF click capture */}
       <NodeContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
     </div>
+    </ZoomLevelProvider>
   );
 });
 

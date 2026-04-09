@@ -1,16 +1,17 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Handle, Position, type NodeProps, type Node, useUpdateNodeInternals } from '@xyflow/react';
+import { memo, useRef, useState, useEffect } from 'react';
+import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { FileCode } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData, ColumnInfo } from '../../../types/domain';
 import { NodeExpandButtons } from './NodeExpandButtons';
+import { useZoomLevel, LOD_COMPACT_ZOOM } from '../ZoomLevelContext';
 
 const WRITE_OPS = new Set(['INSERT', 'UPDATE', 'MERGE']);
 
 export type StatementNodeType = Node<DaliNodeData>;
 
-const MAX_VISIBLE_COLS = 5;
+const COL_ROW_HEIGHT = 22; // must match layoutGraph.ts COLUMN_ROW_HEIGHT
 
 // ─── Statement type → badge colour ──────────────────────────────────────────
 const STMT_TYPE_COLORS: Record<string, string> = {
@@ -74,25 +75,39 @@ function OutputColRow({ col }: { col: ColumnInfo }) {
 export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNodeType>) => {
   const { t } = useTranslation();
   const { selectNode } = useLoomStore();
-  const updateNodeInternals = useUpdateNodeInternals();
+  const zoomLevel = useZoomLevel();
+  const isLodCompact = zoomLevel < LOD_COMPACT_ZOOM;
   const columns  = data.columns ?? [];
-  const isCompact = data.metadata?.compact === true;
-  const visible  = isCompact ? [] : columns.slice(0, MAX_VISIBLE_COLS);
-  const overflow = isCompact ? 0  : Math.max(0, columns.length - MAX_VISIBLE_COLS);
+  const isCompact = isLodCompact || data.metadata?.compact === true;
+  const visible  = isCompact ? [] : columns;
+  const overflow = 0;
 
-  const groupPath = (!isCompact && Array.isArray(data.metadata?.groupPath))
+  // Columns are zoom-driven only (no hover): appear when zoomed past LOD_COMPACT_ZOOM.
+  const showColumns = !isLodCompact;
+
+  // Spacer height when in LOD compact mode but statement has output columns
+  const spacerHeight = !showColumns && columns.length > 0
+    ? columns.length * COL_ROW_HEIGHT
+    : 0;
+
+  // handleTop must NOT depend on isLodCompact — changing at LOD boundary shifts edges.
+  // Use groupPath only (stable per node, not zoom-dependent).
+  const groupPath = (Array.isArray(data.metadata?.groupPath))
     ? (data.metadata.groupPath as string[]) : [];
+  const handleTop = groupPath.length > 0 ? `${22 + groupPath.length * 7}px` : '22px';
 
-  // Measure actual header height so handles align to its centre regardless of content
   const headerRef  = useRef<HTMLDivElement>(null);
-  const [handleTop, setHandleTop] = useState('22px');
-  useLayoutEffect(() => {
-    const h = headerRef.current?.offsetHeight;
-    if (h && h > 0) setHandleTop(`${Math.round(h / 2)}px`);
-  }, [isCompact, groupPath.length, columns.length]);
 
-  // Notify React Flow to re-measure handle positions after handleTop settles
-  useEffect(() => { updateNodeInternals(id); }, [id, handleTop, updateNodeInternals]);
+  // Fade-in when columns appear at LOD threshold (avoids flash of content)
+  const [colsVisible, setColsVisible] = useState(!isLodCompact);
+  useEffect(() => {
+    if (!isLodCompact) {
+      const timer = setTimeout(() => setColsVisible(true), 16);
+      return () => clearTimeout(timer);
+    } else {
+      setColsVisible(false);
+    }
+  }, [isLodCompact]);
 
   // ── Statement type badge ─────────────────────────────────────────────────
   const stmtType  = data.operation?.toUpperCase();
@@ -113,7 +128,12 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       onClick={() => selectNode(id)}
     >
       {!isCompact && <NodeExpandButtons nodeId={id} show={selected ?? false} />}
+      {/* Both default handles BEFORE column rows — React Flow picks the first handle of each
+          type when sourceHandle/targetHandle is unspecified on an edge. Column handles
+          (src-colId / tgt-colId) come AFTER so node-level WRITES_TO/READS_FROM
+          edges always route to the header, not to a column row. */}
       <Handle type="target" position={Position.Left}  style={{ background: typeColor, zIndex: 5, top: handleTop }} />
+      <Handle type="source" position={Position.Right} style={{ background: typeColor, zIndex: 5, top: handleTop }} />
 
       {/* Header */}
       <div ref={headerRef} style={{
@@ -122,7 +142,7 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
         alignItems:   'center',
         gap:          'var(--seer-space-2)',
         background:   'var(--bg3)',
-        borderBottom: visible.length > 0 ? '1px solid var(--bd)' : 'none',
+        borderBottom: (visible.length > 0 || spacerHeight > 0) ? '1px solid var(--bd)' : 'none',
       }}>
         <FileCode size={13} color={typeColor} strokeWidth={1.5} />
         <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -181,21 +201,26 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
         </span>
       </div>
 
-      {/* Output column rows (hidden in compact mode) */}
-      {visible.map((col) => (
-        <OutputColRow key={col.id} col={col} />
-      ))}
-
-      {overflow > 0 && (
-        <div style={{
-          padding:   '3px var(--seer-space-3)',
-          borderTop: '1px solid var(--bd)',
-          fontSize:  '11px',
-          color:     'var(--acc)',
-        }}>
-          +{overflow} more
+      {/* Output column rows (zoom-driven) with CSS fade; spacer when LOD compact */}
+      {showColumns ? (
+        <div style={{ opacity: colsVisible ? 1 : 0, transition: 'opacity 0.15s ease' }}>
+          {visible.map((col) => (
+            <OutputColRow key={col.id} col={col} />
+          ))}
+          {overflow > 0 && (
+            <div style={{
+              padding:   '3px var(--seer-space-3)',
+              borderTop: '1px solid var(--bd)',
+              fontSize:  '11px',
+              color:     'var(--acc)',
+            }}>
+              +{overflow} more
+            </div>
+          )}
         </div>
-      )}
+      ) : spacerHeight > 0 ? (
+        <div style={{ height: spacerHeight }} />
+      ) : null}
 
       {/* "no col mapping" badge — write ops with no output columns mapped */}
       {!isCompact && stmtType && WRITE_OPS.has(stmtType) && columns.length === 0 && (
@@ -219,7 +244,6 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} style={{ background: typeColor, zIndex: 5, top: handleTop }} />
     </div>
   );
 });

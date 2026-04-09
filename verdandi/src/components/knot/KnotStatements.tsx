@@ -1,12 +1,13 @@
 import { memo, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { KnotStatement, KnotSnippet, KnotAtom, KnotOutputColumn } from '../../services/lineage';
+import type { KnotStatement, KnotSnippet, KnotAtom, KnotOutputColumn, KnotAffectedColumn } from '../../services/lineage';
 
 /** All lookup maps passed through the component tree */
 type LookupMaps = {
   snippetMap: Map<string, string>;
   atomMap: Map<string, KnotAtom[]>;
   outColMap: Map<string, KnotOutputColumn[]>;
+  affColMap: Map<string, KnotAffectedColumn[]>;
 };
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   snippets?: KnotSnippet[];
   atoms?: KnotAtom[];
   outputColumns?: KnotOutputColumn[];
+  affectedColumns?: KnotAffectedColumn[];
 }
 
 const TYPE_BADGE: Record<string, { bg: string; color: string }> = {
@@ -34,6 +36,28 @@ const TYPE_BADGE: Record<string, { bg: string; color: string }> = {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 type FlatRow = { stmt: KnotStatement; depth: number };
+
+/**
+ * Geoid format: ...SCHEMA:PROC_TYPE:PROC_NAME:STMT_TYPE:LINE[:CHILD_TYPE:CHILD_LINE...]
+ * The statement type is always at index -2 (before the trailing line number).
+ * The statement line is always at index -1.
+ * Both are more reliable than stmtType/lineNumber for child statements
+ * where the backend may return the root's values instead of the child's.
+ */
+function typeFromGeoid(geoid: string | undefined): string {
+  if (!geoid) return '';
+  const parts = geoid.split(':');
+  if (parts.length < 2) return '';
+  const candidate = parts[parts.length - 2];
+  return /^[A-Z][A-Z0-9_]*$/.test(candidate) ? candidate : '';
+}
+
+function lineFromGeoid(geoid: string | undefined): number | null {
+  if (!geoid) return null;
+  const parts = geoid.split(':');
+  const n = parseInt(parts[parts.length - 1], 10);
+  return isNaN(n) ? null : n;
+}
 
 /** Flatten entire tree into a flat list with depth */
 function flattenAll(stmts: KnotStatement[]): FlatRow[] {
@@ -64,7 +88,8 @@ function flattenChildren(stmt: KnotStatement): FlatRow[] {
 function shortName(stmt: KnotStatement): string {
   const parts: string[] = [];
   if (stmt.routineName) parts.push(stmt.routineName);
-  if (stmt.stmtType) parts.push(stmt.stmtType);
+  const type = typeFromGeoid(stmt.geoid) || stmt.stmtType;
+  if (type) parts.push(type);
   return parts.join(' ') || stmt.geoid?.split(':').slice(-2).join(':') || '—';
 }
 
@@ -77,7 +102,7 @@ function truncGeoid(geoid: string | undefined): string {
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export const KnotStatements = memo(({ statements, snippets, atoms, outputColumns }: Props) => {
+export const KnotStatements = memo(({ statements, snippets, atoms, outputColumns, affectedColumns }: Props) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -103,8 +128,20 @@ export const KnotStatements = memo(({ statements, snippets, atoms, outputColumns
         outColMap.set(c.stmtGeoid, list);
       }
     }
-    return { snippetMap, atomMap, outColMap };
-  }, [snippets, atoms, outputColumns]);
+    // Sort output columns by colOrder within each statement
+    for (const [key, cols] of outColMap) {
+      outColMap.set(key, cols.slice().sort((a, b) => (a.colOrder ?? 0) - (b.colOrder ?? 0)));
+    }
+    const affColMap = new Map<string, KnotAffectedColumn[]>();
+    if (affectedColumns) for (const c of affectedColumns) {
+      if (c.stmtGeoid) {
+        const list = affColMap.get(c.stmtGeoid) || [];
+        list.push(c);
+        affColMap.set(c.stmtGeoid, list);
+      }
+    }
+    return { snippetMap, atomMap, outColMap, affColMap };
+  }, [snippets, atoms, outputColumns, affectedColumns]);
 
   const routines = useMemo(() => {
     const set = new Set<string>();
@@ -259,12 +296,12 @@ function RootStmtRow({ stmt, expanded, toggle, maps }: {
             background: 'var(--bg2)',
             borderBottom: '3px solid var(--acc)',
           }}>
-            <StmtDetailPanel stmt={stmt} t={t} maps={maps} />
-
-            {/* Flat subqueries list */}
-            {flatChildren.length > 0 && (
-              <FlatSubqueries rows={flatChildren} expanded={expanded} toggle={toggle} maps={maps} />
-            )}
+            <StmtDetailPanel
+              stmt={stmt} t={t} maps={maps}
+              flatChildren={flatChildren}
+              expanded={expanded}
+              onToggle={toggle}
+            />
           </td>
         </tr>
       )}
@@ -375,7 +412,9 @@ function StmtTableRow({ stmt, depth, isOpen, toggle, levelLabel, indent }: {
   stmt: KnotStatement; depth: number; isOpen: boolean;
   toggle: (id: string) => void; levelLabel: string; indent?: boolean;
 }) {
-  const badge = TYPE_BADGE[stmt.stmtType] || TYPE_BADGE.UNKNOWN;
+  const effectiveType = typeFromGeoid(stmt.geoid) || stmt.stmtType;
+  const effectiveLine = lineFromGeoid(stmt.geoid) ?? stmt.lineNumber;
+  const badge = TYPE_BADGE[effectiveType] || TYPE_BADGE.UNKNOWN;
   const pad = indent ? depth * 12 : 0;
   // Root rows: slightly different background so they visually stand out from subqueries
   const isRoot = depth === 0;
@@ -448,7 +487,7 @@ function StmtTableRow({ stmt, depth, isOpen, toggle, levelLabel, indent }: {
           fontSize: 10, fontFamily: "'Fira Code', monospace",
           background: badge.bg, color: badge.color,
         }}>
-          {stmt.stmtType}
+          {effectiveType}
         </span>
       </td>
       {/* Level */}
@@ -460,7 +499,7 @@ function StmtTableRow({ stmt, depth, isOpen, toggle, levelLabel, indent }: {
         padding: '6px 8px', borderBottom: '1px solid var(--bd)', textAlign: 'center',
         fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--t2)',
       }}>
-        {stmt.lineNumber || '—'}
+        {effectiveLine || '—'}
       </td>
       {/* Src */}
       <td style={{
@@ -505,13 +544,17 @@ function atomDisplayText(atomText: string): string {
   return tilde >= 0 ? atomText.substring(0, tilde) : atomText;
 }
 
-function StmtDetailPanel({ stmt, t, maps }: {
+function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
   stmt: KnotStatement;
   t: (k: string, opts?: Record<string, unknown>) => string;
   maps: LookupMaps;
+  flatChildren?: FlatRow[];
+  expanded?: Set<string>;
+  onToggle?: (id: string) => void;
 }) {
-  const [atomsOpen, setAtomsOpen] = useState(false);
-  const [sqlOpen,   setSqlOpen]   = useState(false);
+  const [atomsOpen,    setAtomsOpen]    = useState(false);
+  const [sqlOpen,      setSqlOpen]      = useState(false);
+  const [mainInfoOpen, setMainInfoOpen] = useState(false);
 
   const sql         = stmt.geoid ? maps.snippetMap.get(stmt.geoid) : undefined;
   const stmtAtoms   = stmt.geoid ? maps.atomMap.get(stmt.geoid)    : undefined;
@@ -531,12 +574,6 @@ function StmtDetailPanel({ stmt, t, maps }: {
     return m;
   }, [stmtAtoms]);
 
-  /** Resolve output column name from sequence number */
-  const affectedColName = (seq: number | null): string => {
-    if (seq == null || !stmtOutCols) return '—';
-    const col = stmtOutCols.find(c => c.colOrder === seq);
-    return col ? (col.alias || col.name || String(seq)) : String(seq);
-  };
 
   return (
     <div style={{
@@ -544,63 +581,59 @@ function StmtDetailPanel({ stmt, t, maps }: {
       borderLeft: '3px solid var(--acc)',
       margin: '0 0 0 6px',
     }}>
-      {/* Main info */}
-      <SectionHeader>{t('knot.stmt.mainInfo')}</SectionHeader>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <tbody>
-          <InfoRow label="Geoid" value={stmt.geoid || '—'} mono />
-          <InfoRow label={t('knot.stmt.routine')} value={
-            [stmt.packageName, stmt.routineName].filter(Boolean).join(':') || '—'
-          } mono />
-          {stmt.routineType && (
-            <InfoRow label={t('knot.stmt.routineType')} value={stmt.routineType} />
-          )}
-          <InfoRow label={t('knot.stmt.shortName')} value={shortName(stmt)} />
-          <InfoRow label={t('knot.stmt.type')} value={stmt.stmtType || '—'} />
-          <InfoRow label={t('knot.stmt.line')} value={String(stmt.lineNumber || '—')} mono />
-          {stmt.stmtAliases && stmt.stmtAliases.length > 0 && (
-            <InfoRow label={t('knot.stmt.aliases')} value={stmt.stmtAliases.join(', ')} mono />
-          )}
-          {stmt.children && stmt.children.length > 0 && (
-            <InfoRow
-              label={t('knot.stmt.childStmts')}
-              value={stmt.children.map(c => truncGeoid(c.geoid)).join(', ')}
-              mono
-            />
-          )}
-        </tbody>
-      </table>
 
-      {/* Source tables */}
-      {(stmt.sourceTables?.length || 0) > 0 && (
-        <>
-          <SectionHeader count={stmt.sourceTables.length}>{t('knot.stmt.sourceTables')}</SectionHeader>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <PTblTh>{t('knot.stmt.tableGeoid')}</PTblTh>
-                <PTblTh>{t('knot.stmt.type')}</PTblTh>
-              </tr>
-            </thead>
-            <tbody>
-              {stmt.sourceTables.map((tb, i) => (
-                <tr key={i}>
-                  <td style={{
-                    ...pTblTdStyle,
-                    borderLeft: '3px solid var(--inf)',
-                    fontFamily: "'Fira Code', monospace", fontSize: 11,
-                  }}>
-                    {tb}
-                  </td>
-                  <td style={pTblTdStyle}>TABLE</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+      {/* 1. SQL — collapsible, collapsed by default */}
+      <CollapsibleSectionHeader
+        open={sqlOpen}
+        onToggle={() => setSqlOpen(o => !o)}
+      >
+        {t('knot.stmt.sqlTitle')}
+      </CollapsibleSectionHeader>
+      {sqlOpen && (
+        sql ? (
+          <SqlBlock sql={sql} />
+        ) : (
+          <div style={{ padding: '6px 0', fontSize: 11, color: 'var(--t3)' }}>
+            {t('knot.stmt.noSql')}
+          </div>
+        )
       )}
 
-      {/* Target tables */}
+      {/* 2. Main info — collapsible, collapsed by default */}
+      <CollapsibleSectionHeader
+        open={mainInfoOpen}
+        onToggle={() => setMainInfoOpen(o => !o)}
+      >
+        {t('knot.stmt.mainInfo')}
+      </CollapsibleSectionHeader>
+      {mainInfoOpen && (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            <InfoRow label="Geoid" value={stmt.geoid || '—'} mono />
+            <InfoRow label={t('knot.stmt.routine')} value={
+              [stmt.packageName, stmt.routineName].filter(Boolean).join(':') || '—'
+            } mono />
+            {stmt.routineType && (
+              <InfoRow label={t('knot.stmt.routineType')} value={stmt.routineType} />
+            )}
+            <InfoRow label={t('knot.stmt.shortName')} value={shortName(stmt)} />
+            <InfoRow label={t('knot.stmt.type')} value={(typeFromGeoid(stmt.geoid) || stmt.stmtType) || '—'} />
+            <InfoRow label={t('knot.stmt.line')} value={String((lineFromGeoid(stmt.geoid) ?? stmt.lineNumber) || '—')} mono />
+            {stmt.stmtAliases && stmt.stmtAliases.length > 0 && (
+              <InfoRow label={t('knot.stmt.aliases')} value={stmt.stmtAliases.join(', ')} mono />
+            )}
+            {stmt.children && stmt.children.length > 0 && (
+              <InfoRow
+                label={t('knot.stmt.childStmts')}
+                value={stmt.children.map(c => truncGeoid(c.geoid)).join(', ')}
+                mono
+              />
+            )}
+          </tbody>
+        </table>
+      )}
+
+      {/* 3. Target tables */}
       {(stmt.targetTables?.length || 0) > 0 && (
         <>
           <SectionHeader count={stmt.targetTables.length}>{t('knot.stmt.targetTables')}</SectionHeader>
@@ -629,7 +662,75 @@ function StmtDetailPanel({ stmt, t, maps }: {
         </>
       )}
 
-      {/* Output columns */}
+      {/* 4. Affected columns — DaliAffectedColumn via HAS_AFFECTED_COL */}
+      {(() => {
+        const affCols = stmt.geoid ? maps.affColMap.get(stmt.geoid) : undefined;
+        if (!affCols?.length) return null;
+        return (
+          <>
+            <SectionHeader count={affCols.length}>{t('knot.stmt.targetCols')}</SectionHeader>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <PTblTh>#</PTblTh>
+                  <PTblTh>{t('knot.column.name')}</PTblTh>
+                  <PTblTh>{t('knot.stmt.tableRef')}</PTblTh>
+                </tr>
+              </thead>
+              <tbody>
+                {affCols.map((col, i) => (
+                  <tr key={i}>
+                    <td style={{ ...pTblTdStyle, textAlign: 'center', width: 32, color: 'var(--t3)' }}>
+                      {col.position || i + 1}
+                    </td>
+                    <td style={{
+                      ...pTblTdStyle,
+                      fontFamily: "'Fira Code', monospace", fontSize: 11, fontWeight: 500,
+                      borderLeft: '3px solid var(--suc)', color: 'var(--t1)',
+                    }}>
+                      {col.columnName || '—'}
+                    </td>
+                    <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t3)' }}>
+                      {col.tableName || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        );
+      })()}
+
+      {/* 5. Source sets (tables & queries) */}
+      {(stmt.sourceTables?.length || 0) > 0 && (
+        <>
+          <SectionHeader count={stmt.sourceTables.length}>{t('knot.stmt.sourceSets')}</SectionHeader>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <PTblTh>{t('knot.stmt.tableGeoid')}</PTblTh>
+                <PTblTh>{t('knot.stmt.type')}</PTblTh>
+              </tr>
+            </thead>
+            <tbody>
+              {stmt.sourceTables.map((tb, i) => (
+                <tr key={i}>
+                  <td style={{
+                    ...pTblTdStyle,
+                    borderLeft: '3px solid var(--inf)',
+                    fontFamily: "'Fira Code', monospace", fontSize: 11,
+                  }}>
+                    {tb}
+                  </td>
+                  <td style={pTblTdStyle}>TABLE</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {/* 6. Output columns (full detail with expressions and source atoms) */}
       {stmtOutCols && stmtOutCols.length > 0 && (
         <>
           <SectionHeader count={stmtOutCols.length}>{t('knot.stmt.outputCols')}</SectionHeader>
@@ -641,13 +742,15 @@ function StmtDetailPanel({ stmt, t, maps }: {
                   <PTblTh>{t('knot.column.name')}</PTblTh>
                   <PTblTh>{t('knot.stmt.expression')}</PTblTh>
                   <PTblTh>{t('knot.stmt.alias')}</PTblTh>
-                  <PTblTh>{t('knot.stmt.tableRef')}</PTblTh>
                   <PTblTh>{t('knot.stmt.sourceAtoms')}</PTblTh>
                 </tr>
               </thead>
               <tbody>
                 {stmtOutCols.map((col, i) => {
-                  const srcAtoms = colAtomMap.get(col.colOrder) || [];
+                  // When SHUTTLE provides edge-based fields: only atoms with both ATOM_PRODUCES + ATOM_REF_OUTPUT_COL.
+                  // Fallback (SHUTTLE not yet rebuilt): show all atoms matched by outputColumnSequence.
+                  const srcAtoms = (colAtomMap.get(col.colOrder) || [])
+                    .filter(a => a.outputColName ? !!a.refSourceName : true);
                   return (
                     <tr key={i}>
                       <td style={{ ...pTblTdStyle, textAlign: 'center', width: 32, color: 'var(--t3)' }}>
@@ -662,10 +765,7 @@ function StmtDetailPanel({ stmt, t, maps }: {
                       <td style={{ ...pTblTdStyle, fontSize: 11 }}>
                         {col.alias || '—'}
                       </td>
-                      <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10 }}>
-                        {col.tableRef || '—'}
-                      </td>
-                      {/* Source atoms feeding this output column */}
+                      {/* Source atoms: only where both ATOM_PRODUCES and ATOM_REF_OUTPUT_COL exist */}
                       <td style={{ ...pTblTdStyle, padding: 0 }}>
                         {srcAtoms.length === 0 ? (
                           <span style={{ padding: '5px 8px', display: 'block', color: 'var(--t3)', fontSize: 10 }}>—</span>
@@ -683,8 +783,8 @@ function StmtDetailPanel({ stmt, t, maps }: {
                                   }} title={a.atomText}>
                                     {atomDisplayText(a.atomText)}
                                   </td>
-                                  <td style={{ padding: '3px 6px', fontSize: 9, color: 'var(--t3)', fontFamily: "'Fira Code', monospace", whiteSpace: 'nowrap' }}>
-                                    {a.tableName || a.columnName || ''}
+                                  <td style={{ padding: '3px 6px', fontSize: 9, color: 'var(--inf)', fontFamily: "'Fira Code', monospace", whiteSpace: 'nowrap' }}>
+                                    {a.refSourceName || a.tableName || a.columnName || '—'}
                                   </td>
                                 </tr>
                               ))}
@@ -708,7 +808,7 @@ function StmtDetailPanel({ stmt, t, maps }: {
         </>
       )}
 
-      {/* Atoms — collapsible, collapsed by default */}
+      {/* 7. Atoms — collapsible, collapsed by default */}
       {stmtAtoms && stmtAtoms.length > 0 ? (
         <>
           <CollapsibleSectionHeader
@@ -729,6 +829,7 @@ function StmtDetailPanel({ stmt, t, maps }: {
                       <PTblTh>{t('knot.stmt.atomText')}</PTblTh>
                       <PTblTh>{t('knot.column.name')}</PTblTh>
                       <PTblTh>{t('knot.stmt.affectedCol')}</PTblTh>
+                      <PTblTh>{t('knot.stmt.refSource')}</PTblTh>
                       <PTblTh>{t('knot.stmt.tableGeoid')}</PTblTh>
                       <PTblTh>{t('knot.stmt.status')}</PTblTh>
                       <PTblTh>{t('knot.stmt.context')}</PTblTh>
@@ -758,7 +859,10 @@ function StmtDetailPanel({ stmt, t, maps }: {
                           {a.columnName || '—'}
                         </td>
                         <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--inf)' }}>
-                          {affectedColName(a.outputColumnSequence)}
+                          {a.outputColName || '—'}
+                        </td>
+                        <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--acc)' }}>
+                          {a.refSourceName || '—'}
                         </td>
                         <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t3)' }}>
                           {a.tableName || a.tableGeoid || '—'}
@@ -816,21 +920,11 @@ function StmtDetailPanel({ stmt, t, maps }: {
         </>
       )}
 
-      {/* SQL Snippet — collapsible, collapsed by default */}
-      <CollapsibleSectionHeader
-        open={sqlOpen}
-        onToggle={() => setSqlOpen(o => !o)}
-      >
-        {t('knot.stmt.sqlTitle')}
-      </CollapsibleSectionHeader>
-      {sqlOpen && (
-        sql ? (
-          <SqlBlock sql={sql} />
-        ) : (
-          <div style={{ padding: '6px 0', fontSize: 11, color: 'var(--t3)' }}>
-            {t('knot.stmt.noSql')}
-          </div>
-        )
+      {/* 8. Subqueries — only for root statements */}
+      {flatChildren && flatChildren.length > 0 && expanded && onToggle && (
+        <div style={{ margin: '14px 0 0', borderTop: '1px solid var(--bd)' }}>
+          <FlatSubqueries rows={flatChildren} expanded={expanded} toggle={onToggle} maps={maps} />
+        </div>
       )}
     </div>
   );

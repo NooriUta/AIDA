@@ -8,8 +8,6 @@ import type { ExploreResult } from '../services/lineage';
 import type { ColumnInfo } from '../types/domain';
 import type { LoomNode, LoomEdge } from '../types/graph';
 
-const L2_MAX_COLS = 5;
-
 export function applyStmtColumns(
   nodes: LoomNode[],
   baseEdges: LoomEdge[],
@@ -33,16 +31,12 @@ export function applyStmtColumns(
       if (!tableColMap.has(e.source)) tableColMap.set(e.source, new Map());
       tableColMap.get(e.source)!.set(col.label.toUpperCase(), col.id);
       if (!colsByParent.has(e.source)) colsByParent.set(e.source, []);
-      const cols = colsByParent.get(e.source)!;
-      if (cols.length < L2_MAX_COLS)
-        cols.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      colsByParent.get(e.source)!.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
     } else if (e.type === 'HAS_OUTPUT_COL' || e.type === 'HAS_AFFECTED_COL') {
       if (!stmtColMap.has(e.source)) stmtColMap.set(e.source, new Map());
       stmtColMap.get(e.source)!.set(col.label.toUpperCase(), col.id);
       if (!colsByParent.has(e.source)) colsByParent.set(e.source, []);
-      const cols = colsByParent.get(e.source)!;
-      if (cols.length < L2_MAX_COLS)
-        cols.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      colsByParent.get(e.source)!.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
     }
   }
 
@@ -60,6 +54,14 @@ export function applyStmtColumns(
   const cfEdges: LoomEdge[] = [];
   const cfSeen  = new Set<string>();
 
+  // Build per-node sets of column IDs that will have <Handle> elements in the DOM.
+  // All columns in colsByParent get <Handle id="src-*" / "tgt-*"> rendered by
+  // StatementNode / TableNode.  Guard here so every cfEdge we emit is guaranteed renderable.
+  const visibleColIds = new Map<string, Set<string>>();
+  for (const [nodeId, cols] of colsByParent) {
+    visibleColIds.set(nodeId, new Set(cols.map((c) => c.id)));
+  }
+
   for (const e of baseEdges) {
     const edgeType = e.data?.edgeType as string | undefined;
     if (edgeType !== 'WRITES_TO' && edgeType !== 'READS_FROM') continue;
@@ -72,9 +74,16 @@ export function applyStmtColumns(
     const stmtCols  = stmtColMap.get(stmtId);
     if (!tableCols || !stmtCols) continue;
 
+    const visibleStmt  = visibleColIds.get(stmtId);
+    const visibleTable = visibleColIds.get(tableId);
+    // If either side has no visible-column data, no handles exist at all → skip
+    if (!visibleStmt || !visibleTable) continue;
+
     for (const [name, sColId] of stmtCols) {
       const tColId = tableCols.get(name);
       if (!tColId) continue;
+      // Skip if either column handle is absent from the DOM
+      if (!visibleStmt.has(sColId) || !visibleTable.has(tColId)) continue;
 
       if (edgeType === 'WRITES_TO') {
         // stmt.affectedCol (right) → table.col (left)

@@ -18,7 +18,11 @@ export default defineConfig({
     format: 'es',  // emit ES module workers (Vite 8 default; explicit for clarity)
   },
   optimizeDeps: {
-    // Pre-bundle the browser-compatible ELK (CJS → ESM transform)
+    // Pre-bundle the browser-compatible ELK (CJS → ESM transform).
+    // elk.bundled.js is used both on the main thread (fallback) and inside
+    // the Web Worker (primary).  The WASM-backed elk-worker.min.js was
+    // designed to BE a standalone Worker — it crashes when imported inside
+    // our custom Worker under Vite, so we use the pure-JS bundle everywhere.
     include: ['elkjs/lib/elk.bundled.js'],
   },
   test: {

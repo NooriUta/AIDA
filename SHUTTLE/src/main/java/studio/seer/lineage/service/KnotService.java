@@ -100,24 +100,25 @@ public class KnotService {
     public Uni<KnotReport> knotReport(String sessionId) {
         Map<String, Object> params = Map.of("sid", sessionId);
 
-        Uni<KnotSession>             sessionUni    = loadSession(sessionId, params);
-        Uni<List<KnotTable>>         tablesUni     = loadTables(params);
-        Uni<List<KnotStatement>>     statementsUni = loadStatements(params);
-        Uni<List<KnotSnippet>>       snippetsUni   = loadSnippets(params);
-        Uni<List<KnotAtom>>          atomsUni      = loadAtoms(params);
-        Uni<List<KnotOutputColumn>>  outColsUni    = loadOutputColumns(params);
-        Uni<List<KnotCall>>          callsUni      = loadCalls(params);
-        Uni<KnotParamVars>           paramVarsUni  = loadParamsAndVars(params);
+        Uni<KnotSession>                 sessionUni    = loadSession(sessionId, params);
+        Uni<List<KnotTable>>             tablesUni     = loadTables(params);
+        Uni<List<KnotStatement>>         statementsUni = loadStatements(params);
+        Uni<List<KnotSnippet>>           snippetsUni   = loadSnippets(params);
+        Uni<List<KnotAtom>>              atomsUni      = loadAtoms(params);
+        Uni<List<KnotOutputColumn>>      outColsUni    = loadOutputColumns(params);
+        Uni<List<KnotAffectedColumn>>    affColsUni    = loadAffectedColumns(params);
+        Uni<List<KnotCall>>              callsUni      = loadCalls(params);
+        Uni<KnotParamVars>               paramVarsUni  = loadParamsAndVars(params);
 
         return Uni.combine().all()
-            .unis(sessionUni, tablesUni, statementsUni, snippetsUni, atomsUni, outColsUni, callsUni, paramVarsUni)
+            .unis(sessionUni, tablesUni, statementsUni, snippetsUni, atomsUni, outColsUni, affColsUni, callsUni, paramVarsUni)
             .asTuple()
             .map(t -> {
-                KnotParamVars pv = t.getItem8();
+                KnotParamVars pv = t.getItem9();
                 return new KnotReport(
                     t.getItem1(), t.getItem2(), t.getItem3(),
                     t.getItem4(), t.getItem5(), t.getItem6(), t.getItem7(),
-                    pv.parameters(), pv.variables()
+                    t.getItem8(), pv.parameters(), pv.variables()
                 );
             });
     }
@@ -351,6 +352,8 @@ public class KnotService {
             OPTIONAL MATCH (stmt)-[:HAS_ATOM]->(a:DaliAtom)
             RETURN id(stmt)                                                         AS sid,
                    stmt.stmt_geoid                                                  AS geoid,
+                   coalesce(stmt.type, '')                                          AS stmtType,
+                   coalesce(stmt.line_start, 0)                                     AS lineStart,
                    r.routine_name                                                   AS routineName,
                    coalesce(r.routine_type, '')                                     AS routineType,
                    stmt.aliases                                                     AS stmtAliases,
@@ -388,12 +391,14 @@ public class KnotService {
         // Build flat map of all statements (children list is mutable ArrayList)
         LinkedHashMap<String, KnotStatement> byId = new LinkedHashMap<>();
         for (var r : stmtRows) {
-            String id    = str(r, "sid");
-            String geoid = str(r, "geoid");
+            String id       = str(r, "sid");
+            String geoid    = str(r, "geoid");
+            String stmtTypeDb = str(r, "stmtType");
+            int    lineStartDb = num(r, "lineStart");
             byId.put(id, new KnotStatement(
                 id, geoid,
-                parseStmtType(geoid),
-                parseLineNumber(geoid),
+                !stmtTypeDb.isEmpty() ? stmtTypeDb : parseStmtType(geoid),
+                lineStartDb > 0      ? lineStartDb  : parseLineNumber(geoid),
                 str(r, "routineName"),
                 parsePackageName(geoid),
                 str(r, "routineType"),
@@ -459,6 +464,8 @@ public class KnotService {
                    coalesce(atom_context, '')          AS atom_context,
                    coalesce(parent_context, '')        AS parent_context,
                    output_column_sequence,
+                   coalesce(out('ATOM_PRODUCES')[0].name, '')     AS output_col_name,
+                   coalesce(out('ATOM_REF_OUTPUT_COL')[0].name, '') AS ref_source_name,
                    is_column_reference, is_function_call, is_constant,
                    coalesce(s_complex, false)          AS s_complex,
                    coalesce(is_routine_param, false)   AS is_routine_param,
@@ -486,6 +493,8 @@ public class KnotService {
                             str(r, "atom_context"),
                             str(r, "parent_context"),
                             intOrNull(r, "output_column_sequence"),
+                            str(r, "output_col_name"),
+                            str(r, "ref_source_name"),
                             bool(r, "is_column_reference"),
                             bool(r, "is_function_call"),
                             bool(r, "is_constant"),
@@ -560,6 +569,33 @@ public class KnotService {
                     num(r, "col_order"),
                     str(r, "source_type"),
                     str(r, "table_ref")
+                ))
+                .toList()
+            );
+    }
+
+    // ── Affected columns ─────────────────────────────────────────────────────
+
+    private Uni<List<KnotAffectedColumn>> loadAffectedColumns(Map<String, Object> params) {
+        String cypher = """
+            MATCH (sess:DaliSession {session_id: $sid})-[:BELONGS_TO_SESSION]->(r:DaliRoutine)
+            MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)-[:HAS_AFFECTED_COL]->(col:DaliAffectedColumn)
+            RETURN stmt.stmt_geoid                            AS stmtGeoid,
+                   coalesce(col.column_name, '')              AS columnName,
+                   coalesce(col.table_name, '')               AS tableName,
+                   coalesce(col.position, 0)                  AS position
+            ORDER BY stmtGeoid, position
+            LIMIT 5000
+            """;
+
+        return arcade.cypher(cypher, params)
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.stream()
+                .map(r -> new KnotAffectedColumn(
+                    str(r, "stmtGeoid"),
+                    str(r, "columnName"),
+                    str(r, "tableName"),
+                    num(r, "position")
                 ))
                 .toList()
             );

@@ -1,5 +1,6 @@
-import { memo, useEffect, useState, useMemo } from 'react';
+import { memo, useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Header } from '../layout/Header';
 import { KnotSummary } from './KnotSummary';
 import { KnotStructure } from './KnotStructure';
@@ -13,18 +14,69 @@ type TabId = 'summary' | 'structure' | 'routines' | 'statements' | 'atoms';
 
 export const KnotPage = memo(() => {
   const { t } = useTranslation();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('summary');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlPkg  = searchParams.get('pkg')  ?? '';   // e.g. "PKG_ETL_CRM_STAGING"
+  const urlStmt = searchParams.get('stmt') ?? '';   // e.g. "INSERT:4343"
+
+  const [selectedId,    setSelectedId]    = useState<string | null>(null);
+  const [activeTab,     setActiveTab]     = useState<TabId>('summary');
+  const [sessionSearch, setSessionSearch] = useState(urlPkg);
+  const [dialectFilter, setDialectFilter] = useState<string | null>(null);
 
   const { data: sessions, isLoading: sessionsLoading, isError: sessionsError } = useKnotSessions();
   const { data: report, isLoading: reportLoading, isError: reportError } = useKnotReport(selectedId);
 
-  // Auto-select first session
+  // Auto-select session: prefer URL pkg match, fall back to first
   useEffect(() => {
-    if (sessions && sessions.length > 0 && !selectedId) {
-      setSelectedId(sessions[0].sessionId);
+    if (!sessions || sessions.length === 0) return;
+    if (selectedId) return;                               // already selected
+
+    if (urlPkg) {
+      const q = urlPkg.toLowerCase();
+      const match = sessions.find((s) =>
+        s.sessionName.toLowerCase().includes(q) ||
+        q.includes(s.sessionName.toLowerCase()),
+      );
+      if (match) {
+        setSelectedId(match.sessionId);
+        // If a stmt was passed → switch to Statements tab after session loads
+        if (urlStmt) setActiveTab('statements');
+        // Clear URL params so they don't interfere on manual navigation
+        setSearchParams({}, { replace: true });
+        return;
+      }
     }
-  }, [sessions, selectedId]);
+
+    setSelectedId(sessions[0].sessionId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions]);
+
+  // Unique dialects for filter pills
+  const dialects = useMemo(() =>
+    [...new Set((sessions ?? []).map((s) => s.dialect.toUpperCase()))].sort(),
+  [sessions]);
+
+  // Selected session object (for nav button — available before report loads)
+  const selectedSession = useMemo(
+    () => (sessions ?? []).find((s) => s.sessionId === selectedId) ?? null,
+    [sessions, selectedId],
+  );
+
+  // Filtered session list — match on sessionName OR filePath fragment
+  const filteredSessions = useMemo(() => {
+    const all = sessions ?? [];
+    const q = sessionSearch.trim().toLowerCase();
+    return all.filter((s) => {
+      const matchName = !q ||
+        s.sessionName.toLowerCase().includes(q) ||
+        (s.filePath && s.filePath.toLowerCase().includes(q));
+      const matchDialect = !dialectFilter || s.dialect.toUpperCase() === dialectFilter;
+      return matchName && matchDialect;
+    });
+  }, [sessions, sessionSearch, dialectFilter]);
+
+  const clearSearch = useCallback(() => setSessionSearch(''), []);
 
   const tabCounts = useMemo(() => {
     if (!report) return {};
@@ -69,19 +121,106 @@ export const KnotPage = memo(() => {
           flexDirection: 'column',
           overflow: 'hidden',
         }}>
+          {/* Header row */}
           <div style={{
-            padding: '10px 14px',
-            fontSize: 10,
-            fontWeight: 500,
-            letterSpacing: '0.1em',
-            color: 'var(--t3)',
-            textTransform: 'uppercase',
+            padding: '10px 14px 8px',
             borderBottom: '1px solid var(--bd)',
             flexShrink: 0,
           }}>
-            {t('knot.sessions')}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 8,
+            }}>
+              <span style={{
+                fontSize: 10,
+                fontWeight: 500,
+                letterSpacing: '0.1em',
+                color: 'var(--t3)',
+                textTransform: 'uppercase',
+              }}>
+                {t('knot.sessions')}
+              </span>
+              {sessions && sessions.length > 0 && (
+                <span style={{ fontSize: 10, color: 'var(--t3)' }}>
+                  {filteredSessions.length}
+                  {filteredSessions.length !== sessions.length && ` / ${sessions.length}`}
+                </span>
+              )}
+            </div>
+
+            {/* Search input */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 8px',
+              background: 'var(--bg1)',
+              border: '1px solid var(--bd)',
+              borderRadius: 5,
+              marginBottom: dialects.length > 1 ? 6 : 0,
+            }}>
+              <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>⌕</span>
+              <input
+                type="text"
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                placeholder={t('knot.searchSessions')}
+                style={{
+                  flex: 1,
+                  background: 'none',
+                  border: 'none',
+                  outline: 'none',
+                  fontSize: 11,
+                  color: 'var(--t1)',
+                  minWidth: 0,
+                }}
+              />
+              {sessionSearch && (
+                <button
+                  onClick={clearSearch}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: 0, color: 'var(--t3)', fontSize: 11, lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {/* Dialect filter pills — only when 2+ dialects present */}
+            {dialects.length > 1 && (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {dialects.map((d) => {
+                  const active = dialectFilter === d;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => setDialectFilter(active ? null : d)}
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: 3,
+                        border: `1px solid ${active ? 'var(--acc)' : 'var(--bd)'}`,
+                        background: active ? 'color-mix(in srgb, var(--acc) 15%, transparent)' : 'transparent',
+                        color: active ? 'var(--acc)' : 'var(--t3)',
+                        fontSize: 9,
+                        fontFamily: "'Fira Code', monospace",
+                        cursor: 'pointer',
+                        transition: 'border-color 0.1s, color 0.1s',
+                      }}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
+          {/* Session list */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
             {sessionsLoading && (
               <div style={{ padding: '16px 10px', fontSize: 12, color: 'var(--t3)' }}>
@@ -98,7 +237,12 @@ export const KnotPage = memo(() => {
                 {t('knot.emptyList')}
               </div>
             )}
-            {sessions?.map((sess) => (
+            {!sessionsLoading && sessions && sessions.length > 0 && filteredSessions.length === 0 && (
+              <div style={{ padding: '16px 10px', fontSize: 12, color: 'var(--t3)' }}>
+                {t('knot.noSessionsMatch')}
+              </div>
+            )}
+            {filteredSessions.map((sess) => (
               <SessionCard
                 key={sess.sessionId}
                 session={sess}
@@ -118,54 +262,93 @@ export const KnotPage = memo(() => {
             borderBottom: '1px solid var(--bd)',
             display: 'flex',
             alignItems: 'center',
-            padding: '0 16px',
-            gap: 2,
             flexShrink: 0,
             height: 40,
-            overflowX: 'auto',
             minWidth: 0,
           }}>
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                style={{
-                  padding: '0 14px',
-                  height: 40,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 12,
-                  fontWeight: 500,
-                  border: 'none',
-                  background: 'transparent',
-                  color: activeTab === tab.id ? 'var(--t1)' : 'var(--t3)',
-                  cursor: 'pointer',
-                  borderBottom: activeTab === tab.id
-                    ? '2px solid var(--acc)'
-                    : '2px solid transparent',
-                  transition: 'color 0.12s',
-                  fontFamily: 'inherit',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                {t(tab.key)}
-                {tab.count != null && tab.count > 0 && (
-                  <span style={{
-                    padding: '1px 6px',
-                    borderRadius: 10,
-                    fontSize: 10,
-                    background: activeTab === tab.id
-                      ? 'color-mix(in srgb, var(--acc) 12%, transparent)'
-                      : 'var(--bg3)',
-                    color: activeTab === tab.id ? 'var(--acc)' : 'var(--t3)',
-                  }}>
-                    {tab.count.toLocaleString()}
-                  </span>
-                )}
-              </button>
-            ))}
+            {/* Scrollable tabs */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              flex: 1,
+              gap: 2,
+              padding: '0 16px',
+              overflowX: 'auto',
+              minWidth: 0,
+            }}>
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    padding: '0 14px',
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    border: 'none',
+                    background: 'transparent',
+                    color: activeTab === tab.id ? 'var(--t1)' : 'var(--t3)',
+                    cursor: 'pointer',
+                    borderBottom: activeTab === tab.id
+                      ? '2px solid var(--acc)'
+                      : '2px solid transparent',
+                    transition: 'color 0.12s',
+                    fontFamily: 'inherit',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                >
+                  {t(tab.key)}
+                  {tab.count != null && tab.count > 0 && (
+                    <span style={{
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      fontSize: 10,
+                      background: activeTab === tab.id
+                        ? 'color-mix(in srgb, var(--acc) 12%, transparent)'
+                        : 'var(--bg3)',
+                      color: activeTab === tab.id ? 'var(--acc)' : 'var(--t3)',
+                    }}>
+                      {tab.count.toLocaleString()}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* LOOM navigation button — always visible at right */}
+            {selectedSession && (
+              <div style={{ padding: '0 8px', flexShrink: 0 }}>
+                <button
+                  onClick={() => navigate(`/?pkg=${encodeURIComponent(selectedSession.sessionName)}`)}
+                  title={selectedSession.sessionName}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '0 10px',
+                    height: 26,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    fontFamily: 'inherit',
+                    background: 'var(--bg2)',
+                    border: '1px solid var(--bd)',
+                    borderRadius: 4,
+                    color: 'var(--acc)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'border-color 0.1s',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--acc)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)'; }}
+                >
+                  ◈ {t('knot.openInLoom')}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Tab content */}
@@ -184,7 +367,7 @@ export const KnotPage = memo(() => {
                 {activeTab === 'summary'    && <KnotSummary    session={report.session} tables={report.tables} statements={report.statements} />}
                 {activeTab === 'structure'  && <KnotStructure  tables={report.tables} statements={report.statements} />}
                 {activeTab === 'routines'   && <KnotRoutines   session={report.session} statements={report.statements} calls={report.calls ?? []} parameters={report.parameters ?? []} variables={report.variables ?? []} />}
-                {activeTab === 'statements' && <KnotStatements statements={report.statements} snippets={report.snippets} atoms={report.atoms} outputColumns={report.outputColumns} />}
+                {activeTab === 'statements' && <KnotStatements statements={report.statements} snippets={report.snippets} atoms={report.atoms} outputColumns={report.outputColumns} affectedColumns={report.affectedColumns} />}
                 {activeTab === 'atoms'      && <KnotAtoms      session={report.session} atoms={report.atoms} />}
               </>
             )}

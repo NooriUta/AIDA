@@ -32,13 +32,10 @@ export function useFilterSync(rawGraph: Graph | null): void {
   } = useLoomStore();
 
   // ── Populate App/DB/Schema lists for L1 filter panel ──────────────────────
+  // NOTE: intentionally NOT cleared on L2/L3 so FilterToolbar can use them
+  // as a quick-navigation switcher without returning to L1 first.
   useEffect(() => {
-    if (viewLevel !== 'L1' || !rawGraph) {
-      setAvailableApps([]);
-      setAvailableDbs([]);
-      setAvailableSchemas([]);
-      return;
-    }
+    if (viewLevel !== 'L1' || !rawGraph) return;
     setAvailableApps(
       rawGraph.nodes
         .filter((n) => n.type === 'applicationNode')

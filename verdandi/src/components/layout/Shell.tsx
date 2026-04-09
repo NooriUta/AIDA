@@ -1,4 +1,5 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Header } from './Header';
 import { FilterToolbar } from './FilterToolbar';
 import { FilterToolbarL1 } from './FilterToolbarL1';
@@ -10,7 +11,18 @@ import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLoomStore } from '../../stores/loomStore';
 
 export const Shell = memo(() => {
-  const { viewLevel } = useLoomStore();
+  const { viewLevel, jumpTo } = useLoomStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // KNOT → LOOM: auto-navigate to package when ?pkg= param is present
+  useEffect(() => {
+    const pkg = searchParams.get('pkg');
+    if (!pkg) return;
+    setSearchParams({}, { replace: true });
+    jumpTo('L2', `pkg-${pkg}`, pkg, 'DaliPackage');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div style={{
       display: 'grid',

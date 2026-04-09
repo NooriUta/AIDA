@@ -16,7 +16,8 @@
       "invalid": "Invalid username or password.",
       "required": "This field is required",
       "server": "Server error. Please try again.",
-      "network": "Cannot connect to server. Check your network."
+      "network": "Cannot connect to server. Check your network.",
+      "rateLimit": "Too many login attempts. Try again in 15 minutes."
     }
   },
   "canvas": {
@@ -232,8 +233,11 @@
     "empty": "Click any node to inspect",
     "sessions": "Sessions",
     "noSession": "Select a session to view report",
+    "openInLoom": "Open in LOOM",
     "loading": "Loading sessions…",
     "emptyList": "No sessions found",
+    "searchSessions": "search sessions…",
+    "noSessionsMatch": "No matches",
     "error": "Failed to load report",
     "filterTables": "filter tables\u2026",
     "tabs": {
@@ -323,7 +327,9 @@
       "shortName": "Short name",
       "childStmts": "Child statements",
       "sourceTables": "Source tables",
+      "sourceSets": "Source sets (tables & queries)",
       "targetTables": "Target tables",
+      "targetCols": "Affected columns",
       "tableGeoid": "Table geoid",
       "subqueries": "Subqueries",
       "nestedSubq": "Nested subqueries",
@@ -337,9 +343,10 @@
       "outputCols": "Output columns",
       "expression": "Expression",
       "alias": "Alias",
-      "tableRef": "Table ref",
+      "tableRef": "Table",
       "atomText": "Atom",
       "affectedCol": "Affects col",
+      "refSource": "Source ref",
       "status": "Status",
       "context": "Context",
       "moreAtoms": "more atoms",
@@ -441,14 +448,18 @@
 
   "contextMenu": {
     "drillDown": "Drill-down →",
-    "copyName": "Copy name"
+    "copyName": "Copy name",
+    "openInKnot": "Open in KNOT"
   },
 
   "export": {
     "title": "Export",
     "json": "JSON",
     "png": "PNG",
-    "svg": "SVG"
+    "svg": "SVG",
+    "errorPng": "PNG export failed. Try a smaller canvas.",
+    "errorSvg": "SVG export failed. Try a smaller canvas.",
+    "success": "Export complete"
   },
 
   "inspector": {
@@ -469,6 +480,11 @@
     "noColumns":     "No columns",
     "schemas":       "Schemas",
     "drillDown":     "Drill-down →"
+  },
+
+  "errorBoundary": {
+    "message": "Something went wrong while rendering this view.",
+    "retry": "Try again"
   },
 
   "legend": {

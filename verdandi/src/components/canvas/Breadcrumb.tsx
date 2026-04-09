@@ -119,22 +119,25 @@ interface SegmentProps {
 }
 
 function BreadcrumbSegment({ label, icon, onClick, isCurrent }: SegmentProps) {
+  const isClickable = !isCurrent && !!onClick;
   return (
     <span
       onClick={isCurrent ? undefined : onClick}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        padding: '1px 4px',
-        borderRadius: '4px',
-        cursor: isCurrent || !onClick ? 'default' : 'pointer',
-        color: isCurrent ? 'var(--t1)' : 'var(--acc)',
-        fontWeight: isCurrent ? 500 : 400,
-        transition: 'background 0.1s',
+        display:        'inline-flex',
+        alignItems:     'center',
+        gap:            '4px',
+        padding:        '1px 4px',
+        borderRadius:   '4px',
+        cursor:         isClickable ? 'pointer' : 'default',
+        color:          isCurrent ? 'var(--t1)' : 'var(--acc)',
+        fontWeight:     isCurrent ? 500 : 400,
+        textDecoration: isClickable ? 'underline' : 'none',
+        textUnderlineOffset: '2px',
+        transition:     'background 0.1s',
       }}
       onMouseEnter={(e) => {
-        if (!isCurrent && onClick) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)';
+        if (isClickable) (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--acc) 12%, transparent)';
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLElement).style.background = 'transparent';

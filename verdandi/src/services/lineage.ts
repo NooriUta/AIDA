@@ -139,32 +139,56 @@ const SEARCH = /* GraphQL */ `
 // ── Service functions ─────────────────────────────────────────────────────────
 
 export async function fetchOverview(): Promise<SchemaNode[]> {
+  const t0 = performance.now();
   const data = await gqlClient.request<{ overview: SchemaNode[] }>(OVERVIEW);
+  const ms = (performance.now() - t0).toFixed(0);
+  console.info(`[LOOM] overview — ${ms} ms  (${data.overview.length} databases)`);
   return data.overview;
 }
 
 export async function fetchExplore(scope: string): Promise<ExploreResult> {
+  const t0 = performance.now();
   const data = await gqlClient.request<{ explore: ExploreResult }>(EXPLORE, { scope });
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.explore.nodes?.length ?? 0;
+  const e = data.explore.edges?.length ?? 0;
+  console.info(`[LOOM] explore(${scope}) — ${ms} ms  (${n} nodes, ${e} edges)`);
   return data.explore;
 }
 
 export async function fetchLineage(nodeId: string): Promise<ExploreResult> {
+  const t0 = performance.now();
   const data = await gqlClient.request<{ lineage: ExploreResult }>(LINEAGE, { nodeId });
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.lineage.nodes?.length ?? 0;
+  console.info(`[LOOM] lineage(${nodeId}) — ${ms} ms  (${n} nodes)`);
   return data.lineage;
 }
 
 export async function fetchUpstream(nodeId: string): Promise<ExploreResult> {
+  const t0 = performance.now();
   const data = await gqlClient.request<{ upstream: ExploreResult }>(UPSTREAM, { nodeId });
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.upstream.nodes?.length ?? 0;
+  console.info(`[LOOM] upstream(${nodeId}) — ${ms} ms  (${n} nodes)`);
   return data.upstream;
 }
 
 export async function fetchDownstream(nodeId: string): Promise<ExploreResult> {
+  const t0 = performance.now();
   const data = await gqlClient.request<{ downstream: ExploreResult }>(DOWNSTREAM, { nodeId });
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.downstream.nodes?.length ?? 0;
+  console.info(`[LOOM] downstream(${nodeId}) — ${ms} ms  (${n} nodes)`);
   return data.downstream;
 }
 
 export async function fetchExpandDeep(nodeId: string, depth: number): Promise<ExploreResult> {
+  const t0 = performance.now();
   const data = await gqlClient.request<{ expandDeep: ExploreResult }>(EXPAND_DEEP, { nodeId, depth });
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.expandDeep.nodes?.length ?? 0;
+  console.info(`[LOOM] expandDeep(${nodeId}, depth=${depth}) — ${ms} ms  (${n} nodes)`);
   return data.expandDeep;
 }
 
@@ -272,6 +296,8 @@ export interface KnotAtom {
   atomContext: string;
   parentContext: string;
   outputColumnSequence: number | null;
+  outputColName: string;
+  refSourceName: string;
   columnReference: boolean;
   functionCall: boolean;
   constant: boolean;
@@ -313,6 +339,13 @@ export interface KnotVariable {
   dataType: string;
 }
 
+export interface KnotAffectedColumn {
+  stmtGeoid: string;
+  columnName: string;
+  tableName: string;
+  position: number;
+}
+
 export interface KnotReport {
   session: KnotSession;
   tables: KnotTable[];
@@ -320,6 +353,7 @@ export interface KnotReport {
   snippets: KnotSnippet[];
   atoms: KnotAtom[];
   outputColumns: KnotOutputColumn[];
+  affectedColumns: KnotAffectedColumn[];
   calls: KnotCall[];
   parameters: KnotParameter[];
   variables: KnotVariable[];
@@ -380,12 +414,15 @@ const KNOT_REPORT = /* GraphQL */ `
       }
       atoms {
         stmtGeoid atomText columnName tableGeoid tableName
-        status atomContext parentContext outputColumnSequence
+        status atomContext parentContext outputColumnSequence outputColName refSourceName
         columnReference functionCall constant
         complex routineParam routineVar nestedAtomsCount atomLine atomPos
       }
       outputColumns {
         stmtGeoid name expression alias colOrder sourceType tableRef
+      }
+      affectedColumns {
+        stmtGeoid columnName tableName position
       }
       calls {
         callerName callerPackage calleeName lineStart

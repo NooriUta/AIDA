@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { InspectorSection, InspectorRow } from './InspectorSection';
 
@@ -45,12 +46,30 @@ function OutputColRow({ col }: { col: ColumnInfo }) {
   );
 }
 
+/** Extract package name from a statement's fullLabel:
+ *  "DWH.PKG_ETL_CRM_STAGING:PROCEDURE:..." → "PKG_ETL_CRM_STAGING"
+ */
+function pkgFromLabel(fullLabel: string): string | null {
+  const firstSeg = fullLabel.split(':')[0];
+  const parts = firstSeg.split('.');
+  return parts[parts.length - 1] || null;
+}
+
 export const InspectorStatement = memo(({ data, nodeId }: Props) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const columns   = data.columns ?? [];
   const groupPath = Array.isArray(data.metadata?.groupPath) ? (data.metadata.groupPath as string[]) : [];
   const operation = typeof data.operation === 'string' ? data.operation : (data.metadata?.stmtType as string) ?? '';
   const fullLabel = typeof data.metadata?.fullLabel === 'string' ? data.metadata.fullLabel : data.label;
+  const pkgName   = pkgFromLabel(fullLabel);
+
+  const openInKnot = () => {
+    const params = new URLSearchParams();
+    if (pkgName) params.set('pkg', pkgName);
+    params.set('stmt', data.label);
+    navigate(`/knot?${params.toString()}`);
+  };
 
   return (
     <>
@@ -61,6 +80,26 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
           <InspectorRow label={t('inspector.path')} value={groupPath.join(' › ')} />
         )}
         <InspectorRow label={t('inspector.id')} value={nodeId} />
+        <div style={{ padding: '6px 10px 4px' }}>
+          <button
+            onClick={openInKnot}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px',
+              fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
+              background: 'var(--bg3)',
+              border: '1px solid var(--bd)',
+              borderRadius: 4,
+              color: 'var(--acc)',
+              cursor: 'pointer',
+              transition: 'border-color 0.1s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--acc)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)'; }}
+          >
+            ◈ {t('contextMenu.openInKnot')}
+          </button>
+        </div>
       </InspectorSection>
 
       <InspectorSection

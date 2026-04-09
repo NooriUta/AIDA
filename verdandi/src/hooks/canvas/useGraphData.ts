@@ -56,9 +56,16 @@ export function useGraphData() {
 
     // LOOM-027: merge expansion nodes/edges (de-duplicated by id)
     if (expansionGqlNodes.length > 0 || expansionGqlEdges.length > 0) {
-      const expansionGraph = transformGqlExplore({ nodes: expansionGqlNodes, edges: expansionGqlEdges });
+      // Compute existingNodeIds BEFORE transformGqlExplore so we can pass them
+      // as externalNodeIds — edges connecting new expansion nodes to the starting
+      // node (which the backend does NOT return) are otherwise dropped inside
+      // transformGqlExplore's nodeIds filter.
       const existingNodeIds = new Set(base.nodes.map((n) => n.id));
       const existingEdgeIds = new Set(base.edges.map((e) => e.id));
+      const expansionGraph = transformGqlExplore(
+        { nodes: expansionGqlNodes, edges: expansionGqlEdges },
+        existingNodeIds,
+      );
       // L2: only allow table/statement nodes from expansion — suppress routines, packages, etc.
       const L2_ALLOWED = new Set(['tableNode', 'statementNode']);
       const allowedExpNodes = viewLevel === 'L2'
@@ -66,7 +73,16 @@ export function useGraphData() {
         : expansionGraph.nodes;
       const allowedExpIds = new Set(allowedExpNodes.map((n) => n.id));
       const allowedExpEdges = viewLevel === 'L2'
-        ? expansionGraph.edges.filter((e) => allowedExpIds.has(e.source) && allowedExpIds.has(e.target))
+        ? expansionGraph.edges.filter((e) => {
+            // An edge is allowed when both endpoints are "reachable" — either a new expansion
+            // node (allowedExpIds) or a node already present in the current graph (existingNodeIds).
+            // The starting node of an upstream/downstream expand is NOT returned by the backend
+            // but its edges (e.g. READS_FROM source=INSERT:4343) must still be admitted so the
+            // newly fetched upstream tables connect to their consuming statement.
+            const srcOk = allowedExpIds.has(e.source) || existingNodeIds.has(e.source);
+            const tgtOk = allowedExpIds.has(e.target) || existingNodeIds.has(e.target);
+            return srcOk && tgtOk;
+          })
         : expansionGraph.edges;
       base = {
         nodes: [...base.nodes, ...allowedExpNodes.filter((n) => !existingNodeIds.has(n.id))],

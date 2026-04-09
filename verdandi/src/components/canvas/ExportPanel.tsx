@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useReactFlow, getNodesBounds, getViewportForBounds } from '@xyflow/react';
 import { Download, FileJson, ImageDown, Loader2 } from 'lucide-react';
 import { useLoomStore } from '../../stores/loomStore';
+import { showToast } from '../Toast';
 
 interface Props {
   /** Ref to the outermost canvas wrapper — used to locate .react-flow__viewport */
@@ -89,11 +90,12 @@ export const ExportPanel = memo(({ containerRef }: Props) => {
       a.click();
     } catch (err) {
       console.error('[LOOM] PNG export failed', err);
+      showToast(t('export.errorPng', 'PNG export failed. Try a smaller canvas.'), 'error');
     } finally {
       setExporting(null);
       setOpen(false);
     }
-  }, [getViewportEl, getNodes]);
+  }, [getViewportEl, getNodes, t]);
 
   // ── SVG export via html-to-image ──────────────────────────────────────────
   const exportSvg = useCallback(async () => {
@@ -123,11 +125,12 @@ export const ExportPanel = memo(({ containerRef }: Props) => {
       a.click();
     } catch (err) {
       console.error('[LOOM] SVG export failed', err);
+      showToast(t('export.errorSvg', 'SVG export failed. Try a smaller canvas.'), 'error');
     } finally {
       setExporting(null);
       setOpen(false);
     }
-  }, [getViewportEl, getNodes]);
+  }, [getViewportEl, getNodes, t]);
 
   // ── Button styles ─────────────────────────────────────────────────────────
   const dropItem: React.CSSProperties = {

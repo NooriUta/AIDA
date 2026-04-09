@@ -9,7 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DEPTH_STEPS = [1, 2, 3, 5, Infinity] as const;
+const DEPTH_STEPS = [1, 2, 3, 5, 7, Infinity] as const;
+const DEPTH_DEFAULT = 5;
 
 // ─── Icons (inline SVG — no dependency) ──────────────────────────────────────
 function IconRoutine() {
@@ -95,6 +96,8 @@ export const FilterToolbar = memo(() => {
     availableTables,
     availableStmts,
     availableColumns,
+    availableSchemas,
+    availableDbs,
     setTableFilter,
     setStmtFilter,
     setFieldFilter,
@@ -104,6 +107,7 @@ export const FilterToolbar = memo(() => {
     toggleCfEdges,
     clearFilter,
     navigateToLevel,
+    jumpTo,
   } = useLoomStore();
 
   // Only show on L2 / L3
@@ -143,7 +147,7 @@ export const FilterToolbar = memo(() => {
     : IconGeneric;
 
   const hasActiveFilter = tableFilter !== null || stmtFilter !== null || fieldFilter !== null
-    || depth !== Infinity || !upstream || !downstream;
+    || depth !== DEPTH_DEFAULT || !upstream || !downstream;
 
   // ── Stmt options — cascade: filter by selected table ─────────────────────
   const cascadedStmts = useMemo(() => (
@@ -180,42 +184,100 @@ export const FilterToolbar = memo(() => {
       overflow: 'hidden',
     }}>
 
-      {/* ── Start object pill ──────────────────────────────────────────────── */}
-      <div
-        title={t('toolbar.startObject')}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          padding: '3px 8px',
-          background: 'var(--bg3)',
-          border: `1px solid ${hasActiveFilter ? 'var(--acc)' : 'var(--bd)'}`,
-          borderRadius: 6,
-          fontSize: 12,
-          color: 'var(--t1)',
-          flexShrink: 0,
-          cursor: 'default',
-          maxWidth: 200,
-          overflow: 'hidden',
-        }}
-      >
-        <StartIcon />
-        <span style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-          {scopeLabel}
-        </span>
-        {/* ⇄ navigate back to L1 to pick different scope */}
-        <span
-          onClick={() => navigateToLevel('L1')}
-          title={t('toolbar.changeObject')}
-          style={{ cursor: 'pointer', color: 'var(--t3)', display: 'flex', alignItems: 'center' }}
+      {/* ── Start object pill / quick-switcher ────────────────────────────── */}
+      {availableSchemas.length > 0 ? (
+        /* Schema quick-switcher: select styled as a pill */
+        <div
+          title={t('toolbar.startObject')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 8px',
+            background: 'var(--bg3)',
+            border: `1px solid ${hasActiveFilter ? 'var(--acc)' : 'var(--bd)'}`,
+            borderRadius: 6,
+            fontSize: 12,
+            color: 'var(--t1)',
+            flexShrink: 0,
+            maxWidth: 240,
+            overflow: 'hidden',
+          }}
         >
-          <IconSwap />
-        </span>
-      </div>
+          <StartIcon />
+          <select
+            value={availableSchemas.find((s) => s.label === currentScopeLabel)?.id ?? ''}
+            onChange={(e) => {
+              const s = availableSchemas.find((x) => x.id === e.target.value);
+              if (!s) return;
+              const db = availableDbs.find((d) => d.id === s.dbId);
+              const scope = db
+                ? `schema-${s.label}|${db.label}`
+                : `schema-${s.label}`;
+              jumpTo('L2', scope, s.label, 'DaliSchema');
+            }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background:  'transparent',
+              border:      'none',
+              color:       'var(--t1)',
+              fontSize:    12,
+              cursor:      'pointer',
+              outline:     'none',
+              maxWidth:    160,
+              fontWeight:  500,
+            }}
+          >
+            {/* Blank option if current scope doesn't match any schema */}
+            {!availableSchemas.find((s) => s.label === currentScopeLabel) && (
+              <option value="">{scopeLabel}</option>
+            )}
+            {availableSchemas.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          {/* ⇄ back to L1 overview */}
+          <span
+            onClick={() => navigateToLevel('L1')}
+            title={t('toolbar.changeObject')}
+            style={{ cursor: 'pointer', color: 'var(--t3)', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+          >
+            <IconSwap />
+          </span>
+        </div>
+      ) : (
+        /* Fallback: static pill (no schema list available) */
+        <div
+          title={t('toolbar.startObject')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 8px',
+            background: 'var(--bg3)',
+            border: `1px solid ${hasActiveFilter ? 'var(--acc)' : 'var(--bd)'}`,
+            borderRadius: 6,
+            fontSize: 12,
+            color: 'var(--t1)',
+            flexShrink: 0,
+            cursor: 'default',
+            maxWidth: 200,
+            overflow: 'hidden',
+          }}
+        >
+          <StartIcon />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {scopeLabel}
+          </span>
+          <span
+            onClick={() => navigateToLevel('L1')}
+            title={t('toolbar.changeObject')}
+            style={{ cursor: 'pointer', color: 'var(--t3)', display: 'flex', alignItems: 'center' }}
+          >
+            <IconSwap />
+          </span>
+        </div>
+      )}
 
       <Divider />
 

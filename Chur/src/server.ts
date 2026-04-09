@@ -24,12 +24,19 @@ async function start(): Promise<void> {
   // ── Plugins ─────────────────────────────────────────────────────────────────
 
   // Manual CORS (avoids @fastify/cors Fastify-version mismatch in dev)
+  // corsOrigin is a string (single origin) or comma-separated list in env.
+  const allowedOrigins = new Set(
+    (typeof config.corsOrigin === 'string' ? config.corsOrigin : '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+  );
+
   app.addHook('onRequest', async (request, reply) => {
-    const origin = request.headers.origin ?? config.corsOrigin[0] ?? '*';
-    const allowed = Array.isArray(config.corsOrigin)
-      ? config.corsOrigin.includes(origin)
-      : origin === config.corsOrigin;
-    reply.header('Access-Control-Allow-Origin',      allowed ? origin : 'null');
+    const origin = request.headers.origin;
+    // Only reflect the origin if it's in the allow-list; otherwise block.
+    const allowed = origin ? allowedOrigins.has(origin) : false;
+    reply.header('Access-Control-Allow-Origin',      allowed ? origin! : 'null');
     reply.header('Access-Control-Allow-Credentials', 'true');
     reply.header('Access-Control-Allow-Methods',     'GET, POST, OPTIONS');
     reply.header('Access-Control-Allow-Headers',     'Content-Type, Authorization');

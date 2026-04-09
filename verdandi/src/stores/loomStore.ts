@@ -242,7 +242,7 @@ const FILTER_DEFAULTS: FilterState = {
   tableFilter:      null,
   stmtFilter:       null,
   fieldFilter:      null,
-  depth:            Infinity,
+  depth:            5,
   upstream:         true,
   downstream:       true,
   tableLevelView:   false,

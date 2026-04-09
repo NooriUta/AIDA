@@ -119,6 +119,7 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                 { label: t('knot.table.name'),        w: null, center: false },
                 { label: t('knot.table.schema'),      w: null, center: false },
                 { label: t('knot.table.type'),        w: null, center: false },
+                { label: t('knot.table.aliases'),     w: null, center: false },
                 { label: t('knot.table.columns'),     w: 50,  center: true  },
                 { label: 'S',                         w: 32,  center: true  },
                 { label: 'T',                         w: 32,  center: true  },
@@ -165,6 +166,26 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
                     <Tag muted={tb.tableType === 'VIEW'}>{tb.tableType}</Tag>
                   </td>
+                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)', maxWidth: 120 }}>
+                    {tb.aliases?.length > 0 ? (
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                        {tb.aliases.slice(0, 3).map(a => (
+                          <span key={a} style={{
+                            display: 'inline-block', padding: '1px 5px', borderRadius: 3,
+                            fontSize: 9, fontFamily: "'Fira Code', monospace",
+                            background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
+                            border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
+                            color: 'var(--acc)',
+                          }}>{a}</span>
+                        ))}
+                        {tb.aliases.length > 3 && (
+                          <span style={{ fontSize: 9, color: 'var(--t3)' }}>+{tb.aliases.length - 3}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--t3)', fontSize: 10 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)', textAlign: 'center', color: 'var(--t2)' }}>
                     {tb.columnCount}
                   </td>
@@ -182,7 +203,7 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
 
                 isOpen && (
                   <tr key={`${tb.id}-exp`}>
-                    <td colSpan={8} style={{ padding: 0, background: 'var(--bg3)', borderBottom: '2px solid var(--acc)' }}>
+                    <td colSpan={9} style={{ padding: 0, background: 'var(--bg3)', borderBottom: '2px solid var(--acc)' }}>
                       <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
                         {/* Left: Columns table */}

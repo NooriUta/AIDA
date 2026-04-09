@@ -14,6 +14,10 @@ import {
 // Max inline columns shown per table / statement at L2
 const L2_MAX_COLS = 5;
 
+// Bezier curvature for data-flow edges (React Flow default = 0.25).
+// Lower values → straighter lines → fewer S/Z bends on dense graphs.
+const EDGE_CURVATURE = 0.15;
+
 // ─── Nesting edges: build visual hierarchy (Schema → Routine → Stmt) ─────────
 // CONTAINS_ROUTINE is dual-purpose: Schema→Routine AND Routine→Routine.
 // CHILD_OF / USES_SUBQUERY / NESTED_IN are NOT included — sub-statements are
@@ -247,7 +251,8 @@ function transformSchemaExplore(result: ExploreResult): {
         id:       e.id,
         source:   flip ? e.target : e.source,
         target:   flip ? e.source : e.target,
-        type:     'smoothstep',
+        type:     'default',
+        pathOptions: { curvature: EDGE_CURVATURE },
         animated: ANIMATED_EDGES.has(edgeType),
         style:    getEdgeStyle(edgeType),
         data:     { edgeType },
@@ -329,7 +334,8 @@ function hoistSubqueryReads(result: ExploreResult): {
       id:       `__sqrf_${idx++}`,
       source:   e.target,
       target:   rootId,
-      type:     'smoothstep',
+      type:     'default',
+      pathOptions: { curvature: EDGE_CURVATURE },
       animated: false,
       style:    getEdgeStyle('READS_FROM'),
       data:     { edgeType: 'READS_FROM' as DaliEdgeType },
@@ -341,7 +347,18 @@ function hoistSubqueryReads(result: ExploreResult): {
 
 // ─── Public: flat + schema explore dispatcher ────────────────────────────────
 
-export function transformGqlExplore(result: ExploreResult): {
+export function transformGqlExplore(
+  result: ExploreResult,
+  /**
+   * Optional set of node IDs already present in the base graph.
+   * Used by the expansion path: the starting node (e.g. INSERT:4343) is NOT
+   * returned by the backend expansion query, so its edges would otherwise be
+   * dropped by the nodeIds filter.  Passing externalNodeIds lets those edges
+   * through — the allowedExpEdges guard in useGraphData.ts then decides
+   * whether to actually include them in the merged graph.
+   */
+  externalNodeIds?: Set<string>,
+): {
   nodes: LoomNode[];
   edges: LoomEdge[];
 } {
@@ -410,12 +427,18 @@ export function transformGqlExplore(result: ExploreResult): {
     });
 
   const nodeIds = new Set(nodes.map((n) => n.id));
+  // Merge with external node IDs so edges connecting new expansion nodes to
+  // existing graph nodes (the starting node) are not dropped prematurely.
+  const allKnownIds: Set<string> =
+    externalNodeIds && externalNodeIds.size > 0
+      ? new Set([...nodeIds, ...externalNodeIds])
+      : nodeIds;
 
   const regularEdges: LoomEdge[] = result.edges
     .filter((e) =>
       !SUPPRESSED_EDGES.has(e.type) &&
-      nodeIds.has(e.source) &&
-      nodeIds.has(e.target),
+      allKnownIds.has(e.source) &&
+      allKnownIds.has(e.target),
     )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
@@ -424,7 +447,8 @@ export function transformGqlExplore(result: ExploreResult): {
         id:       e.id,
         source:   flip ? e.target : e.source,
         target:   flip ? e.source : e.target,
-        type:     'smoothstep',
+        type:     'default',
+        pathOptions: { curvature: EDGE_CURVATURE },
         animated: ANIMATED_EDGES.has(edgeType),
         style:    getEdgeStyle(edgeType),
         data:     { edgeType },
@@ -433,7 +457,9 @@ export function transformGqlExplore(result: ExploreResult): {
 
   const edges: LoomEdge[] = [
     ...regularEdges,
-    ...syntheticEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)),
+    // hoisted sub-query READS_FROM: synthetic edges already in display direction
+    // (source=table, target=rootStmt) — rootStmt may be an external (existing) node.
+    ...syntheticEdges.filter((e) => allKnownIds.has(e.source) && allKnownIds.has(e.target)),
   ];
 
   return { nodes, edges };

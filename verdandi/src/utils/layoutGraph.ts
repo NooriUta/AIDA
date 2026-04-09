@@ -8,11 +8,11 @@ const COLUMN_ROW_HEIGHT = 22;
 function getNodeHeight(node: LoomNode): number {
   if (node.type === 'tableNode') {
     const cols = node.data.columns?.length ?? 0;
-    return NODE_HEIGHT_BASE + Math.min(cols, 7) * COLUMN_ROW_HEIGHT + 24;
+    return NODE_HEIGHT_BASE + cols * COLUMN_ROW_HEIGHT + 24;
   }
   if (node.type === 'statementNode') {
     const cols = node.data.columns?.length ?? 0;
-    return NODE_HEIGHT_BASE + Math.min(cols, 5) * COLUMN_ROW_HEIGHT + (cols > 0 ? 24 : 0);
+    return NODE_HEIGHT_BASE + cols * COLUMN_ROW_HEIGHT + (cols > 0 ? 24 : 0);
   }
   // Routine group: height is pre-computed and stored in style
   if (node.type === 'routineGroupNode') {
@@ -68,17 +68,25 @@ interface ElkApi {
 }
 
 // ─── Shared layout options (flat layered, LEFT → RIGHT) ──────────────────────
-const LAYERED_OPTIONS: Record<string, string> = {
-  'elk.algorithm':                             'layered',
-  'elk.direction':                             'RIGHT',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '120',
-  'elk.spacing.nodeNode':                      '60',
-  'elk.separateConnectedComponents':           'true',   // properly space isolated subgraphs
-  'elk.spacing.componentComponent':            '80',     // gap between disconnected components
-  'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-  'elk.layered.nodePlacement.strategy':        'LINEAR_SEGMENTS',
-  'elk.layered.unnecessaryBendpoints':         'true',
-};
+// Adaptive: BRANDES_KOEPF is compact but crashes the Worker on 800+ nodes;
+// LINEAR_SEGMENTS is safer for large graphs.
+const LARGE_GRAPH_THRESHOLD = 500;
+
+function getLayeredOptions(nodeCount: number): Record<string, string> {
+  return {
+    'elk.algorithm':                             'layered',
+    'elk.direction':                             'RIGHT',
+    'elk.layered.spacing.nodeNodeBetweenLayers': '140',
+    'elk.spacing.nodeNode':                      '60',
+    'elk.separateConnectedComponents':           'true',
+    'elk.spacing.componentComponent':            '80',
+    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+    'elk.layered.nodePlacement.strategy':
+      nodeCount > LARGE_GRAPH_THRESHOLD ? 'LINEAR_SEGMENTS' : 'BRANDES_KOEPF',
+    // Do NOT add unnecessary bendpoints — they create Z-shaped edge routes.
+    'elk.layered.unnecessaryBendpoints':         'false',
+  };
+}
 
 // ─── Fingerprint-based 1-entry layout cache ───────────────────────────────
 // Avoids re-running ELK when the same graph structure is requested again
@@ -96,75 +104,60 @@ function graphFingerprint(nodes: LoomNode[], edges: LoomEdge[]): string {
   return `${nodeKey}|${edgeKey}`;
 }
 
-/** Invalidate the layout cache — call on scope navigation to avoid stale positions. */
+/** Invalidate the layout cache and abort any in-flight Worker requests. */
 export function clearLayoutCache(): void {
   layoutCache = null;
+  cancelPendingLayouts();
 }
 
-// ─── ELK Web Worker (S6-T5 spike) ────────────────────────────────────────────
-// In browser environments ELK runs in a dedicated worker so layout never blocks
-// the main thread. In Node.js (tests, SSR) Worker is unavailable — falls back to
-// the bundled synchronous ELK running on the main thread.
+// ─── ELK engine ─────────────────────────────────────────────────────────────
+// Uses elk.bundled.js (pure JS) on the main thread.
+//
+// NOTE: A Web Worker approach was attempted (see workers/elkWorker.ts) but
+// Vite's CJS→ESM transform renames the `Worker` global to `_Worker` inside
+// elk.bundled.js, causing "TypeError: _Worker is not a constructor" inside
+// the Worker context.  This is a Vite dev-server limitation; a production-
+// only Worker can be revisited once Vite 6+ ships native CJS Worker support.
+//
+// The main-thread approach is acceptable:
+//   • < 1 s for typical schemas (< 500 nodes)
+//   • 2–5 s for large schemas (500–1000 nodes) — loading spinner is shown
+//   • 15 s timeout with grid fallback for degenerate cases
 
-let _worker: Worker | null = null;
-let _workerFailed = false;
-let _nextId = 0;
-const _pending = new Map<number, { resolve: (g: ElkGraph & { children: ElkNode[] }) => void; reject: (e: Error) => void }>();
+const LAYOUT_TIMEOUT = 15_000; // 15 s max before falling back to grid
 
-function getWorker(): Worker | null {
-  if (_workerFailed || typeof Worker === 'undefined') return null;
-  if (_worker) return _worker;
-  try {
-    _worker = new Worker(new URL('../workers/elkWorker.ts', import.meta.url), { type: 'module' });
-    _worker.onmessage = (e: MessageEvent<{ id: number; result?: ElkGraph & { children: ElkNode[] }; error?: string }>) => {
-      const { id, result, error } = e.data;
-      const cb = _pending.get(id);
-      if (!cb) return;
-      _pending.delete(id);
-      if (error) cb.reject(new Error(error));
-      else       cb.resolve(result!);
-    };
-    _worker.onerror = () => {
-      // Worker crashed — reject all pending, fall back to bundled ELK
-      _workerFailed = true;
-      for (const cb of _pending.values()) cb.reject(new Error('[LOOM] ELK worker crashed'));
-      _pending.clear();
-      _worker = null;
-    };
-    return _worker;
-  } catch {
-    _workerFailed = true;
-    return null;
-  }
+/** Cancel pending layouts — no-op now but kept for API compat with useLoomLayout. */
+export function cancelPendingLayouts(): void {
+  // Reserved for future Worker re-enablement
 }
 
-function layoutWithWorker(graph: ElkGraph): Promise<ElkGraph & { children: ElkNode[] }> {
-  const worker = getWorker()!;
-  const id = _nextId++;
-  return new Promise((resolve, reject) => {
-    _pending.set(id, { resolve, reject });
-    worker.postMessage({ id, graph });
-  });
-}
-
-// Singleton bundled-ELK (main-thread fallback for Node / test / worker-unavailable)
+// Singleton bundled-ELK
 let _elkMain: ElkApi | null = null;
 
-async function layoutWithMain(graph: ElkGraph): Promise<ElkGraph & { children: ElkNode[] }> {
-  if (!_elkMain) {
-    const mod = await import('elkjs/lib/elk.bundled.js');
-    const ELK = (mod.default as unknown) as new () => ElkApi;
-    _elkMain = new ELK();
-  }
-  return _elkMain.layout(graph) as Promise<ElkGraph & { children: ElkNode[] }>;
+async function getElk(): Promise<ElkApi> {
+  if (_elkMain) return _elkMain;
+  const mod = await import('elkjs/lib/elk.bundled.js');
+  const ELK = (mod.default as unknown) as new () => ElkApi;
+  _elkMain = new ELK();
+  return _elkMain;
 }
 
 async function runElkLayout(graph: ElkGraph): Promise<(ElkGraph & { children: ElkNode[] }) | null> {
+  const t0 = performance.now();
   try {
-    const worker = getWorker();
-    return worker ? await layoutWithWorker(graph) : await layoutWithMain(graph);
+    const elk = await getElk();
+    const result = await Promise.race([
+      elk.layout(graph) as Promise<ElkGraph & { children: ElkNode[] }>,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`ELK layout timed out after ${LAYOUT_TIMEOUT / 1000}s`)), LAYOUT_TIMEOUT),
+      ),
+    ]);
+    const ms = (performance.now() - t0).toFixed(0);
+    console.info(`[LOOM] ELK layout (main-thread) — ${ms} ms  (${graph.children.length} nodes, ${graph.edges.length} edges)`);
+    return result;
   } catch (err) {
-    console.warn('[LOOM] ELK layout failed', err);
+    const ms = (performance.now() - t0).toFixed(0);
+    console.warn(`[LOOM] ELK layout failed after ${ms} ms, using grid fallback`, err);
     return null;
   }
 }
@@ -194,7 +187,7 @@ export async function applyELKLayout(
   if (childNodes.length === 0) {
     const graph: ElkGraph = {
       id: 'root',
-      layoutOptions: { ...LAYERED_OPTIONS },
+      layoutOptions: getLayeredOptions(nodes.length),
       children: nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: getNodeHeight(n) })),
       // Only data-flow edges — containment edges are filtered out so ELK receives
       // a clean DAG (or near-DAG) without CONTAINS_ROUTINE/CONTAINS_STMT chains.
@@ -232,7 +225,7 @@ export async function applyELKLayout(
 
   const graph: ElkGraph = {
     id: 'root',
-    layoutOptions: { ...LAYERED_OPTIONS },
+    layoutOptions: getLayeredOptions(topNodes.length),
     children: topNodes.map((n) => ({
       id:     n.id,
       // Use pre-computed style dimensions for compound (group) nodes

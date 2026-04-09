@@ -13,6 +13,8 @@ public record KnotAtom(
     String  atomContext,
     String  parentContext,
     Integer outputColumnSequence,
+    String  outputColName,
+    String  refSourceName,
     boolean isColumnReference,
     boolean isFunctionCall,
     boolean isConstant,

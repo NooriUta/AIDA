@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useReactFlow } from '@xyflow/react';
 
 import { useLoomStore }              from '../../stores/loomStore';
-import { applyELKLayout }            from '../../utils/layoutGraph';
+import { applyELKLayout, cancelPendingLayouts } from '../../utils/layoutGraph';
 import { applyL1Layout }             from '../../utils/layoutL1';
 import type { LoomNode, LoomEdge }   from '../../types/graph';
 import type { ColumnInfo }           from '../../types/domain';
@@ -11,6 +11,23 @@ import type { ColumnInfo }           from '../../types/domain';
 interface Graph {
   nodes: LoomNode[];
   edges: LoomEdge[];
+}
+
+// ── Module-level helpers (defined once, not recreated on every render) ─────────
+
+function stripNodeDim(n: LoomNode): LoomNode {
+  if (!n.style?.opacity && !n.style?.pointerEvents) return n;
+  const s = { ...n.style };
+  delete s.opacity;
+  delete s.pointerEvents;
+  return { ...n, style: s };
+}
+
+function stripEdgeDim(e: LoomEdge): LoomEdge {
+  if (!e.style?.opacity) return e;
+  const s = { ...e.style };
+  delete s.opacity;
+  return { ...e, style: s };
 }
 
 type SetNodes = Dispatch<SetStateAction<LoomNode[]>>;
@@ -34,6 +51,9 @@ export function useLoomLayout(
 
   const [layouting,   setLayouting]   = useState(false);
   const [layoutError, setLayoutError] = useState(false);
+
+  // Track whether post-layout dimming is active to skip no-op cleanup cycles
+  const isDimmedRef = useRef(false);
 
   const {
     viewLevel,
@@ -119,7 +139,7 @@ export function useLoomLayout(
         }
       });
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; cancelPendingLayouts(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayGraph, viewLevel, expandedDbs, l1Filter.depth, l1Filter.systemLevel, stmtColsReady]);
 
@@ -132,25 +152,15 @@ export function useLoomLayout(
     const DIM_TABLE = 0.18;
     const DIM_FIELD = 0.08;
 
-    const stripNodeDim = (n: LoomNode): LoomNode => {
-      if (!n.style?.opacity && !n.style?.pointerEvents) return n;
-      const s = { ...n.style };
-      delete s.opacity;
-      delete s.pointerEvents;
-      return { ...n, style: s };
-    };
-    const stripEdgeDim = (e: LoomEdge): LoomEdge => {
-      if (!e.style?.opacity) return e;
-      const s = { ...e.style };
-      delete s.opacity;
-      return { ...e, style: s };
-    };
-
     if (!activeId && !fieldFilter) {
+      // Skip cleanup if no dimming was previously applied (avoid no-op setNodes/setEdges)
+      if (!isDimmedRef.current) return;
+      isDimmedRef.current = false;
       setNodes((ns) => ns.map(stripNodeDim));
       setEdges((es) => es.map(stripEdgeDim));
       return;
     }
+    isDimmedRef.current = true;
 
     const currentEdges = getEdges();
 

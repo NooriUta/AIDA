@@ -1,48 +1,16 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Handle, Position, type NodeProps, type Node, useUpdateNodeInternals } from '@xyflow/react';
+import { memo, useRef, useState, useEffect } from 'react';
+import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { Table2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData, ColumnInfo } from '../../../types/domain';
 import { NodeExpandButtons } from './NodeExpandButtons';
+import { useZoomLevel, LOD_COMPACT_ZOOM } from '../ZoomLevelContext';
 
 export type TableNodeType = Node<DaliNodeData>;
 
-const MAX_PARTIAL_COLS = 7;
-
-// ── Window button styles ──────────────────────────────────────────────────────
-
-function WinBtn({
-  color,
-  title,
-  active,
-  onClick,
-}: {
-  color: string;
-  title: string;
-  active?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      title={title}
-      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
-      onDoubleClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-      style={{
-        width: '10px',
-        height: '10px',
-        borderRadius: '50%',
-        background: color,
-        border: 'none',
-        cursor: 'pointer',
-        padding: 0,
-        opacity: active === undefined ? 1 : active ? 1 : 0.3,
-        transition: 'opacity 0.12s',
-        flexShrink: 0,
-      }}
-    />
-  );
-}
+const MAX_PARTIAL_COLS = 20;
+const COL_ROW_HEIGHT = 22; // must match layoutGraph.ts COLUMN_ROW_HEIGHT
 
 // ── Column row ────────────────────────────────────────────────────────────────
 
@@ -109,20 +77,19 @@ function ColumnRow({
 // ── TableNode ─────────────────────────────────────────────────────────────────
 
 export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>) => {
-  const { drillDown, selectNode, nodeExpansionState, setNodeExpansion, hideNode } = useLoomStore();
+  const { drillDown, selectNode, nodeExpansionState, setNodeExpansion } = useLoomStore();
   const { t } = useTranslation();
   const [colFilter, setColFilter] = useState('');
-  const updateNodeInternals = useUpdateNodeInternals();
   const headerRef = useRef<HTMLDivElement>(null);
-  const [handleTop, setHandleTop] = useState('22px');
-  useLayoutEffect(() => {
-    const h = headerRef.current?.offsetHeight;
-    if (h && h > 0) setHandleTop(`${Math.round(h / 2)}px`);
-  }, [data.schema, data.columns?.length]);
-  useEffect(() => { updateNodeInternals(id); }, [id, handleTop, updateNodeInternals]);
+  const zoomLevel = useZoomLevel();
+  const isLodCompact = zoomLevel < LOD_COMPACT_ZOOM;
 
-  // Current expansion state — default is 'partial'
-  const expState = nodeExpansionState[id] ?? 'partial';
+  // handleTop must NOT depend on isLodCompact — changing it at LOD boundary shifts edges.
+  // Use stable values based only on static data props.
+  const handleTop = data.schema ? '30px' : '22px';
+
+  // Current expansion state — default is 'partial'. LOD forces collapsed at low zoom.
+  const expState = isLodCompact ? 'collapsed' : (nodeExpansionState[id] ?? 'partial');
   const columns  = data.columns ?? [];
 
   // Client-side column filter (expanded state only)
@@ -137,6 +104,30 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
     filteredCols;
 
   const overflow = expState === 'partial' ? Math.max(0, columns.length - MAX_PARTIAL_COLS) : 0;
+
+  // Columns are zoom-driven only (no hover): appear when zoomed in past LOD_COMPACT_ZOOM.
+  // This avoids blink (no rapid hover toggle) and edge shift (no handle mount/unmount
+  // caused by mouse movement — only zoom-triggered, which is deliberate and smooth).
+  const showColumns = !isLodCompact;
+
+  // Spacer height: reserves space matching ELK layout when columns are not in DOM.
+  // Only needed when collapsed by LOD (isLodCompact) but the node has columns.
+  const spacerHeight = !showColumns && visibleCols.length === 0 && columns.length > 0
+    ? Math.min(columns.length, MAX_PARTIAL_COLS) * COL_ROW_HEIGHT
+    : 0;
+
+  // Delayed visibility for column area: mount immediately but fade in to avoid
+  // the flash of "all columns appear at once" when crossing the LOD threshold.
+  const [colsVisible, setColsVisible] = useState(!isLodCompact);
+  useEffect(() => {
+    if (!isLodCompact) {
+      // Small delay so the mount happens first, then CSS transition kicks in
+      const t = setTimeout(() => setColsVisible(true), 16);
+      return () => clearTimeout(t);
+    } else {
+      setColsVisible(false);
+    }
+  }, [isLodCompact]);
 
   // Double-click on header: toggle collapsed ↔ partial
   const handleHeaderDblClick = (e: React.MouseEvent) => {
@@ -158,13 +149,15 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         minWidth:        '220px',
         padding:         0,
         overflow:        'hidden',
-        // Collapsed: clamp to header height only
-        maxHeight:       expState === 'collapsed' ? headerRef.current?.offsetHeight ?? 44 : 'none',
       }}
       onClick={() => selectNode(id)}
     >
       <NodeExpandButtons nodeId={id} show={selected ?? false} />
-      <Handle type="target" position={Position.Left} style={{ background: 'var(--inf)', zIndex: 5, top: handleTop }} />
+      {/* Both default handles BEFORE column rows — React Flow picks the first handle of
+          each type when sourceHandle/targetHandle is unspecified on an edge. Column handles
+          (src-colId / tgt-colId) come AFTER so node-level WRITES_TO/READS_FROM route to header. */}
+      <Handle type="target" position={Position.Left}  style={{ background: 'var(--inf)', zIndex: 5, top: handleTop }} />
+      <Handle type="source" position={Position.Right} style={{ background: 'var(--acc)', zIndex: 5, top: handleTop }} />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div
@@ -175,7 +168,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
           alignItems:   'center',
           gap:          'var(--seer-space-2)',
           background:   'var(--bg3)',
-          borderBottom: expState !== 'collapsed' ? '1px solid var(--bd)' : 'none',
+          borderBottom: (visibleCols.length > 0 || spacerHeight > 0) ? '1px solid var(--bd)' : 'none',
           boxSizing:    'border-box',
         }}
         onDoubleClick={handleHeaderDblClick}
@@ -207,30 +200,10 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
           </div>
         </div>
 
-        {/* 🔴 hide · 🟡 partial · 🟢 expanded */}
-        <div style={{ display: 'flex', gap: '4px', flexShrink: 0, alignItems: 'center' }}>
-          <WinBtn
-            color="#C85848"
-            title={t('tableNode.hide')}
-            onClick={() => hideNode(id)}
-          />
-          <WinBtn
-            color="#D4922A"
-            title={t('tableNode.collapse') + ' / partial'}
-            active={expState === 'partial'}
-            onClick={() => setNodeExpansion(id, 'partial')}
-          />
-          <WinBtn
-            color="#7DBF78"
-            title={t('tableNode.expand')}
-            active={expState === 'expanded'}
-            onClick={() => setNodeExpansion(id, 'expanded')}
-          />
-        </div>
       </div>
 
       {/* ── Column filter input (expanded only) ────────────────────────────── */}
-      {expState === 'expanded' && (
+      {expState === 'expanded' && showColumns && colsVisible && (
         <div style={{
           padding:      '4px 10px',
           borderBottom: '1px solid var(--bd)',
@@ -258,26 +231,38 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         </div>
       )}
 
-      {/* ── Column rows ─────────────────────────────────────────────────────── */}
-      <div style={expState === 'expanded' ? { maxHeight: '320px', overflowY: 'auto' } : {}}>
-        {visibleCols.map((col) => (
-          <ColumnRow
-            key={col.id}
-            col={col}
-            onClick={data.childrenAvailable ? () => drillDown(col.id, col.name, 'DaliColumn') : undefined}
-          />
-        ))}
-      </div>
-
-      {/* ── "+N more" footer — click to expand ─────────────────────────────── */}
-      {overflow > 0 && (
+      {/* ── Column rows (zoom-driven) with CSS fade; spacer when LOD compact ── */}
+      {showColumns ? (
         <div
           style={{
-            padding:   '3px var(--seer-space-3)',
-            borderTop: '1px solid var(--bd)',
-            fontSize:  '11px',
-            color:     'var(--acc)',
-            cursor:    'pointer',
+            ...(expState === 'expanded' ? { maxHeight: '320px', overflowY: 'auto' } : {}),
+            opacity:    colsVisible ? 1 : 0,
+            transition: 'opacity 0.15s ease',
+          }}
+        >
+          {visibleCols.map((col) => (
+            <ColumnRow
+              key={col.id}
+              col={col}
+              onClick={data.childrenAvailable ? () => drillDown(col.id, col.name, 'DaliColumn') : undefined}
+            />
+          ))}
+        </div>
+      ) : spacerHeight > 0 ? (
+        <div style={{ height: spacerHeight }} />
+      ) : null}
+
+      {/* ── "+N more" footer — click to expand ─────────────────────────────── */}
+      {overflow > 0 && showColumns && (
+        <div
+          style={{
+            padding:    '3px var(--seer-space-3)',
+            borderTop:  '1px solid var(--bd)',
+            fontSize:   '11px',
+            color:      'var(--acc)',
+            cursor:     'pointer',
+            opacity:    colsVisible ? 1 : 0,
+            transition: 'opacity 0.15s ease',
           }}
           onClick={(e) => { e.stopPropagation(); setNodeExpansion(id, 'expanded'); }}
         >
@@ -285,7 +270,6 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} style={{ background: 'var(--acc)', zIndex: 5, top: handleTop }} />
     </div>
   );
 });

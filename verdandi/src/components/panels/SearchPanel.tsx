@@ -167,6 +167,7 @@ export const SearchPanel = memo(() => {
   const [query, setQuery]              = useState('');
   const [debouncedQuery, setDebounced] = useState('');
   const [typeFilters, setTypeFilters]  = useState<Set<string>>(new Set());
+  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabsRef   = useRef<HTMLDivElement>(null);
@@ -186,11 +187,14 @@ export const SearchPanel = memo(() => {
 
   const searchQ = useSearch(debouncedQuery.length >= 2 ? debouncedQuery : '');
 
-  // Track tab-bar overflow to show/hide ">>" scroll button
+  // Track tab-bar overflow to show/hide "<<" / ">>" scroll buttons
   useEffect(() => {
     const el = tabsRef.current;
     if (!el) return;
-    const check = () => setCanScrollRight(el.scrollWidth > el.clientWidth + 2);
+    const check = () => {
+      setCanScrollLeft(el.scrollLeft > 2);
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+    };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
@@ -290,9 +294,8 @@ export const SearchPanel = memo(() => {
 
   const isAllActive = typeFilters.size === 0;
 
-  const scrollTabsRight = () => {
-    tabsRef.current?.scrollBy({ left: 80, behavior: 'smooth' });
-  };
+  const scrollTabsLeft  = () => tabsRef.current?.scrollBy({ left: -80, behavior: 'smooth' });
+  const scrollTabsRight = () => tabsRef.current?.scrollBy({ left:  80, behavior: 'smooth' });
 
   const hiddenIds = [...hiddenNodeIds];
   const showHiddenSection = hiddenIds.length > 0 && debouncedQuery.length < 2;
@@ -340,6 +343,33 @@ export const SearchPanel = memo(() => {
 
       {/* ── Type filter tabs ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, position: 'relative' }}>
+
+        {/* "«" scroll arrow — appears when tabs are scrolled right */}
+        {canScrollLeft && (
+          <button
+            onClick={scrollTabsLeft}
+            title="Назад"
+            style={{
+              flexShrink:   0,
+              padding:      '2px 5px',
+              background:   'linear-gradient(to left, transparent, var(--bg2) 40%)',
+              border:       'none',
+              cursor:       'pointer',
+              fontSize:     '10px',
+              color:        'var(--t3)',
+              position:     'absolute',
+              left:         0,
+              top:          0,
+              bottom:       0,
+              zIndex:       1,
+              display:      'flex',
+              alignItems:   'center',
+            }}
+          >
+            «
+          </button>
+        )}
+
         <div
           ref={tabsRef}
           style={{
@@ -377,7 +407,7 @@ export const SearchPanel = memo(() => {
           })}
         </div>
 
-        {/* ">>" scroll arrow — appears when tabs overflow */}
+        {/* "»" scroll arrow — appears when tabs overflow right */}
         {canScrollRight && (
           <button
             onClick={scrollTabsRight}
