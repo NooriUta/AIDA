@@ -1,9 +1,8 @@
-import type { ExpansionGqlEdge, ExpansionGqlNode } from '../loomStore';
+import type { ExpansionGqlEdge, ExpansionGqlNode, LoomStore } from '../loomStore';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type S = (p: any) => void;
+type Set = (partial: Partial<LoomStore> | ((s: LoomStore) => Partial<LoomStore>)) => void;
 
-export function expansionActions(set: S) {
+export function expansionActions(set: Set) {
   return {
     requestExpand: (nodeId: string, direction: 'upstream' | 'downstream') =>
       set({ expandRequest: { nodeId, direction } }),
@@ -14,14 +13,14 @@ export function expansionActions(set: S) {
       nodes: ExpansionGqlNode[],
       edges: ExpansionGqlEdge[],
     ) =>
-      set((s: any) => {
+      set((s) => {
         const nextUpIds   = new Set(s.expandedUpstreamIds);
         const nextDownIds = new Set(s.expandedDownstreamIds);
         if (direction === 'upstream') nextUpIds.add(nodeId);
         else nextDownIds.add(nodeId);
 
-        const existingNodeIds = new Set(s.expansionGqlNodes.map((n: any) => n.id));
-        const existingEdgeIds = new Set(s.expansionGqlEdges.map((e: any) => e.id));
+        const existingNodeIds = new Set(s.expansionGqlNodes.map((n) => n.id));
+        const existingEdgeIds = new Set(s.expansionGqlEdges.map((e) => e.id));
         return {
           expandedUpstreamIds:   nextUpIds,
           expandedDownstreamIds: nextDownIds,

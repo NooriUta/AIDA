@@ -1,9 +1,8 @@
 import type { DaliNodeType, ViewLevel } from '../../types/domain';
+import type { LoomStore } from '../loomStore';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type S = (p: any) => void;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type G = () => any;
+type Set = (partial: Partial<LoomStore> | ((s: LoomStore) => Partial<LoomStore>)) => void;
+type Get = () => LoomStore;
 
 /** FILTER_DEFAULTS inline copy — avoids circular import with loomStore.ts */
 const FILTER_DEFAULTS = {
@@ -24,11 +23,11 @@ const EMPTY_EXPAND = {
   expandRequest: null,
   expandedUpstreamIds: new Set<string>(),
   expandedDownstreamIds: new Set<string>(),
-  expansionGqlNodes: [],
-  expansionGqlEdges: [],
+  expansionGqlNodes: [] as LoomStore['expansionGqlNodes'],
+  expansionGqlEdges: [] as LoomStore['expansionGqlEdges'],
 };
 
-export function navigationActions(set: S, get: G) {
+export function navigationActions(set: Set, get: Get) {
   return {
     drillDown: (nodeId: string, label: string, nodeType?: DaliNodeType) => {
       const { viewLevel, currentScope, currentScopeLabel, navigationStack } = get();

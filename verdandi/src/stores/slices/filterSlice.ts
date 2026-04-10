@@ -1,7 +1,7 @@
 import type { DaliNodeType } from '../../types/domain';
+import type { LoomStore } from '../loomStore';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type S = (p: any) => void;
+type Set = (partial: Partial<LoomStore> | ((s: LoomStore) => Partial<LoomStore>)) => void;
 
 const FILTER_DEFAULTS = {
   startObjectId:    null,
@@ -17,10 +17,10 @@ const FILTER_DEFAULTS = {
   showCfEdges:      true,
 };
 
-export function filterActions(set: S) {
+export function filterActions(set: Set) {
   return {
     setStartObject: (nodeId: string, nodeType: DaliNodeType, label: string) =>
-      set((s: any) => ({
+      set((s) => ({
         filter: {
           ...s.filter,
           startObjectId:    nodeId,
@@ -32,30 +32,30 @@ export function filterActions(set: S) {
       })),
 
     setTableFilter: (tableId: string | null) =>
-      set((s: any) => ({
+      set((s) => ({
         filter: { ...s.filter, tableFilter: tableId, stmtFilter: null, fieldFilter: null },
         availableColumns: [],
       })),
 
     setStmtFilter: (stmtId: string | null) =>
-      set((s: any) => ({
+      set((s) => ({
         filter: { ...s.filter, stmtFilter: stmtId, fieldFilter: null },
         availableColumns: [],
       })),
 
     setFieldFilter:         (columnName: string | null) =>
-      set((s: any) => ({ filter: { ...s.filter, fieldFilter: columnName } })),
+      set((s) => ({ filter: { ...s.filter, fieldFilter: columnName } })),
     setDepth:               (depth: number) =>
-      set((s: any) => ({ filter: { ...s.filter, depth } })),
+      set((s) => ({ filter: { ...s.filter, depth } })),
     setDirection:           (upstream: boolean, downstream: boolean) =>
-      set((s: any) => ({ filter: { ...s.filter, upstream, downstream } })),
+      set((s) => ({ filter: { ...s.filter, upstream, downstream } })),
     toggleTableLevelView:   () =>
-      set((s: any) => ({ filter: { ...s.filter, tableLevelView: !s.filter.tableLevelView } })),
+      set((s) => ({ filter: { ...s.filter, tableLevelView: !s.filter.tableLevelView } })),
     toggleCfEdges:          () =>
-      set((s: any) => ({ filter: { ...s.filter, showCfEdges: !s.filter.showCfEdges } })),
+      set((s) => ({ filter: { ...s.filter, showCfEdges: !s.filter.showCfEdges } })),
 
     clearFilter: () =>
-      set((s: any) => ({
+      set((s) => ({
         filter: {
           ...FILTER_DEFAULTS,
           startObjectId:    s.filter.startObjectId,
@@ -64,9 +64,9 @@ export function filterActions(set: S) {
         },
       })),
 
-    setAvailableFields:  (fields: string[])  => set({ availableFields: fields }),
-    setAvailableTables:  (tables: any[])     => set({ availableTables: tables }),
-    setAvailableStmts:   (stmts: any[])      => set({ availableStmts: stmts }),
-    setAvailableColumns: (cols: any[])       => set({ availableColumns: cols }),
+    setAvailableFields:  (fields: string[])                                              => set({ availableFields: fields }),
+    setAvailableTables:  (tables: { id: string; label: string }[])                       => set({ availableTables: tables }),
+    setAvailableStmts:   (stmts:  { id: string; label: string; connectedTableIds: string[] }[]) => set({ availableStmts: stmts }),
+    setAvailableColumns: (cols:   { id: string; name: string }[])                        => set({ availableColumns: cols }),
   };
 }

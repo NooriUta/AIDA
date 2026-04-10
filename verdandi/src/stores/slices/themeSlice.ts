@@ -1,9 +1,9 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type S = (p: any) => void;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type G = () => any;
+import type { LoomStore } from '../loomStore';
 
-export function themeActions(set: S, get: G) {
+type Set = (partial: Partial<LoomStore> | ((s: LoomStore) => Partial<LoomStore>)) => void;
+type Get = () => LoomStore;
+
+export function themeActions(set: Set, get: Get) {
   return {
     toggleTheme: () => {
       const next = get().theme === 'dark' ? 'light' : 'dark';

@@ -37,6 +37,7 @@ import { useLoomStore }            from '../../stores/loomStore';
 import { clearLayoutCache }        from '../../utils/layoutGraph';
 import { isUnauthorized }          from '../../services/lineage';
 import { SCOPE_FILTER_TYPES }      from '../../utils/transformGraph';
+import { CANVAS }                  from '../../utils/constants';
 import type { LoomNode }           from '../../types/graph';
 
 import { useGraphData }    from '../../hooks/canvas/useGraphData';
@@ -280,7 +281,7 @@ const LoomCanvasInner = memo(() => {
         }}
         colorMode={rfTheme}
         fitView
-        fitViewOptions={{ padding: 0.15 }}
+        fitViewOptions={{ padding: CANVAS.FIT_VIEW_PADDING }}
         minZoom={0.1}
         maxZoom={3}
         proOptions={{ hideAttribution: true }}

@@ -6,11 +6,12 @@ import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData, ColumnInfo } from '../../../types/domain';
 import { NodeExpandButtons } from './NodeExpandButtons';
 import { useZoomLevel, LOD_COMPACT_ZOOM } from '../ZoomLevelContext';
+import { LAYOUT, TRANSFORM, CANVAS } from '../../../utils/constants';
 
 export type TableNodeType = Node<DaliNodeData>;
 
-const MAX_PARTIAL_COLS = 20;
-const COL_ROW_HEIGHT = 22; // must match layoutGraph.ts COLUMN_ROW_HEIGHT
+const { MAX_PARTIAL_COLS } = TRANSFORM;
+const { COL_ROW_HEIGHT } = LAYOUT;
 
 // ── Column row ────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
   useEffect(() => {
     if (!isLodCompact) {
       // Small delay so the mount happens first, then CSS transition kicks in
-      const t = setTimeout(() => setColsVisible(true), 16);
+      const t = setTimeout(() => setColsVisible(true), CANVAS.LOD_TIMEOUT);
       return () => clearTimeout(t);
     } else {
       setColsVisible(false);

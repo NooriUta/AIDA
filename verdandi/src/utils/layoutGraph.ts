@@ -1,18 +1,17 @@
 import type { LoomNode, LoomEdge } from '../types/graph';
+import { LAYOUT } from './constants';
 
-// ─── Node dimension hints for ELK ────────────────────────────────────────────
-const NODE_WIDTH  = 400;
-const NODE_HEIGHT_BASE = 80;
-const COLUMN_ROW_HEIGHT = 22;
+// ─── Node dimension hints for ELK (sourced from constants.ts) ────────────────
+const { NODE_WIDTH, NODE_HEIGHT_BASE, COL_ROW_HEIGHT, GRID_SPACING } = LAYOUT;
 
 function getNodeHeight(node: LoomNode): number {
   if (node.type === 'tableNode') {
     const cols = node.data.columns?.length ?? 0;
-    return NODE_HEIGHT_BASE + cols * COLUMN_ROW_HEIGHT + 24;
+    return NODE_HEIGHT_BASE + cols * COL_ROW_HEIGHT + 24;
   }
   if (node.type === 'statementNode') {
     const cols = node.data.columns?.length ?? 0;
-    return NODE_HEIGHT_BASE + cols * COLUMN_ROW_HEIGHT + (cols > 0 ? 24 : 0);
+    return NODE_HEIGHT_BASE + cols * COL_ROW_HEIGHT + (cols > 0 ? 24 : 0);
   }
   // Routine group: height is pre-computed and stored in style
   if (node.type === 'routineGroupNode') {
@@ -29,8 +28,8 @@ function applyGridLayout(nodes: LoomNode[]): LoomNode[] {
   return nodes.map((node, i) => {
     const col = i % colCount;
     const y = colY[col];
-    colY[col] += getNodeHeight(node) + 60;
-    return { ...node, position: { x: col * (NODE_WIDTH + 60), y } };
+    colY[col] += getNodeHeight(node) + GRID_SPACING;
+    return { ...node, position: { x: col * (NODE_WIDTH + GRID_SPACING), y } };
   });
 }
 
@@ -70,19 +69,17 @@ interface ElkApi {
 // ─── Shared layout options (flat layered, LEFT → RIGHT) ──────────────────────
 // Adaptive: BRANDES_KOEPF is compact but crashes the Worker on 800+ nodes;
 // LINEAR_SEGMENTS is safer for large graphs.
-const LARGE_GRAPH_THRESHOLD = 500;
-
 function getLayeredOptions(nodeCount: number): Record<string, string> {
   return {
     'elk.algorithm':                             'layered',
     'elk.direction':                             'RIGHT',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '140',
-    'elk.spacing.nodeNode':                      '60',
+    'elk.layered.spacing.nodeNodeBetweenLayers': String(LAYOUT.ELK_BETWEEN_LAYERS),
+    'elk.spacing.nodeNode':                      String(LAYOUT.ELK_NODE_SPACING),
     'elk.separateConnectedComponents':           'true',
-    'elk.spacing.componentComponent':            '80',
+    'elk.spacing.componentComponent':            String(LAYOUT.ELK_COMPONENT_SPACING),
     'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
     'elk.layered.nodePlacement.strategy':
-      nodeCount > LARGE_GRAPH_THRESHOLD ? 'LINEAR_SEGMENTS' : 'BRANDES_KOEPF',
+      nodeCount > LAYOUT.LARGE_GRAPH_THRESHOLD ? 'LINEAR_SEGMENTS' : 'BRANDES_KOEPF',
     // Do NOT add unnecessary bendpoints — they create Z-shaped edge routes.
     'elk.layered.unnecessaryBendpoints':         'false',
   };
@@ -124,7 +121,7 @@ export function clearLayoutCache(): void {
 //   • 2–5 s for large schemas (500–1000 nodes) — loading spinner is shown
 //   • 15 s timeout with grid fallback for degenerate cases
 
-const LAYOUT_TIMEOUT = 15_000; // 15 s max before falling back to grid
+const LAYOUT_TIMEOUT = LAYOUT.TIMEOUT_MS;
 
 /** Cancel pending layouts — no-op now but kept for API compat with useLoomLayout. */
 export function cancelPendingLayouts(): void {
