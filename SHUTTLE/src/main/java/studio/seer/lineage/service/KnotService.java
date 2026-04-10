@@ -852,7 +852,7 @@ public class KnotService {
         // Extract filename from Windows or Unix path
         int slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
         String filename = slash >= 0 ? filePath.substring(slash + 1) : filePath;
-        int dot = filename.lastIndexOf('.');
+        int dot = filename.indexOf('.');
         return dot > 0 ? filename.substring(0, dot) : filename;
     }
 
