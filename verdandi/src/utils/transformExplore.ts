@@ -10,13 +10,9 @@ import {
   extractRoutineKind,
   parseStmtLabel,
 } from './transformHelpers';
+import { TRANSFORM } from './constants';
 
-// Max inline columns shown per table / statement at L2
-const L2_MAX_COLS = 5;
-
-// Bezier curvature for data-flow edges (React Flow default = 0.25).
-// Lower values → straighter lines → fewer S/Z bends on dense graphs.
-const EDGE_CURVATURE = 0.15;
+const { L2_MAX_COLS, EDGE_CURVATURE } = TRANSFORM;
 
 // ─── Nesting edges: build visual hierarchy (Schema → Routine → Stmt) ─────────
 // CONTAINS_ROUTINE is dual-purpose: Schema→Routine AND Routine→Routine.

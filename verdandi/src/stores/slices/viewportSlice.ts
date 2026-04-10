@@ -1,7 +1,8 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type S = (p: any) => void;
+import type { LoomStore } from '../loomStore';
 
-export function viewportActions(set: S) {
+type Set = (partial: Partial<LoomStore> | ((s: LoomStore) => Partial<LoomStore>)) => void;
+
+export function viewportActions(set: Set) {
   return {
     requestFitView:    ()         => set({ fitViewRequest: { type: 'full' } }),
     requestFocusNode:  (nodeId: string) => set({ fitViewRequest: { type: 'node', nodeId } }),
@@ -9,7 +10,7 @@ export function viewportActions(set: S) {
     clearPendingFocus:         () => set({ pendingFocusNodeId: null }),
     clearPendingDeepExpand:    () => set({ pendingDeepExpand: null }),
     activatePendingDeepExpand: () =>
-      set((s: any) => ({ deepExpandRequest: s.pendingDeepExpand, pendingDeepExpand: null })),
+      set((s) => ({ deepExpandRequest: s.pendingDeepExpand, pendingDeepExpand: null })),
     clearDeepExpandRequest:    () => set({ deepExpandRequest: null }),
   };
 }

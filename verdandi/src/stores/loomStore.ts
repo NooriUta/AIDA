@@ -53,7 +53,7 @@ export interface L1HierarchyFilter {
 
 // ─── Store interface ──────────────────────────────────────────────────────────
 
-interface LoomStore {
+export interface LoomStore {
   // View
   viewLevel:         ViewLevel;
   currentScope:      string | null;

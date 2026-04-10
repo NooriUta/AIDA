@@ -1,9 +1,9 @@
 import type { DaliNodeData } from '../../types/domain';
+import type { LoomStore } from '../loomStore';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type S = (p: any) => void;
+type Set = (partial: Partial<LoomStore> | ((s: LoomStore) => Partial<LoomStore>)) => void;
 
-export function selectionActions(set: S) {
+export function selectionActions(set: Set) {
   return {
     selectNode: (nodeId: string | null, data?: DaliNodeData) =>
       set({ selectedNodeId: nodeId, selectedNodeData: data ?? null }),

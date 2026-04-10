@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useReactFlow } from '@xyflow/react';
 import { useLoomStore } from '../../stores/loomStore';
 import type { DaliNodeData } from '../../types/domain';
+import { CANVAS } from '../../utils/constants';
 
 /** Extract package name from a DaliStatement fullLabel.
  *  "DWH.PKG_ETL_CRM_STAGING:PROCEDURE:COMPUTE_CUSTOMER_RFM:INSERT:4343"
@@ -259,7 +260,7 @@ export const NodeContextMenu = memo(({ menu, onClose }: Props) => {
         icon="⊡"
         label={t('actions.fitView')}
         onClick={run(() =>
-          fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.15, maxZoom: 2 })
+          fitView({ nodes: [{ id: nodeId }], duration: CANVAS.FIT_VIEW_DURATION, padding: CANVAS.FIT_VIEW_PADDING, maxZoom: CANVAS.FIT_VIEW_MAX_ZOOM })
         )}
       />
       <Item

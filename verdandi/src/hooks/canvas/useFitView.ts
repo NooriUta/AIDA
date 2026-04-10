@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useReactFlow, type OnMoveEnd } from '@xyflow/react';
 
 import { useLoomStore } from '../../stores/loomStore';
+import { CANVAS } from '../../utils/constants';
 
 /**
  * Handles programmatic fitView requests (search focus, L1 return)
@@ -20,7 +21,7 @@ export function useFitView(layouting: boolean) {
     // Small delay: let React Flow finish painting the new nodes before fitting
     const timer = setTimeout(() => {
       if (req.type === 'full') {
-        fitView({ duration: 500, padding: 0.15 });
+        fitView({ duration: CANVAS.FIT_VIEW_DURATION, padding: CANVAS.FIT_VIEW_PADDING });
       } else {
         fitView({
           nodes:   [{ id: req.nodeId }],

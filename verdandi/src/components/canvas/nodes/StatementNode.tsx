@@ -6,12 +6,11 @@ import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData, ColumnInfo } from '../../../types/domain';
 import { NodeExpandButtons } from './NodeExpandButtons';
 import { useZoomLevel, LOD_COMPACT_ZOOM } from '../ZoomLevelContext';
-
-const WRITE_OPS = new Set(['INSERT', 'UPDATE', 'MERGE']);
+import { LAYOUT, CANVAS, WRITE_OPS } from '../../../utils/constants';
 
 export type StatementNodeType = Node<DaliNodeData>;
 
-const COL_ROW_HEIGHT = 22; // must match layoutGraph.ts COLUMN_ROW_HEIGHT
+const { COL_ROW_HEIGHT } = LAYOUT;
 
 // ─── Statement type → badge colour ──────────────────────────────────────────
 const STMT_TYPE_COLORS: Record<string, string> = {
@@ -102,7 +101,7 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
   const [colsVisible, setColsVisible] = useState(!isLodCompact);
   useEffect(() => {
     if (!isLodCompact) {
-      const timer = setTimeout(() => setColsVisible(true), 16);
+      const timer = setTimeout(() => setColsVisible(true), CANVAS.LOD_TIMEOUT);
       return () => clearTimeout(timer);
     } else {
       setColsVisible(false);
