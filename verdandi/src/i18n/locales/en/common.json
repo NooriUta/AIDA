@@ -2,9 +2,14 @@
   "app": { "title": "SEER Studio", "tagline": "Data Lineage Explorer" },
   "nav": {
     "loom": "LOOM",
+    "knot": "KNOT",
     "anvil": "ANVIL",
-    "shuttle": "SHUTTLE",
-    "knot": "KNOT"
+    "urd": "URD",
+    "skuld": "SKULD",
+    "comingSoon": "Coming in {{horizon}}",
+    "verdandiDesc": "Present — lineage analysis",
+    "urdDesc": "Past — change history",
+    "skuldDesc": "Future — impact prediction"
   },
   "auth": {
     "login": "Sign In",
@@ -27,7 +32,7 @@
     "zoom": "Zoom",
     "computingLayout": "computing layout…",
     "nodeCount": "{{count}} nodes",
-    "hasMore": "Graph truncated — showing first 500 nodes. Narrow your filter."
+    "hasMore": "Showing {{count}} nodes — graph truncated. Narrow your filter."
   },
   "breadcrumb": { "overview": "Overview" },
   "theme": { "dark": "Dark", "light": "Light" },
@@ -99,7 +104,11 @@
     },
     "openLevel": "Open on {{level}}",
     "notOnCanvas": "Located on {{level}} · {{scope}}",
-    "goToLevel": "Go there →"
+    "goToLevel": "Go there →",
+    "recent": "Recent",
+    "recentSearches": "Recent searches",
+    "recentNodes": "Recently viewed",
+    "clearHistory": "Clear"
   },
 
   "nodes": {
@@ -485,7 +494,199 @@
     "routines":      "Routines",
     "noColumns":     "No columns",
     "schemas":       "Schemas",
-    "drillDown":     "Drill-down →"
+    "drillDown":     "Drill-down →",
+    "parameters":    "Parameters",
+    "noParameters":  "No parameters",
+    "openInKnot":    "Open in KNOT",
+    "dataType":      "Data type",
+    "operation":     "Operation",
+    "table":         "Table",
+    "sql":           "SQL",
+    "copySql":       "Copy SQL",
+    "copied":        "Copied!",
+    "joinType":      "Join type",
+    "joinLeft":      "Left table",
+    "joinRight":     "Right table",
+    "joinOn":        "Condition",
+    "direction":     "Direction",
+    "routine":       "Routine",
+    "default":       "Default"
+  },
+
+  "stub": {
+    "underConstruction": "Under Construction",
+    "urdDescription": "URD is the Norn of the past. This module will provide historical lineage analysis, change tracking and time-travel queries across data pipelines.",
+    "skuldDescription": "SKULD is the Norn of the future. This module will offer predictive impact analysis, what-if scenarios and proactive lineage recommendations."
+  },
+
+  "panel": {
+    "explorer":  "Explorer",
+    "inspector": "KNOT Inspector",
+    "expand":    "Expand panel",
+    "collapse":  "Collapse panel"
+  },
+
+  "profile": {
+    "title": "Profile settings",
+    "close": "Close",
+    "account": "Account",
+    "interface": "Interface",
+    "system": "System",
+    "save": "Save changes",
+    "saved": "Saved",
+    "tabs": {
+      "profile":       "Profile",
+      "security":      "Security",
+      "access":        "Access & Role",
+      "appearance":    "Appearance",
+      "graph":         "Graph settings",
+      "activity":      "Activity",
+      "notifications": "Notifications",
+      "favorites":     "Favorites",
+      "shortcuts":     "Shortcuts",
+      "tokens":        "API & Export"
+    },
+    "firstName":            "First name",
+    "firstNamePlaceholder": "Enter first name",
+    "lastName":             "Last name",
+    "lastNamePlaceholder":  "Enter last name",
+    "email":                "Email",
+    "emailHint":            "Contact your admin to change the email address.",
+    "displayName":          "Display name",
+    "displayNameHint":      "Shown in the app header and activity log.",
+    "cancel":               "Cancel",
+    "role":                 "Role",
+    "timezone":             "Timezone",
+    "locale":               "Language",
+    "bio":                  "Bio",
+    "security": {
+      "changePassword":    "Change password",
+      "currentPassword":   "Current password",
+      "newPassword":       "New password",
+      "confirmPassword":   "Confirm new password",
+      "updatePassword":    "Update password",
+      "twoFactor":         "Two-factor authentication",
+      "twoFactorDesc":     "Add an extra layer of security to your account.",
+      "twoFactorDisabled": "2FA is not enabled",
+      "setupTwoFactor":    "Set up 2FA",
+      "dangerZone":        "Danger zone",
+      "terminateAll":      "Terminate all other sessions",
+      "deleteAccount":     "Delete account",
+      "deleteAccountDesc": "Permanently delete your account and all data. This action cannot be undone.",
+      "mismatch":          "Passwords do not match"
+    },
+    "access": {
+      "yourRole":      "Your role",
+      "permissions":   "Permissions",
+      "module":        "Module",
+      "view":          "View",
+      "export":        "Export",
+      "edit":          "Edit",
+      "admin":         "Admin",
+      "granted":       "✓",
+      "denied":        "—"
+    },
+    "appearance": {
+      "theme":     "Theme",
+      "dark":      "Dark",
+      "light":     "Light",
+      "palette":   "Palette",
+      "uiFont":    "UI Font",
+      "monoFont":  "Monospace font",
+      "fontSize":  "Font size",
+      "density":   "Density",
+      "compact":   "Compact",
+      "normal":    "Normal",
+      "apply":     "Apply",
+      "reset":     "Reset to defaults",
+      "preview":   "Preview text"
+    },
+    "graph": {
+      "title":          "Graph settings",
+      "autoLayout":     "Auto layout on load",
+      "drillAnimation": "Drill-down animation",
+      "hoverHighlight": "Highlight on hover",
+      "showEdgeLabels": "Show edge labels",
+      "colLevelDefault":"Columns visible by default",
+      "startLevel":     "Default start level",
+      "nodeLimit":      "Node limit",
+      "reset":          "Reset to defaults"
+    },
+    "activity": {
+      "sessions":   "Active sessions",
+      "recent":     "Recent activity",
+      "current":    "CURRENT",
+      "terminate":  "Terminate",
+      "noSessions": "No other active sessions"
+    },
+    "notif": {
+      "channels":          "Notification channels",
+      "loomEvents":        "LOOM events",
+      "inApp":             "In-app notifications",
+      "inAppDesc":         "Show badge and toast notifications inside the app.",
+      "emailDigest":       "Email digest",
+      "emailDigestDesc":   "Receive a daily summary of changes to your email.",
+      "lineageChange":     "Lineage changes",
+      "lineageChangeDesc": "Notify when lineage graph is updated.",
+      "brokenLineage":     "Broken lineage",
+      "brokenLineageDesc": "Alert when lineage chain has missing or broken links.",
+      "myTablesImpact":    "My tables impact",
+      "myTablesImpactDesc":"When tables you own are impacted by upstream changes.",
+      "shuttleSync":       "Shuttle sync",
+      "shuttleSyncDesc":   "Notify on source sync completion or failure.",
+      "anvilComments":     "ANVIL comments",
+      "anvilCommentsDesc": "Notify when someone comments on your annotations."
+    },
+    "favorites": {
+      "hint":     "Starred nodes from the graph appear here for quick access.",
+      "empty":    "No favorites yet. Star a node in the graph to add it here.",
+      "remove":   "Remove from favorites",
+      "syncHint": "Favorites are synced to your account and available across devices."
+    },
+    "shortcuts": {
+      "navigation": "Navigation",
+      "canvas":     "Canvas",
+      "panels":     "Panels",
+      "graph":      "Graph operations",
+      "export":     "Export"
+    },
+    "tokens": {
+      "apiToken":     "API Token",
+      "apiTokenDesc": "Use this token to authenticate requests to the SEER Studio API. Keep it secret.",
+      "show":         "Show",
+      "hide":         "Hide",
+      "copy":         "Copy",
+      "copied":       "Copied",
+      "reissue":      "Reissue token",
+      "revoke":       "Revoke",
+      "issued":       "Issued",
+      "lastUsed":     "Last used",
+      "exportGraph":  "Export graph",
+      "includeMeta":  "Include metadata",
+      "webhook":      "Webhook",
+      "webhookDesc":  "Send real-time events to your own service when lineage changes occur.",
+      "comingSoon":   "Coming soon"
+    }
+  },
+
+  "searchPalette": {
+    "title": "Search",
+    "minChars": "Type at least 2 characters…",
+    "hint": "Search tables, columns, routines, packages and more"
+  },
+
+  "commandPalette": {
+    "title": "Command Palette",
+    "placeholder": "Search nodes, commands, navigation…",
+    "noResults": "No results",
+    "results": "Search results",
+    "commands": "Commands",
+    "navigation": "Navigation",
+    "fitView": "Fit view to canvas",
+    "toggleTheme": "Toggle dark / light theme",
+    "deselectNode": "Deselect current node",
+    "goToL1": "Go to L1 Overview",
+    "goToKnot": "Go to KNOT"
   },
 
   "errorBoundary": {

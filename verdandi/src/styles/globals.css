@@ -142,6 +142,10 @@ html, body, #root {
 /* Edge paths */
 .react-flow__edge-path { stroke-linecap: round; stroke-linejoin: round; }
 
+/* Edge dimming (LOOM-031) — className-driven since RF v12 skips style-only re-renders */
+.react-flow__edge.loom-edge-dim-table { opacity: 0.18; transition: opacity 0.2s; }
+.react-flow__edge.loom-edge-dim-field { opacity: 0.08; transition: opacity 0.2s; }
+
 /* Selection box */
 .react-flow__selection { background: #A8B86015 !important; border: 1px solid var(--acc) !important; }
 

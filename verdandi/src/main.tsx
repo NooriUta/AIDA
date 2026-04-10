@@ -26,18 +26,6 @@ queryClient.getQueryCache().subscribe((event) => {
   }
 });
 
-// ── Suppress noisy React Flow edge-handle warnings (#008) ───────────────────
-// These fire for column-flow edges whose handles haven't mounted yet; harmless
-// but they flood the console (500+ per render) and drown out useful [LOOM] logs.
-{
-  const origWarn = console.warn;
-  console.warn = (...args: unknown[]) => {
-    const msg = args.map(String).join(' ');
-    if (msg.includes('[React Flow]')) return;
-    origWarn.apply(console, args);
-  };
-}
-
 // Apply saved theme + palette before first render to avoid flash
 const savedTheme = localStorage.getItem('seer-theme') ?? 'dark';
 document.documentElement.setAttribute('data-theme', savedTheme);

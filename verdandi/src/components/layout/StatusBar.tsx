@@ -4,7 +4,7 @@ import { useLoomStore } from '../../stores/loomStore';
 import { useAuthStore } from '../../stores/authStore';
 
 export const StatusBar = memo(() => {
-  const { viewLevel, nodeCount, edgeCount, zoom } = useLoomStore();
+  const { viewLevel, nodeCount, edgeCount, zoom, graphTruncated } = useLoomStore();
   const user = useAuthStore((s) => s.user);
   const { t } = useTranslation();
 
@@ -36,6 +36,25 @@ export const StatusBar = memo(() => {
       <span>{edgeCount} {t('canvas.edges')}</span>
       <Divider />
       <span>{t('canvas.zoom')}: {zoomPct}%</span>
+
+      {/* Truncation warning — inline in footer */}
+      {graphTruncated && (
+        <>
+          <Divider />
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            color: 'var(--wrn)',
+            fontSize: '10px', fontWeight: 500,
+            letterSpacing: '0.03em',
+          }}
+            title={t('canvas.hasMore', { count: nodeCount })}
+          >
+            <span style={{ fontSize: '11px', lineHeight: 1 }}>⚠</span>
+            {t('canvas.hasMore', { count: nodeCount })}
+          </span>
+        </>
+      )}
+
       <div style={{ flex: 1 }} />
       {user && <span>{user.role}</span>}
       <Divider />

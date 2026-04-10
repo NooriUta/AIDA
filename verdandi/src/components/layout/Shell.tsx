@@ -1,5 +1,6 @@
 import { memo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Header } from './Header';
 import { FilterToolbar } from './FilterToolbar';
 import { FilterToolbarL1 } from './FilterToolbarL1';
@@ -9,9 +10,11 @@ import { LoomCanvas } from '../canvas/LoomCanvas';
 import { SearchPanel } from '../panels/SearchPanel';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLoomStore } from '../../stores/loomStore';
+import { useHotkeys } from '../../hooks/useHotkeys';
 
 export const Shell = memo(() => {
-  const { viewLevel, jumpTo } = useLoomStore();
+  const { t } = useTranslation();
+  const { viewLevel, jumpTo, selectNode, requestFitView, undo, redo } = useLoomStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // KNOT → LOOM: auto-navigate to package when ?pkg= param is present
@@ -22,6 +25,14 @@ export const Shell = memo(() => {
     jumpTo('L2', `pkg-${pkg}`, pkg, 'DaliPackage');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Keyboard shortcuts (canvas-level) ────────────────────────────────────────
+  useHotkeys([
+    { key: 'Escape', action: () => selectNode(null), global: true },
+    { key: 'f',      action: () => requestFitView() },
+    { key: 'z',      ctrl: true,  action: () => undo() },
+    { key: 'z',      ctrl: true,  shift: true, action: () => redo() },
+  ]);
 
   return (
     <div style={{
@@ -38,7 +49,7 @@ export const Shell = memo(() => {
       <div style={{ display: 'flex', overflow: 'hidden', position: 'relative' }}>
 
         {/* Left panel — Search / Explorer */}
-        <ResizablePanel side="left" defaultWidth={240} minWidth={160} maxWidth={600} title="Explorer">
+        <ResizablePanel side="left" defaultWidth={240} minWidth={160} maxWidth={600} title={t('panel.explorer')}>
           <SearchPanel />
         </ResizablePanel>
 
@@ -51,7 +62,7 @@ export const Shell = memo(() => {
         </div>
 
         {/* Right panel — KNOT Inspector */}
-        <ResizablePanel side="right" defaultWidth={300} minWidth={200} maxWidth={480} title="KNOT Inspector">
+        <ResizablePanel side="right" defaultWidth={300} minWidth={200} maxWidth={480} title={t('panel.inspector')}>
           <InspectorPanel />
         </ResizablePanel>
 

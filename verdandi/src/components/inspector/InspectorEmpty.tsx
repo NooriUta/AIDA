@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 export const InspectorEmpty = memo(() => {
   const { t } = useTranslation();
   return (
-    <div style={{ padding: '12px 10px' }}>
+    <div role="status" style={{ padding: '12px 10px' }}>
       <p style={{ fontSize: '11px', color: 'var(--t3)', margin: 0 }}>
         {t('inspector.empty')}
       </p>

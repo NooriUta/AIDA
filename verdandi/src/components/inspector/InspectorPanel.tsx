@@ -6,6 +6,9 @@ import { InspectorTable }     from './InspectorTable';
 import { InspectorStatement } from './InspectorStatement';
 import { InspectorSchema }    from './InspectorSchema';
 import { InspectorRoutine }   from './InspectorRoutine';
+import { InspectorColumn }    from './InspectorColumn';
+import { InspectorJoin }      from './InspectorJoin';
+import { InspectorParameter } from './InspectorParameter';
 
 // ── Header ────────────────────────────────────────────────────────────────────
 function InspectorHeader({ label }: { label: string }) {
@@ -33,9 +36,16 @@ export const InspectorPanel = memo(() => {
 
   const nodeType = selectedNodeData.nodeType;
 
+  // Wrap content with ARIA complementary role
+  const wrapPanel = (content: React.ReactNode) => (
+    <div role="complementary" aria-label={t('panel.inspector')}>
+      {content}
+    </div>
+  );
+
   // DaliTable
   if (nodeType === 'DaliTable') {
-    return (
+    return wrapPanel(
       <>
         <InspectorHeader label={selectedNodeData.label} />
         <InspectorTable data={selectedNodeData} nodeId={selectedNodeId} />
@@ -45,7 +55,7 @@ export const InspectorPanel = memo(() => {
 
   // DaliStatement
   if (nodeType === 'DaliStatement') {
-    return (
+    return wrapPanel(
       <>
         <InspectorHeader label={selectedNodeData.label} />
         <InspectorStatement data={selectedNodeData} nodeId={selectedNodeId} />
@@ -60,7 +70,7 @@ export const InspectorPanel = memo(() => {
     nodeType === 'DaliApplication' ||
     nodeType === 'DaliService'
   ) {
-    return (
+    return wrapPanel(
       <>
         <InspectorHeader label={selectedNodeData.label} />
         <InspectorSchema data={selectedNodeData} nodeId={selectedNodeId} />
@@ -70,7 +80,7 @@ export const InspectorPanel = memo(() => {
 
   // DaliRoutine / DaliPackage
   if (nodeType === 'DaliRoutine' || nodeType === 'DaliPackage') {
-    return (
+    return wrapPanel(
       <>
         <InspectorHeader label={selectedNodeData.label} />
         <InspectorRoutine data={selectedNodeData} nodeId={selectedNodeId} />
@@ -78,8 +88,43 @@ export const InspectorPanel = memo(() => {
     );
   }
 
-  // Fallback for other types (DaliColumn, DaliAtom, etc.)
-  return (
+  // DaliColumn / DaliOutputColumn / DaliAtom / DaliAffectedColumn
+  if (
+    nodeType === 'DaliColumn'       ||
+    nodeType === 'DaliOutputColumn' ||
+    nodeType === 'DaliAtom'         ||
+    nodeType === 'DaliAffectedColumn'
+  ) {
+    return wrapPanel(
+      <>
+        <InspectorHeader label={selectedNodeData.label} />
+        <InspectorColumn data={selectedNodeData} nodeId={selectedNodeId} />
+      </>
+    );
+  }
+
+  // DaliParameter / DaliVariable
+  if (nodeType === 'DaliParameter' || nodeType === 'DaliVariable') {
+    return wrapPanel(
+      <>
+        <InspectorHeader label={selectedNodeData.label} />
+        <InspectorParameter data={selectedNodeData} nodeId={selectedNodeId} />
+      </>
+    );
+  }
+
+  // DaliJoin
+  if (nodeType === 'DaliJoin') {
+    return wrapPanel(
+      <>
+        <InspectorHeader label={selectedNodeData.label} />
+        <InspectorJoin data={selectedNodeData} nodeId={selectedNodeId} />
+      </>
+    );
+  }
+
+  // Fallback for unknown types
+  return wrapPanel(
     <>
       <InspectorHeader label={selectedNodeData.label} />
       <div style={{ padding: '8px 10px' }}>

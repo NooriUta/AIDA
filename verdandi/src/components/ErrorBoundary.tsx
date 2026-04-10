@@ -50,7 +50,7 @@ function ErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }
   const { t } = useTranslation();
 
   return (
-    <div style={{
+    <div role="alert" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', minHeight: 200,
       flexDirection: 'column', gap: 16, padding: 32,
@@ -70,7 +70,7 @@ function ErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }
 
       {import.meta.env.DEV && (
         <pre style={{
-          fontSize: 11, color: 'var(--t4, #666)', background: 'var(--bg1, #1a1a1a)',
+          fontSize: 11, color: 'var(--t3, #666)', background: 'var(--bg1, #1a1a1a)',
           padding: '8px 12px', borderRadius: 6, maxWidth: 500, overflow: 'auto',
           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
         }}>
