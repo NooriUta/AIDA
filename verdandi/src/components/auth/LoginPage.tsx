@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,6 +18,12 @@ export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore();
+
+  // Pick a random slogan once per session
+  const [slogan] = useState(() => {
+    const list = t('app.slogans', { returnObjects: true }) as string[];
+    return Array.isArray(list) ? list[Math.floor(Math.random() * list.length)] : t('app.tagline');
+  });
 
   const {
     register,
@@ -65,20 +71,20 @@ export function LoginPage() {
             </span>
           </div>
 
-          {/* Wordmark: • SEER Studio */}
+          {/* Wordmark: • Seiðr Studio */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--acc)', flexShrink: 0, alignSelf: 'center' }} />
             <span className="seer-logo-text" style={{ fontSize: '26px', color: 'var(--t1)' }}>
-              SEER
+              Seiðr
             </span>
             <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--t2)', letterSpacing: '0.06em' }}>
               Studio
             </span>
           </div>
 
-          {/* Tagline */}
-          <div style={{ fontSize: '11px', color: 'var(--t3)', letterSpacing: '0.04em' }}>
-            {t('app.tagline')}
+          {/* Random slogan from library */}
+          <div style={{ fontSize: '11px', color: 'var(--t3)', letterSpacing: '0.04em', textAlign: 'center', maxWidth: '280px' }}>
+            {slogan}
           </div>
 
           {/* Three Norns — mono */}

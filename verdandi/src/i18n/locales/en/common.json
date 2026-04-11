@@ -1,5 +1,16 @@
 {
-  "app": { "title": "SEER Studio", "tagline": "Make invisible data dependencies visible." },
+  "app": {
+    "title": "Seiðr Studio",
+    "tagline": "Make invisible data dependencies visible.",
+    "slogans": [
+      "Make invisible data dependencies visible.",
+      "Trace every thread of your data lineage.",
+      "Column-level clarity. Pipeline-wide insight.",
+      "See what moves your data.",
+      "Every transformation. Every dependency. Visible.",
+      "Know your data. Know its past."
+    ]
+  },
   "nav": {
     "loom": "LOOM",
     "knot": "KNOT",
@@ -652,7 +663,7 @@
     },
     "tokens": {
       "apiToken":     "API Token",
-      "apiTokenDesc": "Use this token to authenticate requests to the SEER Studio API. Keep it secret.",
+      "apiTokenDesc": "Use this token to authenticate requests to the Seiðr Studio API. Keep it secret.",
       "show":         "Show",
       "hide":         "Hide",
       "copy":         "Copy",

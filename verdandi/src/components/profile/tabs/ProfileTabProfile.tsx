@@ -54,7 +54,7 @@ export const ProfileTabProfile = memo(() => {
             }}>
               {user?.role ?? 'viewer'}
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--t3)' }}>SEER Studio · Production</span>
+            <span style={{ fontSize: '11px', color: 'var(--t3)' }}>Seiðr Studio · Production</span>
           </div>
         </div>
       </div>

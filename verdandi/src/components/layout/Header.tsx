@@ -136,7 +136,7 @@ export const Header = memo(() => {
         >
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--acc)', flexShrink: 0 }} />
           <span className="seer-logo-text" style={{ fontSize: '13px', color: 'var(--t1)' }}>
-            SEER
+            Seiðr
           </span>
           <ChevronDown size={11} style={{
             color: 'var(--t3)', marginLeft: '1px',
@@ -160,7 +160,7 @@ export const Header = memo(() => {
               color: 'var(--t3)', letterSpacing: '0.08em',
               borderBottom: '1px solid var(--bd)',
             }}>
-              SEER STUDIO
+              Seiðr Studio
             </div>
             {NORNS.map((norn) => {
               const isCurrent = norn.id === activeNorn;

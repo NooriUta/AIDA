@@ -141,7 +141,7 @@ export const ProfileModal = memo(({ onClose }: Props) => {
           </span>
           {user && (
             <span style={{ fontSize: '11px', color: 'var(--t3)', marginLeft: '2px' }}>
-              {user.username} · SEER Studio
+              {user.username} · Seiðr Studio
             </span>
           )}
           <button
