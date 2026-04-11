@@ -3,12 +3,12 @@
     "title": "Seiðr Studio",
     "tagline": "Make invisible data dependencies visible.",
     "slogans": [
-      "Make invisible data dependencies visible.",
-      "Trace every thread of your data lineage.",
-      "Column-level clarity. Pipeline-wide insight.",
       "See what moves your data.",
-      "Every transformation. Every dependency. Visible.",
-      "Know your data. Know its past."
+      "Every dependency. Made visible.",
+      "Follow the thread. Find the truth.",
+      "Lineage without guesswork.",
+      "Data tells its own story.",
+      "Know where it comes from."
     ]
   },
   "nav": {
