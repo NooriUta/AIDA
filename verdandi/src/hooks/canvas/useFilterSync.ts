@@ -28,6 +28,7 @@ export function useFilterSync(rawGraph: Graph | null): void {
     setAvailableSchemas,
     setAvailableTables,
     setAvailableStmts,
+    setAvailableFields,
     setAvailableColumns,
   } = useLoomStore();
 
@@ -91,6 +92,19 @@ export function useFilterSync(rawGraph: Graph | null): void {
       .sort((a, b) => a.label.localeCompare(b.label));
     setAvailableStmts(stmts);
   }, [viewLevel, rawGraph, setAvailableTables, setAvailableStmts]);
+
+  // ── Populate all-columns list (availableFields) for the column dropdown ─────
+  // Collects unique column names across ALL table/statement nodes so the
+  // dropdown is visible even when no specific table/stmt is selected.
+  useEffect(() => {
+    if (viewLevel !== 'L2' || !rawGraph) { setAvailableFields([]); return; }
+    const names = new Set<string>();
+    for (const n of rawGraph.nodes) {
+      const cols = (n.data.columns as ColumnInfo[] | undefined) ?? [];
+      for (const c of cols) names.add(c.name);
+    }
+    setAvailableFields([...names].sort());
+  }, [viewLevel, rawGraph, setAvailableFields]);
 
   // ── Populate Column cascade: columns of the selected table or stmt ─────────
   // Re-runs when stmtColsQ.data arrives so stmt cols appear after second-pass fetch.

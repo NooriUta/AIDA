@@ -5,6 +5,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
+import { UnderConstructionPage } from './components/stubs/UnderConstructionPage';
 import { useAuthStore } from './stores/authStore';
 
 const KnotPage = lazy(() =>
@@ -44,6 +45,23 @@ function AppRoutes() {
               <Suspense fallback={null}>
                 <KnotPage />
               </Suspense>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/urd"
+          element={
+            <ProtectedRoute>
+              <UnderConstructionPage module="URD" horizon="H3" descriptionKey="stub.urdDescription" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/skuld"
+          element={
+            <ProtectedRoute>
+              <UnderConstructionPage module="SKULD" horizon="H3" descriptionKey="stub.skuldDescription" />
             </ProtectedRoute>
           }
         />

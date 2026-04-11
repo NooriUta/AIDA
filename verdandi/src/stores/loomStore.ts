@@ -9,6 +9,8 @@ import { expansionActions }  from './slices/expansionSlice';
 import { visibilityActions } from './slices/visibilitySlice';
 import { viewportActions }   from './slices/viewportSlice';
 import { themeActions }      from './slices/themeSlice';
+import { undoActions, type UndoEntry } from './slices/undoSlice';
+import { hydratePersistedState, subscribePersist } from './slices/persistSlice';
 
 // ─── Exported types (kept here for backward-compat imports) ───────────────────
 
@@ -85,9 +87,13 @@ export interface LoomStore {
   // Theme & stats
   theme:      'dark' | 'light';
   palette:    string;
-  nodeCount:  number;
-  edgeCount:  number;
-  zoom:       number;
+  nodeCount:       number;
+  edgeCount:       number;
+  zoom:            number;
+  graphTruncated:  boolean;
+
+  // Column-level dimming: column IDs on the lineage path (null = no dimming)
+  highlightedColumns: Set<string> | null;
 
   // Node expansion / visibility (LOOM-026)
   nodeExpansionState: Record<string, 'collapsed' | 'partial' | 'expanded'>;
@@ -99,6 +105,10 @@ export interface LoomStore {
   expandedDownstreamIds:  Set<string>;
   expansionGqlNodes:      ExpansionGqlNode[];
   expansionGqlEdges:      ExpansionGqlEdge[];
+
+  // Undo / redo (LOOM-030)
+  undoStack: UndoEntry[];
+  redoStack: UndoEntry[];
 
   // Viewport
   fitViewRequest:     { type: 'full' } | { type: 'node'; nodeId: string } | null;
@@ -139,6 +149,7 @@ export interface LoomStore {
   setDirection:         (upstream: boolean, downstream: boolean) => void;
   toggleTableLevelView: () => void;
   toggleCfEdges:        () => void;
+  toggleMappingMode:    () => void;
   clearFilter:          () => void;
   setAvailableFields:   (fields: string[]) => void;
   setAvailableTables:   (tables: { id: string; label: string }[]) => void;
@@ -155,10 +166,17 @@ export interface LoomStore {
   clearExpandRequest: () => void;
   clearExpansion:     () => void;
 
+  pushUndo:     (entry: UndoEntry) => void;
+  undo:         () => void;
+  redo:         () => void;
+  clearHistory: () => void;
+
   toggleTheme:   () => void;
   setPalette:    (name: string) => void;
-  setGraphStats: (nodeCount: number, edgeCount: number) => void;
-  setZoom:       (zoom: number) => void;
+  setGraphStats:    (nodeCount: number, edgeCount: number) => void;
+  setZoom:          (zoom: number) => void;
+  setGraphTruncated: (truncated: boolean) => void;
+  setHighlightedColumns: (cols: Set<string> | null) => void;
 
   requestFitView:            () => void;
   requestFocusNode:          (nodeId: string) => void;
@@ -187,23 +205,33 @@ export const FILTER_DEFAULTS: FilterState = {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useLoomStore = create<LoomStore>((set, get) => ({
+// ─── Hydrate persisted filter state ───────────────────────────────────────────
+const _persisted = hydratePersistedState();
+
+export const useLoomStore = create<LoomStore>((set, get) => {
+  // Debug: expose store for browser console inspection
+  if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__LOOM__ = () => get();
+  return ({
   // ── Initial state ─────────────────────────────────────────────────────────
-  viewLevel: 'L1', currentScope: null, currentScopeLabel: null, navigationStack: [],
+  viewLevel: (_persisted.viewLevel as LoomStore['viewLevel']) ?? 'L1',
+  currentScope: _persisted.currentScope ?? null,
+  currentScopeLabel: _persisted.currentScopeLabel ?? null,
+  navigationStack: [],
   l1ScopeStack: [], expandedDbs: new Set(), l1HierarchyFilter: { dbId: null, schemaId: null },
   l1Filter: { depth: 99, dirUp: true, dirDown: true, systemLevel: false },
   availableApps: [], availableDbs: [], availableSchemas: [],
   selectedNodeId: null, selectedNodeData: null,
   highlightedNodes: new Set(), highlightedEdges: new Set(),
-  filter: { ...FILTER_DEFAULTS },
+  filter: _persisted.filter ? { ...FILTER_DEFAULTS, ..._persisted.filter } : { ...FILTER_DEFAULTS },
   availableFields: [], availableTables: [], availableStmts: [], availableColumns: [],
   nodeExpansionState: {}, hiddenNodeIds: new Set(),
+  undoStack: [], redoStack: [],
   expandRequest: null, expandedUpstreamIds: new Set(), expandedDownstreamIds: new Set(),
   expansionGqlNodes: [], expansionGqlEdges: [],
   fitViewRequest: null, pendingFocusNodeId: null, pendingDeepExpand: null, deepExpandRequest: null,
   theme: (localStorage.getItem('seer-theme') as 'dark' | 'light') ?? 'dark',
   palette: localStorage.getItem('seer-palette') ?? 'amber-forest',
-  nodeCount: 0, edgeCount: 0, zoom: 1,
+  nodeCount: 0, edgeCount: 0, zoom: 1, graphTruncated: false, highlightedColumns: null,
 
   // ── Actions from slices ───────────────────────────────────────────────────
   ...navigationActions(set, get),
@@ -214,4 +242,10 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   ...visibilityActions(set),
   ...viewportActions(set),
   ...themeActions(set, get),
-}));
+  ...undoActions(set, get),
+})});
+
+
+// ── Subscribe to persist filter changes ──────────────────────────────────────
+subscribePersist(useLoomStore);
+

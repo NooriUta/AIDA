@@ -22,7 +22,9 @@ export function themeActions(set: Set, get: Get) {
       set({ palette: name });
     },
 
-    setGraphStats: (nodeCount: number, edgeCount: number) => set({ nodeCount, edgeCount }),
-    setZoom:       (zoom: number) => set({ zoom }),
+    setGraphStats:     (nodeCount: number, edgeCount: number) => set({ nodeCount, edgeCount }),
+    setZoom:           (zoom: number) => set({ zoom }),
+    setGraphTruncated: (truncated: boolean) => set({ graphTruncated: truncated }),
+    setHighlightedColumns: (cols: globalThis.Set<string> | null) => set({ highlightedColumns: cols }),
   };
 }

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
@@ -102,6 +102,9 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
         </div>
       </InspectorSection>
 
+      {/* ── SQL preview ──────────────────────────────────────────────────────── */}
+      <SqlSection data={data} />
+
       <InspectorSection
         title={`${t('inspector.outputColumns')} (${columns.length})`}
         defaultOpen={columns.length > 0}
@@ -119,5 +122,65 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
     </>
   );
 });
+
+// ── SQL preview section ──────────────────────────────────────────────────────
+
+function SqlSection({ data }: { data: DaliNodeData }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  const sqlText = typeof data.metadata?.sqlText === 'string' ? data.metadata.sqlText
+    : typeof data.metadata?.snippet === 'string' ? data.metadata.snippet
+    : '';
+
+  const handleCopy = useCallback(() => {
+    if (!sqlText) return;
+    navigator.clipboard.writeText(sqlText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [sqlText]);
+
+  return (
+    <InspectorSection title={t('inspector.sql')} defaultOpen={!!sqlText}>
+      {sqlText ? (
+        <div style={{ position: 'relative' }}>
+          <pre style={{
+            padding: '6px 10px', margin: 0,
+            fontSize: '10px', lineHeight: '1.5',
+            color: 'var(--t1)',
+            background: 'var(--bg0)',
+            border: '1px solid var(--bd)',
+            borderRadius: 4,
+            maxHeight: 200, overflowY: 'auto',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            fontFamily: 'var(--seer-font-mono, monospace)',
+          }}>
+            {sqlText}
+          </pre>
+          <button
+            onClick={handleCopy}
+            style={{
+              position: 'absolute', top: 4, right: 4,
+              fontSize: '9px', fontWeight: 500,
+              padding: '2px 6px', borderRadius: 3,
+              background: copied ? 'var(--suc)' : 'var(--bg3)',
+              border: '1px solid var(--bd)',
+              color: copied ? 'var(--bg0)' : 'var(--t2)',
+              cursor: 'pointer',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {copied ? t('inspector.copied') : t('inspector.copySql')}
+          </button>
+        </div>
+      ) : (
+        <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+          {t('knot.stmt.noSql')}
+        </div>
+      )}
+    </InspectorSection>
+  );
+}
 
 InspectorStatement.displayName = 'InspectorStatement';

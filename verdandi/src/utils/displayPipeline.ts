@@ -115,17 +115,21 @@ export function applyDirectionFilter(
   if (viewLevel === 'L1') return graph;
   if (upstream && downstream) return graph;
 
+  // Filter both table-level (READS_FROM/WRITES_TO) and column-level
+  // (HAS_OUTPUT_COL/HAS_AFFECTED_COL) edges by direction so the toggle
+  // works consistently in both mapping modes.
   const filteredEdges = graph.edges.filter((e) => {
     const et = e.data?.edgeType as string;
-    if (!upstream   && et === 'READS_FROM') return false;
-    if (!downstream && et === 'WRITES_TO')  return false;
+    if (!upstream   && (et === 'READS_FROM' || et === 'HAS_OUTPUT_COL'))   return false;
+    if (!downstream && (et === 'WRITES_TO'  || et === 'HAS_AFFECTED_COL')) return false;
     return true;
   });
 
+  const FLOW_TYPES = new Set(['READS_FROM', 'WRITES_TO', 'HAS_OUTPUT_COL', 'HAS_AFFECTED_COL']);
+
   const connectedIds = new Set<string>();
   for (const e of filteredEdges) {
-    const et = e.data?.edgeType as string;
-    if (et === 'READS_FROM' || et === 'WRITES_TO') {
+    if (FLOW_TYPES.has(e.data?.edgeType as string)) {
       connectedIds.add(e.source);
       connectedIds.add(e.target);
     }
@@ -133,8 +137,7 @@ export function applyDirectionFilter(
 
   const hadFlow = new Set<string>();
   for (const e of graph.edges) {
-    const et = e.data?.edgeType as string;
-    if (et === 'READS_FROM' || et === 'WRITES_TO') {
+    if (FLOW_TYPES.has(e.data?.edgeType as string)) {
       hadFlow.add(e.source);
       hadFlow.add(e.target);
     }
@@ -150,20 +153,41 @@ export function applyDirectionFilter(
   };
 }
 
-// ── Phase 3c — CF edge toggle ─────────────────────────────────────────────────
+// ── Phase 3c — Mapping-mode edge tagging ─────────────────────────────────────
+// Instead of filtering edges, we TAG them with CSS classes so that:
+//   • Column mode (zoomed in): CF edges visible, table-flow edges hidden via CSS
+//   • Column mode (zoomed out / compact): table-flow visible, CF edges hidden via CSS
+//   • Table mode: column edges already removed by applyTableLevelView
+// Edges are NOT removed because ELK needs READS_FROM / WRITES_TO for layout.
+
+export const CF_EDGE_TYPES    = new Set(['HAS_AFFECTED_COL', 'HAS_OUTPUT_COL']);
+export const TABLE_FLOW_TYPES = new Set(['READS_FROM', 'WRITES_TO']);
+
+/** Returns the mapping-mode CSS class for an edge based on its edgeType. */
+export function edgeTypeClass(edgeType: string | undefined): string {
+  if (!edgeType) return '';
+  if (CF_EDGE_TYPES.has(edgeType))    return 'loom-cf';
+  if (TABLE_FLOW_TYPES.has(edgeType)) return 'loom-flow';
+  return '';
+}
 
 export function applyCfEdgeToggle(
   graph: Graph,
   viewLevel: string,
-  showCfEdges: boolean,
+  _showCfEdges: boolean,
   tableLevelView: boolean,
 ): Graph {
-  if (showCfEdges || tableLevelView || viewLevel === 'L1') return graph;
+  if (viewLevel === 'L1' || tableLevelView) return graph;
+
+  // Column mode: tag CF and flow edges with CSS classes for visibility control.
+  // Do NOT filter — ELK needs READS_FROM / WRITES_TO for layered layout.
   return {
     nodes: graph.nodes,
-    edges: graph.edges.filter((e) => {
-      const et = e.data?.edgeType as string;
-      return et !== 'HAS_AFFECTED_COL' && et !== 'HAS_OUTPUT_COL';
+    edges: graph.edges.map((e) => {
+      const tc = edgeTypeClass(e.data?.edgeType as string);
+      if (!tc) return e;
+      const cls = e.className ? `${e.className} ${tc}` : tc;
+      return cls !== e.className ? { ...e, className: cls } : e;
     }),
   };
 }

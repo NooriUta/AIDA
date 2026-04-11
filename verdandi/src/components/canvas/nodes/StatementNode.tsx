@@ -34,17 +34,25 @@ const STMT_TYPE_COLORS: Record<string, string> = {
   DYNAMIC_CURSOR: '#88B8A8',
 };
 
-function OutputColRow({ col }: { col: ColumnInfo }) {
+function OutputColRow({ col, onClick, dimmed }: { col: ColumnInfo; onClick?: () => void; dimmed?: boolean }) {
   return (
-    <div style={{
-      display:     'flex',
-      alignItems:  'center',
-      gap:         'var(--seer-space-2)',
-      padding:     '3px 10px',
-      borderTop:   '1px solid var(--bd)',
-      fontSize:    '12px',
-      position:    'relative',
-    }}>
+    <div
+      role="option"
+      data-col-click
+      style={{
+        display:     'flex',
+        alignItems:  'center',
+        gap:         'var(--seer-space-2)',
+        padding:     '3px 10px',
+        borderTop:   '1px solid var(--bd)',
+        fontSize:    '12px',
+        position:    'relative',
+        cursor:      onClick ? 'pointer' : 'default',
+        opacity:     dimmed ? 0.2 : undefined,
+        transition:  'opacity 0.2s',
+      }}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined}
+    >
       <Handle
         type="source"
         position={Position.Right}
@@ -73,7 +81,7 @@ function OutputColRow({ col }: { col: ColumnInfo }) {
 
 export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNodeType>) => {
   const { t } = useTranslation();
-  const { selectNode } = useLoomStore();
+  const { selectNode, setFieldFilter, setStmtFilter, filter, highlightedColumns } = useLoomStore();
   const zoomLevel = useZoomLevel();
   const isLodCompact = zoomLevel < LOD_COMPACT_ZOOM;
   const columns  = data.columns ?? [];
@@ -103,10 +111,16 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
     if (!isLodCompact) {
       const timer = setTimeout(() => setColsVisible(true), CANVAS.LOD_TIMEOUT);
       return () => clearTimeout(timer);
-    } else {
-      setColsVisible(false);
     }
+    setColsVisible(false); // eslint-disable-line react-hooks/set-state-in-effect -- sync with LOD zoom
   }, [isLodCompact]);
+
+  // Single-click on header: toggle statement filter (dimming)
+  const handleHeaderClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    selectNode(id, data);
+    setStmtFilter(filter.stmtFilter === id ? null : id);
+  };
 
   // ── Statement type badge ─────────────────────────────────────────────────
   const stmtType  = data.operation?.toUpperCase();
@@ -115,6 +129,8 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
 
   return (
     <div
+      role="group"
+      aria-label={data.label}
       className={`loom-node${selected ? ' selected' : ''}`}
       style={{
         background:      'var(--bg2)',
@@ -135,14 +151,17 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       <Handle type="source" position={Position.Right} style={{ background: typeColor, zIndex: 5, top: handleTop }} />
 
       {/* Header */}
-      <div ref={headerRef} style={{
+      <div ref={headerRef} role="button" aria-pressed={filter.stmtFilter === id} style={{
         padding:      'var(--seer-space-2) var(--seer-space-3)',
         display:      'flex',
         alignItems:   'center',
         gap:          'var(--seer-space-2)',
         background:   'var(--bg3)',
         borderBottom: (visible.length > 0 || spacerHeight > 0) ? '1px solid var(--bd)' : 'none',
-      }}>
+        cursor:       'pointer',
+      }}
+        onClick={handleHeaderClick}
+      >
         <FileCode size={13} color={typeColor} strokeWidth={1.5} />
         <div style={{ flex: 1, overflow: 'hidden' }}>
           {/* Hierarchy path (Schema / Package / Routine) — vertical */}
@@ -204,7 +223,17 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       {showColumns ? (
         <div style={{ opacity: colsVisible ? 1 : 0, transition: 'opacity 0.15s ease' }}>
           {visible.map((col) => (
-            <OutputColRow key={col.id} col={col} />
+            <OutputColRow
+              key={col.id}
+              col={col}
+              dimmed={highlightedColumns != null && !highlightedColumns.has(col.id)}
+              onClick={() => {
+                selectNode(id, data);
+                const deselect = filter.fieldFilter === col.name;
+                setStmtFilter(deselect ? null : id);
+                setFieldFilter(deselect ? null : col.name);
+              }}
+            />
           ))}
           {overflow > 0 && (
             <div style={{

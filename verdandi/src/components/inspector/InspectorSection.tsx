@@ -11,9 +11,11 @@ export const InspectorSection = memo(({ title, children, defaultOpen = true }: P
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div style={{ borderBottom: '1px solid var(--bd)' }}>
+    <div style={{ borderBottom: '1px solid var(--bd)' }} role="region" aria-label={title}>
       <button
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={title}
         style={{
           display: 'flex', alignItems: 'center', gap: 4,
           width: '100%', padding: '6px 10px',

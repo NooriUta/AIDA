@@ -1,10 +1,15 @@
-import { memo, useState, useRef, useCallback } from 'react';
-import { Search, X, Table2, Code2, Columns3, Eye, Database, AppWindow, Variable, Braces } from 'lucide-react';
+import { memo, useState, useRef, useCallback, useEffect } from 'react';
+import { Search, X, Table2, Code2, Columns3, Eye, Database, AppWindow, Variable, Braces, Clock, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 import { useSearch } from '../../services/hooks';
 import type { SearchResult } from '../../services/lineage';
 import { ToolbarScrollTabs } from '../ui/ToolbarPrimitives';
+import {
+  getSearchHistory, pushSearchQuery, clearSearchHistory,
+  getRecentNodes, pushRecentNode, clearRecentNodes,
+  type RecentNode,
+} from '../../hooks/useSearchHistory';
 
 // ─── Type icon ─────────────────────────────────────────────────────────────────
 
@@ -168,7 +173,17 @@ export const SearchPanel = memo(() => {
   const [query, setQuery]              = useState('');
   const [debouncedQuery, setDebounced] = useState('');
   const [typeFilters, setTypeFilters]  = useState<Set<string>>(new Set());
+  const [recentQueries, setRecentQueries] = useState<string[]>(() => getSearchHistory());
+  const [recentNodesList, setRecentNodesList] = useState<RecentNode[]>(() => getRecentNodes());
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Refresh history when query is cleared
+  useEffect(() => {
+    if (query.length === 0) {
+      setRecentQueries(getSearchHistory());
+      setRecentNodesList(getRecentNodes());
+    }
+  }, [query]);
 
   // Debounced input: fire search 300ms after last keystroke
   const handleInput = useCallback((value: string) => {
@@ -213,54 +228,82 @@ export const SearchPanel = memo(() => {
   });
 
   // Handle result click — deterministic navigation regardless of current level
+  // Routing rules (ARCH):
+  //   L1 — Application, Service, Database, Schema
+  //   L2 — Table, Column (→ parent table), OutputColumn (→ parent stmt),
+  //         Package, Routine (→ parent package), root Statement (pkg scope)
+  //   L3 — Subquery / nested Statement (session scope)
+  //   TODO — Session, Parameter, Variable (level TBD)
   const handleSelect = useCallback((result: SearchResult) => {
+    // Push to search history
+    if (debouncedQuery.length >= 2) pushSearchQuery(debouncedQuery);
+    pushRecentNode({ id: result.id, label: result.label, type: result.type, scope: result.scope });
     const type = result.type as string;
-    if (type === 'DaliTable') {
-      // L2: table-centric explore — show just this table + 5-hop lineage expand.
-      // Use the table's own RID as scope (→ exploreByRid) so the full schema is NOT loaded.
-      jumpTo('L2', result.id, result.label, 'DaliTable',
-        { focusNodeId: result.id, expandDepth: 5 });
-    } else if (type === 'DaliColumn') {
-      // L2: column-centric explore — exploreByRid resolves the parent table + all
-      // sibling columns inline. The column renders inside the table card, not as a
-      // standalone node, so no focusNodeId needed here.
-      jumpTo('L2', result.id, result.label, 'DaliColumn');
-    } else if (type === 'DaliOutputColumn') {
-      // L2: parent statement via exploreByRid (sibling output cols shown inline)
-      jumpTo('L2', result.id, result.label, 'DaliOutputColumn');
-    } else if (type === 'DaliSchema') {
-      // L1: overview, highlight schema node + auto-expand parent DB + zoom to it
+
+    // ── L1: System / DB / Schema ──────────────────────────────────────────────
+    if (
+      type === 'DaliApplication' ||
+      type === 'DaliService'     ||
+      type === 'DaliDatabase'    ||
+      type === 'DaliSchema'
+    ) {
       jumpTo('L1', null, result.label);
       selectNode(result.id);
       requestFocusNode(result.id);
-    } else if (type === 'DaliPackage') {
-      // L2: package explore — scope = package_name
+      return;
+    }
+
+    // ── L2: Table ─────────────────────────────────────────────────────────────
+    if (type === 'DaliTable') {
+      jumpTo('L2', result.id, result.label, 'DaliTable',
+        { focusNodeId: result.id, expandDepth: 5 });
+      return;
+    }
+
+    // ── L2: Column → shows parent table context ──────────────────────────────
+    if (type === 'DaliColumn') {
+      jumpTo('L2', result.id, result.label, 'DaliColumn');
+      return;
+    }
+
+    // ── L2: OutputColumn → shows parent statement context ────────────────────
+    if (type === 'DaliOutputColumn') {
+      jumpTo('L2', result.id, result.label, 'DaliOutputColumn');
+      return;
+    }
+
+    // ── L2: Package → package explore ────────────────────────────────────────
+    if (type === 'DaliPackage') {
       jumpTo('L2', 'pkg-' + result.scope, result.scope, 'DaliPackage');
-    } else if (type === 'DaliRoutine') {
-      // L2: package explore — scope = package_name (from Cypher join)
+      return;
+    }
+
+    // ── L2: Routine → opens parent package ───────────────────────────────────
+    if (type === 'DaliRoutine') {
       jumpTo('L2', 'pkg-' + result.scope, result.scope, 'DaliPackage');
-    } else if (type === 'DaliSession') {
-      // L2: exploreByRid — session shows its routines and their connections
-      jumpTo('L2', result.id, result.label, 'DaliSession');
-    } else if (type === 'DaliStatement') {
-      // Root statement (scope = package_name) → L2 package view
-      // Sub-statement or session-based (scope = session_id) → L3 lineage
-      const isPackageScope = result.scope
+      return;
+    }
+
+    // ── L2/L3: Statement — root (pkg scope) → L2, subquery → L3 ─────────────
+    if (type === 'DaliStatement') {
+      const isRootStmt = result.scope
         && !result.scope.startsWith('session-')
         && !result.scope.startsWith('#');
-      if (isPackageScope) {
+      if (isRootStmt) {
         jumpTo('L2', 'pkg-' + result.scope, result.scope, 'DaliPackage');
       } else {
         jumpTo('L3', result.id, result.label, 'DaliStatement');
       }
+      return;
+    }
+
+    // ── TODO: level TBD — best-effort routing for now ────────────────────────
+    if (type === 'DaliSession') {
+      // TODO: confirm — currently opens session as L2 explore
+      jumpTo('L2', result.id, result.label, 'DaliSession');
     } else if (type === 'DaliParameter' || type === 'DaliVariable') {
-      // L3: lineage for this parameter/variable
+      // TODO: confirm — currently opens as L3 lineage
       jumpTo('L3', result.id, result.label, type as never);
-    } else if (type === 'DaliDatabase' || type === 'DaliApplication') {
-      // L1: overview, highlight that node + zoom to it
-      jumpTo('L1', null, result.label);
-      selectNode(result.id);
-      requestFocusNode(result.id);
     } else {
       selectNode(result.id);
     }
@@ -296,6 +339,7 @@ export const SearchPanel = memo(() => {
           <Search size={12} color="var(--t3)" style={{ flexShrink: 0 }} />
           <input
             type="text"
+            data-search-input
             placeholder={t('search.placeholder')}
             value={query}
             onChange={(e) => handleInput(e.target.value)}
@@ -357,8 +401,86 @@ export const SearchPanel = memo(() => {
         {/* Prompt when query is too short */}
         {debouncedQuery.length < 2 && debouncedQuery.length > 0 && (
           <div style={{ padding: '8px', fontSize: '11px', color: 'var(--t3)', textAlign: 'center' }}>
-            Type at least 2 characters…
+            {t('searchPalette.minChars')}
           </div>
+        )}
+
+        {/* Idle state — recent searches + recent nodes */}
+        {debouncedQuery.length === 0 && (
+          <>
+            {/* Recent searches */}
+            {recentQueries.length > 0 && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+                  <SectionLabel label={t('search.recentSearches')} />
+                  <button
+                    onClick={() => { clearSearchHistory(); setRecentQueries([]); }}
+                    style={{ fontSize: '9px', color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
+                  >
+                    {t('search.clearHistory')}
+                  </button>
+                </div>
+                {recentQueries.map((q) => (
+                  <div
+                    key={q}
+                    onClick={() => { handleInput(q); setDebounced(q); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '4px 8px', cursor: 'pointer', borderRadius: 4,
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  >
+                    <History size={10} color="var(--t3)" strokeWidth={1.5} />
+                    <span style={{ fontSize: '11px', color: 'var(--t2)' }}>{q}</span>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Recent nodes */}
+            {recentNodesList.length > 0 && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px', marginTop: recentQueries.length > 0 ? 2 : 0 }}>
+                  <SectionLabel label={t('search.recentNodes')} />
+                  <button
+                    onClick={() => { clearRecentNodes(); setRecentNodesList([]); }}
+                    style={{ fontSize: '9px', color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
+                  >
+                    {t('search.clearHistory')}
+                  </button>
+                </div>
+                {recentNodesList.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => handleSelect({ id: n.id, label: n.label, type: n.type, scope: n.scope } as SearchResult)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '4px 8px', cursor: 'pointer', borderRadius: 4,
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  >
+                    <Clock size={10} color="var(--t3)" strokeWidth={1.5} />
+                    <TypeIcon type={n.type} />
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <div style={{
+                        fontSize: '11px', color: 'var(--t1)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {n.label}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '9px', color: 'var(--t3)', flexShrink: 0 }}>
+                      {n.type.replace('Dali', '')}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
         )}
 
         {/* Hidden nodes section */}

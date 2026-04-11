@@ -2,9 +2,14 @@
   "app": { "title": "SEER Studio", "tagline": "Визуализатор линейки данных" },
   "nav": {
     "loom": "LOOM",
+    "knot": "KNOT",
     "anvil": "ANVIL",
-    "shuttle": "SHUTTLE",
-    "knot": "KNOT"
+    "urd": "URD",
+    "skuld": "SKULD",
+    "comingSoon": "Появится в {{horizon}}",
+    "verdandiDesc": "Настоящее — анализ линиджа",
+    "urdDesc": "Прошлое — история изменений",
+    "skuldDesc": "Будущее — предиктивный анализ"
   },
   "auth": {
     "login": "Войти",
@@ -27,7 +32,7 @@
     "zoom": "Масштаб",
     "computingLayout": "вычисляется граф…",
     "nodeCount": "{{count}} узлов",
-    "hasMore": "Граф усечён — показаны первые 500 узлов. Уточните фильтр."
+    "hasMore": "Показано {{count}} узлов — граф усечён. Уточните фильтр."
   },
   "breadcrumb": { "overview": "Обзор" },
   "theme": { "dark": "Тёмная", "light": "Светлая" },
@@ -99,7 +104,11 @@
     },
     "openLevel": "Открыть на {{level}}",
     "notOnCanvas": "Находится на {{level}} · {{scope}}",
-    "goToLevel": "Перейти →"
+    "goToLevel": "Перейти →",
+    "recent": "Недавние",
+    "recentSearches": "Недавние запросы",
+    "recentNodes": "Недавно просмотренные",
+    "clearHistory": "Очистить"
   },
 
   "nodes": {
@@ -485,7 +494,199 @@
     "routines":      "Процедуры",
     "noColumns":     "Нет колонок",
     "schemas":       "Схемы",
-    "drillDown":     "Drill-down →"
+    "drillDown":     "Drill-down →",
+    "parameters":    "Параметры",
+    "noParameters":  "Нет параметров",
+    "openInKnot":    "Открыть в KNOT",
+    "dataType":      "Тип данных",
+    "operation":     "Операция",
+    "table":         "Таблица",
+    "sql":           "SQL",
+    "copySql":       "Скопировать SQL",
+    "copied":        "Скопировано!",
+    "joinType":      "Тип JOIN",
+    "joinLeft":      "Левая таблица",
+    "joinRight":     "Правая таблица",
+    "joinOn":        "Условие",
+    "direction":     "Направление",
+    "routine":       "Процедура",
+    "default":       "По умолчанию"
+  },
+
+  "stub": {
+    "underConstruction": "В разработке",
+    "urdDescription": "URD — Норна прошлого. Этот модуль обеспечит исторический анализ линиджа, отслеживание изменений и запросы «путешествия во времени» по data-пайплайнам.",
+    "skuldDescription": "SKULD — Норна будущего. Этот модуль предложит предиктивный импакт-анализ, what-if сценарии и проактивные рекомендации по линиджу."
+  },
+
+  "panel": {
+    "explorer":  "Проводник",
+    "inspector": "Инспектор KNOT",
+    "expand":    "Развернуть панель",
+    "collapse":  "Свернуть панель"
+  },
+
+  "profile": {
+    "title": "Настройки профиля",
+    "close": "Закрыть",
+    "account": "Аккаунт",
+    "interface": "Интерфейс",
+    "system": "Система",
+    "save": "Сохранить изменения",
+    "saved": "Сохранено",
+    "tabs": {
+      "profile":       "Профиль",
+      "security":      "Безопасность",
+      "access":        "Доступ и роль",
+      "appearance":    "Внешний вид",
+      "graph":         "Настройки графа",
+      "activity":      "Активность",
+      "notifications": "Уведомления",
+      "favorites":     "Избранное",
+      "shortcuts":     "Шорткаты",
+      "tokens":        "API и экспорт"
+    },
+    "firstName":            "Имя",
+    "firstNamePlaceholder": "Введите имя",
+    "lastName":             "Фамилия",
+    "lastNamePlaceholder":  "Введите фамилию",
+    "email":                "Email",
+    "emailHint":            "Для смены email обратитесь к администратору.",
+    "displayName":          "Отображаемое имя",
+    "displayNameHint":      "Отображается в шапке и журнале активности.",
+    "cancel":               "Отмена",
+    "role":                 "Роль",
+    "timezone":             "Часовой пояс",
+    "locale":               "Язык",
+    "bio":                  "О себе",
+    "security": {
+      "changePassword":    "Смена пароля",
+      "currentPassword":   "Текущий пароль",
+      "newPassword":       "Новый пароль",
+      "confirmPassword":   "Подтвердите новый пароль",
+      "updatePassword":    "Обновить пароль",
+      "twoFactor":         "Двухфакторная аутентификация",
+      "twoFactorDesc":     "Дополнительный уровень защиты вашего аккаунта.",
+      "twoFactorDisabled": "2FA не включена",
+      "setupTwoFactor":    "Настроить 2FA",
+      "dangerZone":        "Опасная зона",
+      "terminateAll":      "Завершить все другие сессии",
+      "deleteAccount":     "Удалить аккаунт",
+      "deleteAccountDesc": "Безвозвратно удалить аккаунт и все данные. Это действие нельзя отменить.",
+      "mismatch":          "Пароли не совпадают"
+    },
+    "access": {
+      "yourRole":    "Ваша роль",
+      "permissions": "Права доступа",
+      "module":      "Модуль",
+      "view":        "Просмотр",
+      "export":      "Экспорт",
+      "edit":        "Редактирование",
+      "admin":       "Администрирование",
+      "granted":     "✓",
+      "denied":      "—"
+    },
+    "appearance": {
+      "theme":    "Тема",
+      "dark":     "Тёмная",
+      "light":    "Светлая",
+      "palette":  "Палитра",
+      "uiFont":   "Шрифт интерфейса",
+      "monoFont": "Моноширинный шрифт",
+      "fontSize": "Размер шрифта",
+      "density":  "Плотность",
+      "compact":  "Компактный",
+      "normal":   "Обычный",
+      "apply":    "Применить",
+      "reset":    "Сбросить",
+      "preview":  "Текст для превью"
+    },
+    "graph": {
+      "title":          "Настройки графа",
+      "autoLayout":     "Авто-раскладка при загрузке",
+      "drillAnimation": "Анимация drill-down",
+      "hoverHighlight": "Подсветка при наведении",
+      "showEdgeLabels": "Показывать метки рёбер",
+      "colLevelDefault":"Колонки видны по умолчанию",
+      "startLevel":     "Начальный уровень",
+      "nodeLimit":      "Лимит нод",
+      "reset":          "Сбросить"
+    },
+    "activity": {
+      "sessions":   "Активные сессии",
+      "recent":     "Недавняя активность",
+      "current":    "ТЕКУЩАЯ",
+      "terminate":  "Завершить",
+      "noSessions": "Нет других активных сессий"
+    },
+    "notif": {
+      "channels":          "Каналы уведомлений",
+      "loomEvents":        "События LOOM",
+      "inApp":             "Уведомления в приложении",
+      "inAppDesc":         "Показывать бейджи и тосты внутри приложения.",
+      "emailDigest":       "Email-дайджест",
+      "emailDigestDesc":   "Ежедневная сводка изменений на email.",
+      "lineageChange":     "Изменение линиджа",
+      "lineageChangeDesc": "Уведомлять при обновлении графа линиджа.",
+      "brokenLineage":     "Сломанный линидж",
+      "brokenLineageDesc": "Предупреждать об отсутствующих или сломанных связях.",
+      "myTablesImpact":    "Влияние на мои таблицы",
+      "myTablesImpactDesc":"Когда таблицы в вашей собственности затронуты upstream-изменениями.",
+      "shuttleSync":       "Синхронизация Shuttle",
+      "shuttleSyncDesc":   "Уведомлять о завершении или ошибке синхронизации источников.",
+      "anvilComments":     "Комментарии ANVIL",
+      "anvilCommentsDesc": "Уведомлять, когда кто-то комментирует ваши аннотации."
+    },
+    "favorites": {
+      "hint":     "Помеченные звёздочкой ноды из графа появляются здесь для быстрого доступа.",
+      "empty":    "Нет избранного. Отметьте ноду в графе звёздочкой, чтобы добавить её сюда.",
+      "remove":   "Убрать из избранного",
+      "syncHint": "Избранное синхронизируется с вашим аккаунтом и доступно на всех устройствах."
+    },
+    "shortcuts": {
+      "navigation": "Навигация",
+      "canvas":     "Холст",
+      "panels":     "Панели",
+      "graph":      "Граф",
+      "export":     "Экспорт"
+    },
+    "tokens": {
+      "apiToken":     "API-токен",
+      "apiTokenDesc": "Используйте этот токен для аутентификации запросов к API SEER Studio. Храните в тайне.",
+      "show":         "Показать",
+      "hide":         "Скрыть",
+      "copy":         "Скопировать",
+      "copied":       "Скопировано",
+      "reissue":      "Перевыпустить",
+      "revoke":       "Отозвать",
+      "issued":       "Выпущен",
+      "lastUsed":     "Последнее использование",
+      "exportGraph":  "Экспорт графа",
+      "includeMeta":  "Включить метаданные",
+      "webhook":      "Вебхук",
+      "webhookDesc":  "Отправляйте события в реальном времени на ваш сервис при изменениях линиджа.",
+      "comingSoon":   "Скоро"
+    }
+  },
+
+  "searchPalette": {
+    "title": "Поиск",
+    "minChars": "Введите минимум 2 символа…",
+    "hint": "Поиск таблиц, колонок, процедур, пакетов и другого"
+  },
+
+  "commandPalette": {
+    "title": "Палитра команд",
+    "placeholder": "Поиск нод, команды, навигация…",
+    "noResults": "Нет результатов",
+    "results": "Результаты поиска",
+    "commands": "Команды",
+    "navigation": "Навигация",
+    "fitView": "Вписать граф в экран",
+    "toggleTheme": "Переключить тёмную / светлую тему",
+    "deselectNode": "Снять выделение",
+    "goToL1": "Перейти к L1 Обзор",
+    "goToKnot": "Перейти в KNOT"
   },
 
   "errorBoundary": {

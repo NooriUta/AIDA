@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { KeyRound, Link2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { InspectorSection, InspectorRow } from './InspectorSection';
@@ -36,8 +37,18 @@ function ColumnRow({ col }: { col: ColumnInfo }) {
       {col.type && (
         <span style={{ color: 'var(--t3)', fontSize: '10px', flexShrink: 0 }}>{col.type}</span>
       )}
-      {col.isPrimaryKey && <ColBadge label="PK" color="var(--wrn)" />}
-      {col.isForeignKey  && <ColBadge label="FK" color="var(--inf)" />}
+      {col.isPrimaryKey && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+          <KeyRound size={9} color="var(--wrn)" strokeWidth={2} />
+          <ColBadge label="PK" color="var(--wrn)" />
+        </span>
+      )}
+      {col.isForeignKey && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+          <Link2 size={9} color="var(--inf)" strokeWidth={2} />
+          <ColBadge label="FK" color="var(--inf)" />
+        </span>
+      )}
     </div>
   );
 }

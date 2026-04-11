@@ -7,6 +7,7 @@
 import { memo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
+import { ToolbarDivider, IconLayers, ToolbarToggleButton } from '../ui/ToolbarPrimitives';
 
 const DEPTHS = [1, 2, 3, 99] as const;
 type L1Depth = typeof DEPTHS[number];
@@ -47,28 +48,7 @@ function IconSchema({ active }: { active: boolean }) {
   );
 }
 
-function IconLayers() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M1 4l5-3 5 3-5 3-5-3z"
-        stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" fill="none" />
-      <path d="M1 7l5 3 5-3"
-        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
 
-// ─── Divider ─────────────────────────────────────────────────────────────────
-
-function Sep() {
-  return (
-    <div style={{
-      width: '0.5px', height: 16,
-      background: 'var(--bd)',
-      flexShrink: 0, margin: '0 2px',
-    }} />
-  );
-}
 
 // ─── Cascade selector pill ────────────────────────────────────────────────────
 
@@ -208,7 +188,7 @@ export const FilterToolbarL1 = memo(() => {
         {DEPTHS.map((d) => {
           const isOn = d === depth;
           return (
-            <button key={d} onClick={() => setL1Depth(d)} style={{
+            <button key={d} aria-pressed={isOn} onClick={() => setL1Depth(d)} style={{
               padding: '2px 6px', borderRadius: 3,
               border: `0.5px solid ${isOn ? 'var(--acc)' : 'var(--bd)'}`,
               fontSize: 9, color: isOn ? 'var(--acc)' : 'var(--t3)',
@@ -222,55 +202,34 @@ export const FilterToolbarL1 = memo(() => {
         })}
       </div>
 
-      <Sep />
+      <ToolbarDivider size="sm" />
 
       {/* ── Direction ─────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-        <button onClick={toggleL1DirUp} style={{
-          padding: '2px 7px', borderRadius: 3,
-          border: `0.5px solid ${dirUp ? 'var(--inf)' : 'var(--bd)'}`,
-          fontSize: 10, color: dirUp ? 'var(--inf)' : 'var(--t3)',
-          cursor: 'pointer',
-          background: dirUp ? 'rgba(136,184,168,.08)' : 'transparent',
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-          fontFamily: 'var(--sans)',
-        }}>
+        <ToolbarToggleButton active={dirUp} onClick={toggleL1DirUp} size="sm" color="var(--inf)">
           ↑ {t('toolbar.upstream')}
-        </button>
-        <button onClick={toggleL1DirDown} style={{
-          padding: '2px 7px', borderRadius: 3,
-          border: `0.5px solid ${dirDown ? 'var(--wrn)' : 'var(--bd)'}`,
-          fontSize: 10, color: dirDown ? 'var(--wrn)' : 'var(--t3)',
-          cursor: 'pointer',
-          background: dirDown ? 'rgba(212,146,42,.08)' : 'transparent',
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-          fontFamily: 'var(--sans)',
-        }}>
+        </ToolbarToggleButton>
+        <ToolbarToggleButton active={dirDown} onClick={toggleL1DirDown} size="sm" color="var(--wrn)">
           ↓ {t('toolbar.downstream')}
-        </button>
+        </ToolbarToggleButton>
       </div>
 
-      <Sep />
+      <ToolbarDivider size="sm" />
 
       {/* ── System-level toggle ───────────────────────────────────────── */}
-      <button
+      <ToolbarToggleButton
+        active={systemLevel}
         onClick={toggleL1SystemLevel}
+        size="sm"
+        color="var(--wrn)"
         title={t('l1.systemLevelHint')}
-        style={{
-          padding: '2px 8px', borderRadius: 3,
-          border: `0.5px solid ${systemLevel ? 'var(--wrn)' : 'var(--bd)'}`,
-          fontSize: 9, color: systemLevel ? 'var(--wrn)' : 'var(--t3)',
-          cursor: 'pointer',
-          background: systemLevel ? 'rgba(212,146,42,.07)' : 'transparent',
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          whiteSpace: 'nowrap', flexShrink: 0, fontFamily: 'var(--sans)',
-        }}
+        style={{ fontSize: 9, padding: '2px 8px' }}
       >
-        <IconLayers />
+        <IconLayers size={10} />
         {t('l1.systemLevel')}
-      </button>
+      </ToolbarToggleButton>
 
-      <Sep />
+      <ToolbarDivider size="sm" />
 
       {/* ── Cascade filter: App → DB → Schema ────────────────────────── */}
       <CascadePill

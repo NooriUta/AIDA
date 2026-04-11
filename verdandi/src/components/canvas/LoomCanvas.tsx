@@ -32,7 +32,6 @@ import { NodeContextMenu }  from './NodeContextMenu';
 import { ExportPanel }      from './ExportPanel';
 import type { ContextMenuState } from './NodeContextMenu';
 
-import { ErrorBoundary }            from '../ErrorBoundary';
 import { useLoomStore }            from '../../stores/loomStore';
 import { clearLayoutCache }        from '../../utils/layoutGraph';
 import { isUnauthorized }          from '../../services/lineage';
@@ -75,6 +74,8 @@ const LoomCanvasInner = memo(() => {
     setL1HierarchyDb,
     setL1HierarchySchema,
     clearL1HierarchyFilter,
+    setTableFilter,
+    setFieldFilter,
   } = useLoomStore();
   const { t } = useTranslation();
 
@@ -106,6 +107,7 @@ const LoomCanvasInner = memo(() => {
   useFilterSync(rawGraph);
 
   // ── Close context menu on level change; clear ELK cache on scope change ──────
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- sync with external viewLevel
   useEffect(() => { setContextMenu(null); }, [viewLevel]);
   useEffect(() => { clearLayoutCache(); }, [currentScope]);
 
@@ -131,48 +133,84 @@ const LoomCanvasInner = memo(() => {
 
   // hasMore: backend signalled that the graph was truncated at NODE_LIMIT.
   const hasMore = (activeQuery.data as { hasMore?: boolean } | undefined)?.hasMore ?? false;
+  const setGraphTruncated = useLoomStore((s) => s.setGraphTruncated);
+  useEffect(() => { setGraphTruncated(hasMore); }, [hasMore, setGraphTruncated]);
 
   // ── Node interactions ────────────────────────────────────────────────────────
+  // Single click: select node (show in inspector) + apply filter.
+  //   L1 — hierarchy highlight (DB, Schema)
+  //   L2/L3 — Table / Statement / Column filter is handled INSIDE the node
+  //           components (TableNode header/column, StatementNode header/column)
+  //           to avoid React Flow onNodeClick overwriting internal onClick.
+  //           Only standalone React Flow column/atom nodes are filtered here.
+  // NEVER drill-down — that's double-click only.
   const onNodeClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     selectNode(node.id, node.data);
 
     if (viewLevel === 'L1') {
       if (node.type === 'databaseNode') {
-        // Single-click on DB → drill down to L2 showing all schemas
-        const scope = `db-${node.data.label}`;
-        drillDown(scope, node.data.label, node.data.nodeType);
+        setL1HierarchyDb(node.id);
       } else if (node.type === 'l1SchemaNode' && node.parentId) {
         setL1HierarchyDb(node.parentId);
         setL1HierarchySchema(node.id);
       }
+      return;
     }
-  }, [selectNode, viewLevel, drillDown, setL1HierarchyDb, setL1HierarchySchema]);
 
-  // Double-click:
-  //   Application on L1      → scope filter (stays on L1, dims other apps)
-  //   Database on L1         → drillDown to DB-scope L2
-  //   Schema chip on L1      → drillDown to schema L2
-  //   Schema / Package on L2 → drillDown (L2 → L3)
-  //   Table on L2            → drillDown (L2 → L3)
+    // ── L2 / L3: filter only standalone column/atom nodes ──────────────────
+    // Table header/column clicks and Statement header/column clicks are
+    // handled inside TableNode.tsx / StatementNode.tsx respectively.
+    const nt = node.data.nodeType;
+    if (
+      nt === 'DaliColumn' || nt === 'DaliOutputColumn' ||
+      nt === 'DaliAtom'   || nt === 'DaliAffectedColumn'
+    ) {
+      const f = useLoomStore.getState().filter;
+      setFieldFilter(f.fieldFilter === node.data.label ? null : node.data.label);
+    }
+  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema, setFieldFilter]);
+
+  // Double-click = DrillDown (architecture rule: single=filter, double=drill):
+  //   L1: Application        → scope filter (stays on L1, dims other apps)
+  //   L1: Database / Schema  → drillDown to L2
+  //   L2: Table / Statement / Schema / Package / Database → drillDown to L3
+  //   L3: no drill-down (leaf level)
+  //   Column / Atom / Routine / Join → no drill-down (leaf nodes)
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
+    // L1: Application scope-filter
     if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {
       pushL1Scope(node.id, node.data.label, node.data.nodeType);
       return;
     }
-    if (!node.data.childrenAvailable || viewLevel === 'L3') return;
+
+    // No drill-down from L3 (leaf level)
+    if (viewLevel === 'L3') return;
+
+    // Only drillable types (Table, Statement, Schema, Package, Database)
+    const nt = node.data.nodeType;
+    if (
+      nt !== 'DaliTable'    && nt !== 'DaliStatement' &&
+      nt !== 'DaliSchema'   && nt !== 'DaliPackage'   &&
+      nt !== 'DaliDatabase'
+    ) return;
+
+    // Build scope string
     let scope: string;
-    if (node.data.nodeType === 'DaliSchema') {
+    if (nt === 'DaliSchema') {
       const dbName = node.data.metadata?.databaseName as string | null | undefined;
       scope = dbName ? `schema-${node.data.label}|${dbName}` : `schema-${node.data.label}`;
-    } else if (node.data.nodeType === 'DaliPackage') {
+    } else if (nt === 'DaliPackage') {
       scope = `pkg-${node.data.label}`;
-    } else if (node.data.nodeType === 'DaliDatabase') {
+    } else if (nt === 'DaliDatabase') {
       scope = `db-${node.data.label}`;
     } else {
       scope = node.id;
     }
-    drillDown(scope, node.data.label, node.data.nodeType);
-  }, [viewLevel, pushL1Scope, drillDown]);
+
+    // Clear any active filter before drilling (avoid stale filter on L3)
+    setTableFilter(null);
+    drillDown(scope, node.data.label, nt);
+  }, [viewLevel, pushL1Scope, drillDown, setTableFilter]);
 
   // ── Context menu (LOOM-029) ──────────────────────────────────────────────────
   const onNodeContextMenu = useCallback((e: React.MouseEvent, node: LoomNode) => {
@@ -202,9 +240,17 @@ const LoomCanvasInner = memo(() => {
     [theme],
   );
 
+  // ── Mapping-mode + zoom CSS classes for edge visibility ─────────────────────
+  const tableLevelView = useLoomStore((s) => s.filter.tableLevelView);
+  const isCompact = zoomLevel < LOD_COMPACT_ZOOM;
+  const wrapperCls = [
+    !tableLevelView && 'loom-column-mode',
+    isCompact       && 'loom-compact',
+  ].filter(Boolean).join(' ') || undefined;
+
   return (
     <ZoomLevelProvider value={zoomLevel}>
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div ref={containerRef} className={wrapperCls} style={{ width: '100%', height: '100%', position: 'relative' }}>
       {/* Loading overlay */}
       {isLoading && (
         <div style={{
@@ -220,7 +266,7 @@ const LoomCanvasInner = memo(() => {
             </span>
             {isLargeGraph && layouting && (
               <>
-                <span style={{ fontSize: '10px', color: 'var(--t4)', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: '10px', color: 'var(--t3)', letterSpacing: '0.05em' }}>
                   {t('canvas.nodeCount', { count: pendingNodeCount })}
                 </span>
                 <LoadingDots />
@@ -245,23 +291,6 @@ const LoomCanvasInner = memo(() => {
 
       {/* Breadcrumb */}
       <Breadcrumb />
-
-      {/* hasMore banner — graph was truncated at NODE_LIMIT on the backend */}
-      {hasMore && !isLoading && (
-        <div style={{
-          position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 150, display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 14px', borderRadius: 6,
-          background: 'color-mix(in srgb, var(--wrn) 15%, var(--bg2))',
-          border: '1px solid color-mix(in srgb, var(--wrn) 40%, transparent)',
-          pointerEvents: 'none',
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--wrn)' }}>⚠</span>
-          <span style={{ fontSize: 11, color: 'var(--t2)' }}>
-            {t('canvas.hasMore')}
-          </span>
-        </div>
-      )}
 
       <ReactFlow
         nodes={nodes}
@@ -292,6 +321,12 @@ const LoomCanvasInner = memo(() => {
         panOnDrag={true}
         zoomOnScroll={true}
         zoomOnDoubleClick={false}
+        onError={(code, message) => {
+          // Suppress edge-handle warnings (#008) — fire for column-flow edges
+          // whose handles haven't mounted yet; harmless but floods the console.
+          if (code === '008') return;
+          console.warn(`[React Flow] (${code})`, message);
+        }}
       >
         <Background
           variant={BackgroundVariant.Dots}

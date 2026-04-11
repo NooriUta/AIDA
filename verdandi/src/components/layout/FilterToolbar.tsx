@@ -7,6 +7,7 @@
 import { memo, useCallback, useMemo, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
+import { ToolbarDivider, IconLayers, ToolbarToggleButton } from '../ui/ToolbarPrimitives';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEPTH_STEPS = [1, 2, 3, 5, 7, Infinity] as const;
@@ -53,16 +54,6 @@ function IconSwap() {
   );
 }
 
-function IconLayers() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M1 4l5-3 5 3-5 3-5-3z" stroke="currentColor"
-        strokeWidth="1.2" strokeLinejoin="round" fill="none" />
-      <path d="M1 7l5 3 5-3" stroke="currentColor"
-        strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 /** Column-flow edge icon: two short dashed lines in amber+teal */
 function IconCfEdges() {
@@ -74,16 +65,6 @@ function IconCfEdges() {
   );
 }
 
-// ─── Divider ──────────────────────────────────────────────────────────────────
-function Divider() {
-  return (
-    <div style={{
-      width: 1, height: 20,
-      background: 'var(--bd)',
-      flexShrink: 0, margin: '0 2px',
-    }} />
-  );
-}
 
 // ─── FilterToolbar ────────────────────────────────────────────────────────────
 export const FilterToolbar = memo(() => {
@@ -103,15 +84,10 @@ export const FilterToolbar = memo(() => {
     setFieldFilter,
     setDepth,
     setDirection,
-    toggleTableLevelView,
-    toggleCfEdges,
-    clearFilter,
+    toggleMappingMode,
     navigateToLevel,
     jumpTo,
   } = useLoomStore();
-
-  // Only show on L2 / L3
-  if (viewLevel === 'L1') return null;
 
   const {
     startObjectLabel,
@@ -123,8 +99,30 @@ export const FilterToolbar = memo(() => {
     upstream,
     downstream,
     tableLevelView,
-    showCfEdges,
   } = filter;
+
+  // ── Hooks must be called unconditionally (Rules of Hooks) ─────────────────
+  const cascadedStmts = useMemo(() => (
+    tableFilter
+      ? availableStmts.filter((s) => s.connectedTableIds.includes(tableFilter))
+      : availableStmts
+  ), [availableStmts, tableFilter]);
+
+  const handleTableChange = useCallback(
+    (e: ChangeEvent<HTMLSelectElement>) => setTableFilter(e.target.value || null),
+    [setTableFilter],
+  );
+  const handleStmtChange = useCallback(
+    (e: ChangeEvent<HTMLSelectElement>) => setStmtFilter(e.target.value || null),
+    [setStmtFilter],
+  );
+  const handleFieldChange = useCallback(
+    (e: ChangeEvent<HTMLSelectElement>) => setFieldFilter(e.target.value || null),
+    [setFieldFilter],
+  );
+
+  // Only show on L2 / L3
+  if (viewLevel === 'L1') return null;
 
   const scopeLabel = startObjectLabel ?? currentScopeLabel ?? viewLevel;
 
@@ -149,27 +147,7 @@ export const FilterToolbar = memo(() => {
   const hasActiveFilter = tableFilter !== null || stmtFilter !== null || fieldFilter !== null
     || depth !== DEPTH_DEFAULT || !upstream || !downstream;
 
-  // ── Stmt options — cascade: filter by selected table ─────────────────────
-  const cascadedStmts = useMemo(() => (
-    tableFilter
-      ? availableStmts.filter((s) => s.connectedTableIds.includes(tableFilter))
-      : availableStmts
-  ), [availableStmts, tableFilter]);
-
   const showColumnDropdown = availableColumns.length > 0 || availableFields.length > 0;
-
-  const handleTableChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setTableFilter(e.target.value || null),
-    [setTableFilter],
-  );
-  const handleStmtChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setStmtFilter(e.target.value || null),
-    [setStmtFilter],
-  );
-  const handleFieldChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setFieldFilter(e.target.value || null),
-    [setFieldFilter],
-  );
 
   return (
     <div style={{
@@ -279,13 +257,14 @@ export const FilterToolbar = memo(() => {
         </div>
       )}
 
-      <Divider />
+      <ToolbarDivider />
 
       {/* ── Table / Stmt selects (L2 only) ────────────────────────────────── */}
       {viewLevel === 'L2' && availableTables.length > 0 && (
         <>
           <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>{t('toolbar.table')}:</span>
           <select
+            aria-label={t('toolbar.table')}
             value={tableFilter ?? ''}
             onChange={handleTableChange}
             style={{
@@ -308,6 +287,7 @@ export const FilterToolbar = memo(() => {
 
           <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>{t('toolbar.stmt')}:</span>
           <select
+            aria-label={t('toolbar.stmt')}
             value={stmtFilter ?? ''}
             onChange={handleStmtChange}
             style={{
@@ -327,7 +307,7 @@ export const FilterToolbar = memo(() => {
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
-          <Divider />
+          <ToolbarDivider />
         </>
       )}
 
@@ -336,6 +316,7 @@ export const FilterToolbar = memo(() => {
         <>
           <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>{t('toolbar.field')}:</span>
           <select
+            aria-label={t('toolbar.field')}
             value={fieldFilter ?? ''}
             onChange={handleFieldChange}
             disabled={tableLevelView}
@@ -358,7 +339,7 @@ export const FilterToolbar = memo(() => {
               : availableFields.map((f) => <option key={f} value={f}>{f}</option>)
             }
           </select>
-          <Divider />
+          <ToolbarDivider />
         </>
       )}
 
@@ -372,6 +353,7 @@ export const FilterToolbar = memo(() => {
           return (
             <button
               key={String(d)}
+              aria-pressed={isActive}
               onClick={() => setDepth(d)}
               style={{
                 display: 'inline-flex',
@@ -395,82 +377,30 @@ export const FilterToolbar = memo(() => {
         })}
       </div>
 
-      <Divider />
+      <ToolbarDivider />
 
       {/* ── Direction toggles ──────────────────────────────────────────────── */}
-      <button
-        onClick={() => setDirection(!upstream, downstream)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-          height: 24, padding: '0 7px',
-          borderRadius: 4,
-          border: `1px solid ${upstream ? 'var(--acc)' : 'var(--bd)'}`,
-          background: upstream ? 'var(--bg3)' : 'transparent',
-          color: upstream ? 'var(--acc)' : 'var(--t3)',
-          fontSize: 11, cursor: 'pointer', flexShrink: 0,
-          transition: 'border-color 0.1s, color 0.1s',
-        }}
-      >
+      <ToolbarToggleButton active={upstream} onClick={() => setDirection(!upstream, downstream)}>
         &#x2191; {t('toolbar.upstream')}
-      </button>
-      <button
-        onClick={() => setDirection(upstream, !downstream)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-          height: 24, padding: '0 7px',
-          borderRadius: 4,
-          border: `1px solid ${downstream ? 'var(--acc)' : 'var(--bd)'}`,
-          background: downstream ? 'var(--bg3)' : 'transparent',
-          color: downstream ? 'var(--acc)' : 'var(--t3)',
-          fontSize: 11, cursor: 'pointer', flexShrink: 0,
-          transition: 'border-color 0.1s, color 0.1s',
-        }}
-      >
+      </ToolbarToggleButton>
+      <ToolbarToggleButton active={downstream} onClick={() => setDirection(upstream, !downstream)}>
         &#x2193; {t('toolbar.downstream')}
-      </button>
+      </ToolbarToggleButton>
 
       {/* ── Spacer ─────────────────────────────────────────────────────────── */}
       <div style={{ flex: '1 1 auto' }} />
 
-      {/* ── Column-flow edge toggle ────────────────────────────────────────── */}
-      <button
-        onClick={toggleCfEdges}
-        title={showCfEdges ? t('toolbar.hideCfEdges') : t('toolbar.showCfEdges')}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          height: 26, padding: '0 8px',
-          borderRadius: 5,
-          border: `1px solid ${showCfEdges ? 'var(--inf)' : 'var(--bd)'}`,
-          background: showCfEdges ? 'var(--bg3)' : 'transparent',
-          color: showCfEdges ? 'var(--inf)' : 'var(--t3)',
-          fontSize: 11, cursor: 'pointer', flexShrink: 0,
-          transition: 'border-color 0.1s, color 0.1s',
-          opacity: tableLevelView ? 0.35 : 1,  // dim when tableLevelView overrides
-        }}
-        disabled={tableLevelView}
-      >
-        <IconCfEdges />
-        CF
-      </button>
-
-      {/* ── Table-level view toggle ────────────────────────────────────────── */}
-      <button
-        onClick={toggleTableLevelView}
+      {/* ── Mapping mode toggle: Column ↔ Table ─────────────────────────── */}
+      <ToolbarToggleButton
+        active={!tableLevelView}
+        onClick={toggleMappingMode}
+        color={tableLevelView ? 'var(--t3)' : 'var(--inf)'}
         title={tableLevelView ? t('toolbar.columnLevelView') : t('toolbar.tableLevelView')}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          height: 26, padding: '0 8px',
-          borderRadius: 5,
-          border: `1px solid ${tableLevelView ? 'var(--acc)' : 'var(--bd)'}`,
-          background: tableLevelView ? 'var(--bg3)' : 'transparent',
-          color: tableLevelView ? 'var(--acc)' : 'var(--t2)',
-          fontSize: 11, cursor: 'pointer', flexShrink: 0,
-          transition: 'border-color 0.1s, color 0.1s',
-        }}
+        style={{ height: 26, padding: '0 8px', borderRadius: 5 }}
       >
-        <IconLayers />
-        {tableLevelView ? t('toolbar.columnLevelView') : t('toolbar.tableLevelView')}
-      </button>
+        {tableLevelView ? <IconLayers /> : <IconCfEdges />}
+        {tableLevelView ? t('toolbar.tableLevelView') : t('toolbar.columnLevelView')}
+      </ToolbarToggleButton>
 
       {/* ── Level + filter badge ────────────────────────────────────────────── */}
       <div style={{
@@ -486,8 +416,7 @@ export const FilterToolbar = memo(() => {
         {fieldFilter && <span>· {fieldFilter}</span>}
         <span>· {depthLabel}</span>
         <span>· {dirLabel}</span>
-        {tableLevelView && <span>· &#x229F;</span>}
-        {!showCfEdges   && <span>· ~&#x2205;</span>}
+        {tableLevelView && <span>· TBL</span>}
       </div>
 
     </div>

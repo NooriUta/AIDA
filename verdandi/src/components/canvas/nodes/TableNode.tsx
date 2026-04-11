@@ -18,12 +18,16 @@ const { COL_ROW_HEIGHT } = LAYOUT;
 function ColumnRow({
   col,
   onClick,
+  dimmed,
 }: {
   col: ColumnInfo;
   onClick?: () => void;
+  dimmed?: boolean;
 }) {
   return (
     <div
+      role="option"
+      data-col-click
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -33,6 +37,8 @@ function ColumnRow({
         fontSize: '12px',
         position: 'relative',
         cursor: onClick ? 'pointer' : 'default',
+        opacity: dimmed ? 0.2 : undefined,
+        transition: 'opacity 0.2s',
       }}
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined}
     >
@@ -78,7 +84,7 @@ function ColumnRow({
 // ── TableNode ─────────────────────────────────────────────────────────────────
 
 export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>) => {
-  const { drillDown, selectNode, nodeExpansionState, setNodeExpansion } = useLoomStore();
+  const { selectNode, nodeExpansionState, setNodeExpansion, setFieldFilter, setTableFilter, filter, highlightedColumns } = useLoomStore();
   const { t } = useTranslation();
   const [colFilter, setColFilter] = useState('');
   const headerRef = useRef<HTMLDivElement>(null);
@@ -122,13 +128,18 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
   const [colsVisible, setColsVisible] = useState(!isLodCompact);
   useEffect(() => {
     if (!isLodCompact) {
-      // Small delay so the mount happens first, then CSS transition kicks in
       const t = setTimeout(() => setColsVisible(true), CANVAS.LOD_TIMEOUT);
       return () => clearTimeout(t);
-    } else {
-      setColsVisible(false);
     }
+    setColsVisible(false); // eslint-disable-line react-hooks/set-state-in-effect -- sync with LOD zoom
   }, [isLodCompact]);
+
+  // Single-click on header: toggle table filter (dimming)
+  const handleHeaderClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    selectNode(id, data);
+    setTableFilter(filter.tableFilter === id ? null : id);
+  };
 
   // Double-click on header: toggle collapsed ↔ partial
   const handleHeaderDblClick = (e: React.MouseEvent) => {
@@ -142,6 +153,8 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
 
   return (
     <div
+      role="group"
+      aria-label={data.label}
       className={`loom-node${selected ? ' selected' : ''}`}
       style={{
         background:      'var(--bg2)',
@@ -163,6 +176,8 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div
         ref={headerRef}
+        role="button"
+        aria-pressed={filter.tableFilter === id}
         style={{
           padding:      'var(--seer-space-2) var(--seer-space-3)',
           display:      'flex',
@@ -172,6 +187,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
           borderBottom: (visibleCols.length > 0 || spacerHeight > 0) ? '1px solid var(--bd)' : 'none',
           boxSizing:    'border-box',
         }}
+        onClick={handleHeaderClick}
         onDoubleClick={handleHeaderDblClick}
       >
         <Table2 size={13} color="var(--acc)" strokeWidth={1.5} style={{ flexShrink: 0 }} />
@@ -245,7 +261,13 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
             <ColumnRow
               key={col.id}
               col={col}
-              onClick={data.childrenAvailable ? () => drillDown(col.id, col.name, 'DaliColumn') : undefined}
+              dimmed={highlightedColumns != null && !highlightedColumns.has(col.id)}
+              onClick={() => {
+                selectNode(id, data);
+                const deselect = filter.fieldFilter === col.name;
+                setTableFilter(deselect ? null : id);
+                setFieldFilter(deselect ? null : col.name);
+              }}
             />
           ))}
         </div>

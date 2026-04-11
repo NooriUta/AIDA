@@ -1,5 +1,6 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ResizablePanelProps {
   side: 'left' | 'right';
@@ -18,8 +19,9 @@ export const ResizablePanel = memo(({
   children,
   title,
 }: ResizablePanelProps) => {
+  const { t } = useTranslation();
   const [width, setWidth]         = useState(defaultWidth);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const dragging = useRef(false);
   const startX   = useRef(0);
   const startW   = useRef(0);
@@ -111,7 +113,9 @@ export const ResizablePanel = memo(({
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed((c) => !c)}
-        title={collapsed ? 'Expand panel' : 'Collapse panel'}
+        title={t(collapsed ? 'panel.expand' : 'panel.collapse')}
+        aria-expanded={!collapsed}
+        aria-label={t(collapsed ? 'panel.expand' : 'panel.collapse')}
         style={{
           position: 'absolute',
           top: '50%',

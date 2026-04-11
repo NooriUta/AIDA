@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "SEER VERDANDI — Chur RBAC proxy / auth gateway",
   "scripts": {
-    "dev": "tsx --env-file-if-exists=.env watch src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
     "build": "tsc --project tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run",

@@ -192,12 +192,13 @@ describe('applyDirectionFilter', () => {
 // ── applyCfEdgeToggle ─────────────────────────────────────────────────────────
 
 describe('applyCfEdgeToggle', () => {
-  it('no-op when showCfEdges=true', () => {
+  it('tags CF edges with loom-cf class on L2', () => {
     const g: Graph = {
       nodes: [],
       edges: [edge('a', 'b', 'HAS_AFFECTED_COL')],
     };
-    expect(applyCfEdgeToggle(g, 'L2', true, false)).toBe(g);
+    const result = applyCfEdgeToggle(g, 'L2', true, false);
+    expect(result.edges[0].className).toBe('loom-cf');
   });
 
   it('no-op when tableLevelView=true (handled by phase 3)', () => {
@@ -205,7 +206,7 @@ describe('applyCfEdgeToggle', () => {
     expect(applyCfEdgeToggle(g, 'L2', false, true)).toBe(g);
   });
 
-  it('removes HAS_AFFECTED_COL and HAS_OUTPUT_COL when showCfEdges=false', () => {
+  it('tags edges with CSS classes instead of filtering', () => {
     const g: Graph = {
       nodes: [],
       edges: [
@@ -215,8 +216,10 @@ describe('applyCfEdgeToggle', () => {
       ],
     };
     const result = applyCfEdgeToggle(g, 'L2', false, false);
-    expect(result.edges).toHaveLength(1);
-    expect(result.edges[0].data?.edgeType).toBe('READS_FROM');
+    expect(result.edges).toHaveLength(3);
+    expect(result.edges[0].className).toBe('loom-cf');
+    expect(result.edges[1].className).toBe('loom-cf');
+    expect(result.edges[2].className).toBe('loom-flow');
   });
 });
 
