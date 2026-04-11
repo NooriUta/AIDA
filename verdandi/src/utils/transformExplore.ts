@@ -123,7 +123,10 @@ function transformSchemaExplore(result: ExploreResult): {
   const schemaTableIds = new Set<string>();
   const schemaStmtIds = new Set<string>();
 
+  const _visited = new Set<string>();
   function walkTree(parentId: string) {
+    if (_visited.has(parentId)) return;     // cycle guard (TD-14)
+    _visited.add(parentId);
     const children = nestTree.get(parentId);
     if (!children) return;
     for (const childId of children) {

@@ -149,6 +149,7 @@ export interface LoomStore {
   setDirection:         (upstream: boolean, downstream: boolean) => void;
   toggleTableLevelView: () => void;
   toggleCfEdges:        () => void;
+  toggleMappingMode:    () => void;
   clearFilter:          () => void;
   setAvailableFields:   (fields: string[]) => void;
   setAvailableTables:   (tables: { id: string; label: string }[]) => void;
@@ -207,7 +208,10 @@ export const FILTER_DEFAULTS: FilterState = {
 // ─── Hydrate persisted filter state ───────────────────────────────────────────
 const _persisted = hydratePersistedState();
 
-export const useLoomStore = create<LoomStore>((set, get) => ({
+export const useLoomStore = create<LoomStore>((set, get) => {
+  // Debug: expose store for browser console inspection
+  if (typeof window !== 'undefined') (window as any).__LOOM__ = () => get();
+  return ({
   // ── Initial state ─────────────────────────────────────────────────────────
   viewLevel: (_persisted.viewLevel as LoomStore['viewLevel']) ?? 'L1',
   currentScope: _persisted.currentScope ?? null,
@@ -239,7 +243,9 @@ export const useLoomStore = create<LoomStore>((set, get) => ({
   ...viewportActions(set),
   ...themeActions(set, get),
   ...undoActions(set, get),
-}));
+})});
+
 
 // ── Subscribe to persist filter changes ──────────────────────────────────────
 subscribePersist(useLoomStore);
+

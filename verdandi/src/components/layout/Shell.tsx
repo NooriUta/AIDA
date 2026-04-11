@@ -7,7 +7,7 @@ import { FilterToolbarL1 } from './FilterToolbarL1';
 import { StatusBar } from './StatusBar';
 import { ResizablePanel } from './ResizablePanel';
 import { LoomCanvas } from '../canvas/LoomCanvas';
-import { SearchPanel } from '../panels/SearchPanel';
+// SearchPanel removed — search is now via SearchPalette (/)
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLoomStore } from '../../stores/loomStore';
 import { useHotkeys } from '../../hooks/useHotkeys';
@@ -47,11 +47,6 @@ export const Shell = memo(() => {
 
       {/* ── Row 2: Workspace ──────────────────────────────────────────────── */}
       <div style={{ display: 'flex', overflow: 'hidden', position: 'relative' }}>
-
-        {/* Left panel — Search / Explorer */}
-        <ResizablePanel side="left" defaultWidth={240} minWidth={160} maxWidth={600} title={t('panel.explorer')}>
-          <SearchPanel />
-        </ResizablePanel>
 
         {/* Canvas area = FilterToolbar (level-dependent) + LoomCanvas */}
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>

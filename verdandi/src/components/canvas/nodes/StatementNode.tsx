@@ -37,6 +37,7 @@ const STMT_TYPE_COLORS: Record<string, string> = {
 function OutputColRow({ col, onClick, dimmed }: { col: ColumnInfo; onClick?: () => void; dimmed?: boolean }) {
   return (
     <div
+      role="option"
       data-col-click
       style={{
         display:     'flex',
@@ -129,6 +130,8 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
 
   return (
     <div
+      role="group"
+      aria-label={data.label}
       className={`loom-node${selected ? ' selected' : ''}`}
       style={{
         background:      'var(--bg2)',
@@ -149,7 +152,7 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       <Handle type="source" position={Position.Right} style={{ background: typeColor, zIndex: 5, top: handleTop }} />
 
       {/* Header */}
-      <div ref={headerRef} style={{
+      <div ref={headerRef} role="button" aria-pressed={filter.stmtFilter === id} style={{
         padding:      'var(--seer-space-2) var(--seer-space-3)',
         display:      'flex',
         alignItems:   'center',
@@ -227,7 +230,9 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
               dimmed={highlightedColumns != null && !highlightedColumns.has(col.id)}
               onClick={() => {
                 selectNode(id, data);
-                setFieldFilter(filter.fieldFilter === col.name ? null : col.name);
+                const deselect = filter.fieldFilter === col.name;
+                setStmtFilter(deselect ? null : id);
+                setFieldFilter(deselect ? null : col.name);
               }}
             />
           ))}

@@ -39,7 +39,7 @@ export function filterActions(set: Set) {
 
     setStmtFilter: (stmtId: string | null) =>
       set((s) => ({
-        filter: { ...s.filter, stmtFilter: stmtId, fieldFilter: null },
+        filter: { ...s.filter, stmtFilter: stmtId, tableFilter: null, fieldFilter: null },
         availableColumns: [],
       })),
 
@@ -53,6 +53,12 @@ export function filterActions(set: Set) {
       set((s) => ({ filter: { ...s.filter, tableLevelView: !s.filter.tableLevelView } })),
     toggleCfEdges:          () =>
       set((s) => ({ filter: { ...s.filter, showCfEdges: !s.filter.showCfEdges } })),
+    /** Switch between column mapping (cf edges + column level) and table mapping */
+    toggleMappingMode:      () =>
+      set((s) => {
+        const toTable = !s.filter.tableLevelView;
+        return { filter: { ...s.filter, tableLevelView: toTable, showCfEdges: !toTable } };
+      }),
 
     clearFilter: () =>
       set((s) => ({

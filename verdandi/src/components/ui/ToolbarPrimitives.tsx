@@ -218,3 +218,76 @@ export function PageButton({
     </button>
   );
 }
+
+// ── ToolbarDivider ───────────────────────────────────────────────────────────
+// Vertical separator line. `sm` = L1 (thinner, shorter), `md` = L2/L3.
+
+export function ToolbarDivider({ size = 'md' }: { size?: 'sm' | 'md' }) {
+  return (
+    <div style={{
+      width: size === 'sm' ? '0.5px' : 1,
+      height: size === 'sm' ? 16 : 20,
+      background: 'var(--bd)',
+      flexShrink: 0, margin: '0 2px',
+    }} />
+  );
+}
+
+// ── IconLayers ───────────────────────────────────────────────────────────────
+// Stacked-layers icon used for table-level / system-level view toggles.
+
+export function IconLayers({ size = 11 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M1 4l5-3 5 3-5 3-5-3z" stroke="currentColor"
+        strokeWidth="1.2" strokeLinejoin="round" fill="none" />
+      <path d="M1 7l5 3 5-3" stroke="currentColor"
+        strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── ToolbarToggleButton ──────────────────────────────────────────────────────
+// Reusable toggle button for direction (↑↓), CF edges, table-level view, etc.
+
+export function ToolbarToggleButton({
+  active, onClick, children, color, size = 'md', title, disabled, style: extraStyle,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  color?: string;
+  size?: 'sm' | 'md';
+  title?: string;
+  disabled?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const accent = color ?? 'var(--acc)';
+  const isSm = size === 'sm';
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      disabled={disabled}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: isSm ? 3 : 5,
+        height: isSm ? undefined : 24,
+        padding: isSm ? '2px 7px' : '0 7px',
+        borderRadius: isSm ? 3 : 4,
+        border: `${isSm ? '0.5px' : '1px'} solid ${active ? accent : 'var(--bd)'}`,
+        background: active
+          ? (isSm ? `color-mix(in srgb, ${accent} 8%, transparent)` : 'var(--bg3)')
+          : 'transparent',
+        color: active ? accent : 'var(--t3)',
+        fontSize: isSm ? 10 : 11, cursor: disabled ? 'not-allowed' : 'pointer', flexShrink: 0,
+        fontFamily: isSm ? 'var(--sans)' : 'inherit',
+        transition: 'border-color 0.1s, color 0.1s',
+        whiteSpace: 'nowrap',
+        ...extraStyle,
+      }}
+    >
+      {children}
+    </button>
+  );
+}

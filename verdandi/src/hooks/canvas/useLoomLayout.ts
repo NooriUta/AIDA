@@ -5,6 +5,7 @@ import { useReactFlow } from '@xyflow/react';
 import { useLoomStore }              from '../../stores/loomStore';
 import { applyELKLayout, cancelPendingLayouts } from '../../utils/layoutGraph';
 import { applyL1Layout }             from '../../utils/layoutL1';
+import { edgeTypeClass }             from '../../utils/displayPipeline';
 import type { LoomNode, LoomEdge }   from '../../types/graph';
 import type { ColumnInfo }           from '../../types/domain';
 
@@ -23,9 +24,18 @@ function stripNodeDim(n: LoomNode): LoomNode {
   return { ...n, style: s };
 }
 
+/** Build edge className preserving the mapping-mode type class (loom-cf / loom-flow). */
+function buildEdgeCls(e: LoomEdge, dimCls?: string): string | undefined {
+  const tc = edgeTypeClass(e.data?.edgeType as string);
+  if (!tc && !dimCls) return undefined;
+  if (!dimCls) return tc || undefined;
+  return tc ? `${tc} ${dimCls}` : dimCls;
+}
+
 function stripEdgeDim(e: LoomEdge): LoomEdge {
-  if (!e.className) return e;
-  return { ...e, className: undefined };
+  const cls = buildEdgeCls(e);
+  if (e.className === cls) return e;
+  return { ...e, className: cls };
 }
 
 type SetNodes = Dispatch<SetStateAction<LoomNode[]>>;
@@ -64,7 +74,6 @@ export function useLoomLayout(
     pendingDeepExpand,
     activatePendingDeepExpand,
     setGraphStats,
-    setAvailableFields,
     setHighlightedColumns,
   } = useLoomStore();
 
@@ -97,7 +106,6 @@ export function useLoomLayout(
       setNodes(laid);
       setEdges(displayGraph.edges);
       setGraphStats(laid.length, displayGraph.edges.length);
-      setAvailableFields([]);
       return;
     }
 
@@ -110,13 +118,6 @@ export function useLoomLayout(
         setNodes(layoutedNodes);
         setEdges(displayGraph.edges);
         setGraphStats(layoutedNodes.length, displayGraph.edges.length);
-        // Populate field dropdown: collect unique column/output-column labels
-        const fields = layoutedNodes
-          .filter((n) => n.data.nodeType === 'DaliColumn' || n.data.nodeType === 'DaliOutputColumn')
-          .map((n) => n.data.label)
-          .filter((label, idx, arr) => arr.indexOf(label) === idx)
-          .sort();
-        setAvailableFields(fields);
       })
       .catch((err) => {
         console.error('[LOOM] ELK layout failed', err);
@@ -285,7 +286,7 @@ export function useLoomLayout(
         const sCol = e.sourceHandle!.replace(/^src-/, '');
         const tCol = e.targetHandle!.replace(/^tgt-/, '');
         if (!highlightedCols.has(sCol) || !highlightedCols.has(tCol)) {
-          return { ...e, className: 'loom-edge-dim-field' };
+          return { ...e, className: buildEdgeCls(e, 'loom-edge-dim-field') };
         }
       }
       // Node-level edges: dim if neither endpoint has a highlighted column
@@ -293,11 +294,11 @@ export function useLoomLayout(
         const srcHas = nodesWithHighlight.has(e.source);
         const tgtHas = nodesWithHighlight.has(e.target);
         if (!srcHas || !tgtHas) {
-          return { ...e, className: 'loom-edge-dim-table' };
+          return { ...e, className: buildEdgeCls(e, 'loom-edge-dim-table') };
         }
       }
       if (inTable && inField) return stripEdgeDim(e);
-      return { ...e, className: inField ? 'loom-edge-dim-table' : 'loom-edge-dim-field' };
+      return { ...e, className: buildEdgeCls(e, inField ? 'loom-edge-dim-table' : 'loom-edge-dim-field') };
     }));
 
     // Fly to the focal node after style update settles.

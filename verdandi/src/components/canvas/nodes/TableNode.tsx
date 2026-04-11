@@ -26,6 +26,7 @@ function ColumnRow({
 }) {
   return (
     <div
+      role="option"
       data-col-click
       style={{
         display: 'flex',
@@ -154,6 +155,8 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
 
   return (
     <div
+      role="group"
+      aria-label={data.label}
       className={`loom-node${selected ? ' selected' : ''}`}
       style={{
         background:      'var(--bg2)',
@@ -175,6 +178,8 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div
         ref={headerRef}
+        role="button"
+        aria-pressed={filter.tableFilter === id}
         style={{
           padding:      'var(--seer-space-2) var(--seer-space-3)',
           display:      'flex',
@@ -261,7 +266,9 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
               dimmed={highlightedColumns != null && !highlightedColumns.has(col.id)}
               onClick={() => {
                 selectNode(id, data);
-                setFieldFilter(filter.fieldFilter === col.name ? null : col.name);
+                const deselect = filter.fieldFilter === col.name;
+                setTableFilter(deselect ? null : id);
+                setFieldFilter(deselect ? null : col.name);
               }}
             />
           ))}

@@ -240,9 +240,17 @@ const LoomCanvasInner = memo(() => {
     [theme],
   );
 
+  // ── Mapping-mode + zoom CSS classes for edge visibility ─────────────────────
+  const tableLevelView = useLoomStore((s) => s.filter.tableLevelView);
+  const isCompact = zoomLevel < LOD_COMPACT_ZOOM;
+  const wrapperCls = [
+    !tableLevelView && 'loom-column-mode',
+    isCompact       && 'loom-compact',
+  ].filter(Boolean).join(' ') || undefined;
+
   return (
     <ZoomLevelProvider value={zoomLevel}>
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div ref={containerRef} className={wrapperCls} style={{ width: '100%', height: '100%', position: 'relative' }}>
       {/* Loading overlay */}
       {isLoading && (
         <div style={{
