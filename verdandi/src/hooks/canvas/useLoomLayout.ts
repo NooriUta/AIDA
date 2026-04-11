@@ -303,9 +303,8 @@ export function useLoomLayout(
 
     // Fly to the focal node after style update settles.
     if (activeId) {
-      let raf1: number;
       let raf2: number;
-      raf1 = requestAnimationFrame(() => {
+      const raf1 = requestAnimationFrame(() => {
         raf2 = requestAnimationFrame(() => {
           fitView({
             nodes:   [{ id: activeId }],

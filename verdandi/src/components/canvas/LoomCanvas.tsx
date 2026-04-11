@@ -32,7 +32,6 @@ import { NodeContextMenu }  from './NodeContextMenu';
 import { ExportPanel }      from './ExportPanel';
 import type { ContextMenuState } from './NodeContextMenu';
 
-import { ErrorBoundary }            from '../ErrorBoundary';
 import { useLoomStore }            from '../../stores/loomStore';
 import { clearLayoutCache }        from '../../utils/layoutGraph';
 import { isUnauthorized }          from '../../services/lineage';
@@ -108,6 +107,7 @@ const LoomCanvasInner = memo(() => {
   useFilterSync(rawGraph);
 
   // ── Close context menu on level change; clear ELK cache on scope change ──────
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- sync with external viewLevel
   useEffect(() => { setContextMenu(null); }, [viewLevel]);
   useEffect(() => { clearLayoutCache(); }, [currentScope]);
 

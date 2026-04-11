@@ -85,13 +85,9 @@ export const FilterToolbar = memo(() => {
     setDepth,
     setDirection,
     toggleMappingMode,
-    clearFilter,
     navigateToLevel,
     jumpTo,
   } = useLoomStore();
-
-  // Only show on L2 / L3
-  if (viewLevel === 'L1') return null;
 
   const {
     startObjectLabel,
@@ -103,8 +99,30 @@ export const FilterToolbar = memo(() => {
     upstream,
     downstream,
     tableLevelView,
-    showCfEdges,
   } = filter;
+
+  // ── Hooks must be called unconditionally (Rules of Hooks) ─────────────────
+  const cascadedStmts = useMemo(() => (
+    tableFilter
+      ? availableStmts.filter((s) => s.connectedTableIds.includes(tableFilter))
+      : availableStmts
+  ), [availableStmts, tableFilter]);
+
+  const handleTableChange = useCallback(
+    (e: ChangeEvent<HTMLSelectElement>) => setTableFilter(e.target.value || null),
+    [setTableFilter],
+  );
+  const handleStmtChange = useCallback(
+    (e: ChangeEvent<HTMLSelectElement>) => setStmtFilter(e.target.value || null),
+    [setStmtFilter],
+  );
+  const handleFieldChange = useCallback(
+    (e: ChangeEvent<HTMLSelectElement>) => setFieldFilter(e.target.value || null),
+    [setFieldFilter],
+  );
+
+  // Only show on L2 / L3
+  if (viewLevel === 'L1') return null;
 
   const scopeLabel = startObjectLabel ?? currentScopeLabel ?? viewLevel;
 
@@ -129,27 +147,7 @@ export const FilterToolbar = memo(() => {
   const hasActiveFilter = tableFilter !== null || stmtFilter !== null || fieldFilter !== null
     || depth !== DEPTH_DEFAULT || !upstream || !downstream;
 
-  // ── Stmt options — cascade: filter by selected table ─────────────────────
-  const cascadedStmts = useMemo(() => (
-    tableFilter
-      ? availableStmts.filter((s) => s.connectedTableIds.includes(tableFilter))
-      : availableStmts
-  ), [availableStmts, tableFilter]);
-
   const showColumnDropdown = availableColumns.length > 0 || availableFields.length > 0;
-
-  const handleTableChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setTableFilter(e.target.value || null),
-    [setTableFilter],
-  );
-  const handleStmtChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setStmtFilter(e.target.value || null),
-    [setStmtFilter],
-  );
-  const handleFieldChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setFieldFilter(e.target.value || null),
-    [setFieldFilter],
-  );
 
   return (
     <div style={{

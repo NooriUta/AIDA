@@ -210,7 +210,7 @@ const _persisted = hydratePersistedState();
 
 export const useLoomStore = create<LoomStore>((set, get) => {
   // Debug: expose store for browser console inspection
-  if (typeof window !== 'undefined') (window as any).__LOOM__ = () => get();
+  if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__LOOM__ = () => get();
   return ({
   // ── Initial state ─────────────────────────────────────────────────────────
   viewLevel: (_persisted.viewLevel as LoomStore['viewLevel']) ?? 'L1',

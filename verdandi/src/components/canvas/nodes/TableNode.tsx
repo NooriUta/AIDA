@@ -128,12 +128,10 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
   const [colsVisible, setColsVisible] = useState(!isLodCompact);
   useEffect(() => {
     if (!isLodCompact) {
-      // Small delay so the mount happens first, then CSS transition kicks in
       const t = setTimeout(() => setColsVisible(true), CANVAS.LOD_TIMEOUT);
       return () => clearTimeout(t);
-    } else {
-      setColsVisible(false);
     }
+    setColsVisible(false); // eslint-disable-line react-hooks/set-state-in-effect -- sync with LOD zoom
   }, [isLodCompact]);
 
   // Single-click on header: toggle table filter (dimming)

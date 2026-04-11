@@ -111,9 +111,8 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
     if (!isLodCompact) {
       const timer = setTimeout(() => setColsVisible(true), CANVAS.LOD_TIMEOUT);
       return () => clearTimeout(timer);
-    } else {
-      setColsVisible(false);
     }
+    setColsVisible(false); // eslint-disable-line react-hooks/set-state-in-effect -- sync with LOD zoom
   }, [isLodCompact]);
 
   // Single-click on header: toggle statement filter (dimming)
