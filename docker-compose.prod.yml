@@ -1,0 +1,100 @@
+###############################################################################
+# SEER Studio — Production Docker Compose
+# Uses pre-built images from GHCR (ghcr.io/nooriuta/verdandi/*)
+# Deploy: docker compose -f docker-compose.prod.yml up -d
+#
+# Required env vars (export or .env file):
+#   ARCADEDB_URL            — http://HoundArcade:2480 (external network)
+#   ARCADEDB_DB             — hound
+#   ARCADEDB_USER           — root
+#   ARCADEDB_ROOT_PASSWORD  — (secret)
+#   KEYCLOAK_CLIENT_SECRET  — (secret)
+#   COOKIE_SECRET           — (secret)
+###############################################################################
+
+networks:
+  default:
+    name: verdandi_net
+
+services:
+  # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: start-dev --import-realm
+    restart: unless-stopped
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8180"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "18180:8180"
+    volumes:
+      - ./keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
+
+  # ── SHUTTLE (Quarkus GraphQL API) ──────────────────────────────────────────
+  shuttle:
+    image: ghcr.io/nooriuta/verdandi/shuttle:latest
+    restart: unless-stopped
+    environment:
+      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://HoundArcade:2480}
+      ARCADE_DB:       ${ARCADEDB_DB:-hound}
+      ARCADE_USER:     ${ARCADEDB_USER:-root}
+      ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
+    ports:
+      - "18080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/q/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Chur (auth gateway / BFF) ──────────────────────────────────────────────
+  chur:
+    image: ghcr.io/nooriuta/verdandi/chur:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV:               production
+      PORT:                   "3000"
+      CORS_ORIGIN:            "http://localhost:15173"
+      KEYCLOAK_URL:           http://keycloak:8180
+      KEYCLOAK_REALM:         seer
+      KEYCLOAK_CLIENT_ID:     verdandi-bff
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-verdandi-bff-secret-dev}
+      COOKIE_SECRET:          ${COOKIE_SECRET:-dev-cookie-secret}
+      ARCADEDB_URL:           ${ARCADEDB_URL:-http://HoundArcade:2480}
+      ARCADEDB_DB:            ${ARCADEDB_DB:-hound}
+      ARCADEDB_USER:          ${ARCADEDB_USER:-root}
+      ARCADEDB_PASS:          ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      LINEAGE_API_URL:        http://shuttle:8080
+    ports:
+      - "13000:3000"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      shuttle:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── verdandi (React frontend via nginx) ────────────────────────────────────
+  verdandi:
+    image: ghcr.io/nooriuta/verdandi/verdandi:latest
+    restart: unless-stopped
+    ports:
+      - "15173:5173"
+    depends_on:
+      chur:
+        condition: service_healthy

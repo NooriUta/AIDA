@@ -27,6 +27,7 @@ jobs:
           cache-dependency-path: verdandi/package-lock.json
       - run: npm ci
       - run: npm test
+      - run: npm run test:coverage
       - run: npx vite build
 
   # ── BFF: Chur (Fastify + Vitest) ────────────────────────────────────────────

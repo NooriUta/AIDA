@@ -30,7 +30,16 @@ export default defineConfig({
     environment: 'node',
     include:     ['src/**/*.{test,spec}.{ts,tsx}'],
     setupFiles:  ['./src/test/setup.ts'],
-    coverage:    { provider: 'v8', reporter: ['text', 'html'] },
+    coverage: {
+      provider: 'v8',
+      reporter:  ['text', 'html', 'lcov'],
+      exclude:   ['src/test/**', '**/*.test.*', '**/*.spec.*', 'src/main.tsx', 'src/vite-env.d.ts'],
+      thresholds: {
+        lines:     70,
+        functions: 70,
+        branches:  60,
+      },
+    },
   },
   server: {
     host: '127.0.0.1',  // bind to IPv4 so browsers can reach it
