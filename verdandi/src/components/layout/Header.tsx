@@ -1,5 +1,5 @@
 import { memo, useRef, useState, useCallback } from 'react';
-import { Sun, Moon, Command, Paintbrush, ChevronDown, Search } from 'lucide-react';
+import { Sun, Moon, Paintbrush, ChevronDown, Search } from 'lucide-react';
 import { ProfileModal } from '../profile/ProfileModal';
 import { CommandPalette } from '../CommandPalette';
 import { SearchPalette } from '../SearchPalette';
@@ -135,7 +135,7 @@ export const Header = memo(() => {
           }}
         >
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--acc)', flexShrink: 0 }} />
-          <span style={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.08em', color: 'var(--t1)' }}>
+          <span className="seer-logo-text" style={{ fontSize: '13px', color: 'var(--t1)' }}>
             SEER
           </span>
           <ChevronDown size={11} style={{
@@ -304,6 +304,9 @@ export const Header = memo(() => {
         <span style={{ letterSpacing: '0.04em', color: 'var(--t3)' }}>/</span>
       </button>
 
+      {/* Visual separator between Search and Command palette */}
+      <div style={{ width: 1, height: 16, background: 'var(--bd)', flexShrink: 0 }} />
+
       {/* Command palette */}
       <button
         onClick={toggleCmdPalette}
@@ -318,7 +321,6 @@ export const Header = memo(() => {
         }}
         title={t('commandPalette.title') + ' (⌘K)'}
       >
-        <Command size={12} />
         <span style={{ letterSpacing: '0.04em' }}>⌘K</span>
       </button>
 
