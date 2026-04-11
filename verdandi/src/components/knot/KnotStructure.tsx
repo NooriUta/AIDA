@@ -157,7 +157,7 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                     {isOpen ? '\u25BC' : '\u25B6'}
                   </td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
-                    <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t2)' }}>{tb.geoid}</span>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t2)' }}>{tb.geoid}</span>
                   </td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)', fontWeight: 500 }}>{tb.name}</td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
@@ -172,7 +172,7 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                         {tb.aliases.slice(0, 3).map(a => (
                           <span key={a} style={{
                             display: 'inline-block', padding: '1px 5px', borderRadius: 3,
-                            fontSize: 9, fontFamily: "'Fira Code', monospace",
+                            fontSize: 9, fontFamily: 'var(--mono)',
                             background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
                             border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
                             color: 'var(--acc)',
@@ -218,7 +218,7 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                               {tb.aliases.map(a => (
                                 <span key={a} style={{
                                   display: 'inline-block', padding: '1px 6px', borderRadius: 3,
-                                  fontSize: 10, fontFamily: "'Fira Code', monospace",
+                                  fontSize: 10, fontFamily: 'var(--mono)',
                                   background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
                                   border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
                                   color: 'var(--acc)',
@@ -363,7 +363,7 @@ function StmtChip({ children, color }: { children: React.ReactNode; color: strin
   return (
     <span style={{
       display: 'inline-block', padding: '2px 7px', borderRadius: 3,
-      fontSize: 10, fontFamily: "'Fira Code', monospace",
+      fontSize: 10, fontFamily: 'var(--mono)',
       background: `color-mix(in srgb, ${color} 8%, transparent)`,
       border: `1px solid color-mix(in srgb, ${color} 20%, transparent)`,
       color: 'var(--t2)',
@@ -395,7 +395,7 @@ function MiniTd({ children, center, mono, bold, muted }: {
     <td style={{
       padding: '3px 6px', borderBottom: '1px solid var(--bd)',
       textAlign: center ? 'center' : 'left',
-      fontFamily: mono ? "'Fira Code', monospace" : 'inherit',
+      fontFamily: mono ? 'var(--mono)' : 'inherit',
       fontWeight: bold ? 500 : 400,
       color: muted ? 'var(--t3)' : 'var(--t2)',
       fontSize: 11,

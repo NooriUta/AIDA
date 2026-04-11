@@ -207,7 +207,7 @@ export const KnotPage = memo(() => {
                         background: active ? 'color-mix(in srgb, var(--acc) 15%, transparent)' : 'transparent',
                         color: active ? 'var(--acc)' : 'var(--t3)',
                         fontSize: 9,
-                        fontFamily: "'Fira Code', monospace",
+                        fontFamily: 'var(--mono)',
                         cursor: 'pointer',
                         transition: 'border-color 0.1s, color 0.1s',
                       }}
@@ -424,7 +424,7 @@ function SessionCard({
           padding: '1px 5px',
           borderRadius: 3,
           background: 'var(--bg3)',
-          fontFamily: "'Fira Code', monospace",
+          fontFamily: 'var(--mono)',
           fontSize: 9,
           color: 'var(--t2)',
         }}>

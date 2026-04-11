@@ -211,7 +211,7 @@ export const CommandPalette = memo(({ open, onClose }: CommandPaletteProps) => {
               flex: 1, border: 'none', outline: 'none',
               background: 'transparent',
               color: 'var(--t1)', fontSize: '13px',
-              fontFamily: 'var(--seer-font, inherit)',
+              fontFamily: 'var(--font)',
             }}
           />
           <div style={{

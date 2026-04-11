@@ -84,7 +84,7 @@ function CascadePill({ icon, placeholder, value, options, onChange, onClear, act
       {icon}
       <span style={{
         overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none',
-        maxWidth: 85, fontFamily: 'monospace',
+        maxWidth: 85, fontFamily: 'var(--mono)',
       }}>
         {label}
       </span>
@@ -194,7 +194,7 @@ export const FilterToolbarL1 = memo(() => {
               fontSize: 9, color: isOn ? 'var(--acc)' : 'var(--t3)',
               cursor: 'pointer',
               background: isOn ? 'rgba(168,184,96,.08)' : 'transparent',
-              fontWeight: isOn ? 600 : 400, fontFamily: 'var(--sans)',
+              fontWeight: isOn ? 600 : 400, fontFamily: 'var(--font)',
             }}>
               {depthLabel(d)}
             </button>
@@ -277,7 +277,7 @@ export const FilterToolbarL1 = memo(() => {
             cursor: 'pointer',
             background: 'rgba(212,146,42,.06)',
             whiteSpace: 'nowrap', flexShrink: 0,
-            fontFamily: 'var(--sans)',
+            fontFamily: 'var(--font)',
           }}
         >✕</button>
       )}

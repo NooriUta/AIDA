@@ -10,6 +10,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { LegendButton }    from './LegendButton';
+import { ToolbarDivider }  from '../ui/ToolbarPrimitives';
 
 // ─── Navigation structure (SEER Studio architecture) ─────────────────────────
 type NornId = 'VERDANDI' | 'URD' | 'SKULD';
@@ -215,7 +216,7 @@ export const Header = memo(() => {
       </div>
 
       {/* ── Separator ────────────────────────────────────────────────────── */}
-      <div style={{ width: 1, height: 20, background: 'var(--bd)', flexShrink: 0 }} />
+      <ToolbarDivider />
 
       {/* ── Active Norn name (home point) ────────────────────────────────── */}
       <button
@@ -237,7 +238,7 @@ export const Header = memo(() => {
       </button>
 
       {/* ── Separator ────────────────────────────────────────────────────── */}
-      <div style={{ width: 1, height: 20, background: 'var(--bd)', flexShrink: 0 }} />
+      <ToolbarDivider />
 
       {/* ── Sub-module tabs ──────────────────────────────────────────────── */}
       <nav style={{ display: 'flex', gap: '2px', flex: 1, alignItems: 'center' }}>
@@ -304,8 +305,7 @@ export const Header = memo(() => {
         <span style={{ letterSpacing: '0.04em', color: 'var(--t3)' }}>/</span>
       </button>
 
-      {/* Visual separator between Search and Command palette */}
-      <div style={{ width: 1, height: 16, background: 'var(--bd)', flexShrink: 0 }} />
+      <ToolbarDivider size="sm" />
 
       {/* Command palette */}
       <button

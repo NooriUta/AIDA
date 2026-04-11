@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,11 +19,13 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore();
 
-  // Pick a random slogan once per session
-  const [slogan] = useState(() => {
+  // Pick a random slogan once — useRef persists across re-renders without setter overhead
+  const sloganRef = useRef('');
+  if (!sloganRef.current) {
     const list = t('app.slogans', { returnObjects: true }) as string[];
-    return Array.isArray(list) ? list[Math.floor(Math.random() * list.length)] : t('app.tagline');
-  });
+    sloganRef.current = Array.isArray(list) ? list[Math.floor(Math.random() * list.length)] : t('app.tagline');
+  }
+  const slogan = sloganRef.current;
 
   const {
     register,

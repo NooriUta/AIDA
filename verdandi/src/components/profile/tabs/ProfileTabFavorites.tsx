@@ -39,7 +39,7 @@ export const ProfileTabFavorites = memo(() => {
                 {f.type === 'DaliTable' ? '⊞' : '⊡'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--t1)', fontFamily: 'var(--mono, monospace)' }}>{f.name}</div>
+                <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--t1)', fontFamily: 'var(--mono)' }}>{f.name}</div>
                 <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>{f.schema} · {f.meta}</div>
               </div>
               <button

@@ -174,7 +174,7 @@ export function ToolbarSelect({
       style={{
         background: 'var(--bg2)', border: '1px solid var(--bd)',
         color: 'var(--t1)', padding: '5px 8px', borderRadius: 5,
-        fontSize: 12, outline: 'none', fontFamily: "'DM Sans', sans-serif", cursor: 'pointer',
+        fontSize: 12, outline: 'none', fontFamily: 'var(--font)', cursor: 'pointer',
       }}
     >
       {options.map((opt) => (
@@ -281,7 +281,7 @@ export function ToolbarToggleButton({
           : 'transparent',
         color: active ? accent : 'var(--t3)',
         fontSize: isSm ? 10 : 11, cursor: disabled ? 'not-allowed' : 'pointer', flexShrink: 0,
-        fontFamily: isSm ? 'var(--sans)' : 'inherit',
+        fontFamily: isSm ? 'var(--font)' : 'inherit',
         transition: 'border-color 0.1s, color 0.1s',
         whiteSpace: 'nowrap',
         ...extraStyle,

@@ -440,7 +440,7 @@ function StmtTableRow({ stmt, depth, isOpen, toggle, levelLabel, indent }: {
       {/* Name (geoid) */}
       <td style={{
         padding: '6px 8px', paddingLeft: 8 + pad, borderBottom: '1px solid var(--bd)',
-        fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t2)',
+        fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t2)',
       }}>
         {indent && <span style={{ color: 'var(--t3)', fontSize: 10, marginRight: 4 }}>{'\u2514'}</span>}
         {truncGeoid(stmt.geoid)}
@@ -459,7 +459,7 @@ function StmtTableRow({ stmt, depth, isOpen, toggle, levelLabel, indent }: {
             {(stmt.stmtAliases || []).slice(0, 3).map(a => (
               <span key={a} style={{
                 padding: '1px 5px', borderRadius: 3, fontSize: 9,
-                fontFamily: "'Fira Code', monospace",
+                fontFamily: 'var(--mono)',
                 background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
                 color: 'var(--acc)',
               }}>{a}</span>
@@ -476,7 +476,7 @@ function StmtTableRow({ stmt, depth, isOpen, toggle, levelLabel, indent }: {
       <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--bd)' }}>
         <span style={{
           padding: '2px 6px', borderRadius: 3,
-          fontSize: 10, fontFamily: "'Fira Code', monospace",
+          fontSize: 10, fontFamily: 'var(--mono)',
           background: badge.bg, color: badge.color,
         }}>
           {effectiveType}
@@ -489,7 +489,7 @@ function StmtTableRow({ stmt, depth, isOpen, toggle, levelLabel, indent }: {
       {/* Line */}
       <td style={{
         padding: '6px 8px', borderBottom: '1px solid var(--bd)', textAlign: 'center',
-        fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--t2)',
+        fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)',
       }}>
         {effectiveLine || '—'}
       </td>
@@ -634,14 +634,14 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
                   <td style={{
                     ...pTblTdStyle,
                     borderLeft: `3px solid ${ref.nodeType === 'STMT' ? 'var(--wrn)' : 'var(--suc)'}`,
-                    fontFamily: "'Fira Code', monospace", fontSize: 11,
+                    fontFamily: 'var(--mono)', fontSize: 11,
                   }}>
                     {ref.name}
                   </td>
-                  <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--acc)' }}>
+                  <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--acc)' }}>
                     {ref.aliases?.length ? ref.aliases.join(', ') : '—'}
                   </td>
-                  <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t3)' }}>
+                  <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)' }}>
                     {ref.geoid || '—'}
                   </td>
                 </tr>
@@ -674,12 +674,12 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
                     </td>
                     <td style={{
                       ...pTblTdStyle,
-                      fontFamily: "'Fira Code', monospace", fontSize: 11, fontWeight: 500,
+                      fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 500,
                       borderLeft: '3px solid var(--suc)', color: 'var(--t1)',
                     }}>
                       {col.columnName || '—'}
                     </td>
-                    <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t3)' }}>
+                    <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)' }}>
                       {col.tableName || '—'}
                     </td>
                   </tr>
@@ -712,14 +712,14 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
                   <td style={{
                     ...pTblTdStyle,
                     borderLeft: `3px solid ${ref.nodeType === 'STMT' ? 'var(--wrn)' : 'var(--inf)'}`,
-                    fontFamily: "'Fira Code', monospace", fontSize: 11,
+                    fontFamily: 'var(--mono)', fontSize: 11,
                   }}>
                     {ref.name}
                   </td>
-                  <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--acc)' }}>
+                  <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--acc)' }}>
                     {ref.aliases?.length ? ref.aliases.join(', ') : '—'}
                   </td>
-                  <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       title={ref.geoid || undefined}>
                     {ref.geoid || '—'}
                   </td>
@@ -753,10 +753,10 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
                       <td style={{ ...pTblTdStyle, textAlign: 'center', width: 32, color: 'var(--t3)' }}>
                         {col.colOrder || i + 1}
                       </td>
-                      <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 11, fontWeight: 500 }}>
+                      <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 500 }}>
                         {col.alias || col.name}
                       </td>
-                      <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t3)' }}>
+                      <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)' }}>
                         {col.expression}
                       </td>
                       <td style={{ ...pTblTdStyle, fontSize: 11 }}>
@@ -773,14 +773,14 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
                                 <tr key={ai} style={{ borderBottom: ai < srcAtoms.length - 1 ? '1px solid var(--bd)' : 'none' }}>
                                   <td style={{
                                     padding: '3px 6px', fontSize: 10,
-                                    fontFamily: "'Fira Code', monospace",
+                                    fontFamily: 'var(--mono)',
                                     borderLeft: `3px solid ${atomStatusColor(a.status)}`,
                                     maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                     color: 'var(--t1)',
                                   }} title={a.text}>
                                     {atomDisplayText(a.text)}
                                   </td>
-                                  <td style={{ padding: '3px 6px', fontSize: 9, color: 'var(--inf)', fontFamily: "'Fira Code', monospace", whiteSpace: 'nowrap' }}>
+                                  <td style={{ padding: '3px 6px', fontSize: 9, color: 'var(--inf)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap' }}>
                                     {a.col || a.tbl || '—'}
                                   </td>
                                 </tr>
@@ -839,29 +839,29 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
                         {/* Pos: line:col extracted from atom_text */}
                         <td style={{
                           ...pTblTdStyle,
-                          fontFamily: "'Fira Code', monospace", fontSize: 10,
+                          fontFamily: 'var(--mono)', fontSize: 10,
                           color: 'var(--t3)', textAlign: 'center', whiteSpace: 'nowrap',
                         }}>
                           {a.atomLine > 0 ? `${a.atomLine}:${a.atomPos}` : '—'}
                         </td>
                         <td style={{
                           ...pTblTdStyle,
-                          fontFamily: "'Fira Code', monospace", fontSize: 10,
+                          fontFamily: 'var(--mono)', fontSize: 10,
                           borderLeft: `3px solid ${atomColor(a)}`,
                           maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }} title={a.atomText}>
                           {atomDisplayText(a.atomText)}
                         </td>
-                        <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 11 }}>
+                        <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 11 }}>
                           {a.columnName || '—'}
                         </td>
-                        <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--inf)' }}>
+                        <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--inf)' }}>
                           {a.outputColName || '—'}
                         </td>
-                        <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--acc)' }}>
+                        <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--acc)' }}>
                           {a.refColEdge || a.refSourceName || '—'}
                         </td>
-                        <td style={{ ...pTblTdStyle, fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--inf)' }}>
+                        <td style={{ ...pTblTdStyle, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--inf)' }}>
                           {a.refTblEdge || a.tableName || '—'}
                         </td>
                         <td style={{ ...pTblTdStyle, fontSize: 11 }}>
@@ -1000,7 +1000,7 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
       <td style={{
         padding: '5px 8px', fontSize: 11, color: 'var(--t2)',
         borderBottom: '1px solid var(--bd)',
-        ...(mono ? { fontFamily: "'Fira Code', monospace" } : {}),
+        ...(mono ? { fontFamily: 'var(--mono)' } : {}),
       }}>
         {value}
       </td>
@@ -1029,7 +1029,7 @@ function AtomFlag({ children, bg, color, title }: { children: React.ReactNode; b
   return (
     <span style={{
       display: 'inline-block', padding: '1px 4px', borderRadius: 3,
-      fontSize: 9, fontFamily: "'Fira Code', monospace",
+      fontSize: 9, fontFamily: 'var(--mono)',
       background: bg, color,
     }} title={title}>
       {children}
@@ -1084,7 +1084,7 @@ function AtomStat({ label, value, color }: { label: string; value: number; color
   return (
     <span>
       <span style={{ color: 'var(--t3)', marginRight: 4 }}>{label}:</span>
-      <span style={{ fontFamily: "'Fira Code', monospace", fontWeight: 500, color }}>{value}</span>
+      <span style={{ fontFamily: 'var(--mono)', fontWeight: 500, color }}>{value}</span>
     </span>
   );
 }
@@ -1130,7 +1130,7 @@ function SqlBlock({ sql }: { sql: string }) {
         padding: '12px 14px',
         fontSize: 11,
         lineHeight: 1.55,
-        fontFamily: "'Fira Code', 'Consolas', monospace",
+        fontFamily: 'var(--mono)',
         color: 'var(--t2)',
         overflowX: 'auto',
         overflowY: 'auto',

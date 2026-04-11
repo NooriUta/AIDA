@@ -56,7 +56,7 @@ export const InspectorRow = memo(({ label, value }: { label: string; value: Reac
     <span style={{ color: 'var(--t3)', minWidth: 72, flexShrink: 0 }}>{label}</span>
     <span style={{
       color: 'var(--t1)', wordBreak: 'break-word',
-      fontFamily: 'var(--seer-font-mono, monospace)',
+      fontFamily: 'var(--mono)',
     }}>{value}</span>
   </div>
 ));

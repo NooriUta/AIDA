@@ -32,7 +32,7 @@ export const InspectorSchema = memo(({ data, nodeId }: Props) => {
               fontSize:    '11px',
               borderTop:   '1px solid var(--bd)',
             }}>
-              <span style={{ color: 'var(--t1)', fontFamily: 'monospace' }}>{s.name}</span>
+              <span style={{ color: 'var(--t1)', fontFamily: 'var(--mono)' }}>{s.name}</span>
               {s.tableCount !== undefined && (
                 <span style={{
                   fontSize: '10px', color: 'var(--t3)',

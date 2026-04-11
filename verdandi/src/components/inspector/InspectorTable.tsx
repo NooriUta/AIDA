@@ -30,7 +30,7 @@ function ColumnRow({ col }: { col: ColumnInfo }) {
     }}>
       <span style={{
         flex: 1, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        fontFamily: 'var(--seer-font-mono, monospace)',
+        fontFamily: 'var(--mono)',
       }}>
         {col.name}
       </span>

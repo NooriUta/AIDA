@@ -55,7 +55,7 @@ export const SchemaGroupNode = memo(({ data, selected, id }: NodeProps<SchemaGro
           fontSize:      8,
           padding:       '1px 5px',
           borderRadius:  2,
-          fontFamily:    'monospace',
+          fontFamily:    'var(--mono)',
           border:        `0.5px solid ${color}40`,
           color:         color,
           opacity:       0.65,

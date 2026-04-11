@@ -35,7 +35,7 @@ function OutputColRow({ col }: { col: ColumnInfo }) {
     }}>
       <span style={{
         flex: 1, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        fontFamily: 'var(--seer-font-mono, monospace)',
+        fontFamily: 'var(--mono)',
       }}>
         {col.name}
       </span>
@@ -154,7 +154,7 @@ function SqlSection({ data }: { data: DaliNodeData }) {
             borderRadius: 4,
             maxHeight: 200, overflowY: 'auto',
             whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            fontFamily: 'var(--seer-font-mono, monospace)',
+            fontFamily: 'var(--mono)',
           }}>
             {sqlText}
           </pre>

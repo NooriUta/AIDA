@@ -131,7 +131,7 @@ export const InspectorPanel = memo(() => {
         <div style={{ fontSize: '11px', color: 'var(--t3)' }}>
           {t('inspector.type')}: <span style={{ color: 'var(--t1)' }}>{nodeType}</span>
         </div>
-        <div style={{ fontSize: '10px', color: 'var(--t3)', marginTop: 4, fontFamily: 'monospace' }}>
+        <div style={{ fontSize: '10px', color: 'var(--t3)', marginTop: 4, fontFamily: 'var(--mono)' }}>
           {selectedNodeId}
         </div>
       </div>

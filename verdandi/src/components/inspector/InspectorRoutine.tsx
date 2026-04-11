@@ -39,7 +39,7 @@ function ParamRow({ param }: { param: ParamEntry }) {
     }}>
       <span style={{
         flex: 1, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        fontFamily: 'var(--seer-font-mono, monospace)',
+        fontFamily: 'var(--mono)',
       }}>
         {param.name}
       </span>

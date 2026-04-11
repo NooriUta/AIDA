@@ -67,7 +67,7 @@ export const ServiceNode = memo(({ data, selected, id }: NodeProps<ServiceNodeTy
               padding: '1px 5px',
               color: 'var(--inf)',
               fontSize: '10px',
-              fontFamily: 'monospace',
+              fontFamily: 'var(--mono)',
               letterSpacing: '0.03em',
               flexShrink: 0,
             }}>

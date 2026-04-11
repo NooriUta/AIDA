@@ -304,7 +304,7 @@ export const SearchPalette = memo(({ open, onClose }: SearchPaletteProps) => {
               flex: 1, border: 'none', outline: 'none',
               background: 'transparent',
               color: 'var(--t1)', fontSize: '13px',
-              fontFamily: 'var(--seer-font, inherit)',
+              fontFamily: 'var(--font)',
             }}
           />
           {query.length > 0 && (

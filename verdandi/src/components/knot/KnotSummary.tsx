@@ -113,7 +113,7 @@ export const KnotSummary = memo(({ session: s, tables, statements }: Props) => {
             <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 4 }}>{t('knot.session.processingMs')}</div>
             <div style={{
               fontSize: 14, fontWeight: 600, color: 'var(--acc)',
-              fontFamily: "'Fira Code', monospace",
+              fontFamily: 'var(--mono)',
             }}>
               {s.processingMs > 0 ? `${s.processingMs.toLocaleString()} ms` : '—'}
             </div>
@@ -194,7 +194,7 @@ function StatRow({ label, value, color, dot }: {
       </span>
       <span style={{
         fontWeight: 500, color: color || 'var(--t1)',
-        fontFamily: "'Fira Code', monospace", fontSize: 11,
+        fontFamily: 'var(--mono)', fontSize: 11,
       }}>
         {value.toLocaleString()}
       </span>
@@ -217,7 +217,7 @@ function BarRow({ label, value, max, color }: {
       </div>
       <div style={{
         width: 40, textAlign: 'right', fontSize: 11,
-        fontFamily: "'Fira Code', monospace", color: 'var(--t2)', flexShrink: 0,
+        fontFamily: 'var(--mono)', color: 'var(--t2)', flexShrink: 0,
       }}>
         {value}
       </div>
@@ -249,7 +249,7 @@ function InfoCell({ label, value, small }: { label: string; value: string; small
     <div>
       <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 4 }}>{label}</div>
       <div style={{
-        fontFamily: "'Fira Code', monospace",
+        fontFamily: 'var(--mono)',
         fontSize: small ? 10 : 11,
         color: 'var(--t2)',
         overflow: 'hidden',

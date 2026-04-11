@@ -172,7 +172,7 @@ export const LegendButton = memo(() => {
             </span>
             <span style={{
               fontSize: 9, color: 'var(--acc)',
-              fontFamily: 'monospace', letterSpacing: '0.06em',
+              fontFamily: 'var(--mono)', letterSpacing: '0.06em',
               padding: '1px 5px', border: '0.5px solid var(--acc)',
               borderRadius: 2, opacity: 0.8,
             }}>
@@ -192,7 +192,7 @@ export const LegendButton = memo(() => {
               {edges.map((e) => (
                 <div key={e.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <EdgeSwatch color={e.color} dash={e.dash} animated={e.animated} />
-                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'var(--mono)' }}>
                     {t(e.label)}
                   </span>
                 </div>
@@ -214,7 +214,7 @@ export const LegendButton = memo(() => {
               {nodes.map((n) => (
                 <div key={n.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <NodeSwatch color={n.color} shape={n.shape} />
-                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'var(--mono)' }}>
                     {t(n.label)}
                   </span>
                 </div>
@@ -232,7 +232,7 @@ export const LegendButton = memo(() => {
             ].map(({ key, hint }) => (
               <div key={hint} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
-                  fontSize: 8, color: 'var(--t3)', fontFamily: 'monospace',
+                  fontSize: 8, color: 'var(--t3)', fontFamily: 'var(--mono)',
                   flexShrink: 0, minWidth: 14, textAlign: 'right',
                 }}>
                   {key}

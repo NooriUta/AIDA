@@ -63,7 +63,7 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
           fontWeight:   600,
           color:        'var(--t1)',
           flex:         1,
-          fontFamily:   'monospace',
+          fontFamily:   'var(--mono)',
           overflow:     'hidden',
           textOverflow: 'ellipsis',
           whiteSpace:   'nowrap',
@@ -75,7 +75,7 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
           <span style={{
             fontSize:   9,
             color:      'var(--t3)',
-            fontFamily: 'monospace',
+            fontFamily: 'var(--mono)',
             flexShrink: 0,
           }}>
             {tableCount}
@@ -101,7 +101,7 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
             style={{
               fontSize:    9,
               color:       isExpanded ? color : 'var(--t3)',
-              fontFamily:  'monospace',
+              fontFamily:  'var(--mono)',
               cursor:      'pointer',
               flexShrink:  0,
               lineHeight:  1,
@@ -129,7 +129,7 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
         <span style={{
           fontSize:   9,
           color:      'var(--t3)',
-          fontFamily: 'monospace',
+          fontFamily: 'var(--mono)',
           flex:       1,
         }}>
           {engine || (drillableNode ? '↓ L2 →' : '')}
