@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   COLUMN_EDGE_TYPES,
+  CF_EDGE_TYPES,
+  TABLE_FLOW_TYPES,
+  edgeTypeClass,
   applyL1ScopeFilter,
   applyL1DepthFilter,
   applyHiddenNodes,
@@ -280,5 +283,47 @@ describe('applyL1SchemaChipDim', () => {
     const s2 = result.nodes.find((n) => n.id === 's2')!;
     expect(s1.style?.opacity).not.toBe(0.2);
     expect(s2.style?.opacity).toBe(0.2);
+  });
+});
+
+// ── edgeTypeClass ────────────────────────────────────────────────────────────
+
+describe('edgeTypeClass', () => {
+  it('returns loom-cf for HAS_AFFECTED_COL', () => {
+    expect(edgeTypeClass('HAS_AFFECTED_COL')).toBe('loom-cf');
+  });
+
+  it('returns loom-cf for HAS_OUTPUT_COL', () => {
+    expect(edgeTypeClass('HAS_OUTPUT_COL')).toBe('loom-cf');
+  });
+
+  it('returns loom-flow for READS_FROM', () => {
+    expect(edgeTypeClass('READS_FROM')).toBe('loom-flow');
+  });
+
+  it('returns loom-flow for WRITES_TO', () => {
+    expect(edgeTypeClass('WRITES_TO')).toBe('loom-flow');
+  });
+
+  it('returns empty string for structural edge types', () => {
+    expect(edgeTypeClass('HAS_COLUMN')).toBe('');
+  });
+
+  it('returns empty string for undefined', () => {
+    expect(edgeTypeClass(undefined)).toBe('');
+  });
+});
+
+// ── CF_EDGE_TYPES / TABLE_FLOW_TYPES ─────────────────────────────────────────
+
+describe('CF_EDGE_TYPES', () => {
+  it('has exactly 2 entries', () => {
+    expect(CF_EDGE_TYPES.size).toBe(2);
+  });
+});
+
+describe('TABLE_FLOW_TYPES', () => {
+  it('has exactly 2 entries', () => {
+    expect(TABLE_FLOW_TYPES.size).toBe(2);
   });
 });
