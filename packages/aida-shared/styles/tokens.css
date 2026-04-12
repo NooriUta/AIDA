@@ -1,0 +1,95 @@
+/* AIDA Design Tokens — единый источник правды для всей платформы.
+ * Извлечены из frontends/verdandi/src/styles/globals.css.
+ * Verdandi импортирует собственный globals.css (не трогаем).
+ * Новые приложения (heimdall-frontend, shell) импортируют этот файл.
+ */
+
+/* ── Шрифты ─────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Unbounded:wght@800&display=swap');
+
+:root {
+  --font:         'Manrope', sans-serif;
+  --mono:         'IBM Plex Mono', monospace;
+  --font-display: 'Unbounded', sans-serif;
+}
+
+/* ── Spacing ─────────────────────────────────────────────────────────────── */
+:root {
+  --seer-space-1:  4px;
+  --seer-space-2:  8px;
+  --seer-space-3: 12px;
+  --seer-space-4: 16px;
+  --seer-space-6: 24px;
+  --seer-space-8: 32px;
+}
+
+/* ── Radius ──────────────────────────────────────────────────────────────── */
+:root {
+  --seer-radius-sm:  4px;
+  --seer-radius-md:  6px;
+  --seer-radius-lg:  8px;
+  --seer-radius-xl: 14px;
+}
+
+/* ── Базовая тёмная тема (amber-forest, совпадает с verdandi default) ─────── */
+[data-theme="dark"] {
+  --bg0: #0e0e0e;
+  --bg1: #161616;
+  --bg2: #1e1e1e;
+  --bg3: #2a2a2a;
+  --t1:  #f0ece4;
+  --t2:  #b0a898;
+  --t3:  #6e6760;
+  --bd:  #2e2e2e;
+  --bdh: #3e3e3e;
+  --acc: #e6a817;
+  --suc: #3fb950;
+  --wrn: #d29922;
+  --inf: #58a6ff;
+  --danger: #f85149;
+}
+
+/* ── Светлая тема ─────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg0: #fafaf8;
+  --bg1: #f2f0ea;
+  --bg2: #e8e4db;
+  --bg3: #ddd9cf;
+  --t1:  #1a1814;
+  --t2:  #4a4640;
+  --t3:  #7a7670;
+  --bd:  #ccc8bf;
+  --bdh: #b8b4ab;
+  --acc: #c98a0a;
+  --suc: #2a7d3f;
+  --wrn: #a0720c;
+  --inf: #1a6bbf;
+  --danger: #c0392b;
+}
+
+/* ── Палитра: lichen ─────────────────────────────────────────────────────── */
+[data-theme="dark"][data-palette="lichen"]  { --acc: #6db38c; --inf: #5ba3c9; }
+[data-theme="light"][data-palette="lichen"] { --acc: #2e7d5a; --inf: #1a5f8a; }
+
+/* ── Палитра: slate ──────────────────────────────────────────────────────── */
+[data-theme="dark"][data-palette="slate"]   { --acc: #7b9ebf; }
+[data-theme="light"][data-palette="slate"]  { --acc: #3a6a9a; }
+
+/* ── Палитра: juniper ────────────────────────────────────────────────────── */
+[data-theme="dark"][data-palette="juniper"]  { --acc: #8fbc8f; }
+[data-theme="light"][data-palette="juniper"] { --acc: #3a7a3a; }
+
+/* ── Палитра: warm-dark ──────────────────────────────────────────────────── */
+[data-palette="warm-dark"] {
+  --bg0: #120e0a;
+  --bg1: #1a1410;
+  --bg2: #221c16;
+  --bg3: #2e261e;
+  --acc: #d4882a;
+}
+
+/* ── App-специфичные цвета (для AidaNav и компонентов) ───────────────────── */
+:root {
+  --aida-app-verdandi: #7F77DD;
+  --aida-app-heimdall: #e6a817;
+}

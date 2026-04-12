@@ -1,0 +1,52 @@
+---
+title: HEIMDALL event bus metrics and control plane
+---
+graph TB
+    classDef emitter fill:#1e2e3a,stroke:#60a5fa,stroke-width:2px,color:#fff
+    classDef core fill:#3a2e1e,stroke:#fbbf24,stroke-width:3px,color:#fff
+    classDef storage fill:#2e1e3a,stroke:#a78bfa,stroke-width:2px,color:#fff
+    classDef consumer fill:#1e3a1e,stroke:#4ade80,stroke-width:2px,color:#fff
+    classDef control fill:#3a1e1e,stroke:#f87171,stroke-width:2px,color:#fff
+
+    HOUND["Hound<br/>file_parsing_*<br/>atom_extracted"]
+    DALI["Dali<br/>session_*<br/>worker_assigned<br/>complex_job_progress"]
+    MIMIR["MIMIR<br/>query_received<br/>tier events<br/>tool_call_*"]
+    ANVIL["ANVIL<br/>traversal_*"]
+    SHUTTLE["SHUTTLE<br/>request_*<br/>mutation_executed"]
+
+    subgraph HEIMDALL_BE["HEIMDALL backend · Quarkus proposed · :9093"]
+        INGEST["Event ingestion<br/>HTTP POST /events<br/>Q25 transport"]
+        RING["Ring buffer<br/>10K events<br/>ADR-DA-003"]
+        METRICS["Metrics aggregation<br/>Micrometer"]
+        WS_SERVER["WebSocket server<br/>graphql-ws"]
+        CTRL["Control resource<br/>reset snapshot replay"]
+        REPLAY["Replay engine<br/>Demo safety"]
+    end
+
+    HEIMDALL_FE["HEIMDALL frontend<br/>:14000"]
+    VERDANDI["VERDANDI<br/>status bar"]
+    DALI_CTRL["Dali Core control"]
+    FRIGG[("FRIGG snapshots")]
+
+    HOUND -.-> INGEST
+    DALI -.-> INGEST
+    MIMIR -.-> INGEST
+    ANVIL -.-> INGEST
+    SHUTTLE -.-> INGEST
+    INGEST --> RING
+    INGEST --> METRICS
+    RING --> WS_SERVER
+    METRICS --> WS_SERVER
+    WS_SERVER -->|via Chur| HEIMDALL_FE
+    WS_SERVER -->|via Chur+SHUTTLE| VERDANDI
+    HEIMDALL_FE -->|admin commands| CTRL
+    CTRL -->|POST /control/*| DALI_CTRL
+    CTRL -->|save/load| REPLAY
+    REPLAY <--> FRIGG
+    REPLAY -.->|replay| RING
+
+    class HOUND,DALI,MIMIR,ANVIL,SHUTTLE emitter
+    class INGEST,RING,METRICS,WS_SERVER,REPLAY core
+    class FRIGG storage
+    class HEIMDALL_FE,VERDANDI consumer
+    class CTRL,DALI_CTRL control

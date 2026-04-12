@@ -208,6 +208,27 @@ public class UniversalSemanticEngine {
                 }
             }
 
+            // READS_FROM propagation: when a SELECT/SUBQUERY exits as a direct child of a CTE,
+            // lift its physical-table source references to the CTE so that the CTE has its own
+            // READS_FROM edges to the tables it reads from (directly or through inline subqueries).
+            if (si != null) {
+                String parentGeoid = si.getParentStatementGeoid();
+                if (parentGeoid != null) {
+                    StatementInfo parentSi = builder.getStatements().get(parentGeoid);
+                    if (parentSi != null && "CTE".equals(parentSi.getType())) {
+                        String siType = si.getType();
+                        if ("SELECT".equals(siType) || "SUBQUERY".equals(siType)) {
+                            for (var srcEntry : si.getSourceTables().entrySet()) {
+                                // Only propagate physical tables, not sub-statement geoids
+                                if (builder.getTables().containsKey(srcEntry.getKey())) {
+                                    parentSi.addSourceTable(srcEntry.getKey(), null);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // H1.2-INS: INSERT INTO t (cols) SELECT … — bind SELECT output cols to INSERT
             // target cols by position so table_ref carries the target column reference.
             // Only fires when the INSERT has an explicit column list (insertTargetColumns non-empty).
@@ -437,9 +458,13 @@ public class UniversalSemanticEngine {
             addPendingColumn(fullRef, currentStmt);
         }
 
-        // Add column to structure + usage tracking
+        // Add column to structure + usage tracking.
+        // Guard: skip SubQuery/CTE/MERGE-USING SELECT statement geoids — those atoms link via
+        // ATOM_REF_OUTPUT_COL, not DaliColumn. Physical table geoids are NOT in getStatements().
         if (tableGeoid != null) {
-            builder.addColumn(tableGeoid, columnPart, null, null);
+            if (!builder.getStatements().containsKey(tableGeoid)) {
+                builder.addColumn(tableGeoid, columnPart, null, null);
+            }
             String colGeoid = tableGeoid + "." + columnPart.toUpperCase();
             ColumnInfo colInfo = builder.getColumns().get(colGeoid);
             if (colInfo != null) {
@@ -972,7 +997,10 @@ public class UniversalSemanticEngine {
             }
 
             if (tGeoid != null) {
-                builder.addColumn(tGeoid, cPart, null, null);
+                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
+                if (!builder.getStatements().containsKey(tGeoid)) {
+                    builder.addColumn(tGeoid, cPart, null, null);
+                }
                 resolvedNow++;
             } else {
                 stillPending.add(p);
@@ -1010,7 +1038,10 @@ public class UniversalSemanticEngine {
                 if (ref.isResolved()) tGeoid = ref.getGeoid();
             }
             if (tGeoid != null) {
-                builder.addColumn(tGeoid, cPart, null, null);
+                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
+                if (!builder.getStatements().containsKey(tGeoid)) {
+                    builder.addColumn(tGeoid, cPart, null, null);
+                }
                 resolved.add(i);
             }
         }

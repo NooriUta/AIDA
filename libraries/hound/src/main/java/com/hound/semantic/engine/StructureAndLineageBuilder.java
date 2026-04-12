@@ -44,12 +44,19 @@ public class StructureAndLineageBuilder {
         String upperName = tableName.toUpperCase();
         String resolvedSchema = schemaGeoid;
 
-        // Auto-detect schema from qualified name: "BUDM_RMS.TABLE" → schema "BUDM_RMS"
-        if (upperName.contains(".") && (resolvedSchema == null || resolvedSchema.isBlank())) {
+        // Strip schema prefix from qualified name: "DWH.DIM_CUSTOMER" → table "DIM_CUSTOMER".
+        // This applies unconditionally — even if resolvedSchema is already set — to prevent
+        // double-schema geoids like "DWH.DWH.DIM_CUSTOMER" when the caller passes the fully-
+        // qualified name AND a non-empty schemaGeoid at the same time.
+        if (upperName.contains(".")) {
             String[] parts = upperName.split("\\.");
             upperName = parts[parts.length - 1];
-            resolvedSchema = String.join(".", Arrays.copyOf(parts, parts.length - 1));
-            ensureSchema(resolvedSchema, null);
+            String embeddedSchema = String.join(".", Arrays.copyOf(parts, parts.length - 1));
+            if (resolvedSchema == null || resolvedSchema.isBlank()) {
+                resolvedSchema = embeddedSchema;
+                ensureSchema(resolvedSchema, null);
+            }
+            // else: keep caller-supplied resolvedSchema (typically same value), just use clean table name
         }
 
         String geoid = (resolvedSchema != null && !resolvedSchema.isBlank())

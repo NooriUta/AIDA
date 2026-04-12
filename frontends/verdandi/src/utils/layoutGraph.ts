@@ -1,17 +1,21 @@
 import type { LoomNode, LoomEdge } from '../types/graph';
-import { LAYOUT } from './constants';
+import { LAYOUT, TRANSFORM } from './constants';
 import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 
 // ─── Node dimension hints for ELK (sourced from constants.ts) ────────────────
 const { NODE_WIDTH, NODE_HEIGHT_BASE, COL_ROW_HEIGHT, GRID_SPACING } = LAYOUT;
 
 function getNodeHeight(node: LoomNode): number {
+  // Cap column count used for ELK height so giant statement/table nodes
+  // (e.g. INSERT with 600+ output columns) don't stretch the layout to 20,000 px.
+  // applyStmtColumns already caps at MAX_PARTIAL_COLS; this is a safety net.
+  const maxCols = TRANSFORM.MAX_PARTIAL_COLS;
   if (node.type === 'tableNode') {
-    const cols = node.data.columns?.length ?? 0;
+    const cols = Math.min(node.data.columns?.length ?? 0, maxCols);
     return NODE_HEIGHT_BASE + cols * COL_ROW_HEIGHT + 24;
   }
   if (node.type === 'statementNode') {
-    const cols = node.data.columns?.length ?? 0;
+    const cols = Math.min(node.data.columns?.length ?? 0, maxCols);
     return NODE_HEIGHT_BASE + cols * COL_ROW_HEIGHT + (cols > 0 ? 24 : 0);
   }
   // Routine group: height is pre-computed and stored in style
@@ -124,20 +128,48 @@ export function clearLayoutCache(): void {
 
 const LAYOUT_TIMEOUT = LAYOUT.TIMEOUT_MS;
 
-let _elk: ElkApi | null = null;
+let _elk:              ElkApi | null = null;
+let _workerBlobUrl:    string | null = null;
+
+// ─── Cross-origin Worker fix (MF-remote mode) ────────────────────────────────
+// When verdandi runs as a Module Federation remote inside Shell (different port /
+// origin), elkWorkerUrl resolves to verdandi's Vite server (e.g. :5173) while
+// the Shell page is at a different origin (e.g. :5175).
+// Browsers block cross-origin `new Worker(url)` calls with a SecurityError.
+// Fix: fetch the worker script bytes via CORS (Vite dev server sends
+// Access-Control-Allow-Origin: *), create a same-origin Blob URL, then use
+// that blob URL in the workerFactory — no cross-origin restriction applies.
+// In production the worker asset is co-located with the page, so the fetch
+// is always same-origin and the blob just adds negligible overhead.
+async function resolveWorkerBlobUrl(): Promise<string> {
+  if (_workerBlobUrl) return _workerBlobUrl;
+  try {
+    const resp = await fetch(elkWorkerUrl);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    const blob = new Blob([text], { type: 'application/javascript' });
+    _workerBlobUrl = URL.createObjectURL(blob);
+  } catch (err) {
+    // Same-origin fallback: if fetch fails for some reason, use the raw URL.
+    console.warn('[LOOM] Could not fetch elk-worker for blob URL — falling back to direct URL', err);
+    _workerBlobUrl = elkWorkerUrl;
+  }
+  return _workerBlobUrl;
+}
 
 async function getElk(): Promise<ElkApi> {
   if (_elk) return _elk;
+  // Resolve blob URL BEFORE constructing ELK so workerFactory can be synchronous.
+  const blobUrl = await resolveWorkerBlobUrl();
   const mod = await import('elkjs/lib/elk.bundled.js');
   const ELK = (mod.default as unknown) as new (opts: {
-    workerUrl:     string;
+    workerUrl?:    string;
     workerFactory: (url: string) => Worker;
   }) => ElkApi;
   // Pass factory without workerUrl to skip ELKNode's Node.js web-worker check
   // (which always warns in browser because the 'web-worker' npm package is absent).
-  // The factory ignores the url param and uses the imported elkWorkerUrl directly.
   _elk = new ELK({
-    workerFactory: (_url: string) => new Worker(elkWorkerUrl),
+    workerFactory: (_url: string) => new Worker(blobUrl),
   });
   return _elk;
 }

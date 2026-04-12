@@ -33,10 +33,17 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated.
+  // NOTE: `navigate` is intentionally excluded from deps — React Router's
+  // navigate function is stable across renders by design, but including it
+  // causes an infinite loop in React Router v7 when the location changes
+  // (new navigate ref → effect fires → navigate() → new location → repeat).
+  // Navigate to '..' (parent) to stay within verdandi's routing scope so it
+  // works correctly both standalone (/login → /) and inside Shell (/verdandi/login → /verdandi/).
   useEffect(() => {
-    if (isAuthenticated) navigate('/', { replace: true });
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated) navigate('..', { replace: true, relative: 'path' });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const onSubmit = async ({ username, password }: FormValues) => {
     await login(username, password);
@@ -44,7 +51,7 @@ export function LoginPage() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100%',
       background: 'var(--bg0)',
       display: 'flex',
       alignItems: 'center',
@@ -91,7 +98,7 @@ export function LoginPage() {
 
           {/* Three Norns — mono */}
           <div className="mono" style={{ fontSize: '10px', color: 'var(--t3)', letterSpacing: '0.07em', opacity: 0.7 }}>
-            VERDANDI · URD · SKULD
+            VERðANðI · URð · SKULð
           </div>
         </div>
 

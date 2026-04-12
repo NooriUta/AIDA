@@ -1,5 +1,14 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// i18n must be initialised before any component renders — importing it here
+// ensures it runs when App is loaded as an MF remote (main.tsx is not executed
+// in that case, so we can't rely on main.tsx's import).  ES module singletons
+// guarantee this runs exactly once even when both main.tsx and App.tsx import it.
+import './i18n/config';
+// React Flow CSS must also be imported here for MF-remote mode — main.tsx is
+// not executed when verdandi is loaded as a remote by Shell.
+import '@xyflow/react/dist/style.css';
 import { Shell } from './components/layout/Shell';
 import { LoginPage } from './components/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -12,7 +21,34 @@ const KnotPage = lazy(() =>
   import('./components/knot/KnotPage').then((m) => ({ default: m.KnotPage })),
 );
 
+// Module-level QueryClient singleton — shared across standalone and MF-remote usage.
+// When verdandi runs inside the shell, the shell does not provide a QueryClient,
+// so verdandi creates and owns its own.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+      networkMode: 'always',
+    },
+  },
+});
 
+queryClient.getQueryCache().subscribe((event) => {
+  if (event.type === 'updated' && event.action.type === 'error') {
+    const onError = event.query.meta?.onError as ((e: unknown) => void) | undefined;
+    onError?.(event.action.error);
+  }
+});
+
+/**
+ * Verdandi root component — exported as MF remote (verdandi/App).
+ *
+ * Does NOT include BrowserRouter — the Router context is provided by the
+ * host (Shell) when running as a remote, or by main.tsx when running standalone.
+ * This prevents the "You cannot render a <Router> inside another <Router>" error.
+ */
 export default function App() {
   const checkSession = useAuthStore((s) => s.checkSession);
 
@@ -21,25 +57,31 @@ export default function App() {
   useEffect(() => { checkSession(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <BrowserRouter>
+    <QueryClientProvider client={queryClient}>
       <AppRoutes />
       <ToastContainer />
-    </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 
-/** Separated so useLocation() is inside BrowserRouter. */
+/**
+ * Route declarations use RELATIVE paths (no leading "/") so they work correctly
+ * both in standalone mode (BrowserRouter at /) and when loaded as an MF remote
+ * inside Shell (mounted at /verdandi/*).
+ *
+ * React Router v6 resolves relative routes against the matched parent segment,
+ * so "login" resolves to "/login" standalone and "/verdandi/login" inside Shell.
+ */
 function AppRoutes() {
   const { pathname } = useLocation();
 
   return (
     <ErrorBoundary resetKey={pathname}>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-
+        <Route path="login" element={<LoginPage />} />
 
         <Route
-          path="/knot"
+          path="knot"
           element={
             <ProtectedRoute>
               <Suspense fallback={null}>
@@ -50,7 +92,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/urd"
+          path="urd"
           element={
             <ProtectedRoute>
               <UnderConstructionPage module="URD" horizon="H3" descriptionKey="stub.urdDescription" />
@@ -58,7 +100,7 @@ function AppRoutes() {
           }
         />
         <Route
-          path="/skuld"
+          path="skuld"
           element={
             <ProtectedRoute>
               <UnderConstructionPage module="SKULD" horizon="H3" descriptionKey="stub.skuldDescription" />
@@ -66,8 +108,9 @@ function AppRoutes() {
           }
         />
 
+        {/* Catch-all: protected shell — matches "/" standalone and "/verdandi/*" in shell */}
         <Route
-          path="/*"
+          path="*"
           element={
             <ProtectedRoute>
               <Shell />

@@ -1,0 +1,18 @@
+{
+  "app": { "title": "AIDA Platform" },
+  "nav": {
+    "verdandi": "Seiðr Studio",
+    "heimdall": "HEIMDALL"
+  },
+  "theme":   { "dark": "Dark",    "light": "Light"   },
+  "palette": {
+    "title":       "Palette",
+    "amberForest": "Amber Forest",
+    "lichen":      "Lichen",
+    "slate":       "Slate",
+    "juniper":     "Juniper",
+    "warmDark":    "Warm Dark"
+  },
+  "language": { "en": "English", "ru": "Русский" },
+  "status":   { "loading": "Loading…" }
+}

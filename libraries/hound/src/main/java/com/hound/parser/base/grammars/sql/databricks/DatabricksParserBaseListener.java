@@ -1,4 +1,4 @@
-// Generated from C:/AIDA/Dali4/HOUND/Hound/src/main/resources/grammars/sql/databricks/DatabricksParser.g4 by ANTLR 4.13.1
+// Generated from C:/AIDA/aida-root/libraries/hound/src/main/resources/grammars/sql/databricks/DatabricksParser.g4 by ANTLR 4.13.2
 package com.hound.parser.base.grammars.sql.databricks;
 
 import org.antlr.v4.runtime.ParserRuleContext;

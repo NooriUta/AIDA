@@ -1,0 +1,18 @@
+{
+  "app": { "title": "Платформа AIDA" },
+  "nav": {
+    "verdandi": "Seiðr Studio",
+    "heimdall": "HEIMDALL"
+  },
+  "theme":   { "dark": "Тёмная", "light": "Светлая" },
+  "palette": {
+    "title":       "Палитра",
+    "amberForest": "Янтарный лес",
+    "lichen":      "Лишайник",
+    "slate":       "Сланец",
+    "juniper":     "Можжевельник",
+    "warmDark":    "Тёплая тёмная"
+  },
+  "language": { "en": "English", "ru": "Русский" },
+  "status":   { "loading": "Загрузка…" }
+}

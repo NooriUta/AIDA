@@ -327,6 +327,39 @@ task runBatchLocal(type: JavaExec) {
     }
 }
 
+// ==================== REMOTE_BATCH (алиас для IDEA) ====================
+
+task REMOTE_BATCH(type: JavaExec) {
+    description = 'Запуск Hound REMOTE_BATCH (C:/Dali_tests/test_plsql → hound @ localhost:2480)'
+    group = 'hound'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.hound.HoundApplication'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8'
+    args(
+        '--input',       'C:/Dali_tests/test_plsql',
+        '--db-type',     'arcadedb',
+        '--db-batch',
+        '--db-host',     'localhost',
+        '--db-port',     '2480',
+        '--db-name',     'hound',
+        '--db-user',     'root',
+        '--db-password', 'playwithdata',
+        '--clean'
+    )
+    doFirst {
+        println ""
+        println "════════════════════════════════════════"
+        println " Hound REMOTE_BATCH"
+        println "════════════════════════════════════════"
+        println " input:    C:/Dali_tests/test_plsql"
+        println " arcadedb: http://localhost:2480"
+        println " database: hound"
+        println " clean:    true"
+        println "════════════════════════════════════════"
+        println ""
+    }
+}
+
 // ==================== RUN ====================
 
 run {

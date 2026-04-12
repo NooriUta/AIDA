@@ -13,7 +13,12 @@ import java.util.Map;
 /**
  * Fire-and-forget event emitter from SHUTTLE → HEIMDALL.
  *
- * Key guarantee: errors are logged at WARN level and never propagated.
+ * Two delivery paths (both non-blocking):
+ *  1. HTTP POST /events → HEIMDALL backend (persistence + ring buffer)
+ *  2. HeimdallEventBus.publish() → in-process BroadcastProcessor
+ *     → GraphQL subscriptions (I33: SHUTTLE as event relay for verdandi)
+ *
+ * Key guarantee: errors on either path are logged at WARN and never propagated.
  * HEIMDALL being down must NOT affect SHUTTLE operation.
  */
 @ApplicationScoped
@@ -22,6 +27,7 @@ public class HeimdallEmitter {
     private static final Logger LOG = Logger.getLogger(HeimdallEmitter.class);
 
     @Inject @RestClient HeimdallClient client;
+    @Inject             HeimdallEventBus eventBus;
 
     /**
      * Emit a single event asynchronously. Non-blocking, errors swallowed at WARN.
@@ -29,6 +35,7 @@ public class HeimdallEmitter {
     public void emit(EventType type, EventLevel level,
                      String sessionId, String correlationId,
                      long durationMs, Map<String, Object> payload) {
+
         var event = new HeimdallEvent(
                 System.currentTimeMillis(),
                 "shuttle",
@@ -40,10 +47,19 @@ public class HeimdallEmitter {
                 durationMs,
                 payload
         );
+
+        // Path 1 — HTTP to HEIMDALL backend (fire-and-forget)
         client.send(event)
                 .subscribe().with(
-                        __ -> LOG.debugf("Emitted %s to HEIMDALL", type),
+                        __ -> LOG.debugf("Emitted %s to HEIMDALL backend", type),
                         ex -> LOG.warnf("HEIMDALL emit failed (%s): %s", type, ex.getMessage())
                 );
+
+        // Path 2 — in-process bus for GraphQL subscriptions
+        try {
+            eventBus.publish(event);
+        } catch (Exception ex) {
+            LOG.warnf("HeimdallEventBus publish failed (%s): %s", type, ex.getMessage());
+        }
     }
 }

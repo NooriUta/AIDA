@@ -338,13 +338,16 @@ public class JsonlBatchBuilder {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
                 atomIdMap.put(stmtGeoid + ":" + at.getKey(), atomId);
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema
+                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema.
+                // Only applies to physical-table atoms: SubQuery/CTE/MERGE-USING SELECT atoms resolve via
+                // ATOM_REF_OUTPUT_COL (not DaliColumn), so absence from str.getColumns() is expected.
                 String atomColForWarn1 = (String) a.get("column_name");
                 String atomTblForWarn1 = (String) a.get("table_geoid");
                 boolean isColRef1 = Boolean.TRUE.equals(a.get("is_column_reference"));
                 String atomWarning1 = (String) a.get("warning");
                 if (atomWarning1 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
                         && isColRef1 && atomTblForWarn1 != null && atomColForWarn1 != null
+                        && str.getTables().containsKey(atomTblForWarn1)
                         && !str.getColumns().containsKey(atomTblForWarn1 + "." + atomColForWarn1.toUpperCase())) {
                     atomWarning1 = AtomInfo.STATUS_UNBOUND;
                 }
@@ -410,34 +413,6 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 12b. DaliResolutionLog (document)
-        for (Map<String, Object> logEntry : result.getResolutionLog()) {
-            b.appendDocument("DaliResolutionLog", mapOf(
-                    "session_id", sid,
-                    "file_path", result.getFilePath(),
-                    "statement_geoid", logEntry.get("statement_geoid"),
-                    "raw_input", logEntry.get("raw_input"),
-                    "result_kind", logEntry.get("result_kind"),
-                    "is_function_call", logEntry.get("is_function_call"),
-                    "atom_context", logEntry.get("atom_context"),
-                    "parent_context", logEntry.get("parent_context"),
-                    "note", logEntry.get("note"),
-                    "strategy", logEntry.get("strategy"),
-                    "table_name", logEntry.get("table_name"),
-                    "column_name", logEntry.get("column_name"),
-                    "position", logEntry.get("position")
-            ));
-        }
-
-        // 12c. DaliSchemaLog (document)
-        for (Map<String, Object> schEntry : result.getSchemaRegistrationLog()) {
-            b.appendDocument("DaliSchemaLog", mapOf(
-                    "session_id", sid,
-                    "schema_name", schEntry.get("schema_name"),
-                    "reason", schEntry.get("reason"),
-                    "backtrace", schEntry.get("backtrace")
-            ));
-        }
 
         // ─────────────────────────────────────────────────────
         // Phase 2: Edges (strictly after all vertices)
@@ -975,13 +950,16 @@ public class JsonlBatchBuilder {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
                 atomIdMap.put(stmtGeoid + ":" + at.getKey(), atomId);
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema
+                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema.
+                // Only applies to physical-table atoms: SubQuery/CTE/MERGE-USING SELECT atoms resolve via
+                // ATOM_REF_OUTPUT_COL (not DaliColumn), so absence from str.getColumns() is expected.
                 String atomColForWarn2 = (String) a.get("column_name");
                 String atomTblForWarn2 = (String) a.get("table_geoid");
                 boolean isColRef2 = Boolean.TRUE.equals(a.get("is_column_reference"));
                 String atomWarning2 = (String) a.get("warning");
                 if (atomWarning2 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
                         && isColRef2 && atomTblForWarn2 != null && atomColForWarn2 != null
+                        && str.getTables().containsKey(atomTblForWarn2)
                         && !str.getColumns().containsKey(atomTblForWarn2 + "." + atomColForWarn2.toUpperCase())) {
                     atomWarning2 = AtomInfo.STATUS_UNBOUND;
                 }
@@ -1044,31 +1022,6 @@ public class JsonlBatchBuilder {
                     "stmt_geoid", e.getKey(),
                     "snippet", raw,
                     "snippet_hash", md5(raw)
-            ));
-        }
-        for (Map<String, Object> logEntry : result.getResolutionLog()) {
-            b.appendDocument("DaliResolutionLog", mapOf(
-                    "session_id", sid,
-                    "file_path", result.getFilePath(),
-                    "statement_geoid", logEntry.get("statement_geoid"),
-                    "raw_input", logEntry.get("raw_input"),
-                    "result_kind", logEntry.get("result_kind"),
-                    "is_function_call", logEntry.get("is_function_call"),
-                    "atom_context", logEntry.get("atom_context"),
-                    "parent_context", logEntry.get("parent_context"),
-                    "note", logEntry.get("note"),
-                    "strategy", logEntry.get("strategy"),
-                    "table_name", logEntry.get("table_name"),
-                    "column_name", logEntry.get("column_name"),
-                    "position", logEntry.get("position")
-            ));
-        }
-        for (Map<String, Object> schEntry : result.getSchemaRegistrationLog()) {
-            b.appendDocument("DaliSchemaLog", mapOf(
-                    "session_id", sid,
-                    "schema_name", schEntry.get("schema_name"),
-                    "reason", schEntry.get("reason"),
-                    "backtrace", schEntry.get("backtrace")
             ));
         }
 

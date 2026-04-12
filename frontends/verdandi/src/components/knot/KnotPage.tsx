@@ -103,7 +103,7 @@ export const KnotPage = memo(() => {
     <div style={{
       display: 'grid',
       gridTemplateRows: '42px 1fr',
-      height: '100vh',
+      height: '100%',
       overflow: 'hidden',
       background: 'var(--bg0)',
     }}>

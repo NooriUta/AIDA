@@ -7,6 +7,7 @@
 import type { ExploreResult } from '../services/lineage';
 import type { ColumnInfo } from '../types/domain';
 import type { LoomNode, LoomEdge } from '../types/graph';
+import { TRANSFORM } from './constants';
 
 export function applyStmtColumns(
   nodes: LoomNode[],
@@ -31,12 +32,21 @@ export function applyStmtColumns(
       if (!tableColMap.has(e.source)) tableColMap.set(e.source, new Map());
       tableColMap.get(e.source)!.set(col.label.toUpperCase(), col.id);
       if (!colsByParent.has(e.source)) colsByParent.set(e.source, []);
-      colsByParent.get(e.source)!.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      // Cap columns per node so ELK height stays manageable (MAX_PARTIAL_COLS).
+      // tableColMap keeps ALL columns for edge-matching; colsByParent controls rendering.
+      const tableCols = colsByParent.get(e.source)!;
+      if (tableCols.length < TRANSFORM.MAX_PARTIAL_COLS) {
+        tableCols.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      }
     } else if (e.type === 'HAS_OUTPUT_COL' || e.type === 'HAS_AFFECTED_COL') {
       if (!stmtColMap.has(e.source)) stmtColMap.set(e.source, new Map());
       stmtColMap.get(e.source)!.set(col.label.toUpperCase(), col.id);
       if (!colsByParent.has(e.source)) colsByParent.set(e.source, []);
-      colsByParent.get(e.source)!.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      // Same cap for statement nodes — prevents multi-thousand-pixel statement nodes.
+      const stmtCols = colsByParent.get(e.source)!;
+      if (stmtCols.length < TRANSFORM.MAX_PARTIAL_COLS) {
+        stmtCols.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      }
     }
   }
 

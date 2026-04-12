@@ -2,12 +2,26 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { federation } from '@module-federation/vite';
 import path from 'path';
 
 export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
+    federation({
+      name: 'verdandi',
+      filename: 'remoteEntry.js',
+      exposes: { './App': './src/App.tsx' },
+      shared: {
+        react:              { singleton: true, requiredVersion: '^19.0.0' },
+        'react-dom':        { singleton: true, requiredVersion: '^19.0.0' },
+        'react-router-dom': { singleton: true, requiredVersion: '^7.0.0'  },
+        // aida-shared is NOT listed here — verdandi uses its own globals.css and
+        // does not import from aida-shared, so MF should not try to resolve it.
+        zustand:            { singleton: true, requiredVersion: '^5.0.0'  },
+      },
+    }),
   ],
   resolve: {
     alias: {
@@ -15,14 +29,9 @@ export default defineConfig({
     },
   },
   worker: {
-    format: 'es',  // emit ES module workers (Vite 8 default; explicit for clarity)
+    format: 'es',
   },
   optimizeDeps: {
-    // Pre-bundle the browser-compatible ELK (CJS → ESM transform).
-    // elk.bundled.js is used both on the main thread (fallback) and inside
-    // the Web Worker (primary).  The WASM-backed elk-worker.min.js was
-    // designed to BE a standalone Worker — it crashes when imported inside
-    // our custom Worker under Vite, so we use the pure-JS bundle everywhere.
     include: ['elkjs/lib/elk.bundled.js'],
   },
   test: {
@@ -41,12 +50,18 @@ export default defineConfig({
       },
     },
   },
+  // Module Federation generates top-level await — requires es2022+ target.
+  build: {
+    target: 'es2022',
+  },
   server: {
-    host: '127.0.0.1',  // bind to IPv4 so browsers can reach it
-    // Dev proxy: forward all API routes through Chur (BFF) on :3000
+    host: '0.0.0.0',
+    cors: true,           // required for MF remote loading from shell origin
     proxy: {
+      // Dev: proxy GraphQL directly to SHUTTLE (bypasses Chur auth — dev only).
+      // In production the reverse-proxy / Chur handles /graphql.
       '/graphql': {
-        target: 'http://localhost:3000',
+        target: process.env.SHUTTLE_URL ?? 'http://localhost:8080',
         changeOrigin: true,
       },
       '/auth': {

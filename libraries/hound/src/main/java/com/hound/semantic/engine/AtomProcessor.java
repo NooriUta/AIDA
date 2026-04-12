@@ -309,10 +309,13 @@ public class AtomProcessor {
                 atomData.put("is_routine_param", Boolean.TRUE.equals(resolution.get("is_routine_param")));
                 atomData.put("is_routine_var", Boolean.TRUE.equals(resolution.get("is_routine_var")));
 
-                // Добавляем колонку в structure если resolved to table
+                // Reconstruct column only for physical tables.
+                // SubQuery/CTE atoms resolve to a statement geoid — those are linked
+                // via ATOM_REF_OUTPUT_COL, not via DaliColumn records.
                 String tableGeoid = (String) resolution.get("table_geoid");
                 String columnName = (String) resolution.get("column_name");
-                if (tableGeoid != null && columnName != null && builder != null) {
+                if (tableGeoid != null && columnName != null && builder != null
+                        && builder.getTables().containsKey(tableGeoid)) {
                     builder.addColumn(tableGeoid, columnName, (String) atomData.get("atom_text"), null);
                 }
 

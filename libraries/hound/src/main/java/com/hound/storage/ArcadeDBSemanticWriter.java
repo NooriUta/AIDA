@@ -212,7 +212,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                 "DaliApplication"
         };
         String[] docTypes = {
-                "DaliSnippet","DaliSnippetScript","DaliResolutionLog","DaliSchemaLog"
+                "DaliSnippet","DaliSnippetScript"
         };
 
         if (mode == Mode.EMBEDDED) {

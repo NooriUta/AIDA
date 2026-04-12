@@ -78,7 +78,7 @@ services:
       shuttle:
         condition: service_started
 
-  # ── verdandi (React frontend) ──────────────────────────────────────────────
+  # ── verdandi (React frontend — Seiðr Studio) ──────────────────────────────
   verdandi:
     build:
       context: ./frontends/verdandi
@@ -87,6 +87,37 @@ services:
       - "15173:5173"
     depends_on:
       chur:
+        condition: service_started
+
+  # ── heimdall-frontend (React — HEIMDALL Control Panel) ────────────────────
+  heimdall-frontend:
+    build:
+      context: ./frontends/heimdall-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "25174:5174"
+    depends_on:
+      chur:
+        condition: service_started
+      heimdall-backend:
+        condition: service_healthy
+
+  # ── Shell (Module Federation host — AIDA Platform entrypoint) ────────────
+  shell:
+    build:
+      context: .
+      dockerfile: frontends/shell/Dockerfile
+    ports:
+      - "25175:5175"
+    environment:
+      VITE_VERDANDI_URL:  http://localhost:15173/remoteEntry.js
+      VITE_HEIMDALL_URL:  http://localhost:25174/remoteEntry.js
+    depends_on:
+      chur:
+        condition: service_started
+      verdandi:
+        condition: service_started
+      heimdall-frontend:
         condition: service_started
 
   # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────

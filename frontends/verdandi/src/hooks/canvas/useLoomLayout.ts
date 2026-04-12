@@ -75,6 +75,7 @@ export function useLoomLayout(
     activatePendingDeepExpand,
     setGraphStats,
     setHighlightedColumns,
+    requestFitView,
   } = useLoomStore();
 
   // ── Layout: L1 = pre-computed + applyL1Layout; L2/L3 = ELK ─────────────────
@@ -106,6 +107,9 @@ export function useLoomLayout(
       setNodes(laid);
       setEdges(displayGraph.edges);
       setGraphStats(laid.length, displayGraph.edges.length);
+      // Fit view after L1 layout so nodes are centered even when data arrives
+      // after ReactFlow's one-time fitView-on-init already fired.
+      requestFitView();
       return;
     }
 
@@ -131,6 +135,11 @@ export function useLoomLayout(
           if (pendingFocusNodeId) {
             requestFocusNode(pendingFocusNodeId);
             clearPendingFocus();
+          } else if (!pendingDeepExpand) {
+            // No specific focus target — fit the full graph so ELK-positioned
+            // nodes are centered even when data arrives after ReactFlow's
+            // one-time fitView-on-init already fired.
+            requestFitView();
           }
           // Search auto-expand: promote pending → active request now that graph exists
           if (pendingDeepExpand) {

@@ -1,9 +1,41 @@
 # HEIMDALL — Sprint Plan: первые два спринта + контурная интеграция
 
 **Документ:** `HEIMDALL_SPRINT_PLAN`
-**Версия:** 1.0
+**Версия:** 1.2
 **Дата:** 12.04.2026
-**Статус:** Working document — Track B
+**Статус:** Sprint 1 ✅ DONE · Sprint 2 ✅ DONE · Sprint 3 (future)
+
+## Sprint 2 — Completion Summary (12.04.2026)
+
+| Компонент | Статус | Детали |
+|---|---|---|
+| MetricsCollector | ✅ DONE | AtomicLong counters: atoms, files, tools, queue, workers. `GET /metrics/snapshot` endpoint |
+| EventFilter | ✅ DONE | `?filter=component:shuttle` / `level:ERROR` / `session_id:...` / `type:...`. R1 fixed: query string parsed manually |
+| SnapshotManager | ✅ DONE | Reactive (Uni) chain. FriggGateway mirrors ArcadeGateway pattern. FRIGG :2481 |
+| ControlResource | ✅ DONE | `POST /control/reset\|snapshot\|cancel`, `GET /control/snapshots`. X-Seer-Role: admin |
+| HeimdallEmitter (SHUTTLE) | ✅ DONE | Fire-and-forget, WARN on failure. Model copies в `studio.seer.lineage.heimdall.model.*` |
+| Chur proxy | ✅ DONE | `/heimdall/health`, `/heimdall/metrics/snapshot`, `/heimdall/control/*`. Admin-only gate |
+| FRIGG healthcheck | ✅ DONE | Alpine `sh` lacks `/dev/tcp` → switched to `wget -q -O /dev/null` |
+| docs/internal/FRIGG.md | ✅ DONE | Connection details, credentials, init instructions, port mapping |
+
+**Risks resolved:** R1 (HandshakeRequest), R2 (FRIGG running), R3 (DDL syntax)
+**Risk remaining:** R6 (Chur WebSocket upgrade — следующий спринт)
+
+### Test results (Sprint 2)
+
+```
+✅ ./gradlew :services:heimdall-backend:test — green
+✅ quarkusDev на :9093, /q/health → UP
+✅ GET /metrics/snapshot → JSON с zero counters
+✅ POST /events ATOM_EXTRACTED → metrics.atomsExtracted == 1
+✅ wscat -c 'ws://localhost:9093/ws/events?filter=component:shuttle' — только shuttle events
+✅ POST /control/reset -H "X-Seer-Role: admin" → {"status":"reset"}, WS получает DEMO_RESET
+✅ POST /control/snapshot?name=baseline → {"snapshotId":"..."}
+✅ FRIGG docker ps — (healthy)
+✅ GET /control/snapshots → saved list
+✅ SHUTTLE lineage query → HEIMDALL WS: REQUEST_RECEIVED + REQUEST_COMPLETED
+✅ Stop HEIMDALL → SHUTTLE отвечает нормально, логирует WARN
+```
 
 Этот документ описывает детальный план первых двух спринтов HEIMDALL backend и frontend, а также схему встраивания в общий контур после завершения репо-миграции.
 
@@ -341,12 +373,12 @@ heimdall-backend:
 public class MetricsCollector {
 
     // Micrometer counters — атомарные, thread-safe
-    private final Counter atomsExtracted;
-    private final Counter filesParsed;
-    private final Counter toolCallsTotal;
-    private final Counter sessionStarted;
-
-    // Gauges — текущее состояние
+    // AtomicLong (не Micrometer Counter) — Counter#count() возвращает double
+    // с погрешностью при больших значениях. AtomicLong даёт точные snapshot.
+    private final AtomicLong atomsExtracted  = new AtomicLong(0);
+    private final AtomicLong filesParsed     = new AtomicLong(0);
+    private final AtomicLong toolCallsTotal  = new AtomicLong(0);
+    private final AtomicLong sessionStarted  = new AtomicLong(0);
     private final AtomicLong activeWorkers   = new AtomicLong(0);
     private final AtomicLong queueDepth      = new AtomicLong(0);
     private final AtomicLong ringBufferSize  = new AtomicLong(0);
@@ -863,8 +895,28 @@ demo-snapshot:
 
 ---
 
+
+---
+
+## Известные риски Sprint 2 (зафиксированы 12.04.2026)
+
+| ID | Риск | Статус | Действие |
+|---|---|---|---|
+| **R1** | `handshakeRequest().queryParam()` — возвращает `String` или `Optional<String>` в зависимости от версии Quarkus WebSocket API | 🔴 Проверить при первой компиляции | Добавить null-check или `.orElse(null)` |
+| **R2** | FRIGG (:2481) не запущен в dev — `POST /control/snapshot` вернёт 500 | 🟡 Ожидаемо | Добавить второй ArcadeDB контейнер в `docker-compose.yml` перед Sprint 2 |
+| **R3** | `CREATE CLASS ... EXTENDS V` vs `CREATE VERTEX TYPE` в ArcadeDB v24+ — разный DDL | 🟡 Уточнить | Проверить в docs ArcadeDB 26.x перед первым запуском FRIGG |
+| **R6** | `@fastify/websocket` не установлен в Chur — WebSocket-прокси (:3000 → :9093) не работает | 🟡 Известно | `npm install @fastify/websocket` в `bff/chur/` — оставить на конец Sprint 2 (C.3.4) |
+
+### Уточнения по Sprint 2
+
+- **EventFilter** — ✅ реализованы все фильтры: `component:shuttle`, `level:ERROR`, `session_id:...`, `type:...`. AND-комбинации — Sprint 3.
+- **ControlResource** вызывает `metricsCollector.reset()` явно — MetricsCollector **не подписан** на RingBuffer (намеренно, чтобы метрики не зависели от порядка событий).
+- **SnapshotManager** — полная Reactive цепочка (`Uni`) как в SHUTTLE `ArcadeGateway`. Не смешивать с blocking calls.
+
 ## История изменений
 
 | Дата | Версия | Что |
 |---|---|---|
+| 12.04.2026 | 1.2 | **Sprint 2 DONE.** Completion summary добавлен. R1 fixed (HandshakeRequest.query() manual parse). R2 resolved (FriggGateway + FRIGG healthcheck). EventFilter поддерживает все 4 типа. HeimdallEmitter в SHUTTLE (model copies). Chur proxy /heimdall/* done. docs/internal/FRIGG.md создан. |
+| 12.04.2026 | 1.1 | Sprint 2 технические уточнения: AtomicLong вместо Micrometer Counter (точность snapshot), SnapshotManager Reactive chain, EventFilter AND в Sprint 3, ControlResource явный reset(). Риски R1/R2/R3/R6 зафиксированы. |
 | 12.04.2026 | 1.0 | Initial. Sprint 1 (event pipeline), Sprint 2 (metrics + control + первые эмиттеры). Контурная интеграция: Chur proxy, VERDANDI subscription, все эмиттеры по очереди, HEIMDALL frontend skeleton. Demo safety Makefile targets. |
