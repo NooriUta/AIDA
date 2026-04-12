@@ -54,7 +54,7 @@ export const ProfileTabProfile = memo(() => {
             }}>
               {user?.role ?? 'viewer'}
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--t3)' }}>SEER Studio · Production</span>
+            <span style={{ fontSize: '11px', color: 'var(--t3)' }}>Seiðr Studio · Production</span>
           </div>
         </div>
       </div>
@@ -115,7 +115,7 @@ ProfileTabProfile.displayName = 'ProfileTabProfile';
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '7px 10px',
   background: 'var(--bg2)', border: '1px solid var(--bd)',
-  borderRadius: '6px', color: 'var(--t1)', fontSize: '13px',
+  borderRadius: 'var(--seer-radius-md)', color: 'var(--t1)', fontSize: '13px',
   fontFamily: 'inherit', outline: 'none',
 };
 const labelStyle: React.CSSProperties = {
@@ -124,14 +124,14 @@ const labelStyle: React.CSSProperties = {
 };
 const btnPrimary: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: '6px',
-  padding: '7px 14px', borderRadius: '6px',
+  padding: '7px 14px', borderRadius: 'var(--seer-radius-md)',
   fontSize: '12px', fontWeight: 500, fontFamily: 'inherit',
   cursor: 'pointer', border: '1px solid var(--acc)',
   background: 'var(--acc)', color: 'var(--bg0)',
 };
 const btnSecondary: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: '6px',
-  padding: '7px 14px', borderRadius: '6px',
+  padding: '7px 14px', borderRadius: 'var(--seer-radius-md)',
   fontSize: '12px', fontWeight: 500, fontFamily: 'inherit',
   cursor: 'pointer', border: '1px solid var(--bd)',
   background: 'transparent', color: 'var(--t2)',

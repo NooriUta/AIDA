@@ -86,5 +86,5 @@ function SettingRow({ label, desc, on, onToggle }: { label: string; desc: string
   );
 }
 
-const btnPrimary:   React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--acc)', background: 'var(--acc)', color: 'var(--bg0)' };
-const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };
+const btnPrimary:   React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--acc)', background: 'var(--acc)', color: 'var(--bg0)' };
+const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };

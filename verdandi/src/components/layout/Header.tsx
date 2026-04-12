@@ -1,5 +1,5 @@
 import { memo, useRef, useState, useCallback } from 'react';
-import { Sun, Moon, Command, Paintbrush, ChevronDown, Search } from 'lucide-react';
+import { Sun, Moon, Paintbrush, ChevronDown, Search } from 'lucide-react';
 import { ProfileModal } from '../profile/ProfileModal';
 import { CommandPalette } from '../CommandPalette';
 import { SearchPalette } from '../SearchPalette';
@@ -10,6 +10,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { LegendButton }    from './LegendButton';
+import { ToolbarDivider }  from '../ui/ToolbarPrimitives';
 
 // ─── Navigation structure (SEER Studio architecture) ─────────────────────────
 type NornId = 'VERDANDI' | 'URD' | 'SKULD';
@@ -96,7 +97,7 @@ export const Header = memo(() => {
 
   return (
     <header style={{
-      height: '48px',
+      height: '42px',
       background: 'var(--bg0)',
       borderBottom: '1px solid var(--bd)',
       display: 'flex',
@@ -117,7 +118,7 @@ export const Header = memo(() => {
             background: seerMenuOpen ? 'var(--bg2)' : 'transparent',
             border: '1px solid',
             borderColor: seerMenuOpen ? 'var(--bd)' : 'transparent',
-            borderRadius: '6px',
+            borderRadius: 'var(--seer-radius-md)',
             cursor: 'pointer',
             transition: 'background 0.12s, border-color 0.12s',
           }}
@@ -135,8 +136,8 @@ export const Header = memo(() => {
           }}
         >
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--acc)', flexShrink: 0 }} />
-          <span style={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.08em', color: 'var(--t1)' }}>
-            SEER
+          <span className="seer-logo-text" style={{ fontSize: '13px', color: 'var(--t1)' }}>
+            Seiðr
           </span>
           <ChevronDown size={11} style={{
             color: 'var(--t3)', marginLeft: '1px',
@@ -151,7 +152,7 @@ export const Header = memo(() => {
             position: 'absolute', top: 'calc(100% + 4px)', left: 0,
             zIndex: 300, minWidth: '220px',
             background: 'var(--bg1)', border: '1px solid var(--bd)',
-            borderRadius: '8px',
+            borderRadius: 'var(--seer-radius-lg)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
             overflow: 'hidden',
           }}>
@@ -160,7 +161,7 @@ export const Header = memo(() => {
               color: 'var(--t3)', letterSpacing: '0.08em',
               borderBottom: '1px solid var(--bd)',
             }}>
-              SEER STUDIO
+              Seiðr Studio
             </div>
             {NORNS.map((norn) => {
               const isCurrent = norn.id === activeNorn;
@@ -215,7 +216,7 @@ export const Header = memo(() => {
       </div>
 
       {/* ── Separator ────────────────────────────────────────────────────── */}
-      <div style={{ width: 1, height: 20, background: 'var(--bd)', flexShrink: 0 }} />
+      <ToolbarDivider />
 
       {/* ── Active Norn name (home point) ────────────────────────────────── */}
       <button
@@ -226,7 +227,7 @@ export const Header = memo(() => {
           fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em',
           color: 'var(--t1)',
           background: 'transparent', border: 'none',
-          cursor: 'pointer', borderRadius: '4px',
+          cursor: 'pointer', borderRadius: 'var(--seer-radius-sm)',
           transition: 'color 0.12s',
           flexShrink: 0,
         }}
@@ -237,7 +238,7 @@ export const Header = memo(() => {
       </button>
 
       {/* ── Separator ────────────────────────────────────────────────────── */}
-      <div style={{ width: 1, height: 20, background: 'var(--bd)', flexShrink: 0 }} />
+      <ToolbarDivider />
 
       {/* ── Sub-module tabs ──────────────────────────────────────────────── */}
       <nav style={{ display: 'flex', gap: '2px', flex: 1, alignItems: 'center' }}>
@@ -257,7 +258,7 @@ export const Header = memo(() => {
                   padding: '6px 14px',
                   fontSize: '12px',
                   fontWeight: isSub ? 500 : 400,
-                  borderRadius: '4px',
+                  borderRadius: 'var(--seer-radius-sm)',
                   border: 'none',
                   cursor: isEnabled ? 'pointer' : 'not-allowed',
                   background: isSub
@@ -294,7 +295,7 @@ export const Header = memo(() => {
           padding: '5px 10px',
           background: 'var(--bg2)',
           border: '1px solid var(--bd)',
-          borderRadius: '6px',
+          borderRadius: 'var(--seer-radius-md)',
           color: 'var(--t2)', fontSize: '11px',
           cursor: 'pointer',
         }}
@@ -304,6 +305,8 @@ export const Header = memo(() => {
         <span style={{ letterSpacing: '0.04em', color: 'var(--t3)' }}>/</span>
       </button>
 
+      <ToolbarDivider size="sm" />
+
       {/* Command palette */}
       <button
         onClick={toggleCmdPalette}
@@ -312,13 +315,12 @@ export const Header = memo(() => {
           padding: '5px 10px',
           background: 'var(--bg2)',
           border: '1px solid var(--bd)',
-          borderRadius: '6px',
+          borderRadius: 'var(--seer-radius-md)',
           color: 'var(--t2)', fontSize: '11px',
           cursor: 'pointer',
         }}
         title={t('commandPalette.title') + ' (⌘K)'}
       >
-        <Command size={12} />
         <span style={{ letterSpacing: '0.04em' }}>⌘K</span>
       </button>
 
@@ -332,7 +334,7 @@ export const Header = memo(() => {
           style={{
             background: 'transparent',
             border: '1px solid var(--bd)',
-            borderRadius: '6px',
+            borderRadius: 'var(--seer-radius-md)',
             padding: '5px 7px',
             cursor: 'pointer',
             color: paletteMenuOpen ? 'var(--acc)' : 'var(--t2)',
@@ -348,7 +350,7 @@ export const Header = memo(() => {
             position: 'absolute', top: 'calc(100% + 4px)', right: 0,
             zIndex: 300, minWidth: '160px',
             background: 'var(--bg1)', border: '1px solid var(--bd)',
-            borderRadius: '8px',
+            borderRadius: 'var(--seer-radius-lg)',
             boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
             overflow: 'hidden',
           }}>
@@ -401,7 +403,7 @@ export const Header = memo(() => {
         style={{
           background: 'transparent',
           border: '1px solid var(--bd)',
-          borderRadius: '6px',
+          borderRadius: 'var(--seer-radius-md)',
           padding: '5px 7px',
           cursor: 'pointer',
           color: 'var(--t2)',
@@ -423,7 +425,7 @@ export const Header = memo(() => {
             padding: '4px 8px 4px 5px',
             background: 'transparent',
             border: '1px solid transparent',
-            borderRadius: '6px',
+            borderRadius: 'var(--seer-radius-md)',
             cursor: 'pointer',
             transition: 'background 0.12s, border-color 0.12s',
           }}

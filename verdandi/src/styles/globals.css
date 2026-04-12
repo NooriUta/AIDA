@@ -1,5 +1,5 @@
-/* ── Google Fonts: DM Sans (UI) + Fira Code (data) ──────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Fira+Code:wght@400;500&display=swap');
+/* ── Google Fonts: DM Sans + Fira Code (fallback/option) + Manrope + Unbounded + IBM Plex Mono (brandbook) ── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Fira+Code:wght@400;500&family=Manrope:wght@300;400;500;600;700&family=Unbounded:wght@800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap');
 
 @import "tailwindcss";
 
@@ -22,10 +22,14 @@
   --t3: #665c48;
 
   /* Semantic */
-  --acc: #A8B860;
-  --suc: #7DBF78;
-  --wrn: #D4922A;
-  --inf: #88B8A8;
+  --acc:    #A8B860;
+  --suc:    #7DBF78;
+  --wrn:    #D4922A;
+  --inf:    #88B8A8;
+  --danger: #C85848;
+
+  /* Brandbook alias */
+  --dng: var(--danger);
 
   /* Spacing */
   --seer-space-1: 4px;
@@ -39,6 +43,7 @@
   --seer-radius-sm: 4px;
   --seer-radius-md: 6px;
   --seer-radius-lg: 8px;
+  --seer-radius-xl: 14px;
 
   /* Legacy aliases — keep so Shell/ResizablePanel still work */
   --seer-bg:         var(--bg1);
@@ -59,6 +64,11 @@
   --header-bg:     var(--bg0);
   --statusbar-bg:  var(--bg0);
   --panel-bg:      var(--bg0);
+
+  /* Typography — переопределяются через ProfileTabAppearance JS */
+  --font:         'Manrope', 'DM Sans', system-ui, sans-serif;
+  --mono:         'IBM Plex Mono', 'Fira Code', monospace;
+  --font-display: 'Unbounded', sans-serif;
 }
 
 /* ── Light theme override ────────────────────────────────────────────────────── */
@@ -72,10 +82,11 @@
   --t1:  #1e1a12;
   --t2:  #5c5240;
   --t3:  #9a8a6e;
-  --acc: #6b7a2a;
-  --suc: #3d7a38;
-  --wrn: #a06010;
-  --inf: #3a7060;
+  --acc:    #6b7a2a;
+  --suc:    #3d7a38;
+  --wrn:    #a06010;
+  --inf:    #3a7060;
+  --danger: #c03030;
   --header-bg:    var(--bg0);
   --statusbar-bg: var(--bg0);
   --panel-bg:     var(--bg0);
@@ -89,7 +100,7 @@ html, body, #root {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font);
   font-size: 13px;
   font-weight: 400;
   background: var(--bg1);
@@ -97,10 +108,29 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Mono utility — Fira Code for data layer ─────────────────────────────────── */
+/* ── Form elements: bypass browser UA font defaults ─────────────────────────── */
+/* Browser UA sets its own font on button/input. 'inherit' is fragile when the
+   inheritance chain passes through a lazy-loaded chunk boundary (e.g. KNOT).
+   Explicit var() reference wins over UA defaults without needing inline styles. */
+button, input, textarea, select {
+  font-family: var(--font);
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+/* ── Mono utility — IBM Plex Mono for data layer (brandbook) ────────────────── */
 .mono {
-  font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-feature-settings: "liga" 1, "calt" 1;
+}
+
+/* ── Brandbook display font — Unbounded 800 for logo + display headings ──────── */
+.seer-logo-text,
+.seer-display-heading {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 /* ── Scrollbars ──────────────────────────────────────────────────────────────── */
@@ -219,7 +249,7 @@ html, body, #root {
   --bg0: #eff5ef; --bg1: #f5fbf5; --bg2: #ffffff; --bg3: #e4ede5;
   --bd:  #b8cfc0; --bdh: #9ab8a4;
   --t1: #182418;  --t2: #3a6040;   --t3: #80a884;
-  --acc: #3a8035; --suc: #287840;  --wrn: #8a6010; --inf: #286860;
+  --acc: #3a8035; --suc: #287840;  --wrn: #8a6010; --inf: #286860; --danger: #c03030;
 }
 
 /* Slate — cool blue-grey */
@@ -239,7 +269,7 @@ html, body, #root {
   --bg0: #eff1f8; --bg1: #f6f8fd; --bg2: #ffffff; --bg3: #e4e8f4;
   --bd:  #bcc4d8; --bdh: #9ca8cc;
   --t1: #14182a;  --t2: #384468;   --t3: #8090b4;
-  --acc: #3468b8; --suc: #287058;  --wrn: #9a6018; --inf: #2a6088;
+  --acc: #3468b8; --suc: #287058;  --wrn: #9a6018; --inf: #2a6088; --danger: #c03030;
 }
 
 /* Juniper — deep teal-forest */
@@ -259,7 +289,7 @@ html, body, #root {
   --bg0: #edf5f1; --bg1: #f5fbf8; --bg2: #ffffff; --bg3: #deeee8;
   --bd:  #b4d0c4; --bdh: #94b8ac;
   --t1: #102820;  --t2: #286050;   --t3: #70a898;
-  --acc: #1a8060; --suc: #289850;  --wrn: #806018; --inf: #1a6878;
+  --acc: #1a8060; --suc: #289850;  --wrn: #806018; --inf: #1a6878; --danger: #c03030;
 }
 
 /* Warm Dark — deep amber gold */
@@ -279,5 +309,5 @@ html, body, #root {
   --bg0: #f5f0e0; --bg1: #fdfaf2; --bg2: #ffffff; --bg3: #eee8d4;
   --bd:  #d0c49a; --bdh: #b8a880;
   --t1: #201808;  --t2: #6a5030;   --t3: #a89060;
-  --acc: #8a6018; --suc: #3a6820;  --wrn: #a04808; --inf: #3a6858;
+  --acc: #8a6018; --suc: #3a6820;  --wrn: #a04808; --inf: #3a6858; --danger: #c03030;
 }

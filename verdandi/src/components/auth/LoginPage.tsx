@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
-import { Network, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
 const schema = z.object({
@@ -18,6 +18,14 @@ export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore();
+
+  // Pick a random slogan once — useRef persists across re-renders without setter overhead
+  const sloganRef = useRef('');
+  if (!sloganRef.current) {
+    const list = t('app.slogans', { returnObjects: true }) as string[];
+    sloganRef.current = Array.isArray(list) ? list[Math.floor(Math.random() * list.length)] : t('app.tagline');
+  }
+  const slogan = sloganRef.current;
 
   const {
     register,
@@ -51,32 +59,47 @@ export function LoginPage() {
         gap: '32px',
       }}>
         {/* Logo */}
-        <div style={{ textAlign: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+          {/* Seiðr lettermark — amber square with S */}
           <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '48px',
-            height: '48px',
-            borderRadius: 'var(--seer-radius-md)',
-            background: 'var(--bg2)',
-            border: '1px solid var(--bd)',
-            marginBottom: '16px',
+            width: '44px', height: '44px',
+            borderRadius: 'var(--seer-radius-sm)',
+            background: 'var(--acc)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
           }}>
-            <Network size={22} color="var(--acc)" strokeWidth={1.5} />
+            <span className="seer-logo-text" style={{ fontSize: '24px', color: 'var(--bg0)', lineHeight: 1 }}>
+              S
+            </span>
           </div>
-          <div style={{ fontSize: '20px', fontWeight: 600, color: 'var(--t1)', letterSpacing: '0.06em' }}>
-            {t('app.title')}
+
+          {/* Wordmark: • Seiðr Studio */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--acc)', flexShrink: 0, alignSelf: 'center' }} />
+            <span className="seer-logo-text" style={{ fontSize: '26px', color: 'var(--t1)' }}>
+              Seiðr
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--t2)', letterSpacing: '0.06em' }}>
+              Studio
+            </span>
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--t3)', marginTop: '4px', letterSpacing: '0.04em' }}>
-            VERDANDI · LOOM
+
+          {/* Random slogan from library */}
+          <div style={{ fontSize: '11px', color: 'var(--t3)', letterSpacing: '0.04em', textAlign: 'center', maxWidth: '280px' }}>
+            {slogan}
+          </div>
+
+          {/* Three Norns — mono */}
+          <div className="mono" style={{ fontSize: '10px', color: 'var(--t3)', letterSpacing: '0.07em', opacity: 0.7 }}>
+            VERDANDI · URD · SKULD
           </div>
         </div>
 
-        {/* Card */}
+        {/* Card — amber accent top border */}
         <div style={{
           background: 'var(--bg1)',
           border: '1px solid var(--bd)',
+          borderTop: '2px solid var(--acc)',
           borderRadius: 'var(--seer-radius-lg)',
           padding: '28px',
           display: 'flex',

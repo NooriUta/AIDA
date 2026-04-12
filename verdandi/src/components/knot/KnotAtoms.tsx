@@ -170,10 +170,10 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
                 padding: '3px 10px', borderRadius: 4,
                 background: 'var(--bg3)', border: '1px solid var(--bd)',
               }}>
-                <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--t2)' }}>{ctx}</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)' }}>{ctx}</span>
                 <span style={{
                   fontSize: 10, fontWeight: 600, color: 'var(--acc)',
-                  fontFamily: "'Fira Code', monospace",
+                  fontFamily: 'var(--mono)',
                 }}>{count}</span>
               </div>
             ))}
@@ -329,7 +329,7 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
                         }}>{idx}</td>
                         <td style={{
                           padding: '3px 8px', borderBottom: '1px solid var(--bd)',
-                          fontFamily: "'Fira Code', monospace", fontSize: 10,
+                          fontFamily: 'var(--mono)', fontSize: 10,
                           maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }} title={a.atomText}>{dispText || '—'}</td>
                         {/* Тип источника: TABLE или STMT */}
@@ -339,7 +339,7 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
                             <td style={{
                               padding: '3px 8px', borderBottom: '1px solid var(--bd)',
                               fontSize: 9, color: atomSourceColor(st), whiteSpace: 'nowrap',
-                              fontFamily: "'Fira Code', monospace",
+                              fontFamily: 'var(--mono)',
                             }}>{st}</td>
                           );
                         })()}
@@ -350,7 +350,7 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
                           return (
                             <td style={{
                               padding: '3px 8px', borderBottom: '1px solid var(--bd)',
-                              fontFamily: "'Fira Code', monospace", fontSize: 10, color: col,
+                              fontFamily: 'var(--mono)', fontSize: 10, color: col,
                               maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }} title={val !== '—' ? val : undefined}>{val}</td>
                           );
@@ -361,14 +361,14 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
                           return (
                             <td style={{
                               padding: '3px 8px', borderBottom: '1px solid var(--bd)',
-                              fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--inf)',
+                              fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--inf)',
                               maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }} title={val !== '—' ? val : undefined}>{val}</td>
                           );
                         })()}
                         <td style={{
                           padding: '3px 8px', borderBottom: '1px solid var(--bd)',
-                          fontFamily: "'Fira Code', monospace", fontSize: 9, color: 'var(--t3)',
+                          fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)',
                           whiteSpace: 'nowrap',
                         }}>
                           {a.atomLine > 0 ? `${a.atomLine}:${a.atomPos}` : '—'}
@@ -387,7 +387,7 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
                         {/* Вых. колонка */}
                         <td style={{
                           padding: '3px 8px', borderBottom: '1px solid var(--bd)',
-                          fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t2)',
+                          fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t2)',
                           whiteSpace: 'nowrap',
                         }}>{a.outputColName || '—'}</td>
                         <td style={{ padding: '3px 8px', borderBottom: '1px solid var(--bd)' }}>
@@ -442,7 +442,7 @@ function FlagBadge({ label, color, title }: { label: string; color: string; titl
     <span title={title} style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       padding: '0 3px', borderRadius: 2, fontSize: 8, fontWeight: 700,
-      fontFamily: "'Fira Code', monospace",
+      fontFamily: 'var(--mono)',
       background: `color-mix(in srgb, ${color} 15%, transparent)`,
       color, minWidth: 14, height: 14,
     }}>
@@ -535,16 +535,16 @@ function AtomMiniTable({
             <tr key={i}>
               <td style={{
                 padding: '4px 8px', borderBottom: '1px solid var(--bd)',
-                fontFamily: "'Fira Code', monospace", fontSize: 10,
+                fontFamily: 'var(--mono)', fontSize: 10,
                 maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>{a.atomText}</td>
               <td style={{
                 padding: '4px 8px', borderBottom: '1px solid var(--bd)',
-                fontFamily: "'Fira Code', monospace", fontSize: 10,
+                fontFamily: 'var(--mono)', fontSize: 10,
               }}>{a.columnName || '—'}</td>
               <td style={{
                 padding: '4px 8px', borderBottom: '1px solid var(--bd)',
-                fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'var(--t3)',
+                fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)',
               }}>{a.tableName || a.tableGeoid || '—'}</td>
               <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--bd)', fontSize: 10 }}>
                 <span style={{
@@ -613,7 +613,7 @@ function BarRow({ label, value, max, color }: {
       </div>
       <div style={{
         width: 50, textAlign: 'right', fontSize: 10,
-        fontFamily: "'Fira Code', monospace", color: 'var(--t2)', flexShrink: 0,
+        fontFamily: 'var(--mono)', color: 'var(--t2)', flexShrink: 0,
       }}>
         {value.toLocaleString()}
       </div>
@@ -628,7 +628,7 @@ function StatRow({ label, value }: { label: string; value: number }) {
       padding: '5px 0', borderBottom: '1px solid var(--bd)', fontSize: 12,
     }}>
       <span style={{ color: 'var(--t2)' }}>{label}</span>
-      <span style={{ fontWeight: 500, color: 'var(--t1)', fontFamily: "'Fira Code', monospace", fontSize: 11 }}>
+      <span style={{ fontWeight: 500, color: 'var(--t1)', fontFamily: 'var(--mono)', fontSize: 11 }}>
         {value.toLocaleString()}
       </span>
     </div>

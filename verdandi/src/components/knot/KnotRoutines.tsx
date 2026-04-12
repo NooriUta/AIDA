@@ -213,11 +213,11 @@ KnotRoutines.displayName = 'KnotRoutines';
 // ── RoutineRow ─────────────────────────────────────────────────────────────────
 
 const TYPE_COLOR: Record<string, { bg: string; color: string }> = {
-  SELECT: { bg: 'rgba(136,184,168,.15)', color: 'var(--inf)' },
-  INSERT: { bg: 'rgba(125,191,120,.15)', color: 'var(--suc)' },
-  UPDATE: { bg: 'rgba(212,146,42,.15)',  color: 'var(--wrn)' },
-  DELETE: { bg: 'rgba(192,96,96,.15)',   color: 'var(--dan, #C06060)' },
-  MERGE:  { bg: 'rgba(154,140,110,.15)', color: 'var(--t2)' },
+  SELECT: { bg: 'color-mix(in srgb, var(--inf) 15%, transparent)', color: 'var(--inf)' },
+  INSERT: { bg: 'color-mix(in srgb, var(--suc) 15%, transparent)', color: 'var(--suc)' },
+  UPDATE: { bg: 'color-mix(in srgb, var(--wrn) 15%, transparent)',  color: 'var(--wrn)' },
+  DELETE: { bg: 'color-mix(in srgb, var(--danger) 15%, transparent)',   color: 'var(--danger)' },
+  MERGE:  { bg: 'color-mix(in srgb, var(--t2) 15%, transparent)', color: 'var(--t2)' },
 };
 
 const DIR_COLOR: Record<string, string> = {
@@ -259,10 +259,10 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {r.routineType.toUpperCase().includes('FUNCTION')
-              ? <Badge bg="rgba(136,184,168,.15)" color="var(--inf)">FUNC</Badge>
-              : <Badge bg="rgba(125,191,120,.12)" color="var(--suc)">PROC</Badge>
+              ? <Badge bg="color-mix(in srgb, var(--inf) 15%, transparent)" color="var(--inf)">FUNC</Badge>
+              : <Badge bg="color-mix(in srgb, var(--suc) 12%, transparent)" color="var(--suc)">PROC</Badge>
             }
-            <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 12, fontWeight: 500, color: 'var(--t1)' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 500, color: 'var(--t1)' }}>
               {r.name}
             </span>
           </div>
@@ -288,7 +288,7 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
             {r.stmtList.length === 0
               ? <div style={{ fontSize: 11, color: 'var(--t3)' }}>No statements</div>
               : r.stmtList.slice(0, 15).map((st, i) => {
-                  const tc = TYPE_COLOR[st.stmtType] || { bg: 'rgba(102,92,72,.15)', color: 'var(--t3)' };
+                  const tc = TYPE_COLOR[st.stmtType] || { bg: 'color-mix(in srgb, var(--t3) 15%, transparent)', color: 'var(--t3)' };
                   return (
                     <div key={i} style={{
                       display: 'flex', alignItems: 'center', gap: 6,
@@ -296,13 +296,13 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
                     }}>
                       <span style={{
                         display: 'inline-block', padding: '1px 5px', borderRadius: 3,
-                        fontSize: 9, fontFamily: "'Fira Code', monospace",
+                        fontSize: 9, fontFamily: 'var(--mono)',
                         background: tc.bg, color: tc.color, flexShrink: 0,
                       }}>
                         {st.stmtType}
                       </span>
                       <span style={{
-                        fontFamily: "'Fira Code', monospace", fontSize: 10,
+                        fontFamily: 'var(--mono)', fontSize: 10,
                         color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
                         {truncGeoid(st.geoid)}
@@ -332,7 +332,7 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
                   <div key={tbl} style={{ marginBottom: 2 }}>
                     <span style={{
                       display: 'inline-block', padding: '1px 6px', borderRadius: 3,
-                      fontSize: 10, fontFamily: "'Fira Code', monospace",
+                      fontSize: 10, fontFamily: 'var(--mono)',
                       background: 'var(--bg2)', border: '1px solid var(--bd)', color: 'var(--t2)',
                     }}>
                       {tbl}
@@ -358,7 +358,7 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
                 }}>
                   {p.direction && (
                     <span style={{
-                      fontSize: 8, fontFamily: "'Fira Code', monospace", fontWeight: 600,
+                      fontSize: 8, fontFamily: 'var(--mono)', fontWeight: 600,
                       color: DIR_COLOR[p.direction.toUpperCase()] || 'var(--t3)',
                       flexShrink: 0, minWidth: 18,
                     }}>
@@ -366,13 +366,13 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
                     </span>
                   )}
                   <span style={{
-                    fontFamily: "'Fira Code', monospace", fontSize: 10,
+                    fontFamily: 'var(--mono)', fontSize: 10,
                     color: 'var(--t1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {p.paramName || '—'}
                   </span>
                   {p.dataType && (
-                    <span style={{ fontSize: 9, color: 'var(--t3)', flexShrink: 0, fontFamily: "'Fira Code', monospace" }}>
+                    <span style={{ fontSize: 9, color: 'var(--t3)', flexShrink: 0, fontFamily: 'var(--mono)' }}>
                       {p.dataType}
                     </span>
                   )}
@@ -396,13 +396,13 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
                   padding: '2px 0', borderBottom: i < vars.length - 1 ? '1px solid var(--bd)' : 'none',
                 }}>
                   <span style={{
-                    fontFamily: "'Fira Code', monospace", fontSize: 10,
+                    fontFamily: 'var(--mono)', fontSize: 10,
                     color: 'var(--t1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {v.varName || '—'}
                   </span>
                   {v.dataType && (
-                    <span style={{ fontSize: 9, color: 'var(--t3)', flexShrink: 0, fontFamily: "'Fira Code', monospace" }}>
+                    <span style={{ fontSize: 9, color: 'var(--t3)', flexShrink: 0, fontFamily: 'var(--mono)' }}>
                       {v.dataType}
                     </span>
                   )}
@@ -426,7 +426,7 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
                   padding: '2px 0', borderBottom: i < callees.length - 1 ? '1px solid var(--bd)' : 'none',
                 }}>
                   <span style={{
-                    fontFamily: "'Fira Code', monospace", fontSize: 10,
+                    fontFamily: 'var(--mono)', fontSize: 10,
                     color: 'var(--t1)', flex: 1,
                   }}>{c.calleeName || '—'}</span>
                   {c.lineStart > 0 && (
@@ -484,7 +484,7 @@ function Badge({ children, bg, color }: { children: string; bg: string; color: s
       display: 'inline-flex', alignItems: 'center',
       padding: '2px 7px', borderRadius: 3,
       fontSize: 10, fontWeight: 500,
-      fontFamily: "'Fira Code', monospace",
+      fontFamily: 'var(--mono)',
       background: bg, color,
     }}>
       {children}

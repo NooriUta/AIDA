@@ -35,10 +35,10 @@ export const ProfileTabAccess = memo(() => {
           display: 'flex', alignItems: 'center', gap: '14px',
           padding: '12px 16px', background: 'var(--bg2)',
           border: `1px solid color-mix(in srgb, ${color} 40%, var(--bd))`,
-          borderRadius: '6px',
+          borderRadius: 'var(--seer-radius-md)',
         }}>
           <div style={{
-            width: '32px', height: '32px', borderRadius: '6px', flexShrink: 0,
+            width: '32px', height: '32px', borderRadius: 'var(--seer-radius-md)', flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
             background: `color-mix(in srgb, ${color} 14%, transparent)`,
             color,
@@ -88,7 +88,7 @@ export const ProfileTabAccess = memo(() => {
         </tbody>
       </table>
 
-      <div style={{ marginTop: '18px', padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: '6px' }}>
+      <div style={{ marginTop: '18px', padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)' }}>
         <div style={{ fontSize: '11px', color: 'var(--t3)' }}>{t('profile.access.changeHint')}</div>
       </div>
     </div>

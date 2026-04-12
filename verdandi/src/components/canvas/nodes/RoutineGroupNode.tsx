@@ -13,36 +13,36 @@ export type RoutineGroupNodeType = Node<DaliNodeData>;
 
 export const RoutineGroupNode = memo(({ data, selected, id }: NodeProps<RoutineGroupNodeType>) => {
   const { selectNode } = useLoomStore();
-  const color = '#7DBF78'; // routine green
-
   return (
     <div
       style={{
         width:        '100%',
         height:       '100%',
-        border:       `1.5px solid ${selected ? color : color + '44'}`,
-        borderRadius: 6,
+        border:       selected
+          ? '1.5px solid var(--suc)'
+          : '1.5px solid color-mix(in srgb, var(--suc) 27%, transparent)',
+        borderRadius: 'var(--seer-radius-md)',
         background:   'rgba(20,17,8,0.25)',
         position:     'relative',
         overflow:     'visible',
       }}
       onClick={(e) => { e.stopPropagation(); selectNode(id); }}
     >
-      <Handle type="target" position={Position.Left} style={{ background: color, zIndex: 5 }} />
+      <Handle type="target" position={Position.Left} style={{ background: 'var(--suc)', zIndex: 5 }} />
 
       {/* Header */}
       <div style={{
         padding:       '6px 10px 5px',
         borderBottom:  '0.5px solid var(--bd)',
-        borderRadius:  '4px 4px 0 0',
+        borderRadius:  'var(--seer-radius-sm) var(--seer-radius-sm) 0 0',
         display:       'flex',
         alignItems:    'center',
         gap:           5,
-        background:    `${color}12`,
+        background:    'color-mix(in srgb, var(--suc) 7%, transparent)',
         userSelect:    'none',
         pointerEvents: 'none',
       }}>
-        <Workflow size={12} color={color} strokeWidth={1.5} />
+        <Workflow size={12} color="var(--suc)" strokeWidth={1.5} />
 
         {/* Package prefix (when routine comes from a package) */}
         {data.metadata?.packageName && (
@@ -79,9 +79,9 @@ export const RoutineGroupNode = memo(({ data, selected, id }: NodeProps<RoutineG
           fontSize:      8,
           padding:       '1px 5px',
           borderRadius:  2,
-          fontFamily:    'monospace',
-          border:        `0.5px solid ${color}40`,
-          color:         color,
+          fontFamily:    'var(--mono)',
+          border:        '0.5px solid color-mix(in srgb, var(--suc) 25%, transparent)',
+          color:         'var(--suc)',
           opacity:       0.65,
           flexShrink:    0,
           letterSpacing: '0.03em',
@@ -90,7 +90,7 @@ export const RoutineGroupNode = memo(({ data, selected, id }: NodeProps<RoutineG
         </span>
       </div>
 
-      <Handle type="source" position={Position.Right} style={{ background: color, zIndex: 5 }} />
+      <Handle type="source" position={Position.Right} style={{ background: 'var(--suc)', zIndex: 5 }} />
     </div>
   );
 });

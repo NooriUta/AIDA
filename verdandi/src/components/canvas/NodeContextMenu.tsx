@@ -142,7 +142,7 @@ export const NodeContextMenu = memo(({ menu, onClose }: Props) => {
         width: MENU_W,
         background: 'var(--bg2)',
         border: '1px solid var(--bd)',
-        borderRadius: 'var(--seer-radius-md, 6px)',
+        borderRadius: 'var(--seer-radius-md)',
         boxShadow: '0 6px 28px rgba(0,0,0,0.50)',
         padding: '4px 0',
         fontSize: '12px',

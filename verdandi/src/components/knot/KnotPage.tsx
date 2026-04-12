@@ -102,7 +102,7 @@ export const KnotPage = memo(() => {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: '48px 1fr',
+      gridTemplateRows: '42px 1fr',
       height: '100vh',
       overflow: 'hidden',
       background: 'var(--bg0)',
@@ -124,7 +124,7 @@ export const KnotPage = memo(() => {
           {/* Header row */}
           <div style={{
             padding: '10px 14px 8px',
-            borderBottom: '1px solid var(--bd)',
+            borderBottom: '0.5px solid var(--bd)',
             flexShrink: 0,
           }}>
             <div style={{
@@ -158,7 +158,7 @@ export const KnotPage = memo(() => {
               padding: '4px 8px',
               background: 'var(--bg1)',
               border: '1px solid var(--bd)',
-              borderRadius: 5,
+              borderRadius: 'var(--seer-radius-md)',
               marginBottom: dialects.length > 1 ? 6 : 0,
             }}>
               <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0 }}>⌕</span>
@@ -207,7 +207,7 @@ export const KnotPage = memo(() => {
                         background: active ? 'color-mix(in srgb, var(--acc) 15%, transparent)' : 'transparent',
                         color: active ? 'var(--acc)' : 'var(--t3)',
                         fontSize: 9,
-                        fontFamily: "'Fira Code', monospace",
+                        fontFamily: 'var(--mono)',
                         cursor: 'pointer',
                         transition: 'border-color 0.1s, color 0.1s',
                       }}
@@ -228,7 +228,7 @@ export const KnotPage = memo(() => {
               </div>
             )}
             {sessionsError && (
-              <div style={{ padding: '16px 10px', fontSize: 12, color: 'var(--dan, #C06060)' }}>
+              <div style={{ padding: '16px 10px', fontSize: 12, color: 'var(--danger)' }}>
                 {t('knot.error')}
               </div>
             )}
@@ -259,11 +259,11 @@ export const KnotPage = memo(() => {
           {/* Tab bar */}
           <div style={{
             background: 'var(--bg0)',
-            borderBottom: '1px solid var(--bd)',
+            borderBottom: '0.5px solid var(--bd)',
             display: 'flex',
             alignItems: 'center',
             flexShrink: 0,
-            height: 40,
+            height: 36,
             minWidth: 0,
           }}>
             {/* Scrollable tabs */}
@@ -282,7 +282,7 @@ export const KnotPage = memo(() => {
                   onClick={() => setActiveTab(tab.id)}
                   style={{
                     padding: '0 14px',
-                    height: 40,
+                    height: 36,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
@@ -336,7 +336,7 @@ export const KnotPage = memo(() => {
                     fontFamily: 'inherit',
                     background: 'var(--bg2)',
                     border: '1px solid var(--bd)',
-                    borderRadius: 4,
+                    borderRadius: 'var(--seer-radius-sm)',
                     color: 'var(--acc)',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
@@ -394,7 +394,7 @@ function SessionCard({
       onClick={onClick}
       style={{
         padding: '8px 12px',
-        borderRadius: 6,
+        borderRadius: 'var(--seer-radius-md)',
         cursor: 'pointer',
         background: selected ? 'var(--bg2)' : 'transparent',
         border: selected ? '1px solid var(--bd)' : '1px solid transparent',
@@ -424,7 +424,7 @@ function SessionCard({
           padding: '1px 5px',
           borderRadius: 3,
           background: 'var(--bg3)',
-          fontFamily: "'Fira Code', monospace",
+          fontFamily: 'var(--mono)',
           fontSize: 9,
           color: 'var(--t2)',
         }}>
@@ -446,7 +446,7 @@ function EmptyState({ message, error = false }: { message: string; error?: boole
       justifyContent: 'center',
       height: '100%',
       fontSize: 13,
-      color: error ? 'var(--dan, #C06060)' : 'var(--t3)',
+      color: error ? 'var(--danger)' : 'var(--t3)',
     }}>
       {message}
     </div>

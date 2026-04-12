@@ -64,7 +64,7 @@ export const ProfileTabShortcuts = memo(() => {
           <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--t2)', letterSpacing: '0.04em', marginBottom: '10px', textTransform: 'uppercase' }}>
             {t(group.labelKey)}
           </div>
-          <div style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--bd)' }}>
+          <div style={{ borderRadius: 'var(--seer-radius-md)', overflow: 'hidden', border: '1px solid var(--bd)' }}>
             {group.items.map((item, i) => (
               <div key={i} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -79,7 +79,7 @@ export const ProfileTabShortcuts = memo(() => {
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       minWidth: '22px', height: '20px', padding: '0 5px',
                       background: 'var(--bg3)', border: '1px solid var(--bdh)',
-                      borderRadius: '4px', fontSize: '11px', fontFamily: 'var(--mono, monospace)',
+                      borderRadius: 'var(--seer-radius-sm)', fontSize: '11px', fontFamily: 'var(--mono)',
                       color: 'var(--t2)', boxShadow: '0 1px 0 var(--bdh)',
                     }}>
                       {k}
@@ -92,7 +92,7 @@ export const ProfileTabShortcuts = memo(() => {
         </div>
       ))}
 
-      <div style={{ padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: '6px', marginTop: '4px' }}>
+      <div style={{ padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)', marginTop: '4px' }}>
         <div style={{ fontSize: '11px', color: 'var(--t3)' }}>
           ⌘ = Ctrl on Windows/Linux · ⇧ = Shift
         </div>

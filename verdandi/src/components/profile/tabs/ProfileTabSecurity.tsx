@@ -91,7 +91,7 @@ function PasswordField({ label, value, onChange }: { label: string; value: strin
     <div>
       <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--t2)', letterSpacing: '0.04em', marginBottom: '6px', textTransform: 'uppercase' }}>{label}</label>
       <input type="password" value={value} onChange={(e) => onChange(e.target.value)} placeholder="••••••••"
-        style={{ width: '100%', padding: '7px 10px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: '6px', color: 'var(--t1)', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }} />
+        style={{ width: '100%', padding: '7px 10px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)', color: 'var(--t1)', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }} />
     </div>
   );
 }
@@ -100,6 +100,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '18px', paddingBottom: '10px', borderBottom: '1px solid var(--bd)' }}>{children}</div>;
 }
 
-const btnPrimary:   React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--acc)', background: 'var(--acc)', color: 'var(--bg0)' };
-const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };
-const btnDanger:    React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)', background: 'transparent', color: 'var(--danger)' };
+const btnPrimary:   React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--acc)', background: 'var(--acc)', color: 'var(--bg0)' };
+const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };
+const btnDanger:    React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)', background: 'transparent', color: 'var(--danger)' };

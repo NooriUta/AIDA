@@ -332,7 +332,7 @@ const LoomCanvasInner = memo(() => {
           variant={BackgroundVariant.Dots}
           gap={24}
           size={1.5}
-          color={theme === 'dark' ? '#42382a4d' : '#d4ccb84d'}
+          color="color-mix(in srgb, var(--bd) 30%, transparent)"
         />
         <Controls position="bottom-right" />
         <MiniMap

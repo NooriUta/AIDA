@@ -81,7 +81,7 @@ export const ProfileTabGraph = memo(() => {
         <select
           value={prefs.startLevel}
           onChange={(e) => setPrefs((p) => ({ ...p, startLevel: e.target.value }))}
-          style={{ padding: '5px 8px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: '4px', color: 'var(--t1)', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}
+          style={{ padding: '5px 8px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-sm)', color: 'var(--t1)', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}
         >
           <option value="L1">L1 — {t('profile.graph.levelSchema')}</option>
           <option value="L2">L2 — {t('profile.graph.levelTables')}</option>
@@ -98,7 +98,7 @@ export const ProfileTabGraph = memo(() => {
         <select
           value={prefs.nodeLimit}
           onChange={(e) => setPrefs((p) => ({ ...p, nodeLimit: e.target.value }))}
-          style={{ padding: '5px 8px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: '4px', color: 'var(--t1)', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}
+          style={{ padding: '5px 8px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-sm)', color: 'var(--t1)', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}
         >
           {['100', '200', '400', '∞'].map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
@@ -137,5 +137,5 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
   );
 }
 
-const btnPrimary:   React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--acc)', background: 'var(--acc)', color: 'var(--bg0)' };
-const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };
+const btnPrimary:   React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--acc)', background: 'var(--acc)', color: 'var(--bg0)' };
+const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };

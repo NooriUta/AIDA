@@ -29,7 +29,7 @@ export const ProfileTabTokens = memo(() => {
           {t('profile.tokens.apiTokenDesc')}
         </p>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
-          <div style={{ flex: 1, padding: '7px 10px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: '6px', fontFamily: 'var(--mono, monospace)', fontSize: '12px', color: 'var(--t2)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ flex: 1, padding: '7px 10px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--t2)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {visible ? MOCK_TOKEN : MASKED}
           </div>
           <button onClick={() => setVisible((v) => !v)} style={btnSm}>{visible ? t('profile.tokens.hide') : t('profile.tokens.show')}</button>
@@ -74,7 +74,7 @@ export const ProfileTabTokens = memo(() => {
             URL endpoint
           </label>
           <input type="url" placeholder="https://your-service.com/webhook"
-            style={{ width: '100%', padding: '7px 10px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: '6px', color: 'var(--t1)', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }} />
+            style={{ width: '100%', padding: '7px 10px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)', color: 'var(--t1)', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }} />
         </div>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px', borderRadius: '3px', background: 'color-mix(in srgb, var(--t3) 12%, transparent)', border: '1px solid var(--bd)', fontSize: '10px', color: 'var(--t3)', letterSpacing: '0.05em' }}>
           {t('profile.tokens.comingSoon')}
@@ -103,6 +103,6 @@ function BlockTitle({ children, dotOn }: { children: React.ReactNode; dotOn?: bo
   );
 }
 
-const btnSm:        React.CSSProperties = { fontSize: '11px', padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' };
-const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };
-const btnDanger:    React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)', background: 'transparent', color: 'var(--danger)' };
+const btnSm:        React.CSSProperties = { fontSize: '11px', padding: '5px 10px', borderRadius: 'var(--seer-radius-md)', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' };
+const btnSecondary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t2)' };
+const btnDanger:    React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '7px 14px', borderRadius: 'var(--seer-radius-md)', fontSize: '12px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)', background: 'transparent', color: 'var(--danger)' };

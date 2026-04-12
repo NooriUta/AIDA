@@ -4,36 +4,37 @@ import { useLoomStore } from '../../../stores/loomStore';
 
 // ── Font definitions ──────────────────────────────────────────────────────────
 const UI_FONTS = [
-  { id: 'DM Sans',      label: 'DM Sans',      sub: 'Current · Rounded humanist' },
-  { id: 'Inter',        label: 'Inter',         sub: 'Neutral grotesque' },
-  { id: 'IBM Plex Sans',label: 'IBM Plex Sans', sub: 'Technical · IDE-like' },
-  { id: 'Geist',        label: 'Geist ✦',       sub: 'Vercel · Ultra-clean' },
-  { id: 'Oxanium',      label: 'Oxanium ✦',     sub: 'Sci-fi · Data terminal' },
-  { id: 'Exo 2',        label: 'Exo 2 ✦',       sub: 'Geometric · Futuristic' },
+  { id: 'Manrope',       label: 'Manrope',       sub: 'Brand · Rounded sans' },
+  { id: 'DM Sans',       label: 'DM Sans',        sub: 'Rounded humanist' },
+  { id: 'Inter',         label: 'Inter',          sub: 'Neutral grotesque' },
+  { id: 'IBM Plex Sans', label: 'IBM Plex Sans',  sub: 'Technical · IDE-like' },
+  { id: 'Geist',         label: 'Geist ✦',        sub: 'Vercel · Ultra-clean' },
+  { id: 'Oxanium',       label: 'Oxanium ✦',      sub: 'Sci-fi · Data terminal' },
+  { id: 'Exo 2',         label: 'Exo 2 ✦',        sub: 'Geometric · Futuristic' },
 ];
 
 const MONO_FONTS = [
-  { id: 'Fira Code',       label: 'Fira Code',        sub: 'Current · Ligatures' },
+  { id: 'IBM Plex Mono',   label: 'IBM Plex Mono',   sub: 'Brand mono · Clean' },
+  { id: 'Fira Code',       label: 'Fira Code',        sub: 'Ligatures' },
   { id: 'JetBrains Mono',  label: 'JetBrains Mono',   sub: 'Ligatures · Wide' },
-  { id: 'IBM Plex Mono',   label: 'IBM Plex Mono',    sub: 'No ligatures · Clean' },
   { id: 'Geist Mono',      label: 'Geist Mono ✦',     sub: 'Vercel · Minimal' },
   { id: 'Source Code Pro', label: 'Source Code Pro',  sub: 'Geometric · Adobe' },
 ];
 
 const PALETTES = [
-  { id: 'amber-forest', label: 'Amber Forest', colors: ['#A8B860', '#1c1810', '#42382a'] },
-  { id: 'slate',        label: 'Slate',         colors: ['#7B9EFF', '#1e2433', '#354060'] },
-  { id: 'lichen',       label: 'Lichen',        colors: ['#B0C070', '#161814', '#363a2c'] },
-  { id: 'juniper',      label: 'Juniper',       colors: ['#D4A050', '#171410', '#3c3228'] },
-  { id: 'warm-dark',    label: 'Warm Dark',     colors: ['#C4965A', '#241e14', '#4a3f2c'] },
+  { id: 'amber-forest', key: 'palette.amberForest', colors: ['#A8B860', '#1c1810', '#42382a'] },
+  { id: 'slate',        key: 'palette.slate',        colors: ['#7B9EFF', '#1e2433', '#354060'] },
+  { id: 'lichen',       key: 'palette.lichen',       colors: ['#B0C070', '#161814', '#363a2c'] },
+  { id: 'juniper',      key: 'palette.juniper',      colors: ['#D4A050', '#171410', '#3c3228'] },
+  { id: 'warm-dark',    key: 'palette.warmDark',     colors: ['#C4965A', '#241e14', '#4a3f2c'] },
 ];
 
 export const ProfileTabAppearance = memo(() => {
   const { t } = useTranslation();
   const { theme, toggleTheme, palette, setPalette } = useLoomStore();
 
-  const [uiFont,   setUiFont]   = useState(() => localStorage.getItem('seer-ui-font')   ?? 'DM Sans');
-  const [monoFont, setMonoFont] = useState(() => localStorage.getItem('seer-mono-font') ?? 'Fira Code');
+  const [uiFont,   setUiFont]   = useState(() => localStorage.getItem('seer-ui-font')   ?? 'Manrope');
+  const [monoFont, setMonoFont] = useState(() => localStorage.getItem('seer-mono-font') ?? 'IBM Plex Mono');
   const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem('seer-font-size') ?? '13', 10));
   const [density,  setDensity]  = useState<'compact' | 'normal'>(() =>
     (localStorage.getItem('seer-density') as 'compact' | 'normal') ?? 'compact'
@@ -72,7 +73,7 @@ export const ProfileTabAppearance = memo(() => {
             key={th}
             onClick={() => { if (theme !== th) toggleTheme(); }}
             style={{
-              flex: 1, padding: '10px 0', borderRadius: '6px',
+              flex: 1, padding: '10px 0', borderRadius: 'var(--seer-radius-md)',
               border: `1.5px solid ${theme === th ? 'var(--acc)' : 'var(--bd)'}`,
               cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
@@ -83,7 +84,7 @@ export const ProfileTabAppearance = memo(() => {
             }}
           >
             <div style={{
-              width: '40px', height: '26px', borderRadius: '4px',
+              width: '40px', height: '26px', borderRadius: 'var(--seer-radius-sm)',
               border: '1px solid var(--bd)', overflow: 'hidden',
               display: 'flex', flexDirection: 'column',
             }}>
@@ -103,7 +104,7 @@ export const ProfileTabAppearance = memo(() => {
             key={p.id}
             onClick={() => setPalette(p.id)}
             style={{
-              borderRadius: '6px',
+              borderRadius: 'var(--seer-radius-md)',
               border: `1.5px solid ${palette === p.id ? 'var(--acc)' : 'var(--bd)'}`,
               cursor: 'pointer', overflow: 'hidden', position: 'relative',
               transition: 'border-color 0.12s',
@@ -118,7 +119,7 @@ export const ProfileTabAppearance = memo(() => {
               ))}
             </div>
             <div style={{ padding: '5px 8px', fontSize: '10px', fontWeight: 600, color: 'var(--t2)', background: 'var(--bg2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              {p.label}
+              {t(p.key)}
             </div>
           </div>
         ))}
@@ -132,7 +133,7 @@ export const ProfileTabAppearance = memo(() => {
             key={f.id}
             onClick={() => setUiFont(f.id)}
             style={{
-              padding: '10px 12px', borderRadius: '6px',
+              padding: '10px 12px', borderRadius: 'var(--seer-radius-md)',
               border: `1.5px solid ${uiFont === f.id ? 'var(--acc)' : 'var(--bd)'}`,
               cursor: 'pointer',
               background: uiFont === f.id ? 'color-mix(in srgb, var(--acc) 6%, var(--bg2))' : 'var(--bg2)',
@@ -158,7 +159,7 @@ export const ProfileTabAppearance = memo(() => {
             key={f.id}
             onClick={() => setMonoFont(f.id)}
             style={{
-              padding: '10px 12px', borderRadius: '6px',
+              padding: '10px 12px', borderRadius: 'var(--seer-radius-md)',
               border: `1.5px solid ${monoFont === f.id ? 'var(--acc)' : 'var(--bd)'}`,
               cursor: 'pointer',
               background: monoFont === f.id ? 'color-mix(in srgb, var(--acc) 6%, var(--bg2))' : 'var(--bg2)',
@@ -176,7 +177,7 @@ export const ProfileTabAppearance = memo(() => {
 
       {/* Font preview */}
       <FieldLabel style={{ marginBottom: '8px' }}>{t('profile.appearance.preview')}</FieldLabel>
-      <div style={{ padding: '12px 14px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: '6px', marginBottom: '24px' }}>
+      <div style={{ padding: '12px 14px', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)', marginBottom: '24px' }}>
         <div style={{ fontSize: '10px', color: 'var(--t3)', marginBottom: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UI — node title</div>
         <div style={{ fontSize: `${fontSize}px`, fontWeight: 500, color: 'var(--t1)', marginBottom: '8px' }}>
           orders · public · 14 columns
@@ -208,7 +209,7 @@ export const ProfileTabAppearance = memo(() => {
             key={d}
             onClick={() => setDensity(d)}
             style={{
-              flex: 1, padding: '8px 0', borderRadius: '6px',
+              flex: 1, padding: '8px 0', borderRadius: 'var(--seer-radius-md)',
               border: `1.5px solid ${density === d ? 'var(--acc)' : 'var(--bd)'}`,
               cursor: 'pointer', fontFamily: 'inherit',
               background: density === d ? 'color-mix(in srgb, var(--acc) 8%, var(--bg2))' : 'var(--bg2)',

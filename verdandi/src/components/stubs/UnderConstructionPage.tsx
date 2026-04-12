@@ -18,7 +18,7 @@ export const UnderConstructionPage = memo(({ module, horizon, descriptionKey }: 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: '48px 1fr 28px',
+      gridTemplateRows: '42px 1fr 28px',
       height: '100vh',
       overflow: 'hidden',
       background: 'var(--seer-bg)',
@@ -71,7 +71,7 @@ export const UnderConstructionPage = memo(({ module, horizon, descriptionKey }: 
         {/* Horizon badge */}
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: '6px',
-          padding: '4px 12px', borderRadius: '4px',
+          padding: '4px 12px', borderRadius: 'var(--seer-radius-sm)',
           fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em',
           background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
           color: 'var(--acc)',

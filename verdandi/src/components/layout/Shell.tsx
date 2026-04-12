@@ -37,7 +37,7 @@ export const Shell = memo(() => {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: '48px 1fr 28px',
+      gridTemplateRows: '42px 1fr 28px',
       height: '100vh',
       overflow: 'hidden',
       background: 'var(--seer-bg)',

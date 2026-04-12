@@ -24,43 +24,43 @@ interface NodeRow {
 
 const EDGE_ROWS: Record<'L1' | 'L2' | 'L3', EdgeRow[]> = {
   L1: [
-    { color: '#A8B860',              label: 'legend.edge.hasDatabase'    },
-    { color: '#88B8A8',              label: 'legend.edge.containsSchema' },
-    { color: '#665c48', dash: '6 3', label: 'legend.edge.usesDatabase'   },
+    { color: 'var(--acc)',              label: 'legend.edge.hasDatabase'    },
+    { color: 'var(--inf)',              label: 'legend.edge.containsSchema' },
+    { color: 'var(--t3)', dash: '6 3', label: 'legend.edge.usesDatabase'   },
   ],
   L2: [
-    { color: '#88B8A8',                   label: 'legend.edge.readsFrom'    },
-    { color: '#D4922A', dash: '5 3',      label: 'legend.edge.writesTo'     },
-    { color: '#A8B860', animated: true,   label: 'legend.edge.dataFlow'     },
-    { color: '#D4922A',                   label: 'legend.edge.filterFlow'   },
-    { color: '#88B8A8',                   label: 'legend.edge.joinFlow'     },
-    { color: '#665c48', dash: '4 2',      label: 'legend.edge.containsStmt' },
+    { color: 'var(--inf)',                   label: 'legend.edge.readsFrom'    },
+    { color: 'var(--wrn)', dash: '5 3',      label: 'legend.edge.writesTo'     },
+    { color: 'var(--acc)', animated: true,   label: 'legend.edge.dataFlow'     },
+    { color: 'var(--wrn)',                   label: 'legend.edge.filterFlow'   },
+    { color: 'var(--inf)',                   label: 'legend.edge.joinFlow'     },
+    { color: 'var(--t3)', dash: '4 2',       label: 'legend.edge.containsStmt' },
   ],
   L3: [
-    { color: '#88B8A8',                   label: 'legend.edge.readsFrom'    },
-    { color: '#D4922A', dash: '5 3',      label: 'legend.edge.writesTo'     },
-    { color: '#A8B860', animated: true,   label: 'legend.edge.dataFlow'     },
-    { color: '#A8B860', animated: true,   label: 'legend.edge.atomProduces' },
-    { color: '#88B8A8', dash: '4 3',      label: 'legend.edge.atomRefCol'   },
+    { color: 'var(--inf)',                   label: 'legend.edge.readsFrom'    },
+    { color: 'var(--wrn)', dash: '5 3',      label: 'legend.edge.writesTo'     },
+    { color: 'var(--acc)', animated: true,   label: 'legend.edge.dataFlow'     },
+    { color: 'var(--acc)', animated: true,   label: 'legend.edge.atomProduces' },
+    { color: 'var(--inf)', dash: '4 3',      label: 'legend.edge.atomRefCol'   },
   ],
 };
 
 const NODE_ROWS: Record<'L1' | 'L2' | 'L3', NodeRow[]> = {
   L1: [
-    { color: '#A8B860', shape: 'rect',      label: 'legend.node.application' },
-    { color: '#a89a7a', shape: 'rect',      label: 'legend.node.database'    },
-    { color: '#88B8A8', shape: 'rect-dash', label: 'legend.node.schema'      },
+    { color: 'var(--acc)', shape: 'rect',      label: 'legend.node.application' },
+    { color: 'var(--t2)',  shape: 'rect',      label: 'legend.node.database'    },
+    { color: 'var(--inf)', shape: 'rect-dash', label: 'legend.node.schema'      },
   ],
   L2: [
-    { color: '#A8B860', shape: 'rect',      label: 'legend.node.table'     },
-    { color: '#665c48', shape: 'rect',      label: 'legend.node.package'   },
-    { color: '#7DBF78', shape: 'rect',      label: 'legend.node.routine'   },
-    { color: '#7DBF78', shape: 'rect',      label: 'legend.node.statement' },
+    { color: 'var(--acc)', shape: 'rect',      label: 'legend.node.table'     },
+    { color: 'var(--t3)',  shape: 'rect',      label: 'legend.node.package'   },
+    { color: 'var(--suc)', shape: 'rect',      label: 'legend.node.routine'   },
+    { color: 'var(--suc)', shape: 'rect',      label: 'legend.node.statement' },
   ],
   L3: [
-    { color: '#A8B860', shape: 'rect',      label: 'legend.node.table'  },
-    { color: '#88B8A8', shape: 'circle',    label: 'legend.node.column' },
-    { color: '#D4922A', shape: 'circle',    label: 'legend.node.atom'   },
+    { color: 'var(--acc)', shape: 'rect',      label: 'legend.node.table'  },
+    { color: 'var(--inf)', shape: 'circle',    label: 'legend.node.column' },
+    { color: 'var(--wrn)', shape: 'circle',    label: 'legend.node.atom'   },
   ],
 };
 
@@ -95,7 +95,7 @@ function NodeSwatch({ color, shape }: Pick<NodeRow, 'color' | 'shape'>) {
     <svg width="14" height="10" viewBox="0 0 14 10" style={{ flexShrink: 0 }}>
       <rect
         x="1" y="1" width="12" height="8" rx="1.5"
-        fill={color + '22'} stroke={color} strokeWidth="1.2"
+        fill={color} fillOpacity="0.13" stroke={color} strokeWidth="1.2"
         strokeDasharray={shape === 'rect-dash' ? '3 2' : undefined}
       />
     </svg>
@@ -172,7 +172,7 @@ export const LegendButton = memo(() => {
             </span>
             <span style={{
               fontSize: 9, color: 'var(--acc)',
-              fontFamily: 'monospace', letterSpacing: '0.06em',
+              fontFamily: 'var(--mono)', letterSpacing: '0.06em',
               padding: '1px 5px', border: '0.5px solid var(--acc)',
               borderRadius: 2, opacity: 0.8,
             }}>
@@ -192,7 +192,7 @@ export const LegendButton = memo(() => {
               {edges.map((e) => (
                 <div key={e.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <EdgeSwatch color={e.color} dash={e.dash} animated={e.animated} />
-                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'var(--mono)' }}>
                     {t(e.label)}
                   </span>
                 </div>
@@ -214,7 +214,7 @@ export const LegendButton = memo(() => {
               {nodes.map((n) => (
                 <div key={n.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <NodeSwatch color={n.color} shape={n.shape} />
-                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 9, color: 'var(--t2)', fontFamily: 'var(--mono)' }}>
                     {t(n.label)}
                   </span>
                 </div>
@@ -232,7 +232,7 @@ export const LegendButton = memo(() => {
             ].map(({ key, hint }) => (
               <div key={hint} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
-                  fontSize: 8, color: 'var(--t3)', fontFamily: 'monospace',
+                  fontSize: 8, color: 'var(--t3)', fontFamily: 'var(--mono)',
                   flexShrink: 0, minWidth: 14, textAlign: 'right',
                 }}>
                   {key}

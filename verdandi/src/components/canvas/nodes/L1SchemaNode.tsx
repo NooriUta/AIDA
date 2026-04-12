@@ -57,7 +57,7 @@ export const L1SchemaNode = memo(({ data, selected, id }: NodeProps<L1SchemaNode
       <span title={data.label} style={{
         fontSize:     9,
         color:        selected ? 'var(--t1)' : 'var(--t2)',
-        fontFamily:   'monospace',
+        fontFamily:   'var(--mono)',
         overflow:     'hidden',
         textOverflow: 'ellipsis',
         whiteSpace:   'nowrap',
@@ -72,7 +72,7 @@ export const L1SchemaNode = memo(({ data, selected, id }: NodeProps<L1SchemaNode
         <span style={{
           fontSize:   8,
           color:      'var(--t3)',
-          fontFamily: 'monospace',
+          fontFamily: 'var(--mono)',
           flexShrink: 0,
         }}>
           {data.tablesCount}
@@ -84,7 +84,7 @@ export const L1SchemaNode = memo(({ data, selected, id }: NodeProps<L1SchemaNode
         <span style={{
           fontSize:   8,
           color:      'var(--inf)',  // #88B8A8 teal — structural/package colour
-          fontFamily: 'monospace',
+          fontFamily: 'var(--mono)',
           flexShrink: 0,
           opacity:    0.8,
         }}>

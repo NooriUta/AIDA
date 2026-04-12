@@ -13,15 +13,15 @@ export type SchemaGroupNodeType = Node<DaliNodeData>;
 
 export const SchemaGroupNode = memo(({ data, selected, id }: NodeProps<SchemaGroupNodeType>) => {
   const { selectNode } = useLoomStore();
-  const color = '#88B8A8'; // --inf
-
   return (
     <div
       style={{
         width:        '100%',
         height:       '100%',
-        border:       `1.5px dashed ${selected ? color : color + '55'}`,
-        borderRadius: 8,
+        border:       selected
+          ? '1.5px dashed var(--inf)'
+          : '1.5px dashed color-mix(in srgb, var(--inf) 33%, transparent)',
+        borderRadius: 'var(--seer-radius-lg)',
         background:   'rgba(20,17,8,0.35)',
         position:     'relative',
       }}
@@ -31,15 +31,15 @@ export const SchemaGroupNode = memo(({ data, selected, id }: NodeProps<SchemaGro
       <div style={{
         padding:      '7px 10px 6px',
         borderBottom: '0.5px solid var(--bd)',
-        borderRadius: '6px 6px 0 0',
+        borderRadius: 'var(--seer-radius-md) var(--seer-radius-md) 0 0',
         display:      'flex',
         alignItems:   'center',
         gap:          6,
-        background:   `${color}10`,
+        background:   'color-mix(in srgb, var(--inf) 6%, transparent)',
         userSelect:   'none',
         pointerEvents: 'none',
       }}>
-        <FolderTree size={13} color={color} strokeWidth={1.5} />
+        <FolderTree size={13} color="var(--inf)" strokeWidth={1.5} />
         <span style={{
           fontWeight:   600,
           fontSize:     11,
@@ -55,9 +55,9 @@ export const SchemaGroupNode = memo(({ data, selected, id }: NodeProps<SchemaGro
           fontSize:      8,
           padding:       '1px 5px',
           borderRadius:  2,
-          fontFamily:    'monospace',
-          border:        `0.5px solid ${color}40`,
-          color:         color,
+          fontFamily:    'var(--mono)',
+          border:        '0.5px solid color-mix(in srgb, var(--inf) 25%, transparent)',
+          color:         'var(--inf)',
           opacity:       0.65,
           flexShrink:    0,
           letterSpacing: '0.03em',

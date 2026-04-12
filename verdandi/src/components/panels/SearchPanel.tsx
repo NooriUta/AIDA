@@ -57,7 +57,7 @@ function ResultRow({
         gap:          '6px',
         padding:      '5px 8px',
         cursor:       'pointer',
-        borderRadius: '4px',
+        borderRadius: 'var(--seer-radius-sm)',
         background:   hovered ? 'var(--bg3)' : 'transparent',
         transition:   'background 0.1s',
       }}
@@ -117,7 +117,7 @@ function HiddenNodeRow({
         alignItems:   'center',
         gap:          '6px',
         padding:      '5px 8px',
-        borderRadius: '4px',
+        borderRadius: 'var(--seer-radius-sm)',
         background:   hovered ? 'var(--bg3)' : 'transparent',
         transition:   'background 0.1s',
       }}
@@ -334,7 +334,7 @@ export const SearchPanel = memo(() => {
           padding:      '5px 8px',
           background:   'var(--bg1)',
           border:       '1px solid var(--bd)',
-          borderRadius: '6px',
+          borderRadius: 'var(--seer-radius-md)',
         }}>
           <Search size={12} color="var(--t3)" style={{ flexShrink: 0 }} />
           <input

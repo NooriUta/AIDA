@@ -62,9 +62,9 @@ export function ToastContainer() {
 // ── Single toast item ────────────────────────────────────────────────────────
 
 const LEVEL_STYLES: Record<ToastLevel, { bg: string; border: string; icon: string }> = {
-  error:   { bg: 'color-mix(in srgb, #D44 18%, var(--bg2, #2a2a2a))', border: '#D44', icon: '\u2716' },
-  success: { bg: 'color-mix(in srgb, #6A4 18%, var(--bg2, #2a2a2a))', border: '#6A4', icon: '\u2714' },
-  info:    { bg: 'color-mix(in srgb, #48C 18%, var(--bg2, #2a2a2a))', border: '#48C', icon: '\u2139' },
+  error:   { bg: 'color-mix(in srgb, var(--danger) 18%, var(--bg2))', border: 'color-mix(in srgb, var(--danger) 50%, transparent)', icon: '\u2716' },
+  success: { bg: 'color-mix(in srgb, var(--suc)    18%, var(--bg2))', border: 'color-mix(in srgb, var(--suc)    50%, transparent)', icon: '\u2714' },
+  info:    { bg: 'color-mix(in srgb, var(--inf)     18%, var(--bg2))', border: 'color-mix(in srgb, var(--inf)     50%, transparent)', icon: '\u2139' },
 };
 
 function ToastItem({ entry }: { entry: ToastEntry }) {
@@ -90,9 +90,9 @@ function ToastItem({ entry }: { entry: ToastEntry }) {
         padding: '10px 16px',
         background: s.bg,
         border: `1px solid ${s.border}`,
-        borderRadius: 'var(--seer-radius-md, 6px)',
+        borderRadius: 'var(--seer-radius-md)',
         boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-        color: 'var(--t1, #ddd)',
+        color: 'var(--t1)',
         fontSize: 12, letterSpacing: '0.03em',
         maxWidth: 360,
         opacity: visible ? 1 : 0,

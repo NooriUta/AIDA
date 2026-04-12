@@ -63,11 +63,11 @@ export const ServiceNode = memo(({ data, selected, id }: NodeProps<ServiceNodeTy
             <span style={{
               background: 'var(--bg3)',
               border: '1px solid var(--bd)',
-              borderRadius: '4px',
+              borderRadius: 'var(--seer-radius-sm)',
               padding: '1px 5px',
               color: 'var(--inf)',
               fontSize: '10px',
-              fontFamily: 'monospace',
+              fontFamily: 'var(--mono)',
               letterSpacing: '0.03em',
               flexShrink: 0,
             }}>

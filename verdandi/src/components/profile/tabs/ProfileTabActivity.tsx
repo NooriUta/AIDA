@@ -36,7 +36,7 @@ export const ProfileTabActivity = memo(() => {
         {sessions.map((s) => (
           <div key={s.id} style={{
             display: 'flex', alignItems: 'center', gap: '12px',
-            background: 'var(--bg2)', borderRadius: '6px', padding: '10px 14px', marginBottom: '8px',
+            background: 'var(--bg2)', borderRadius: 'var(--seer-radius-md)', padding: '10px 14px', marginBottom: '8px',
             border: s.current ? '1px solid color-mix(in srgb, var(--suc) 40%, transparent)' : '1px solid var(--bd)',
           }}>
             <span style={{ fontSize: '16px', flexShrink: 0 }}>{s.browser === 'Chrome' ? '💻' : '🖥'}</span>
@@ -51,7 +51,7 @@ export const ProfileTabActivity = memo(() => {
             ) : (
               <button
                 onClick={() => terminateSession(s.id)}
-                style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)', background: 'transparent', color: 'var(--danger)', fontFamily: 'inherit' }}
+                style={{ fontSize: '11px', padding: '4px 10px', borderRadius: 'var(--seer-radius-md)', cursor: 'pointer', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)', background: 'transparent', color: 'var(--danger)', fontFamily: 'inherit' }}
               >
                 {t('profile.activity.terminate')}
               </button>
@@ -67,7 +67,7 @@ export const ProfileTabActivity = memo(() => {
       <div>
         {MOCK_ACTIVITY.map((a, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 0', borderBottom: '1px solid var(--bd)' }}>
-            <div style={{ width: '28px', height: '28px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: 'var(--bg3)', marginTop: '1px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: 'var(--seer-radius-sm)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: 'var(--bg3)', marginTop: '1px' }}>
               {a.icon}
             </div>
             <div style={{ flex: 1 }}>

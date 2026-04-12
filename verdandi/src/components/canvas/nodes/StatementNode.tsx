@@ -207,7 +207,7 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
           fontSize:      '8px',
           padding:       '1px 5px',
           borderRadius:  2,
-          fontFamily:    'monospace',
+          fontFamily:    'var(--mono)',
           border:        `0.5px solid ${typeColor}`,
           color:         typeColor,
           opacity:       0.8,

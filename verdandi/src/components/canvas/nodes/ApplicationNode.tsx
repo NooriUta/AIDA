@@ -62,7 +62,7 @@ export const ApplicationNode = memo(({ data, selected }: NodeProps<ApplicationNo
           fontSize:       8,
           padding:        '1px 5px',
           borderRadius:   2,
-          fontFamily:     'monospace',
+          fontFamily:     'var(--mono)',
           border:         `0.5px solid ${color}40`,
           color:          color,
           opacity:        0.7,

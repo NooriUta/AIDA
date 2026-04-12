@@ -111,7 +111,7 @@ export const ProfileModal = memo(({ onClose }: Props) => {
         height: '580px', maxHeight: '90vh',
         background: 'var(--bg1)',
         border: '1px solid var(--bd)',
-        borderRadius: '14px',
+        borderRadius: 'var(--seer-radius-xl)',
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
         transform: visible ? 'translateY(0) scale(1)' : 'translateY(12px) scale(0.98)',
@@ -141,7 +141,7 @@ export const ProfileModal = memo(({ onClose }: Props) => {
           </span>
           {user && (
             <span style={{ fontSize: '11px', color: 'var(--t3)', marginLeft: '2px' }}>
-              {user.username} · SEER Studio
+              {user.username} · Seiðr Studio
             </span>
           )}
           <button
@@ -151,7 +151,7 @@ export const ProfileModal = memo(({ onClose }: Props) => {
               marginLeft: 'auto',
               width: '26px', height: '26px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: '4px', cursor: 'pointer',
+              borderRadius: 'var(--seer-radius-sm)', cursor: 'pointer',
               color: 'var(--t3)',
               border: 'none', background: 'transparent',
               transition: 'background 0.12s, color 0.12s',
@@ -194,7 +194,7 @@ export const ProfileModal = memo(({ onClose }: Props) => {
                     onClick={() => setActiveTab(item.id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '9px',
-                      padding: '6px 10px', borderRadius: '6px',
+                      padding: '6px 10px', borderRadius: 'var(--seer-radius-md)',
                       cursor: 'pointer',
                       color: activeTab === item.id ? 'var(--acc)' : 'var(--t2)',
                       fontSize: '12px', fontWeight: 500,
@@ -230,7 +230,7 @@ export const ProfileModal = memo(({ onClose }: Props) => {
               onClick={() => { logout(); handleClose(); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: '9px',
-                padding: '6px 10px', borderRadius: '6px',
+                padding: '6px 10px', borderRadius: 'var(--seer-radius-md)',
                 cursor: 'pointer',
                 color: 'var(--danger)',
                 fontSize: '12px', fontWeight: 500,

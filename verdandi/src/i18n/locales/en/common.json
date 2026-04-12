@@ -1,5 +1,16 @@
 {
-  "app": { "title": "SEER Studio", "tagline": "Data Lineage Explorer" },
+  "app": {
+    "title": "Seiðr Studio",
+    "tagline": "Make invisible data dependencies visible.",
+    "slogans": [
+      "See what moves your data.",
+      "Every dependency. Made visible.",
+      "Follow the thread. Find the truth.",
+      "Lineage without guesswork.",
+      "Data tells its own story.",
+      "Know where it comes from."
+    ]
+  },
   "nav": {
     "loom": "LOOM",
     "knot": "KNOT",
@@ -652,7 +663,7 @@
     },
     "tokens": {
       "apiToken":     "API Token",
-      "apiTokenDesc": "Use this token to authenticate requests to the SEER Studio API. Keep it secret.",
+      "apiTokenDesc": "Use this token to authenticate requests to the Seiðr Studio API. Keep it secret.",
       "show":         "Show",
       "hide":         "Hide",
       "copy":         "Copy",
