@@ -1,5 +1,7 @@
 package com.hound.semantic.engine;
 
+import com.hound.api.HoundEventListener;
+import com.hound.api.NoOpHoundEventListener;
 import com.hound.semantic.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,11 +25,22 @@ public class UniversalSemanticEngine {
     private final AtomProcessor atomProcessor;
     private final JoinProcessor joinProcessor;
 
+    /** No-arg constructor — uses NoOp listener (backward-compatible). */
     public UniversalSemanticEngine() {
+        this(NoOpHoundEventListener.INSTANCE, "");
+    }
+
+    /**
+     * Constructor with event listener.
+     *
+     * @param listener receives onAtomExtracted / onRecordRegistered events
+     * @param file     file path forwarded to listener callbacks
+     */
+    public UniversalSemanticEngine(HoundEventListener listener, String file) {
         this.scopeManager = new ScopeManager();
         this.nameResolver = new NameResolver();
-        this.builder = new StructureAndLineageBuilder();
-        this.atomProcessor = new AtomProcessor();
+        this.builder = new StructureAndLineageBuilder(listener, file);
+        this.atomProcessor = new AtomProcessor(listener, file);
         this.joinProcessor = new JoinProcessor();
 
         // Wire dependencies

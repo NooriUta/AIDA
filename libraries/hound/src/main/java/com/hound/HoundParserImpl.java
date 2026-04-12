@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -58,7 +57,7 @@ public class HoundParserImpl implements HoundParser {
     public ParseResult parse(Path file, HoundConfig config, HoundEventListener listener) {
         listener.onFileParseStarted(file.toString(), config.dialect());
         try (ArcadeDBSemanticWriter writer = createWriter(config)) {
-            ParseResult result = doParseFile(file, config, writer, null, null);
+            ParseResult result = doParseFile(file, config, writer, null, null, listener);
             listener.onFileParseCompleted(file.toString(), result);
             return result;
         } catch (Exception e) {
@@ -92,7 +91,7 @@ public class HoundParserImpl implements HoundParser {
             for (Path file : files) {
                 futures.add(pool2.submit(() -> {
                     listener.onFileParseStarted(file.toString(), config.dialect());
-                    return analyzeFile(file, config, sessionSeq, schema);
+                    return analyzeFile(file, config, sessionSeq, schema, listener);
                 }));
             }
             pool2.shutdownAndWait();
@@ -137,7 +136,8 @@ public class HoundParserImpl implements HoundParser {
      * Does NOT write to DB — caller decides when/how to write.
      */
     private AnalysisResult analyzeFile(Path file, HoundConfig config,
-                                        AtomicLong sessionSeq, String defaultSchema)
+                                        AtomicLong sessionSeq, String defaultSchema,
+                                        HoundEventListener listener)
             throws IOException {
         String sql = readFileWithFallback(file);
         if (sql.isBlank()) {
@@ -149,9 +149,10 @@ public class HoundParserImpl implements HoundParser {
         PipelineTimer timer = new PipelineTimer();
         timer.count("lines", (int) lineCount);
 
-        UniversalSemanticEngine engine = new UniversalSemanticEngine();
-        Object listener = createDialectListener(config.dialect(), engine, defaultSchema);
-        parseAndWalk(sql, config.dialect(), listener, timer);
+        // Pass listener so AtomProcessor/StructureAndLineageBuilder fire events (C.1.3)
+        UniversalSemanticEngine engine = new UniversalSemanticEngine(listener, file.toString());
+        Object dialectListener = createDialectListener(config.dialect(), engine, defaultSchema);
+        parseAndWalk(sql, config.dialect(), dialectListener, timer);
 
         timer.start("resolve");
         engine.resolvePendingColumns();
@@ -173,8 +174,10 @@ public class HoundParserImpl implements HoundParser {
      */
     private ParseResult doParseFile(Path file, HoundConfig config,
                                      ArcadeDBSemanticWriter writer,
-                                     CanonicalPool pool, String dbName) throws IOException {
-        AnalysisResult ar = analyzeFile(file, config, new AtomicLong(System.currentTimeMillis()), dbName);
+                                     CanonicalPool pool, String dbName,
+                                     HoundEventListener listener) throws IOException {
+        AnalysisResult ar = analyzeFile(file, config,
+                new AtomicLong(System.currentTimeMillis()), dbName, listener);
         if (ar.semantic() == null) return emptyResult(file.toString());
 
         if (writer != null) {
