@@ -48,8 +48,8 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testImplementation 'org.mockito:mockito-core:5.18.0'
 
-    implementation 'com.arcadedb:arcadedb-engine:26.3.2'
-    implementation 'com.arcadedb:arcadedb-network:26.3.2'
+    implementation 'com.arcadedb:arcadedb-engine:25.12.1'
+    implementation 'com.arcadedb:arcadedb-network:25.12.1'
 
 }
 
