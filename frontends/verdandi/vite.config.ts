@@ -17,7 +17,8 @@ export default defineConfig({
         react:              { singleton: true, requiredVersion: '^19.0.0' },
         'react-dom':        { singleton: true, requiredVersion: '^19.0.0' },
         'react-router-dom': { singleton: true, requiredVersion: '^7.0.0'  },
-        'aida-shared':      { singleton: true },
+        // aida-shared is NOT listed here — verdandi uses its own globals.css and
+        // does not import from aida-shared, so MF should not try to resolve it.
         zustand:            { singleton: true, requiredVersion: '^5.0.0'  },
       },
     }),
