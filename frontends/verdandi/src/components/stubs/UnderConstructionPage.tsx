@@ -19,7 +19,7 @@ export const UnderConstructionPage = memo(({ module, horizon, descriptionKey }: 
     <div style={{
       display: 'grid',
       gridTemplateRows: '42px 1fr 28px',
-      height: '100vh',
+      height: '100%',
       overflow: 'hidden',
       background: 'var(--seer-bg)',
     }}>
