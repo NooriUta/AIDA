@@ -1,7 +1,8 @@
-import type { FastifyPluginAsync } from 'fastify';
-import { WebSocket }               from 'ws';
-import { requireAdmin }            from '../middleware/requireAdmin';
-import { ensureValidSession }      from '../sessions';
+import type { FastifyPluginAsync }      from 'fastify';
+import type { SocketStream }            from '@fastify/websocket';
+import { WebSocket }                    from 'ws';
+import { requireAdmin }                 from '../middleware/requireAdmin';
+import { ensureValidSession }           from '../sessions';
 
 const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://localhost:9093';
 const HEIMDALL_WS     = HEIMDALL_ORIGIN.replace(/^http/, 'ws');
@@ -104,17 +105,20 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/heimdall/ws/events',
     { websocket: true },
-    async (socket, request) => {
+    async (connection: SocketStream, request) => {
+      // connection = SocketStream (Duplex); connection.socket = ws.WebSocket
+      const ws = connection.socket;
+
       // Auth: validate session cookie
       const sid = (request.cookies as Record<string, string | undefined>)?.sid;
       if (!sid) {
-        socket.close(1008, 'Unauthorized');
+        ws.close(1008, 'Unauthorized');
         return;
       }
 
       const sessionUser = await ensureValidSession(sid).catch(() => null);
       if (!sessionUser || sessionUser.role !== 'admin') {
-        socket.close(1008, 'Forbidden');
+        ws.close(1008, 'Forbidden');
         return;
       }
 
@@ -125,20 +129,20 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
       const upstream = new WebSocket(wsUrl);
 
       upstream.on('message', (data) => {
-        if (socket.readyState === socket.OPEN) {
-          socket.send(data as string);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(data as unknown as string);
         }
       });
 
-      upstream.on('error', () => socket.close(1011, 'Upstream error'));
-      upstream.on('close',  () => { if (socket.readyState === socket.OPEN) socket.close(); });
+      upstream.on('error', () => ws.close(1011, 'Upstream error'));
+      upstream.on('close', () => { if (ws.readyState === WebSocket.OPEN) ws.close(); });
 
-      socket.on('close', () => {
+      ws.on('close', () => {
         if (upstream.readyState === WebSocket.OPEN) upstream.close();
       });
 
       // Client is read-only — ignore messages from browser
-      socket.on('message', () => {});
+      ws.on('message', () => {});
     },
   );
 };

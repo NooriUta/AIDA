@@ -54,6 +54,9 @@ export default defineConfig({
       '@module-federation/sdk',
     ],
   },
+  build: {
+    target: 'es2022',
+  },
   server: {
     port: 5175,
     host: '0.0.0.0',
