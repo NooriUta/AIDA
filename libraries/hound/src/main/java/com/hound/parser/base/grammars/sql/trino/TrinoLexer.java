@@ -1,4 +1,4 @@
-// Generated from C:/AIDA/Dali4/HOUND/Hound/src/main/resources/grammars/sql/trino/TrinoLexer.g4 by ANTLR 4.13.1
+// Generated from C:/AIDA/aida-root/libraries/hound/src/main/resources/grammars/sql/trino/TrinoLexer.g4 by ANTLR 4.13.2
 package com.hound.parser.base.grammars.sql.trino;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.CharStream;
@@ -11,7 +11,7 @@ import org.antlr.v4.runtime.misc.*;
 
 @SuppressWarnings({"all", "warnings", "unchecked", "unused", "cast", "CheckReturnValue", "this-escape"})
 public class TrinoLexer extends Lexer {
-	static { RuntimeMetaData.checkVersion("4.13.1", RuntimeMetaData.VERSION); }
+	static { RuntimeMetaData.checkVersion("4.13.2", RuntimeMetaData.VERSION); }
 
 	protected static final DFA[] _decisionToDFA;
 	protected static final PredictionContextCache _sharedContextCache =

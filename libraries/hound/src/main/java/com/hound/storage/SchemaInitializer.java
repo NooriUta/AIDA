@@ -2,6 +2,7 @@
 package com.hound.storage;
 
 import com.arcadedb.database.Database;
+import com.arcadedb.query.sql.executor.ResultSet;
 import com.arcadedb.schema.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,8 +18,10 @@ import org.slf4j.LoggerFactory;
  *   DaliSession, DaliStatement, DaliAtom, DaliOutputColumn,
  *   DaliJoin, DaliParameter, DaliVariable, DaliAffectedColumn
  *
- * ── Document types (4) ──
+ * ── Document types (5) ──
  *   DaliSnippet      — full SQL text for a statement (stmt_geoid + snippet)
+ *   DaliSnippetScript — full raw file text, one record per session
+ *   DaliMeta         — singleton: schema_version (v26+)
  *   DaliPerfStats    — per-session pipeline timing & counts (never cleared by cleanAll)
  *   DaliResolutionLog — atom resolution diagnostics (file_path, table_name, column_name, position)
  *   DaliSchemaLog    — suspicious schema name registrations with backtrace
@@ -105,6 +108,9 @@ public final class SchemaInitializer {
         if (!schema.existsType("DaliSnippet"))        schema.createDocumentType("DaliSnippet");
         // v22: DaliSnippetScript — full raw SQL text of the parsed file, one record per session.
         if (!schema.existsType("DaliSnippetScript"))  schema.createDocumentType("DaliSnippetScript");
+        // v26: DaliMeta — singleton document recording the schema version for runtime checks.
+        boolean metaIsNew = !schema.existsType("DaliMeta");
+        if (metaIsNew) schema.createDocumentType("DaliMeta");
 
         // ── String properties (required for FULLTEXT indexes) ──
         // Namespace / canonical
@@ -241,6 +247,16 @@ public final class SchemaInitializer {
         // file text (up to hundreds of KB) which exceeds ArcadeDB's 255 KB page limit for
         // FULL_TEXT indexes, causing index corruption and multi-GB on-disk bloat (v25 fix).
 
+        // ── DaliMeta: seed / update singleton version record (v26) ──
+        declareProp(schema, "DaliMeta", "schema_version", com.arcadedb.schema.Type.INTEGER);
+        db.transaction(() -> {
+            ResultSet existing = db.query("sql", "SELECT FROM DaliMeta LIMIT 1");
+            if (existing.hasNext()) {
+                db.command("sql", "UPDATE DaliMeta SET schema_version = " + SCHEMA_VERSION);
+            } else {
+                db.command("sql", "INSERT INTO DaliMeta SET schema_version = " + SCHEMA_VERSION);
+            }
+        });
 
         logger.info("ArcadeDB schema v{}: {} types created", SCHEMA_VERSION, c);
     }
