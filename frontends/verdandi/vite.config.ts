@@ -2,12 +2,25 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { federation } from '@module-federation/vite';
 import path from 'path';
 
 export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
+    federation({
+      name: 'verdandi',
+      filename: 'remoteEntry.js',
+      exposes: { './App': './src/App.tsx' },
+      shared: {
+        react:              { singleton: true, requiredVersion: '^19.0.0' },
+        'react-dom':        { singleton: true, requiredVersion: '^19.0.0' },
+        'react-router-dom': { singleton: true, requiredVersion: '^7.0.0'  },
+        'aida-shared':      { singleton: true },
+        zustand:            { singleton: true, requiredVersion: '^5.0.0'  },
+      },
+    }),
   ],
   resolve: {
     alias: {
@@ -15,14 +28,9 @@ export default defineConfig({
     },
   },
   worker: {
-    format: 'es',  // emit ES module workers (Vite 8 default; explicit for clarity)
+    format: 'es',
   },
   optimizeDeps: {
-    // Pre-bundle the browser-compatible ELK (CJS → ESM transform).
-    // elk.bundled.js is used both on the main thread (fallback) and inside
-    // the Web Worker (primary).  The WASM-backed elk-worker.min.js was
-    // designed to BE a standalone Worker — it crashes when imported inside
-    // our custom Worker under Vite, so we use the pure-JS bundle everywhere.
     include: ['elkjs/lib/elk.bundled.js'],
   },
   test: {
@@ -42,8 +50,8 @@ export default defineConfig({
     },
   },
   server: {
-    host: '0.0.0.0',  // bind to all interfaces (IPv4 + IPv6)
-    // Dev proxy: forward all API routes through Chur (BFF) on :3000
+    host: '0.0.0.0',
+    cors: true,           // required for MF remote loading from shell origin
     proxy: {
       '/graphql': {
         target: 'http://localhost:3000',
