@@ -1,0 +1,13 @@
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'aida-root'
+
+// ─── JVM modules ──────────────────────────────────────────────────────────────
+include 'libraries:hound'
+include 'services:shuttle'
+// include 'shared:dali-models'  // uncomment when ready

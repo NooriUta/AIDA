@@ -1,0 +1,135 @@
+// ─── AIDA monorepo — root build ──────────────────────────────────────────────
+//
+// JVM modules (Gradle subprojects — self-contained, own gradlew + settings):
+//   :libraries:hound     Java 21 / ANTLR       SQL parser & semantic engine
+//   :services:shuttle    Quarkus 3 / Java 21   lineage GraphQL API      :8080
+//
+// Node services (not Gradle subprojects — managed via tasks below):
+//   bff/chur             Fastify / Node 24     RBAC proxy + auth        :3000
+//   frontends/verdandi   React 19 / Vite 8     data lineage UI          :5173
+//
+// ─── Quick-start ──────────────────────────────────────────────────────────────
+//   ./gradlew devAll                    start SHUTTLE + Chur + verdandi together
+//
+// ─── Individual ───────────────────────────────────────────────────────────────
+//   ./gradlew :services:shuttle:quarkusDev    SHUTTLE in dev mode
+//   ./gradlew :services:shuttle:build         SHUTTLE fat-jar
+//   ./gradlew :libraries:hound:build          Hound library build
+//   ./gradlew :libraries:hound:fatJar         Hound standalone JAR
+//
+//   ./gradlew churDev                   Chur  in dev mode (tsx watch)
+//   ./gradlew churBuild                 Chur  compile TS → bff/chur/dist/
+//   ./gradlew churStart                 Chur  start from dist/ (production)
+//   ./gradlew churInstall               Chur  npm install
+//
+//   ./gradlew verdandiDev               verdandi in dev mode (Vite, :5173)
+//   ./gradlew verdandiBuild             verdandi production build → dist/
+//   ./gradlew verdandiInstall           verdandi npm install
+
+ext {
+    isWindows   = System.properties['os.name'].toLowerCase().contains('windows')
+    // Node.js managed by JetBrains — not in system PATH
+    def nodeHome = System.getenv('NODE_HOME') ?:
+        (isWindows ? "${System.getenv('APPDATA')}/JetBrains/IntelliJIdea2025.3/node/versions/24.14.1" : '')
+    npmCmd      = nodeHome ? "${nodeHome}/npm.cmd" : (isWindows ? 'npm.cmd' : 'npm')
+    nodeCmd     = nodeHome ? "${nodeHome}/node.exe" : 'node'
+    churDir     = file('bff/chur')
+    verdandiDir = file('frontends/verdandi')
+    gradleCmd   = new File(rootDir, isWindows ? 'gradlew.bat' : 'gradlew').canonicalPath
+}
+
+// ─── verdandi tasks ───────────────────────────────────────────────────────────
+
+task verdandiInstall(type: Exec) {
+    group       = 'verdandi'
+    description = 'npm install in frontends/verdandi/'
+    workingDir  verdandiDir
+    commandLine npmCmd, 'install'
+}
+
+task verdandiDev(type: Exec) {
+    group       = 'verdandi'
+    description = 'Start verdandi frontend in dev mode (Vite, :5173)'
+    workingDir  verdandiDir
+    commandLine npmCmd, 'run', 'dev'
+    dependsOn   verdandiInstall
+}
+
+task verdandiBuild(type: Exec) {
+    group       = 'verdandi'
+    description = 'Build verdandi production bundle → frontends/verdandi/dist/'
+    workingDir  verdandiDir
+    commandLine npmCmd, 'run', 'build'
+    dependsOn   verdandiInstall
+}
+
+// ─── Chur tasks ───────────────────────────────────────────────────────────────
+
+task churInstall(type: Exec) {
+    group       = 'Chur'
+    description = 'npm install in bff/chur/'
+    workingDir  churDir
+    commandLine npmCmd, 'install'
+}
+
+task churDev(type: Exec) {
+    group       = 'Chur'
+    description = 'Start Chur auth gateway in dev mode (tsx watch, :3000)'
+    workingDir  churDir
+    commandLine npmCmd, 'run', 'dev'
+    dependsOn   churInstall
+}
+
+task churBuild(type: Exec) {
+    group       = 'Chur'
+    description = 'Compile Chur TypeScript → bff/chur/dist/'
+    workingDir  churDir
+    commandLine npmCmd, 'run', 'build'
+    dependsOn   churInstall
+}
+
+task churStart(type: Exec) {
+    group       = 'Chur'
+    description = 'Start Chur from bff/chur/dist/ (production, :3000)'
+    workingDir  churDir
+    commandLine npmCmd, 'start'
+    dependsOn   churBuild
+}
+
+// ─── devAll — start SHUTTLE + Chur + verdandi together ───────────────────────
+
+task devAll {
+    group       = 'Development'
+    description = 'Start all services: SHUTTLE (:8080) + Chur (:3000) + verdandi (:5173)'
+    dependsOn   churInstall, verdandiInstall
+
+    doLast {
+        if (isWindows) {
+            // Open each service in its own console window (Windows)
+            new ProcessBuilder('cmd', '/c',
+                "start \"SHUTTLE\" /D \"${rootDir}\" \"${gradleCmd}\" :services:shuttle:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
+                "start \"Chur\" /D \"${churDir}\" ${npmCmd} run dev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
+                "start \"verdandi\" /D \"${verdandiDir}\" ${npmCmd} run dev")
+                .start()
+            println '> Opened SHUTTLE (:8080), Chur (:3000) and verdandi (:5173) in separate windows.'
+        } else {
+            // Unix/macOS — run all three in parallel, inherit output to this terminal
+            def shuttleProc = new ProcessBuilder(gradleCmd, ':services:shuttle:quarkusDev')
+                .directory(rootDir).inheritIO().start()
+            def churProc = new ProcessBuilder(npmCmd, 'run', 'dev')
+                .directory(churDir).inheritIO().start()
+            def verdandiProc = new ProcessBuilder(npmCmd, 'run', 'dev')
+                .directory(verdandiDir).inheritIO().start()
+            Runtime.runtime.addShutdownHook(new Thread({
+                shuttleProc.destroyForcibly()
+                churProc.destroyForcibly()
+                verdandiProc.destroyForcibly()
+            }))
+            [shuttleProc, churProc, verdandiProc]*.waitFor()
+        }
+    }
+}

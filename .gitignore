@@ -1,0 +1,43 @@
+# Gradle
+.gradle/
+build/
+**/build/
+**/.gradle/
+!gradle-wrapper.jar
+
+# Maven (legacy)
+target/
+**/target/
+
+# Java
+*.class
+out/
+
+# Node.js
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+**/coverage/
+.cache/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+
+# Dev artifacts
+quarkus-dev.log
+*.log
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test-results/
