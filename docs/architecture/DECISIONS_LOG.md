@@ -11,7 +11,7 @@
 
 ## 📋 Quick status
 
-**Зафиксированных решений:** 16
+**Зафиксированных решений:** 17
 **Открытых вопросов:** 28 (Q1, Q3-Q22, Q24-Q32)
 **Сознательно отложено:** 10 (D1-D10)
 
@@ -74,7 +74,7 @@
 | Q24 | HEIMDALL backend deployment details | см. Q3 |
 | Q25 | Event bus transport (HTTP POST / Kafka / Reactive Messaging) | mid May |
 | Q26 | ANVIL direct из SHUTTLE или только через MIMIR | при MIMIR design |
-| Q27 | HoundConfig полная схема | при Hound refactor (C.1.2) |
+| ✅ **Q27** | **HoundConfig полная схема — ЗАКРЫТ** (13.04.2026, C.1.2) | |
 
 ### 🟢 Post-upgrade opportunities (новые этой сессии)
 

@@ -1,6 +1,8 @@
 // src/main/java/com/hound/HoundApplication.java
 package com.hound;
 
+import com.hound.api.ArcadeWriteMode;
+import com.hound.api.HoundConfig;
 import com.hound.semantic.engine.UniversalSemanticEngine;
 import com.hound.semantic.model.*;
 import com.hound.semantic.dialect.plsql.PlSqlSemanticListener;
@@ -23,6 +25,7 @@ import com.hound.metrics.PipelineTimer;
 import com.hound.processor.ThreadPoolManager;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
@@ -73,21 +76,21 @@ public class HoundApplication {
     // Run
     // ═══════════════════════════════════════════════════════════════
 
-    public void run(RunConfig config) throws Exception {
-        logger.info("=== Hound Semantic Engine v1.0.0 ===");
-        logger.info("Input    : {}", config.inputPath);
-        logger.info("Language : {}", config.language);
+    public void run(RunConfig runConfig) throws Exception {
+        HoundConfig config = runConfig.toHoundConfig();
+        Path target = Path.of(runConfig.inputPath);
 
-        // Создаём writer (embedded или remote или null)
+        logger.info("=== Hound Semantic Engine v1.0.0 ===");
+        logger.info("Input    : {}", target);
+        logger.info("Language : {}", config.dialect());
+
         ArcadeDBSemanticWriter writer = createWriter(config);
 
-        // --clean: удалить все данные перед запуском
-        if (config.clean && writer != null) {
+        if (runConfig.clean && writer != null) {
             logger.info("CLEAN    : deleting all Dali records...");
             writer.cleanAll();
         }
 
-        Path target = Path.of(config.inputPath);
         if (!Files.exists(target)) {
             if (writer != null) writer.close();
             throw new IllegalArgumentException("Не найдено: " + target);
@@ -100,9 +103,8 @@ public class HoundApplication {
                 processFile(target, config, writer);
             }
 
-            // --diag: запустить диагностику после обработки
-            if (config.diag && writer != null) {
-                runDiagnostics(config, writer);
+            if (runConfig.diag && writer != null) {
+                runDiagnostics(runConfig, writer);
             }
         } finally {
             if (writer != null) writer.close();
@@ -112,13 +114,12 @@ public class HoundApplication {
     /**
      * Запускает DiagnosticRunner после обработки файлов (remote only).
      */
-    private void runDiagnostics(RunConfig config, ArcadeDBSemanticWriter writer) {
+    private void runDiagnostics(RunConfig runConfig, ArcadeDBSemanticWriter writer) {
         System.out.println();
-        if ("arcadedb".equalsIgnoreCase(config.dbType)) {
-            // Remote: use DiagnosticRunner with RemoteDatabase
+        if ("arcadedb".equalsIgnoreCase(runConfig.dbType)) {
             var remoteDb = new com.arcadedb.remote.RemoteDatabase(
-                    config.dbHost, config.dbPort, config.dbName,
-                    config.dbUser, config.dbPassword);
+                    runConfig.dbHost, runConfig.dbPort, runConfig.dbName,
+                    runConfig.dbUser, runConfig.dbPassword);
             try {
                 new DiagnosticRunner(remoteDb).runAll();
             } finally {
@@ -128,26 +129,30 @@ public class HoundApplication {
     }
 
     /**
-     * Создаёт writer в зависимости от параметров:
-     *   --arcade-db path          → embedded mode
-     *   --db-type arcadedb        → remote mode (к Docker серверу)
-     *   ничего                     → null (без записи)
+     * Создаёт writer по {@link HoundConfig#writeMode()}.
+     * DISABLED → null (no DB writes).
+     * REMOTE / REMOTE_BATCH → ArcadeDBSemanticWriter.
      */
-    private ArcadeDBSemanticWriter createWriter(RunConfig config) {
-        // Remote mode
-        if ("arcadedb".equalsIgnoreCase(config.dbType)) {
-            logger.info("ArcadeDB : REMOTE{} {}:{}/{} user={}",
-                    config.useBatch ? "_BATCH" : "",
-                    config.dbHost, config.dbPort, config.dbName, config.dbUser);
-            return new ArcadeDBSemanticWriter(
-                    config.dbHost, config.dbPort, config.dbName,
-                    config.dbUser, config.dbPassword,
-                    config.useBatch);
+    private ArcadeDBSemanticWriter createWriter(HoundConfig config) {
+        if (config.writeMode() == ArcadeWriteMode.DISABLED
+                || config.writeMode() == ArcadeWriteMode.EMBEDDED) {
+            logger.info("Storage  : {}", config.writeMode());
+            return null;
         }
 
-        // Нет записи
-        logger.info("Storage  : disabled (используйте --db-type arcadedb)");
-        return null;
+        URI uri = URI.create(config.arcadeUrl());
+        String host = uri.getHost();
+        int    port = uri.getPort() > 0 ? uri.getPort() : 2480;
+        boolean batch = config.writeMode() == ArcadeWriteMode.REMOTE_BATCH;
+
+        logger.info("ArcadeDB : REMOTE{} {}:{}/{} user={}",
+                batch ? "_BATCH" : "",
+                host, port, config.arcadeDbName(), config.arcadeUser());
+
+        return new ArcadeDBSemanticWriter(
+                host, port, config.arcadeDbName(),
+                config.arcadeUser(), config.arcadePassword(),
+                batch);
     }
 
     /** Результат анализа одного файла (без записи в БД). */
@@ -168,22 +173,13 @@ public class HoundApplication {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Обрабатывает директорию с автоматическим определением режима namespace:
-     * <ul>
-     *   <li><b>Multi-DB</b>: поддиректории присутствуют → корень = DaliApplication,
-     *       каждая поддиректория (уровень 2) = DaliDatabase; SQL-файлы уровней 3+
-     *       рекурсивно относятся к своей level-2 базе данных.
-     *   <li><b>Single-DB</b>: нет поддиректорий (или есть файлы прямо в корне) →
-     *       корень = и DaliApplication и DaliDatabase (одно имя).
-     * </ul>
-     *
-     * <p>Имя приложения: {@code --app-name} как override; иначе — имя корневой директории.
+     * Обрабатывает директорию с автоматическим определением режима namespace.
+     * appName = {@link HoundConfig#targetSchema()} если задан, иначе имя директории.
      */
-    private void processDirectory(Path dir, RunConfig config, ArcadeDBSemanticWriter writer)
+    private void processDirectory(Path dir, HoundConfig config, ArcadeDBSemanticWriter writer)
             throws IOException {
-        // Имя приложения: явный --app-name или имя корневой директории
-        String appName = (config.appName != null && !config.appName.isBlank())
-                ? config.appName
+        String appName = (config.targetSchema() != null && !config.targetSchema().isBlank())
+                ? config.targetSchema()
                 : dir.getFileName().toString();
 
         List<DatabaseBatch> batches = detectDatabases(dir);
@@ -278,17 +274,16 @@ public class HoundApplication {
 
     /**
      * Обрабатывает один DatabaseBatch: Phase 1 (параллельный разбор) + Phase 2 (запись).
-     * Создаёт CanonicalPool если есть db_name и writer.
      *
-     * @param appName имя приложения (DaliApplication): корневая директория или --app-name override
+     * @param appName имя приложения (DaliApplication)
      * @return int[]{success, failed}
      */
-    private int[] processBatch(DatabaseBatch batch, String appName, RunConfig config,
+    private int[] processBatch(DatabaseBatch batch, String appName, HoundConfig config,
                                 ArcadeDBSemanticWriter writer,
                                 List<PipelineTimer> allTimers, List<String> allNames)
             throws IOException {
         List<Path> sqlFiles = batch.files();
-        int threads = config.threads;
+        int threads = config.workerThreads();
 
         // Создаём CanonicalPool для этой базы данных.
         // appName = имя корневой директории (или --app-name override).
@@ -345,7 +340,7 @@ public class HoundApplication {
      * Не пишет в БД — результат собирается в Phase 2.
      * Потокобезопасен: каждый вызов создаёт свои engine/listener.
      */
-    private AnalysisResult analyzeFile(Path file, RunConfig config, AtomicLong sessionSeq,
+    private AnalysisResult analyzeFile(Path file, HoundConfig config, AtomicLong sessionSeq,
                                         String defaultSchema)
             throws IOException {
         String sql = readFileWithFallback(file);
@@ -359,8 +354,8 @@ public class HoundApplication {
         timer.count("lines", (int) lineCount);
 
         UniversalSemanticEngine engine = new UniversalSemanticEngine();
-        Object listener = createListener(config.language, engine, defaultSchema);
-        parseAndWalk(sql, config.language, listener, timer);
+        Object listener = createListener(config.dialect(), engine, defaultSchema);
+        parseAndWalk(sql, config.dialect(), listener, timer);
 
         timer.start("resolve");
         engine.resolvePendingColumns();
@@ -370,7 +365,7 @@ public class HoundApplication {
         SemanticResult result = engine.getResult(
                 "session-" + sessionSeq.getAndIncrement(),
                 file.toString(),
-                config.language,
+                config.dialect(),
                 parseWalkResolveMs
         ).withRawScript(sql);
 
@@ -381,7 +376,7 @@ public class HoundApplication {
     // File
     // ═══════════════════════════════════════════════════════════════
 
-    private PipelineTimer processFile(Path file, RunConfig config, ArcadeDBSemanticWriter writer)
+    private PipelineTimer processFile(Path file, HoundConfig config, ArcadeDBSemanticWriter writer)
             throws IOException {
         String sql = readFileWithFallback(file);
         if (sql.isBlank()) {
@@ -394,8 +389,8 @@ public class HoundApplication {
         timer.count("lines", (int) lineCount);
 
         UniversalSemanticEngine engine = new UniversalSemanticEngine();
-        Object listener = createListener(config.language, engine);
-        parseAndWalk(sql, config.language, listener, timer);
+        Object listener = createListener(config.dialect(), engine);
+        parseAndWalk(sql, config.dialect(), listener, timer);
 
         timer.start("resolve");
         engine.resolvePendingColumns();
@@ -405,7 +400,7 @@ public class HoundApplication {
         SemanticResult result = engine.getResult(
                 "session-" + System.currentTimeMillis(),
                 file.toString(),
-                config.language,
+                config.dialect(),
                 parseWalkResolveMs
         ).withRawScript(sql);
 
@@ -711,8 +706,6 @@ public class HoundApplication {
         String dbPassword = "playwithdata";
 
         // Namespace / application hierarchy
-        // --app-name groups multiple databases under one DaliApplication vertex.
-        // Example: --app-name CRM  (creates CRM → DWH, CRM → ODS edges if both processed)
         String appName = null;
 
         // Flags
@@ -720,5 +713,22 @@ public class HoundApplication {
         boolean diag     = false;
         boolean useBatch = false;
         int     threads  = Runtime.getRuntime().availableProcessors();
+
+        /** Convert CLI-parsed RunConfig to typed HoundConfig. */
+        HoundConfig toHoundConfig() {
+            ArcadeWriteMode mode;
+            String arcadeUrl = null;
+            if ("arcadedb".equalsIgnoreCase(dbType)) {
+                mode     = useBatch ? ArcadeWriteMode.REMOTE_BATCH : ArcadeWriteMode.REMOTE;
+                arcadeUrl = "http://" + dbHost + ":" + dbPort;
+            } else {
+                mode = ArcadeWriteMode.DISABLED;
+            }
+            return new HoundConfig(
+                    language, appName, mode, arcadeUrl,
+                    dbName, dbUser, dbPassword,
+                    threads, false, 5000, null
+            );
+        }
     }
 }
