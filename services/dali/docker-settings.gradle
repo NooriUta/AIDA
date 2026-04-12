@@ -1,0 +1,15 @@
+// Docker-only settings — используется ТОЛЬКО внутри Docker-образа (не в монорепо).
+// Копируется в образе как settings.gradle, чтобы включить только нужные модули
+// (libraries:hound, shared:dali-models, services:dali).
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'aida-root'
+
+include 'shared:dali-models'
+include 'libraries:hound'
+include 'services:dali'
