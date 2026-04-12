@@ -25,6 +25,8 @@ coverage/
 
 # Logs
 *.log
+*.log.*
+**/log/
 /tmp/
 
 # IDE

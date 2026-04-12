@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "verdandi",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "chur",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "shuttle",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": [":services:shuttle:quarkusDev"],
+      "port": 8080
+    }
+  ]
+}

@@ -28,11 +28,14 @@
 
 ext {
     isWindows   = System.properties['os.name'].toLowerCase().contains('windows')
-    // Node.js managed by JetBrains — not in system PATH
-    def nodeHome = System.getenv('NODE_HOME') ?:
-        (isWindows ? "${System.getenv('APPDATA')}/JetBrains/IntelliJIdea2025.3/node/versions/24.14.1" : '')
-    npmCmd      = nodeHome ? "${nodeHome}/npm.cmd" : (isWindows ? 'npm.cmd' : 'npm')
-    nodeCmd     = nodeHome ? "${nodeHome}/node.exe" : 'node'
+    // Prefer system Node (in PATH); fall back to JetBrains-managed Node
+    def sysNpm  = isWindows ? 'npm.cmd' : 'npm'
+    def sysNode = isWindows ? 'node.exe' : 'node'
+    def jbNode  = System.getenv('APPDATA') ?
+        "${System.getenv('APPDATA')}/JetBrains/IntelliJIdea2025.3/node/versions/24.14.1" : ''
+    def nodeHome = System.getenv('NODE_HOME') ?: (jbNode && new File(jbNode, sysNode).exists() ? jbNode : '')
+    npmCmd      = nodeHome ? "${nodeHome}/${sysNpm}" : sysNpm
+    nodeCmd     = nodeHome ? "${nodeHome}/${sysNode}" : sysNode
     churDir     = file('bff/chur')
     verdandiDir = file('frontends/verdandi')
     gradleCmd   = new File(rootDir, isWindows ? 'gradlew.bat' : 'gradlew').canonicalPath
