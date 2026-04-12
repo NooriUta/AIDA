@@ -30,7 +30,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   keycloak:          'Keycloak (Auth)',
   frigg:             'Frigg (Store)',
   ygg:               'Yggdrasil (DB)',
-  dali:              'Dali (ArcadeDB)',
+  dali:              'Dali (Parser)',
   mimir:             'Mímir (Memory)',
   anvil:             'Anvil (Indexer)',
 };
@@ -43,7 +43,7 @@ const SERVICE_ORDER = [
 ];
 
 // Frontend-only WIP stubs — not pinged by backend
-const WIP_SERVICES = ['dali', 'mimir', 'anvil'];
+const WIP_SERVICES = ['mimir', 'anvil'];
 
 // Heimdall-backend must not be restartable from its own UI
 const NO_RESTART = new Set(['heimdall-backend']);
