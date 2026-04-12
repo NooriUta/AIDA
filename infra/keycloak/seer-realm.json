@@ -18,11 +18,11 @@
   "defaultRoles": ["viewer"],
   "clients": [
     {
-      "clientId": "verdandi-bff",
-      "name": "VERDANDI Chur BFF",
+      "clientId": "aida-bff",
+      "name": "AIDA BFF (Chur)",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "verdandi-bff-secret-dev",
+      "secret": "aida-bff-secret-dev",
       "directAccessGrantsEnabled": true,
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
@@ -47,6 +47,20 @@
           }
         }
       ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "aida:admin",
+      "description": "HEIMDALL admin access — metrics, snapshots, control panel",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "aida:admin:destructive",
+      "description": "HEIMDALL destructive ops — reset, cancel sessions",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     }
   ],
   "users": [

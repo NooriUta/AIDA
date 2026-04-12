@@ -1,5 +1,6 @@
 import type { LoomNode, LoomEdge } from '../types/graph';
 import { LAYOUT } from './constants';
+import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 
 // ─── Node dimension hints for ELK (sourced from constants.ts) ────────────────
 const { NODE_WIDTH, NODE_HEIGHT_BASE, COL_ROW_HEIGHT, GRID_SPACING } = LAYOUT;
@@ -107,69 +108,56 @@ export function clearLayoutCache(): void {
   cancelPendingLayouts();
 }
 
-// ─── ELK engine (Web Worker) ─────────────────────────────────────────────────
-// ELK layout runs inside a dedicated Web Worker (workers/elkWorker.ts) so the
-// main thread stays responsive during heavy layouts (500–5000+ nodes).
+// ─── ELK engine ──────────────────────────────────────────────────────────────
+// elk.bundled.js runs on the main thread, but uses elk-worker.min.js as a real
+// Web Worker for its own computation, so elk.layout() is truly non-blocking.
 //
-// The worker stubs out `self.Worker` before importing elk.bundled.js, which
-// prevents elkjs from spawning nested workers and avoids the Vite CJS→ESM
-// `_Worker is not a constructor` error that blocked the earlier attempt.
+// We provide an explicit workerFactory so ELKNode (elk.bundled.js) skips its
+// internal `require('./elk-worker.min.js').Worker` path — that path breaks after
+// Rollup/Vite's CJS→ESM transform renames the local `_Worker` variable to a
+// value that is not a constructor.  By providing our own factory we get a real
+// browser Worker pointing to elk-worker.min.js served as a classic script.
 //
-// vite.config.ts is already configured:
-//   worker: { format: 'es' }
-//   optimizeDeps.include: ['elkjs/lib/elk.bundled.js']
+// vite.config.ts: optimizeDeps.include: ['elkjs/lib/elk.bundled.js']
+// elkWorkerUrl: imported via ?url — Vite emits elk-worker.min.js as a static
+// asset and returns its URL; loaded as classic script, no ESM transform applied.
 
 const LAYOUT_TIMEOUT = LAYOUT.TIMEOUT_MS;
 
-// Worker singleton + in-flight request registry
-let _elkWorker: Worker | null = null;
-let _reqCounter = 0;
-const _pending = new Map<number, {
-  resolve: (r: ElkGraph & { children: ElkNode[] }) => void;
-  reject:  (e: Error) => void;
-}>();
+let _elk: ElkApi | null = null;
 
-function getElkWorker(): Worker {
-  if (!_elkWorker) {
-    _elkWorker = new Worker(
-      new URL('../workers/elkWorker.ts', import.meta.url),
-      { type: 'module' },
-    );
-    _elkWorker.onmessage = (
-      e: MessageEvent<{ id: number; result?: ElkGraph & { children: ElkNode[] }; error?: string }>,
-    ) => {
-      const { id, result, error } = e.data;
-      const p = _pending.get(id);
-      if (!p) return;
-      _pending.delete(id);
-      if (error) p.reject(new Error(error));
-      else       p.resolve(result!);
-    };
-  }
-  return _elkWorker;
+async function getElk(): Promise<ElkApi> {
+  if (_elk) return _elk;
+  const mod = await import('elkjs/lib/elk.bundled.js');
+  const ELK = (mod.default as unknown) as new (opts: {
+    workerUrl:     string;
+    workerFactory: (url: string) => Worker;
+  }) => ElkApi;
+  // Pass factory without workerUrl to skip ELKNode's Node.js web-worker check
+  // (which always warns in browser because the 'web-worker' npm package is absent).
+  // The factory ignores the url param and uses the imported elkWorkerUrl directly.
+  _elk = new ELK({
+    workerFactory: (_url: string) => new Worker(elkWorkerUrl),
+  });
+  return _elk;
 }
 
-/** Cancel all in-flight layout requests (e.g. on schema change). */
+/** Terminate the ELK worker and reset singleton (cancels any in-flight layout). */
 export function cancelPendingLayouts(): void {
-  _pending.forEach(({ reject }) => reject(new Error('cancelled')));
-  _pending.clear();
+  if (_elk) {
+    try { (_elk as any).terminate?.(); } catch { /* ignore */ }
+    _elk = null;
+  }
 }
 
 async function runElkLayout(graph: ElkGraph): Promise<(ElkGraph & { children: ElkNode[] }) | null> {
   const t0 = performance.now();
   try {
-    const id     = ++_reqCounter;
-    const worker = getElkWorker();
+    const elk    = await getElk();
     const result = await Promise.race([
-      new Promise<ElkGraph & { children: ElkNode[] }>((resolve, reject) => {
-        _pending.set(id, { resolve, reject });
-        worker.postMessage({ id, graph });
-      }),
+      elk.layout(graph) as Promise<ElkGraph & { children: ElkNode[] }>,
       new Promise<never>((_, reject) =>
-        setTimeout(() => {
-          _pending.delete(id);
-          reject(new Error(`ELK layout timed out after ${LAYOUT_TIMEOUT / 1000}s`));
-        }, LAYOUT_TIMEOUT),
+        setTimeout(() => reject(new Error(`ELK layout timed out after ${LAYOUT_TIMEOUT / 1000}s`)), LAYOUT_TIMEOUT),
       ),
     ]);
     const ms = (performance.now() - t0).toFixed(0);

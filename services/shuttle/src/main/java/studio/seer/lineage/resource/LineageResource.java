@@ -3,9 +3,14 @@ package studio.seer.lineage.resource;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.graphql.*;
+import studio.seer.lineage.heimdall.HeimdallEmitter;
+import studio.seer.lineage.heimdall.model.EventLevel;
+import studio.seer.lineage.heimdall.model.EventType;
 import studio.seer.lineage.model.*;
 import studio.seer.lineage.security.SeerIdentity;
 import studio.seer.lineage.service.*;
+
+import java.util.Map;
 
 import java.util.List;
 
@@ -21,11 +26,12 @@ import java.util.List;
 @GraphQLApi
 public class LineageResource {
 
-    @Inject SeerIdentity  identity;
+    @Inject SeerIdentity    identity;
     @Inject OverviewService overviewService;
     @Inject ExploreService  exploreService;
     @Inject LineageService  lineageService;
     @Inject SearchService   searchService;
+    @Inject HeimdallEmitter heimdall;
 
     // ── L1: Overview ──────────────────────────────────────────────────────────
 
@@ -68,7 +74,13 @@ public class LineageResource {
         @Description("@rid of a DaliTable or DaliColumn vertex")
         String nodeId
     ) {
-        return lineageService.lineage(nodeId);
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0, Map.of("query", "lineage", "nodeId", nodeId != null ? nodeId : ""));
+        return lineageService.lineage(nodeId)
+                .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("query", "lineage")));
     }
 
     @Query("upstream")

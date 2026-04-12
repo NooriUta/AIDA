@@ -20,6 +20,10 @@ dependencies {
     implementation 'io.quarkus:quarkus-rest'
     implementation 'io.quarkus:quarkus-rest-jackson'
 
+    // REST Client — для FRIGG (ArcadeDB :2481)
+    implementation 'io.quarkus:quarkus-rest-client'
+    implementation 'io.quarkus:quarkus-rest-client-jackson'
+
     // WebSocket (Next API — не legacy @ServerEndpoint)
     implementation 'io.quarkus:quarkus-websockets-next'
 

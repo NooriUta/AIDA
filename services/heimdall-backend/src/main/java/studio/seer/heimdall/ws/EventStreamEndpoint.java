@@ -13,6 +13,8 @@ import org.jboss.logging.Logger;
 import studio.seer.heimdall.RingBuffer;
 import studio.seer.shared.HeimdallEvent;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -49,8 +51,16 @@ public class EventStreamEndpoint {
     public Uni<Void> onOpen(WebSocketConnection connection) {
         LOG.infof("WebSocket connected: %s", connection.id());
 
+        // Parse optional ?filter=key:value query param from raw query string
+        String rawFilter = queryParam(connection.handshakeRequest().query(), "filter");
+        EventFilter filter = EventFilter.parse(rawFilter);
+        if (!filter.isEmpty()) {
+            LOG.infof("WebSocket %s applying filter: %s", connection.id(), rawFilter);
+        }
+
         // Создаём subscriber который шлёт события этому конкретному соединению
         Consumer<HeimdallEvent> subscriber = event -> {
+            if (!filter.matches(event)) return;
             if (connection.isOpen()) {
                 connection.sendText(toJson(event))
                         .subscribe().with(
@@ -65,8 +75,9 @@ public class EventStreamEndpoint {
         subscribers.put(connection.id(), subscriber);
         ringBuffer.subscribe(subscriber);
 
-        // Cold-start replay: клиент получает последние N событий сразу при подключении
+        // Cold-start replay: клиент получает последние N событий (с применением фильтра) сразу при подключении
         var replay = ringBuffer.snapshot().stream()
+                .filter(filter::matches)
                 .limit(COLD_START_REPLAY_SIZE)
                 .toList();
 
@@ -90,6 +101,23 @@ public class EventStreamEndpoint {
         if (sub != null) {
             ringBuffer.unsubscribe(sub);
         }
+    }
+
+    /**
+     * Extract a single named parameter from a raw query string (e.g. "filter=component:shuttle&foo=bar").
+     * Returns null if the parameter is absent.
+     */
+    private static String queryParam(String queryString, String name) {
+        if (queryString == null || queryString.isBlank()) return null;
+        for (String pair : queryString.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) continue;
+            String k = URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8);
+            if (name.equals(k)) {
+                return URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
     }
 
     private String toJson(HeimdallEvent event) {

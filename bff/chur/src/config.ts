@@ -15,9 +15,9 @@ export const config = {
   // ── Keycloak OIDC ──────────────────────────────────────────────────────────
   keycloakUrl:      process.env.KEYCLOAK_URL          ?? 'http://localhost:8180',
   keycloakRealm:    process.env.KEYCLOAK_REALM        ?? 'seer',
-  keycloakClientId: process.env.KEYCLOAK_CLIENT_ID    ?? 'verdandi-bff',
+  keycloakClientId: process.env.KEYCLOAK_CLIENT_ID    ?? 'aida-bff',
   keycloakSecret:   requireInProd('KEYCLOAK_CLIENT_SECRET',
-                      process.env.KEYCLOAK_CLIENT_SECRET, 'verdandi-bff-secret-dev'),
+                      process.env.KEYCLOAK_CLIENT_SECRET, 'aida-bff-secret-dev'),
   cookieSecret:     requireInProd('COOKIE_SECRET',
                       process.env.COOKIE_SECRET, 'dev-cookie-secret'),
 

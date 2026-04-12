@@ -58,8 +58,8 @@ services:
       # Keycloak (internal network — no port offset)
       KEYCLOAK_URL:          http://keycloak:8180
       KEYCLOAK_REALM:        seer
-      KEYCLOAK_CLIENT_ID:    verdandi-bff
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-verdandi-bff-secret-dev}
+      KEYCLOAK_CLIENT_ID:    aida-bff
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
       COOKIE_SECRET:         ${COOKIE_SECRET:-dev-cookie-secret}
       # ArcadeDB (external container)
       ARCADEDB_URL:          ${ARCADEDB_URL:-http://HoundArcade:2480}
@@ -68,6 +68,8 @@ services:
       ARCADEDB_PASS:         ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
       # SHUTTLE (internal network)
       LINEAGE_API_URL:       http://shuttle:8080
+      # HEIMDALL (internal network)
+      HEIMDALL_URL:          http://heimdall-backend:9093
     ports:
       - "13000:3000"
     depends_on:
@@ -87,6 +89,26 @@ services:
       chur:
         condition: service_started
 
+  # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────
+  # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с HoundArcade.
+  # ArcadeDB всегда слушает :2480 внутри контейнера.
+  # Маппинг: host :2481 → container :2480  (dev: localhost:2481 → FRIGG)
+  # Docker-сеть: frigg:2480  |  HoundArcade:2480 — разные контейнеры, нет конфликта
+  frigg:
+    image: arcadedata/arcadedb:26.3.2
+    environment:
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=playwithdata"
+    ports:
+      - "2481:2480"
+    volumes:
+      - frigg_data:/home/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # ── HEIMDALL (admin observability backend) ─────────────────────────────────
   # ВАЖНО: context = . (монорепо root), не services/heimdall-backend/
   # Причина: сервис зависит от shared/dali-models/ (inter-module dependency).
@@ -98,9 +120,19 @@ services:
       - "19093:9093"
     environment:
       QUARKUS_HTTP_PORT: "9093"
+      QUARKUS_REST_CLIENT_FRIGG_API_URL: http://frigg:2480
+      FRIGG_DB:       heimdall
+      FRIGG_USER:     root
+      FRIGG_PASSWORD: playwithdata
+    depends_on:
+      frigg:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9093 && echo -e 'GET /q/health HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
+
+volumes:
+  frigg_data:

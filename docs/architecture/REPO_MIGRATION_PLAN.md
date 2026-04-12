@@ -1,7 +1,7 @@
 # AIDA — Repository Migration Plan
 
 **Документ:** `REPO_MIGRATION_PLAN`
-**Версия:** 2.0
+**Версия:** 2.1
 **Дата:** 12.04.2026
 **Статус:** Working document — план реконструкции репозиториев
 
@@ -71,15 +71,29 @@ aida-root/                          ← git init, новый GitHub repo (NooriU
 │       └── src/
 │
 ├── frontends/
-│   └── verdandi/
+│   ├── verdandi/                   ← LOOM + KNOT + ANVIL UI + MIMIR Chat
+│   │   ├── package.json
+│   │   ├── vite.config.ts
+│   │   ├── Dockerfile
+│   │   └── src/
+│   ├── heimdall-frontend/          ← Admin panel (создаётся в рамках HEIMDALL sprint)
+│   ├── urd/                        ← Time-travel / history (planned, post-HighLoad)
+│   └── skuld/                      ← Proposals / future state (planned, post-HighLoad)
+│
+├── packages/                        ← shared npm packages (NEW — ADR-DA-013)
+│   └── aida-shared/
 │       ├── package.json
-│       ├── vite.config.ts
-│       ├── Dockerfile
 │       └── src/
+│           ├── navigation.ts        ← navigateTo, buildAppUrl, useAppContext
+│           ├── auth.ts              ← useUser, ChurAuthProvider
+│           ├── tokens.css           ← design tokens
+│           └── index.ts
 │
 ├── infra/
-│   └── keycloak/
-│       └── seer-realm.json
+│   ├── keycloak/
+│   │   └── seer-realm.json
+│   └── nginx/
+│       └── seer-studio.conf        ← path routing (§2.4)
 │
 ├── scripts/
 │   └── rollback.sh
@@ -523,3 +537,5 @@ git push -u origin main
 |---|---|---|
 | 12.04.2026 | 1.0 | Initial. As-Is из реального индекса проекта. |
 | 12.04.2026 | 2.0 | Полный пересмотр. D1-D10 design decisions. Git стратегия: новый repo NooriUta/aida + история VERDANDI через merge. Self-contained modules (D10). Критический fix build.gradle:84. Без ArcadeDB upgrade, без placeholder modules. Конкретные команды по 6 фазам. |
+
+| 12.04.2026 | 2.1 | **Frontend architecture добавлена.** ADR-DA-012/013. `packages/aida-shared/` добавлена в структуру (navigation utils + auth + tokens). `frontends/` расширен: `urd/`, `skuld/` (planned), `heimdall-frontend/`. `infra/nginx/` для path routing конфига. |
