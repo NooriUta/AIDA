@@ -14,6 +14,8 @@ RUN npm ci --legacy-peer-deps && \
     cp -rL /app/packages/aida-shared node_modules/aida-shared
 
 COPY frontends/heimdall-frontend/ .
+ARG VITE_HEIMDALL_API=""
+ENV VITE_HEIMDALL_API=$VITE_HEIMDALL_API
 RUN rm -rf .vite && npx vite build
 
 FROM nginx:alpine AS runner

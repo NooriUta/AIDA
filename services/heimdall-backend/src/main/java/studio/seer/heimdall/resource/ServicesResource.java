@@ -44,8 +44,10 @@ public class ServicesResource {
 
     public record ServiceStatus(String name, int port, String mode, String status, long latencyMs) {}
 
-    private record ServiceDef(String name, int port, String mode, String healthPath, boolean self, boolean tcp) {
-        String url() { return "http://localhost:" + port + healthPath; }
+    private record ServiceDef(String name, int port, String pingHost, int pingPort,
+                              String mode, String healthPath, boolean self, boolean tcp) {
+        /** Actual URL used for health-check (Docker: uses internal DNS + port, dev: localhost). */
+        String url() { return "http://" + pingHost + ":" + pingPort + healthPath; }
     }
 
     @ConfigProperty(name = "seer.services.dev")
@@ -62,10 +64,22 @@ public class ServicesResource {
     private static final Set<String> NO_RESTART = Set.of("heimdall-backend");
 
     /**
-     * Parses "name:port:type" or "name:port:type:healthPath" entries.
-     * type = http | tcp | self
+     * Parses service entries.  Format (all fields after type are optional):
+     *   name:displayPort:type[:healthPath[:internalPort[:pingName]]]
+     *
+     * type         = http | tcp | self
+     * healthPath   — appended to ping URL for http checks (default "/")
+     * internalPort — container-internal port used for the actual health-check
+     *                (defaults to displayPort; ignored for "self")
+     * pingName     — Docker DNS hostname to ping (defaults to name;
+     *                use for external containers whose DNS name differs, e.g. HoundArcade)
+     *
+     * For docker mode the ping is sent to http://pingName:internalPort,
+     * so the backend container reaches peers via Docker's internal network.
+     * For dev mode the ping always goes to localhost:displayPort.
      */
     private List<ServiceDef> parseEntries(List<String> entries, String mode) {
+        boolean isDocker = "docker".equals(mode);
         List<ServiceDef> result = new ArrayList<>();
         for (String entry : entries) {
             String trimmed = entry.strip();
@@ -74,15 +88,20 @@ public class ServicesResource {
             if (parts.length < 3) {
                 continue; // malformed, skip
             }
-            String name       = parts[0];
-            int    port       = Integer.parseInt(parts[1]);
-            String type       = parts[2];
-            String healthPath = parts.length >= 4 ? parts[3] : "/";
+            String name        = parts[0];
+            int    displayPort = Integer.parseInt(parts[1]);
+            String type        = parts[2];
+            String healthPath  = parts.length >= 4 && !parts[3].isEmpty() ? parts[3] : "/";
+            int    pingPort    = parts.length >= 5 && !parts[4].isEmpty()
+                                     ? Integer.parseInt(parts[4]) : displayPort;
+            String pingHost    = isDocker
+                                     ? (parts.length >= 6 && !parts[5].isEmpty() ? parts[5] : name)
+                                     : "localhost";
 
             result.add(switch (type) {
-                case "tcp"  -> new ServiceDef(name, port, mode, "/",        false, true);
-                case "self" -> new ServiceDef(name, port, mode, "/",        true,  false);
-                default     -> new ServiceDef(name, port, mode, healthPath, false, false);
+                case "tcp"  -> new ServiceDef(name, displayPort, pingHost, pingPort, mode, "/",        false, true);
+                case "self" -> new ServiceDef(name, displayPort, pingHost, pingPort, mode, "/",        true,  false);
+                default     -> new ServiceDef(name, displayPort, pingHost, pingPort, mode, healthPath, false, false);
             });
         }
         return result;
@@ -163,7 +182,7 @@ public class ServicesResource {
             return Uni.createFrom().item(() -> {
                 long start = System.currentTimeMillis();
                 try (Socket s = new Socket()) {
-                    s.connect(new InetSocketAddress("localhost", svc.port()), 1500);
+                    s.connect(new InetSocketAddress(svc.pingHost(), svc.pingPort()), 1500);
                     return new ServiceStatus(svc.name(), svc.port(), svc.mode(), "up", System.currentTimeMillis() - start);
                 } catch (Exception e) {
                     return new ServiceStatus(svc.name(), svc.port(), svc.mode(), "down", System.currentTimeMillis() - start);

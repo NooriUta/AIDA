@@ -62,13 +62,13 @@ parser.core.UniversalParser
 
 | Приоритет | Файл:Строка | Проблема | Условие | Решение |
 |---|---|---|---|---|
-| 🔴 Critical | `StructureAndLineageBuilder.java:44` | NPE — `tableName.toUpperCase()` без null-проверки | `ensureTable(null, ...)` из любого listener | `if (tableName == null \|\| tableName.isBlank()) return "UNKNOWN";` |
-| 🔴 Critical | `StructureAndLineageBuilder.java:88` | NPE — `tableName.toUpperCase()` в `ensureTableWithType` | Тот же сценарий | Та же защита |
-| 🔴 Critical | `ArcadeDBSemanticWriter.java:122` | Potential NPE — `result.getLineage().size()` без проверки | `getLineage()` вернёт null при пустом `SemanticResult` | `int cnt = result.getLineage() != null ? result.getLineage().size() : 0;` |
-| 🟠 High | `NameResolver.java:441-483` | Потенциальная бесконечная рекурсия в `resolveImplicitTableInternal` — нет depth guard | Циклическая иерархия `statement` в `StatementInfo` (data bug) | Добавить `depth` счётчик с `MAX_RECURSION_DEPTH`, аналогично `resolveParentRecursive` |
+| ✅ FIXED | `StructureAndLineageBuilder.java:44` | NPE — `tableName.toUpperCase()` без null-проверки | `ensureTable(null, ...)` из любого listener | `if (tableName == null \|\| tableName.isBlank()) return "UNKNOWN";` |
+| ✅ FIXED | `StructureAndLineageBuilder.java:88` | NPE — `tableName.toUpperCase()` в `ensureTableWithType` | Тот же сценарий | Та же защита |
+| ✅ FIXED | `ArcadeDBSemanticWriter.java:122` | Potential NPE — `result.getLineage().size()` без проверки | `getLineage()` вернёт null при пустом `SemanticResult` | `int cnt = result.getLineage() != null ? result.getLineage().size() : 0;` |
+| ✅ FIXED | `NameResolver.java:441-483` | Потенциальная бесконечная рекурсия в `resolveImplicitTableInternal` — нет depth guard | Циклическая иерархия `statement` в `StatementInfo` (data bug) | Добавить `depth` счётчик с `MAX_RECURSION_DEPTH`, аналогично `resolveParentRecursive` |
 | 🟠 High | `StructureAndLineageBuilder.java:490-497` | Quality > 1.0 — атом может быть `resolved` и `constant/function` одновременно (двойной подсчёт) | `SELECT NVL(col, 'default')` — col resolved + 'default' constant | `Math.min(1.0, ...)` или `else if` вместо независимых `if` |
-| 🟡 Medium | `ThreadPoolManager.java:23` | Все потоки называются `hound-worker-1` — `new AtomicInteger(0)` создаётся заново на каждый поток | Все сценарии с >1 потоком | `private static final AtomicInteger THREAD_SEQ = new AtomicInteger(0);` |
-| 🟡 Medium | `HoundApplication.java:348` | `InterruptedException` перехватывается, `interrupt()` восстанавливается, но цикл продолжается | Оставшиеся futures могут быть пропущены без полного прерывания | После `Thread.currentThread().interrupt()` добавить `break;` |
+| ✅ FIXED | `ThreadPoolManager.java:23` | Все потоки называются `hound-worker-1` — `new AtomicInteger(0)` создаётся заново на каждый поток | Все сценарии с >1 потоком | `private static final AtomicInteger THREAD_SEQ = new AtomicInteger(0);` |
+| ✅ FIXED | `HoundApplication.java:348` | `InterruptedException` перехватывается, `interrupt()` восстанавливается, но цикл продолжается | Оставшиеся futures могут быть пропущены без полного прерывания | После `Thread.currentThread().interrupt()` добавить `break;` |
 
 ### Детали B1/B2 — ensureTable NPE
 
@@ -153,14 +153,64 @@ t.setName("hound-worker-" + THREAD_SEQ.incrementAndGet());
 
 | Приоритет | # | Задача | Effort | Место в C.1 |
 |---|---|---|---|---|
-| 🔴 Critical | B1 | NPE в `ensureTable` (строки 44, 88) | ~1 ч | C.1.0 |
-| 🔴 Critical | B3 | NPE в `ArcadeDBSemanticWriter:122` | ~30 мин | C.1.0 |
-| 🟠 High | B4 | Бесконечная рекурсия в `resolveImplicitTableInternal` | ~2 ч | C.1.0 |
+| ✅ FIXED | B1 | NPE в `ensureTable` (строки 44, 88) | ~1 ч | C.1.0 |
+| ✅ FIXED | B3 | NPE в `ArcadeDBSemanticWriter:122` | ~30 мин | C.1.0 |
+| ✅ FIXED | B4 | Бесконечная рекурсия в `resolveImplicitTableInternal` | ~2 ч | C.1.0 |
 | 🟠 High | P1 | O(A×T) → O(A) в `resolveTableByNameOnly` | ~3 ч | C.1.6 |
 | 🟠 High | P2 | O(N²) → O(N) в `addChildStatement` (`LinkedHashSet`) | ~1 ч | C.1.6 |
-| 🟡 Medium | B5 | Quality > 1.0 двойной подсчёт | ~1 ч | C.1.0 |
-| 🟡 Medium | B6 | Thread naming всегда `hound-worker-1` | ~30 мин | C.1.0 |
-| 🟡 Medium | B7 | `InterruptedException` без `break` | ~30 мин | C.1.0 |
+| ✅ FIXED | B5 | Quality > 1.0 двойной подсчёт | ~1 ч | C.1.0 |
+| ✅ FIXED | B6 | Thread naming всегда `hound-worker-1` | ~30 мин | C.1.0 |
+| ✅ FIXED | B7 | `InterruptedException` без `break` | ~30 мин | C.1.0 |
 | 🟡 Medium | R1 | Дублирование `computeStatementQuality/Depth/hasCte` | ~2 ч | C.1.7 |
 | 🟢 Low | R2 | `ISemanticEngine` интерфейс | ~3 ч | C.1.7 |
 | 🟢 Low | Cycle | `UniversalParser ↔ ParserRegistry` цикл | ~2 ч | C.1.7 |
+
+---
+
+## Дополнительные фиксы (обнаружены в процессе, не были в review)
+
+> Полное описание: `HOUND_BUGFIX_REPORT.md`
+
+| # | Файл | Проблема | Статус |
+|---|---|---|---|
+| **Fix 1** | `UniversalSemanticEngine.java` (3 точки) | Orphaned DaliColumn без HAS_COLUMN — `addColumn()` вызывался для SubQuery/CTE geoid | ✅ FIXED |
+| **Fix 2** | `StructureAndLineageBuilder.java` | Double-schema geoid: `ensureTable("DWH.DIM_CUSTOMER","DWH")` → `DWH.DWH.DIM_CUSTOMER` | ✅ FIXED |
+| **Fix 3** | `RemoteWriter.java` (`write` + `writeBatch`) | HAS_COLUMN не создавался для pool-cached колонок новых таблиц | ✅ FIXED |
+| **Fix 4** | `JsonlBatchBuilder.java` | UNBOUND false-positive для атомов в SubQuery/CTE geoid | ✅ FIXED |
+| **Fix 5** | 5 файлов схемы | Удалены неиспользуемые типы: DaliPerfStats, DaliResolutionLog, DaliSchemaLog, DaliMeta | ✅ DONE |
+| **Fix 6** | `EmbeddedWriter.java`, `RemoteWriter.java` | `--clean` медленный (N×500 DELETE loops) → `TRUNCATE TYPE ... UNSAFE` | ✅ FIXED |
+
+**Fix 1 — Guard pattern (применён в 3 точках):**
+```java
+if (!builder.getStatements().containsKey(tableGeoid)) {
+    builder.addColumn(tableGeoid, ...);
+}
+```
+
+**Fix 2 — Безусловный strip схемы:**
+```java
+if (upperName.contains(".")) {
+    upperName = parts[parts.length - 1];  // "DIM_CUSTOMER" (не "DWH.DIM_CUSTOMER")
+}
+```
+
+**Fix 3 — Sweep по rid.columns через prefix:**
+```java
+String prefix = tblGeoid + ".";
+for (var e : rid.columns.entrySet()) {
+    if (!skipGeoids.contains(e.getKey()) && e.getKey().startsWith(prefix))
+        edgeByRid("HAS_COLUMN", fromRid, e.getValue(), sid);
+}
+```
+
+**Fix 4 — UNBOUND только для физических таблиц:**
+```java
+&& str.getTables().containsKey(atomTblForWarn)  // ← добавлено
+&& !str.getColumns().containsKey(tblGeoid + "." + colName)
+```
+
+**Fix 6 — TRUNCATE:**
+```java
+db.command("sql", "TRUNCATE TYPE `" + typeName + "` UNSAFE");
+// было: while loop SELECT count(*) + DELETE LIMIT 500
+```
