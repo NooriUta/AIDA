@@ -58,8 +58,8 @@ services:
       # Keycloak (internal network — no port offset)
       KEYCLOAK_URL:          http://keycloak:8180
       KEYCLOAK_REALM:        seer
-      KEYCLOAK_CLIENT_ID:    verdandi-bff
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-verdandi-bff-secret-dev}
+      KEYCLOAK_CLIENT_ID:    aida-bff
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
       COOKIE_SECRET:         ${COOKIE_SECRET:-dev-cookie-secret}
       # ArcadeDB (external container)
       ARCADEDB_URL:          ${ARCADEDB_URL:-http://HoundArcade:2480}
@@ -87,6 +87,24 @@ services:
       chur:
         condition: service_started
 
+  # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────
+  # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с HoundArcade (:2480).
+  # Dev: localhost:2481 | Docker: frigg:2480 (внутренняя сеть) / host :12481
+  frigg:
+    image: arcadedata/arcadedb:26.3.2
+    environment:
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=playwithdata"
+    ports:
+      - "12481:2480"
+    volumes:
+      - frigg_data:/home/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 200"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # ── HEIMDALL (admin observability backend) ─────────────────────────────────
   # ВАЖНО: context = . (монорепо root), не services/heimdall-backend/
   # Причина: сервис зависит от shared/dali-models/ (inter-module dependency).
@@ -98,9 +116,19 @@ services:
       - "19093:9093"
     environment:
       QUARKUS_HTTP_PORT: "9093"
+      QUARKUS_REST_CLIENT_FRIGG_API_URL: http://frigg:2480
+      FRIGG_DB:       heimdall
+      FRIGG_USER:     root
+      FRIGG_PASSWORD: playwithdata
+    depends_on:
+      frigg:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9093 && echo -e 'GET /q/health HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
+
+volumes:
+  frigg_data:
