@@ -1,7 +1,7 @@
 # AIDA — Decisions Log (quick reference)
 
 **Документ:** `DECISIONS_LOG`
-**Версия:** 1.2
+**Версия:** 1.4
 **Дата:** 11.04.2026
 **Статус:** Working document — quick reference для навигации
 
@@ -11,7 +11,7 @@
 
 ## 📋 Quick status
 
-**Зафиксированных решений:** 11
+**Зафиксированных решений:** 16
 **Открытых вопросов:** 28 (Q1, Q3-Q22, Q24-Q32)
 **Сознательно отложено:** 10 (D1-D10)
 
@@ -40,6 +40,7 @@
 | 10 | **ArcadeDB: HoundArcade (network mode) уже на 26.3.2** — production и SHUTTLE уже на 26.x. Embedded используется **только в тестах Hound** (25.12.1). Новые фичи 26.x (Bolt, gRPC batch, GraphQL introspection) нужны. ADR-DA-011 CONFIRMED. | `MODULES_TECH_STACK.md §3.2`, ADR-DA-011, `REFACTORING_PLAN.md C.0` |
 | 12 | **ArcadeDB version policy** — No mixed embedded/network versions на одной БД. Выбран Вариант 1: тесты Hound → network mode (26.x). Вариант 2 (ANTLR shading) отклонён — техдолг. Вариант 3 (mixed 25+26) отклонён — риск авто-апгрейда схемы. | `REFACTORING_PLAN.md C.0` |
 | 13 | **ADR-DA-012: Frontend routing — single domain + path** — `seer.studio/verdandi`, `/urd`, `/skuld`, `/heimdall`. Nginx раздаёт отдельные SPA-бандлы. B2 CONFIRMED: thin JS shell + Module Federation. Shell = host, verdandi/heimdall/urd/skuld = remotes. aida-shared singleton = shared context state. Обоснование: лучше чем субдомены для передачи контекста, одна точка деплоя. | `MODULES_TECH_STACK.md §2.4` |
+| 15 | **HEIMDALL Sprint 2 — завершён** (12.04.2026). EventFilter 4 типа фильтров. SnapshotManager Uni chain. FriggGateway (mirrors ArcadeGateway). Chur proxy /heimdall/* (admin-only). HeimdallEmitter в SHUTTLE (fire-and-forget). R1 fixed (HandshakeRequest manual parse). R2 resolved (FRIGG running, healthcheck wget). | `HEIMDALL_SPRINT_PLAN.md v1.2` |
 | 14 | **ADR-DA-013: Cross-app context passing через URL params** — canonical ID = ArcadeDB geoid (`DaliTable:prod.orders`). `navigateTo(app, context)` + `useAppContext()` в `aida-shared`. Параметры: nodeId, schema, returnTo, highlight, sessionId. URL = единственный источник правды. | `MODULES_TECH_STACK.md §2.5` |
 | 11 | **Arrow Flight** — strategic note в §8 архитектурного документа, связан с долгосрочным ygg.db fork. **НЕ прорабатывается для October scope**, никаких изменений в матрице D или plan C | `MODULES_TECH_STACK.md §8.1-8.2` |
 
@@ -66,8 +67,8 @@
 | Q9 | ANVIL backend язык | зависит от Q1 + Q30 post-upgrade re-eval |
 | Q10 | Chur migration на Quarkus | зависит от Q1, не блокирует |
 | Q11 | Список middleware modules для URD/SKULD | от owner SEER Studio, post-HighLoad |
-| Q12 | HEIMDALL frontend charting library | mid May |
-| Q13 | HEIMDALL frontend WebSocket protocol | mid May |
+| ✅ Q12 | HEIMDALL frontend charting library | **Recharts via shadcn/charts** — shadcn/ui в стеке (ADR-003), zero-config Tailwind. Post-HighLoad альтернативы: Nivo, ApexCharts, Unovis |
+| ✅ Q13 | HEIMDALL frontend WebSocket protocol | **Native WebSocket** — HEIMDALL backend exposes raw `/ws/events`. graphql-ws только в VERDANDI (I33 через SHUTTLE). I34 обновлён. |
 | Q14 | PostgreSQL semantic listener план | start of May |
 | Q15 | ClickHouse semantic listener | June |
 | Q24 | HEIMDALL backend deployment details | см. Q3 |
@@ -151,4 +152,6 @@
 |---|---|---|
 | 11.04.2026 | 1.0 | Initial decisions log после большой integration session (v2.2 MODULES_TECH_STACK). 11 зафиксированных решений, 28 открытых вопросов, 10 отложенных items. |
 | 12.04.2026 | 1.1 | **ArcadeDB ситуация уточнена.** HoundArcade (remote/network) уже на 26.3.2 — production path актуален. Embedded ArcadeDB в Hound — **только тесты** (25.12.1), не production. C.0 переформулирован: не «upgrade с нуля», а «тесты Hound → network mode». Effort пересмотрен: 5-8 дней → 1-3 дня. Добавлено решение #12: ArcadeDB version policy (no mixed versions). Critical path обновлён. |
+| 12.04.2026 | 1.4 | **HEIMDALL Sprint 2 DONE.** Решение #15 добавлено. R1/R2 закрыты. EventFilter 4 типа, FriggGateway, Chur proxy, HeimdallEmitter в SHUTTLE. |
+| 12.04.2026 | 1.3 | **Q12 и Q13 закрыты.** Q12: Recharts via shadcn/charts (shadcn/ui уже в стеке → zero-config). Q13: Native WebSocket для HEIMDALL frontend (I34), graphql-ws остаётся в VERDANDI (I33). INTEGRATIONS_MATRIX I34 обновлён. |
 | 12.04.2026 | 1.2 | **Frontend architecture зафиксирована.** ADR-DA-012: single domain + path routing (`seer.studio/verdandi`, `/urd`, `/skuld`, `/heimdall`). ADR-DA-013: URL-based context passing (ArcadeDB geoid как canonical ID, `navigateTo` + `useAppContext` в `aida-shared`). `aida-shared` scope L2. Решения #13 и #14 добавлены. B1 для demo, B2 post-HighLoad. |

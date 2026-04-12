@@ -1,0 +1,53 @@
+---
+title: Hound 4-stage pipeline with SemanticEngine
+---
+graph TB
+    classDef stage fill:#1e3a1e,stroke:#4ade80,stroke-width:3px,color:#fff
+    classDef component fill:#3a2e1e,stroke:#fbbf24,stroke-width:2px,color:#fff
+    classDef data fill:#2e1e3a,stroke:#a78bfa,stroke-width:2px,color:#fff
+    classDef output fill:#1e2e3a,stroke:#60a5fa,stroke-width:3px,color:#fff
+
+    INPUT[("SQL file · .sql source")]
+
+    subgraph STAGE1["Stage 1 · Lexer + Parser · ANTLR4"]
+        LEX["Lexer · TokenStream"]
+        PARSE["Parser · Parse Tree"]
+    end
+
+    subgraph STAGE2["Stage 2 · AST Construction"]
+        AST["UniversalAstNode tree<br/>RULE + TERMINAL + ERROR nodes"]
+    end
+
+    subgraph STAGE3["Stage 3 · Semantic Analysis · SemanticEngine"]
+        SCOPE["ScopeManager<br/>Stack contexts"]
+        RESOLVE["NameResolver<br/>8 strategies"]
+        ATOM["AtomProcessor<br/>Classify expressions"]
+        BUILD["StructureAndLineageBuilder<br/>Tables · Columns · Edges"]
+        JOIN["JoinProcessor<br/>JOIN classification"]
+    end
+
+    subgraph STAGE4["Stage 4 · Graph Persistence"]
+        MODE["HoundConfig.writeMode<br/>policy selection"]
+        EMBEDDED["EMBEDDED<br/>UC3 UC4 preview"]
+        REMOTE["REMOTE single<br/>UC2b event"]
+        BATCH["REMOTE_BATCH<br/>UC1 default"]
+    end
+
+    YGG[("YGG · HoundArcade")]
+    OUTPUT["ParseResult<br/>metrics · warnings · errors"]
+
+    INPUT --> LEX --> PARSE --> AST --> SCOPE --> RESOLVE --> ATOM
+    ATOM --> BUILD
+    ATOM --> JOIN
+    BUILD --> MODE
+    JOIN --> MODE
+    MODE --> EMBEDDED --> YGG
+    MODE --> REMOTE --> YGG
+    MODE --> BATCH --> YGG
+    BUILD --> OUTPUT
+    JOIN --> OUTPUT
+
+    class STAGE1,STAGE2,STAGE3,STAGE4 stage
+    class LEX,PARSE,AST,SCOPE,RESOLVE,ATOM,BUILD,JOIN,MODE,EMBEDDED,REMOTE,BATCH component
+    class INPUT data
+    class OUTPUT,YGG output

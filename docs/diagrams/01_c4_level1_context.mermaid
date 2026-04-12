@@ -1,0 +1,35 @@
+---
+title: AIDA C4 Level 1 Context Diagram
+---
+graph TB
+    classDef user fill:#1e2e3a,stroke:#60a5fa,stroke-width:3px,color:#fff
+    classDef system fill:#1a1a2e,stroke:#f472b6,stroke-width:4px,color:#fff
+    classDef external fill:#2e1e1e,stroke:#f87171,stroke-width:2px,color:#fff
+
+    DE["Data Engineer<br/>Explore lineage<br/>Understand impact<br/>NL queries via MIMIR"]
+    DA["Data Analyst<br/>Trace data origins<br/>Validate changes"]
+    DBA["DBA / Architect<br/>System-wide data flow<br/>Refactoring planning"]
+    OPS["Ops / DevOps<br/>Health monitoring<br/>Admin operations"]
+
+    AIDA["AIDA Platform<br/>Lineage Intelligence<br/>for Legacy SQL<br/>SEER Studio first product"]
+
+    SRCDB[("Source Databases<br/>Oracle · PostgreSQL<br/>ClickHouse<br/>JDBC fetch")]
+    CLAUDE["Anthropic Claude API<br/>LLM tier 1<br/>Tool calling"]
+    OLLAMA["Ollama local<br/>LLM tier 2<br/>Qwen fallback"]
+    KC["Keycloak 26.2<br/>Auth provider<br/>realm seer"]
+    GH["GitHub<br/>GHCR · Actions<br/>CI/CD"]
+
+    DE -->|HTTPS| AIDA
+    DA -->|HTTPS| AIDA
+    DBA -->|HTTPS| AIDA
+    OPS -->|HTTPS admin| AIDA
+
+    AIDA -->|JDBC fetch SQL| SRCDB
+    AIDA -->|HTTPS tool calls| CLAUDE
+    AIDA -->|HTTP fallback| OLLAMA
+    AIDA -->|JWT JWKS| KC
+    AIDA -.->|Docker images| GH
+
+    class DE,DA,DBA,OPS user
+    class AIDA system
+    class SRCDB,CLAUDE,OLLAMA,KC,GH external

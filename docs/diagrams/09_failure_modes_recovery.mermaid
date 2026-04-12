@@ -1,0 +1,71 @@
+---
+title: AIDA failure modes and recovery paths
+---
+graph TB
+    classDef catastrophic fill:#3a1e1e,stroke:#f87171,stroke-width:3px,color:#fff
+    classDef severe fill:#3a2e1e,stroke:#fb923c,stroke-width:2px,color:#fff
+    classDef graceful fill:#2e3a1e,stroke:#fbbf24,stroke-width:2px,color:#fff
+    classDef recovery fill:#1e3a1e,stroke:#4ade80,stroke-width:2px,color:#fff
+    classDef transient fill:#1e2e3a,stroke:#60a5fa,stroke-width:2px,color:#fff
+
+    subgraph CATA["CATASTROPHIC · system unusable"]
+        YGG_DOWN["YGG down<br/>cannot restart"]
+        KC_DOWN["Keycloak down"]
+        CHUR_DOWN["Chur down"]
+        FRIGG_DOWN["FRIGG down<br/>JobRunr state lost"]
+    end
+
+    subgraph SEVERE["SEVERE · major degradation"]
+        DALI_DOWN["Dali down"]
+        SHUTTLE_DOWN["SHUTTLE down"]
+        HEIMDALL_DOWN["HEIMDALL down"]
+        HOUND_CRASH["Hound JVM crash"]
+    end
+
+    subgraph GRACEFUL["GRACEFUL · partial degradation"]
+        CLAUDE_OUT["Claude API down"]
+        OLLAMA_OUT["Ollama down"]
+        NET_BLIP["Network blip"]
+        WS_DROP["WebSocket disconnect"]
+    end
+
+    subgraph TRANSIENT["TRANSIENT · self-healing"]
+        PARSER_ERR["ANTLR parse error"]
+        UNRESOLVED["Unresolved reference"]
+        BATCH_RETRY["Batch write retry"]
+        QUERY_RETRY["Query retry"]
+    end
+
+    subgraph RECOVERY["RECOVERY STRATEGIES"]
+        DOCKER_RESTART["Docker restart policy<br/>healthcheck 10s"]
+        SNAPSHOT_RESTORE["Snapshot restore<br/>make demo-reset"]
+        TIER_FALLBACK["Tier fallback chain<br/>Claude to Ollama to cache"]
+        JOBRUNR_RETRY["JobRunr retry<br/>exponential backoff"]
+        AUTO_RECONNECT["Auto-reconnect<br/>graphql-ws"]
+        VIDEO["Pre-recorded video<br/>ultimate fallback"]
+    end
+
+    YGG_DOWN --> SNAPSHOT_RESTORE
+    YGG_DOWN -.-> VIDEO
+    KC_DOWN --> DOCKER_RESTART
+    CHUR_DOWN --> DOCKER_RESTART
+    FRIGG_DOWN --> DOCKER_RESTART
+    FRIGG_DOWN --> SNAPSHOT_RESTORE
+    DALI_DOWN --> DOCKER_RESTART
+    SHUTTLE_DOWN --> DOCKER_RESTART
+    HEIMDALL_DOWN --> DOCKER_RESTART
+    HOUND_CRASH --> JOBRUNR_RETRY
+    CLAUDE_OUT --> TIER_FALLBACK
+    OLLAMA_OUT --> TIER_FALLBACK
+    NET_BLIP --> JOBRUNR_RETRY
+    WS_DROP --> AUTO_RECONNECT
+    PARSER_ERR -.-> JOBRUNR_RETRY
+    UNRESOLVED -.-> JOBRUNR_RETRY
+    BATCH_RETRY -.-> JOBRUNR_RETRY
+    QUERY_RETRY -.-> AUTO_RECONNECT
+
+    class YGG_DOWN,KC_DOWN,CHUR_DOWN,FRIGG_DOWN catastrophic
+    class DALI_DOWN,SHUTTLE_DOWN,HEIMDALL_DOWN,HOUND_CRASH severe
+    class CLAUDE_OUT,OLLAMA_OUT,NET_BLIP,WS_DROP graceful
+    class PARSER_ERR,UNRESOLVED,BATCH_RETRY,QUERY_RETRY transient
+    class DOCKER_RESTART,SNAPSHOT_RESTORE,TIER_FALLBACK,JOBRUNR_RETRY,AUTO_RECONNECT,VIDEO recovery

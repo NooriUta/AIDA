@@ -208,6 +208,27 @@ public class UniversalSemanticEngine {
                 }
             }
 
+            // READS_FROM propagation: when a SELECT/SUBQUERY exits as a direct child of a CTE,
+            // lift its physical-table source references to the CTE so that the CTE has its own
+            // READS_FROM edges to the tables it reads from (directly or through inline subqueries).
+            if (si != null) {
+                String parentGeoid = si.getParentStatementGeoid();
+                if (parentGeoid != null) {
+                    StatementInfo parentSi = builder.getStatements().get(parentGeoid);
+                    if (parentSi != null && "CTE".equals(parentSi.getType())) {
+                        String siType = si.getType();
+                        if ("SELECT".equals(siType) || "SUBQUERY".equals(siType)) {
+                            for (var srcEntry : si.getSourceTables().entrySet()) {
+                                // Only propagate physical tables, not sub-statement geoids
+                                if (builder.getTables().containsKey(srcEntry.getKey())) {
+                                    parentSi.addSourceTable(srcEntry.getKey(), null);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // H1.2-INS: INSERT INTO t (cols) SELECT … — bind SELECT output cols to INSERT
             // target cols by position so table_ref carries the target column reference.
             // Only fires when the INSERT has an explicit column list (insertTargetColumns non-empty).

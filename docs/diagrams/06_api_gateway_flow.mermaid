@@ -1,0 +1,53 @@
+---
+title: API Gateway flow — Browser to backends
+---
+sequenceDiagram
+    participant B as Browser VERDANDI
+    participant CH as Chur BFF
+    participant KC as Keycloak
+    participant SH as SHUTTLE GraphQL
+    participant D as Dali
+    participant M as MIMIR
+    participant Y as YGG
+
+    Note over B,Y: Login flow
+    B->>CH: POST /auth/login
+    CH->>KC: token grant_type=password
+    KC-->>CH: access_token + scopes
+    CH-->>B: Set-Cookie sid
+
+    Note over B,Y: Read query (overview)
+    B->>CH: POST /graphql query overview
+    CH->>CH: lookup session
+    CH->>SH: forward with X-Seer-User
+    SH->>Y: Cypher read
+    Y-->>SH: schemas
+    SH-->>CH: response
+    CH-->>B: response
+
+    Note over B,Y: Mutation startParseSession
+    B->>CH: mutation startParseSession
+    CH->>CH: check scope seer:write
+    CH->>SH: forward mutation
+    SH->>D: POST /sessions
+    Note over D: JobRunr.enqueue
+    D-->>SH: Session QUEUED
+    SH-->>CH: response
+    CH-->>B: response
+
+    Note over B,Y: MIMIR query
+    B->>CH: mutation askMimir
+    CH->>SH: forward
+    SH->>M: POST /answer
+    M->>M: tier 1 Claude
+    M->>Y: tool call read
+    Y-->>M: result
+    M-->>SH: MimirAnswer
+    SH-->>CH: response
+    CH-->>B: response
+
+    Note over B,Y: WebSocket subscription
+    B->>CH: WS upgrade /graphql
+    CH->>SH: WS upgrade forward
+    SH->>B: connection established
+    Note over B,SH: Events batched 50 per 100ms

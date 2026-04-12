@@ -1,7 +1,7 @@
 # AIDA — Карта модулей и технологического стека
 
 **Документ:** `ARCH_11042026_MODULES_TECH_STACK`
-**Версия:** 2.4
+**Версия:** 2.5
 **Дата:** 11.04.2026
 **Статус:** Working document
 
@@ -895,8 +895,8 @@ navigationSlice, l1Slice, selectionSlice, filterSlice, expansionSlice, visibilit
 | State | Zustand | 5.0.12 | 🔬 PROPOSED |
 | Data fetching | TanStack Query | 5.x | 🔬 PROPOSED |
 | GraphQL client | graphql-request | 7.x | 🔬 PROPOSED |
-| WebSocket | TBD (graphql-ws / native / Socket.io) | — | ⚠️ TBD |
-| Charting | TBD (Recharts / visx / Chart.js) | — | ⚠️ TBD |
+| WebSocket | **Native WebSocket** (raw `/ws/events` endpoint) | — | ✅ Q13 CLOSED |
+| Charting | **Nivo** (`@nivo/line`, `@nivo/bar`, `@nivo/pie`) — красивые дефолты, MIT, react-spring анимации, высокая кастомизация | ✅ Q12 CLOSED |
 | Virtualization для event stream | react-window или react-virtuoso | — | 🔬 PROPOSED |
 | Styling | Tailwind 4 (same as VERDANDI) | 4.x | 🔬 PROPOSED |
 | Routing | react-router-dom 7 | — | 🔬 PROPOSED |
@@ -1424,8 +1424,8 @@ JobRunr из коробки поддерживает PostgreSQL, MySQL, SQLite, 
 | Q9 | **ANVIL backend язык** — Python или Java. **Post-upgrade опция:** Q30 может использовать 72 built-in ArcadeDB algorithms вместо custom Cypher | зависит от Q1 |
 | Q10 | **Chur migration на Quarkus** — да или нет? | зависит от Q1, не блокирует (Chur работает) |
 | Q11 | **Список middleware modules** для URD/SKULD | от owner SEER Studio, post-HighLoad |
-| Q12 | **HEIMDALL frontend charting library** — Recharts / visx / Chart.js / D3 | mid May |
-| Q13 | **HEIMDALL frontend WebSocket protocol** — graphql-ws / native / Socket.io | mid May |
+| ✅ Q12 | **HEIMDALL frontend charting library** | **Nivo** — MIT, красивые дефолты, react-spring анимации, золотая середина между DX и кастомизацией. Recharts/shadcn отклонён (потолок сложности), visx отклонён (слишком low-level для timeline). |
+| ✅ Q13 | **HEIMDALL frontend WebSocket protocol** | **Native WebSocket** — backend exposes raw `/ws/events` (JSON stream). graphql-ws остаётся только в VERDANDI (I33 через SHUTTLE subscriptions). I34 обновлён: graphql-ws → native WebSocket. |
 | Q14 | **PostgreSQL semantic listener** — план довести до production quality на основе существующего каркаса (SemanticEngine + 5 компонентов) | start of May |
 | Q15 | **ClickHouse semantic listener** — после PostgreSQL | June |
 | Q24 | **HEIMDALL backend deployment** — embedded в SHUTTLE или отдельный процесс | см. Q3 |

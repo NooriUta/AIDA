@@ -20,6 +20,7 @@
       "runtimeExecutable": "C:/AIDA/aida-root/gradlew.bat",
       "runtimeArgs": [":services:shuttle:quarkusDev"],
       "port": 8080,
+      "autoPort": false,
       "cwd": "C:/AIDA/aida-root"
     },
     {
@@ -35,6 +36,13 @@
       "runtimeArgs": ["C:/AIDA/aida-root/frontends/heimdall-frontend/node_modules/vite/bin/vite.js"],
       "port": 5174,
       "cwd": "C:/AIDA/aida-root/frontends/heimdall-frontend"
+    },
+    {
+      "name": "shell",
+      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
+      "runtimeArgs": ["C:/AIDA/aida-root/frontends/shell/node_modules/vite/bin/vite.js"],
+      "port": 5175,
+      "cwd": "C:/AIDA/aida-root/frontends/shell"
     }
   ]
 }
