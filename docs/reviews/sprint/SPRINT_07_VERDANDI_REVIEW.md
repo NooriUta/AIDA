@@ -44,7 +44,7 @@
 
 | ID | Риск | Уровень | Детали |
 |---|---|---|---|
-| WARN-01 | ELK на UI thread | 🟡 | `elkWorker.ts` (48 LOC) существует но не используется. `layoutGraph.ts:111-122` — ELK на main thread. Причина: Vite CJS→ESM transform ломает Worker global. Freeze 2-5 сек при 500-1000 нодах. |
+| WARN-01 | ELK на UI thread | ✅ | **Resolved 12.04.2026.** `elk.bundled.js` + `workerFactory: () => new Worker(elkWorkerUrl)` (`elk-worker.min.js?url`). Main thread free. Verified: 524 ms (430 nodes, 709 edges). |
 | WARN-05 | SearchPanel.tsx растёт | 🟡 | 516 LOC (было 470), продолжает расти |
 | WARN-06 | LoomCanvas.tsx > цель | 🟢 | 403 LOC, цель ≤350 |
 
@@ -76,7 +76,7 @@
 - ❌ useLoomLayout.test.ts (326 LOC — самый сложный хук)
 
 ### Блок 3: Performance — 50% 🔄
-- P-01 ELK Worker: ❌ (см. WARN-01)
+- P-01 ELK Worker: ✅ (WARN-01 resolved — real Web Worker, main thread free)
 - P-02 memoization: ✅ useDisplayGraph 2×useMemo, useGraphData 2×useMemo
 - P-03 Load test 500+: ❌ не проведён
 - P-04 React Query: ✅

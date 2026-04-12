@@ -1,7 +1,7 @@
 # AIDA — Decisions Log (quick reference)
 
 **Документ:** `DECISIONS_LOG`
-**Версия:** 1.0
+**Версия:** 1.2
 **Дата:** 11.04.2026
 **Статус:** Working document — quick reference для навигации
 
@@ -39,6 +39,8 @@
 | 9 | **Hound three modes policy в HoundConfig** — REMOTE_BATCH default (UC1/UC2a), REMOTE single (UC2b), EMBEDDED (UC3/UC4/preview/dev). Dali выбирает mode по типу job | `MODULES_TECH_STACK.md §3.1`, `INTEGRATIONS_MATRIX.md §2.5` |
 | 10 | **ArcadeDB: HoundArcade (network mode) уже на 26.3.2** — production и SHUTTLE уже на 26.x. Embedded используется **только в тестах Hound** (25.12.1). Новые фичи 26.x (Bolt, gRPC batch, GraphQL introspection) нужны. ADR-DA-011 CONFIRMED. | `MODULES_TECH_STACK.md §3.2`, ADR-DA-011, `REFACTORING_PLAN.md C.0` |
 | 12 | **ArcadeDB version policy** — No mixed embedded/network versions на одной БД. Выбран Вариант 1: тесты Hound → network mode (26.x). Вариант 2 (ANTLR shading) отклонён — техдолг. Вариант 3 (mixed 25+26) отклонён — риск авто-апгрейда схемы. | `REFACTORING_PLAN.md C.0` |
+| 13 | **ADR-DA-012: Frontend routing — single domain + path** — `seer.studio/verdandi`, `/urd`, `/skuld`, `/heimdall`. Nginx раздаёт отдельные SPA-бандлы. B2 CONFIRMED: thin JS shell + Module Federation. Shell = host, verdandi/heimdall/urd/skuld = remotes. aida-shared singleton = shared context state. Обоснование: лучше чем субдомены для передачи контекста, одна точка деплоя. | `MODULES_TECH_STACK.md §2.4` |
+| 14 | **ADR-DA-013: Cross-app context passing через URL params** — canonical ID = ArcadeDB geoid (`DaliTable:prod.orders`). `navigateTo(app, context)` + `useAppContext()` в `aida-shared`. Параметры: nodeId, schema, returnTo, highlight, sessionId. URL = единственный источник правды. | `MODULES_TECH_STACK.md §2.5` |
 | 11 | **Arrow Flight** — strategic note в §8 архитектурного документа, связан с долгосрочным ygg.db fork. **НЕ прорабатывается для October scope**, никаких изменений в матрице D или plan C | `MODULES_TECH_STACK.md §8.1-8.2` |
 
 ---
@@ -149,3 +151,4 @@
 |---|---|---|
 | 11.04.2026 | 1.0 | Initial decisions log после большой integration session (v2.2 MODULES_TECH_STACK). 11 зафиксированных решений, 28 открытых вопросов, 10 отложенных items. |
 | 12.04.2026 | 1.1 | **ArcadeDB ситуация уточнена.** HoundArcade (remote/network) уже на 26.3.2 — production path актуален. Embedded ArcadeDB в Hound — **только тесты** (25.12.1), не production. C.0 переформулирован: не «upgrade с нуля», а «тесты Hound → network mode». Effort пересмотрен: 5-8 дней → 1-3 дня. Добавлено решение #12: ArcadeDB version policy (no mixed versions). Critical path обновлён. |
+| 12.04.2026 | 1.2 | **Frontend architecture зафиксирована.** ADR-DA-012: single domain + path routing (`seer.studio/verdandi`, `/urd`, `/skuld`, `/heimdall`). ADR-DA-013: URL-based context passing (ArcadeDB geoid как canonical ID, `navigateTo` + `useAppContext` в `aida-shared`). `aida-shared` scope L2. Решения #13 и #14 добавлены. B1 для demo, B2 post-HighLoad. |
