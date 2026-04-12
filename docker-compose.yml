@@ -78,7 +78,7 @@ services:
       shuttle:
         condition: service_started
 
-  # ── verdandi (React frontend) ──────────────────────────────────────────────
+  # ── verdandi (React frontend — Seiðr Studio) ──────────────────────────────
   verdandi:
     build:
       context: ./frontends/verdandi
@@ -88,6 +88,19 @@ services:
     depends_on:
       chur:
         condition: service_started
+
+  # ── heimdall-frontend (React — HEIMDALL Control Panel) ────────────────────
+  heimdall-frontend:
+    build:
+      context: ./frontends/heimdall-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "25174:5174"
+    depends_on:
+      chur:
+        condition: service_started
+      heimdall-backend:
+        condition: service_healthy
 
   # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────
   # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с HoundArcade.

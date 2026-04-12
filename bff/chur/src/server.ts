@@ -1,7 +1,8 @@
 import './types'; // load Fastify request augmentation
 
-import Fastify from 'fastify';
-import cookie  from '@fastify/cookie';
+import Fastify          from 'fastify';
+import cookie           from '@fastify/cookie';
+import fastifyWebsocket from '@fastify/websocket';
 
 import { config }         from './config';
 import rbacPlugin         from './plugins/rbac';
@@ -47,6 +48,7 @@ async function start(): Promise<void> {
     secret: config.cookieSecret, // sign session cookies
   });
 
+  await app.register(fastifyWebsocket);
   await app.register(rbacPlugin);
 
   // ── Routes ───────────────────────────────────────────────────────────────────
