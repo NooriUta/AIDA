@@ -1,89 +1,101 @@
-import React from 'react';
+import { useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { useTranslation } from 'react-i18next';
 import type { HeimdallEvent, EventFilter } from 'aida-shared';
+import { EVENT_LABELS, formatPayload, levelClass } from '../utils/eventFormat';
 
 interface EventLogProps {
   events: HeimdallEvent[];
   filter?: EventFilter;
+  /** Height of the container (CSS string or px number). Default: '100%' */
   maxHeight?: string;
-}
-
-const COMPONENT_COLORS: Record<string, string> = {
-  hound:   '#7F77DD',
-  dali:    '#1D9E75',
-  mimir:   '#BA7517',
-  shuttle: '#3B82F6',
-};
-
-const LEVEL_COLORS: Record<string, string> = {
-  INFO:  'var(--t3)',
-  WARN:  'var(--wrn)',
-  ERROR: 'var(--danger)',
-};
-
-function componentColor(comp: string): string {
-  const key = comp.toLowerCase();
-  for (const [k, v] of Object.entries(COMPONENT_COLORS)) {
-    if (key.includes(k)) return v;
-  }
-  return '#888888';
+  height?: string | number;
+  connected?: boolean;
 }
 
 function formatTime(ts: number): string {
   return new Date(ts).toISOString().substring(11, 23); // HH:mm:ss.mmm
 }
 
-function payloadPreview(payload: Record<string, unknown>): string {
-  const str = JSON.stringify(payload);
-  return str.length > 80 ? str.slice(0, 77) + '…' : str;
-}
-
-const rowStyle: React.CSSProperties = {
-  display:             'grid',
-  gridTemplateColumns: '90px 100px 160px 50px 60px 1fr',
-  gap:                 'var(--seer-space-2)',
-  padding:             '4px var(--seer-space-4)',
-  borderBottom:        '1px solid var(--bd)',
-  fontSize:            '12px',
-  fontFamily:          'var(--mono)',
-  alignItems:          'center',
-  minHeight:           '28px',
-};
-
-const headerStyle: React.CSSProperties = {
-  ...rowStyle,
-  background:    'var(--bg2)',
-  color:         'var(--t3)',
-  fontWeight:    500,
-  fontSize:      '11px',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  position:      'sticky',
-  top:           0,
-  zIndex:        1,
-};
-
-function EventRow({ event }: { event: HeimdallEvent }) {
-  const compColor  = componentColor(event.sourceComponent ?? '');
-  const levelColor = LEVEL_COLORS[event.level] ?? 'var(--t3)';
+function EventRow({
+  event,
+  selected,
+  onClick,
+}: {
+  event:    HeimdallEvent;
+  selected: boolean;
+  onClick:  () => void;
+}) {
+  const comp   = (event.sourceComponent ?? '').toLowerCase();
+  const rowCls = [
+    'event-row-grid',
+    event.level === 'ERROR' ? 'evt-row-error' : event.level === 'WARN' ? 'evt-row-warn' : '',
+    selected ? 'evt-row-selected' : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <div style={rowStyle}>
-      <span style={{ color: 'var(--t3)' }}>{formatTime(event.timestamp)}</span>
-      <span style={{ color: compColor, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {event.sourceComponent}
-      </span>
-      <span style={{ color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {event.eventType}
-      </span>
-      <span style={{ color: levelColor, fontWeight: 600 }}>{event.level}</span>
-      <span style={{ color: 'var(--t3)', textAlign: 'right' }}>
-        {event.durationMs > 0 ? `${event.durationMs}ms` : ''}
-      </span>
-      <span style={{ color: 'var(--t3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {payloadPreview(event.payload)}
-      </span>
+    <div className={rowCls} onClick={onClick} style={{ cursor: 'pointer' }}>
+      <span className="evt-ts">{formatTime(event.timestamp)}</span>
+      <span><span className={`comp comp-${comp}`}>{event.sourceComponent}</span></span>
+      <span className="evt-type">{EVENT_LABELS[event.eventType] ?? event.eventType}</span>
+      <span><span className={`badge ${levelClass(event.level)}`}>{event.level}</span></span>
+      <span className="evt-dur">{event.durationMs > 0 ? `${event.durationMs}ms` : '—'}</span>
+      <span className="evt-payload">{formatPayload(event)}</span>
+    </div>
+  );
+}
+
+function EventDetail({ event, onClose }: { event: HeimdallEvent; onClose: () => void }) {
+  const comp = (event.sourceComponent ?? '').toLowerCase();
+  return (
+    <div style={{
+      borderTop:   '1px solid var(--bd)',
+      background:  'var(--bg1)',
+      padding:     '10px 14px',
+      flexShrink:  0,
+      fontSize:    12,
+      lineHeight:  1.6,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className={`comp comp-${comp}`}>{event.sourceComponent}</span>
+          <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{event.eventType}</span>
+          <span className={`badge ${levelClass(event.level)}`}>{event.level}</span>
+          {event.durationMs > 0 && (
+            <span style={{ color: 'var(--t3)' }}>{event.durationMs}ms</span>
+          )}
+          <span style={{ color: 'var(--t3)' }}>{new Date(event.timestamp).toISOString()}</span>
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'none', border: 'none', color: 'var(--t3)',
+            cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 4px',
+          }}
+        >✕</button>
+      </div>
+      {(event.sessionId || event.correlationId || event.userId) && (
+        <div style={{ display: 'flex', gap: 16, marginBottom: 6, color: 'var(--t3)', fontSize: 11 }}>
+          {event.sessionId    && <span>session: <span style={{ color: 'var(--t2)' }}>{event.sessionId}</span></span>}
+          {event.correlationId && <span>correlation: <span style={{ color: 'var(--t2)' }}>{event.correlationId}</span></span>}
+          {event.userId       && <span>user: <span style={{ color: 'var(--t2)' }}>{event.userId}</span></span>}
+        </div>
+      )}
+      {event.payload && Object.keys(event.payload).length > 0 && (
+        <pre style={{
+          margin: 0, padding: '6px 10px',
+          background: 'var(--bg0)',
+          border: '1px solid var(--bd)',
+          borderRadius: 'var(--seer-radius-sm)',
+          color: 'var(--t1)',
+          fontSize: 11,
+          overflowX: 'auto',
+          maxHeight: 120,
+          overflowY: 'auto',
+        }}>
+          {JSON.stringify(event.payload, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }
@@ -93,19 +105,62 @@ function applyFilter(events: HeimdallEvent[], filter?: EventFilter): HeimdallEve
   return events.filter(e => {
     if (filter.component && !e.sourceComponent?.toLowerCase().includes(filter.component.toLowerCase())) return false;
     if (filter.sessionId && e.sessionId !== filter.sessionId) return false;
-    if (filter.level     && e.level    !== filter.level)     return false;
-    if (filter.type      && e.eventType !== filter.type)      return false;
+    if (filter.level     && e.level     !== filter.level)     return false;
+    if (filter.type      && e.eventType !== filter.type)       return false;
     return true;
   });
 }
 
-export function EventLog({ events, filter, maxHeight = '100%' }: EventLogProps) {
-  const { t }    = useTranslation();
-  const filtered = applyFilter(events, filter);
+export function EventLog({ events, filter, maxHeight, height, connected }: EventLogProps) {
+  const { t }          = useTranslation();
+  const filtered       = applyFilter(events, filter);
+  const h              = height ?? maxHeight ?? '100%';
+  const heightVal      = typeof h === 'number' ? `${h}px` : h;
+  const [selected, setSelected] = useState<HeimdallEvent | null>(null);
+
+  function handleRowClick(event: HeimdallEvent) {
+    setSelected(prev => prev?.timestamp === event.timestamp && prev?.sourceComponent === event.sourceComponent ? null : event);
+  }
 
   return (
-    <div style={{ height: maxHeight, display: 'flex', flexDirection: 'column', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)', overflow: 'hidden' }}>
-      <div style={headerStyle}>
+    <div style={{
+      height:        heightVal,
+      display:       'flex',
+      flexDirection: 'column',
+      background:    'var(--bg0)',
+      border:        '1px solid var(--bd)',
+      borderRadius:  'var(--seer-radius-md)',
+      overflow:      'hidden',
+    }}>
+      {/* Connection status bar */}
+      {connected !== undefined && (
+        <div style={{
+          display:      'flex',
+          alignItems:   'center',
+          gap:          6,
+          padding:      '5px 14px',
+          background:   'var(--bg1)',
+          borderBottom: '1px solid var(--bd)',
+          fontSize:     11,
+          color:        'var(--t3)',
+          flexShrink:   0,
+        }}>
+          <span style={{
+            width:        6,
+            height:       6,
+            borderRadius: '50%',
+            background:   connected ? 'var(--suc)' : 'var(--danger)',
+            display:      'inline-block',
+            flexShrink:   0,
+          }} />
+          {connected
+            ? `${t('ws.open')} · ${filtered.length} ${t('eventStream.events')}`
+            : t('ws.closed')}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="event-grid-head">
         <span>{t('eventLog.time')}</span>
         <span>{t('eventLog.component')}</span>
         <span>{t('eventLog.eventType')}</span>
@@ -113,8 +168,17 @@ export function EventLog({ events, filter, maxHeight = '100%' }: EventLogProps) 
         <span>{t('eventLog.duration')}</span>
         <span>{t('eventLog.payload')}</span>
       </div>
+
+      {/* Body */}
       {filtered.length === 0 ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', fontSize: '13px' }}>
+        <div style={{
+          flex:           1,
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'center',
+          color:          'var(--t3)',
+          fontSize:       '13px',
+        }}>
           {t('eventLog.noEvents')}
         </div>
       ) : (
@@ -122,8 +186,22 @@ export function EventLog({ events, filter, maxHeight = '100%' }: EventLogProps) 
           style={{ flex: 1 }}
           data={filtered}
           followOutput="smooth"
-          itemContent={(_, event) => <EventRow event={event} />}
+          itemContent={(_, event) => (
+            <EventRow
+              event={event}
+              selected={
+                selected?.timestamp === event.timestamp &&
+                selected?.sourceComponent === event.sourceComponent
+              }
+              onClick={() => handleRowClick(event)}
+            />
+          )}
         />
+      )}
+
+      {/* Detail panel */}
+      {selected && (
+        <EventDetail event={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );

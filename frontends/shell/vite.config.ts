@@ -23,9 +23,9 @@ export default defineConfig({
         },
       },
       shared: {
-        react:              { singleton: true, requiredVersion: '^19.0.0' },
-        'react-dom':        { singleton: true, requiredVersion: '^19.0.0' },
-        'react-router-dom': { singleton: true, requiredVersion: '^7.0.0'  },
+        react:              { singleton: true, eager: true, requiredVersion: '^19.0.0' },
+        'react-dom':        { singleton: true, eager: true, requiredVersion: '^19.0.0' },
+        'react-router-dom': { singleton: true, eager: true, requiredVersion: '^7.0.0'  },
         'aida-shared':      { singleton: true },
         zustand:            { singleton: true, requiredVersion: '^5.0.0'  },
       },
@@ -42,16 +42,25 @@ export default defineConfig({
       'aida-shared/styles/tokens': path.resolve(__dirname, '../../packages/aida-shared/styles/tokens.css'),
       'aida-shared':               path.resolve(__dirname, '../../packages/aida-shared/src/index.ts'),
     },
+    // Dedupe ensures Shell serves one canonical copy of each singleton.
+    // Remotes (verdandi, heimdall-frontend) exclude these from their own
+    // optimizeDeps so the MF runtime redirects to Shell's pre-bundled copies.
+    dedupe: ['react', 'react-dom', 'react-router-dom', 'zustand'],
   },
   optimizeDeps: {
     // Exclude aida-shared from esbuild pre-bundling — it's TypeScript source resolved via alias
     exclude: ['aida-shared'],
     // Pre-bundle MF runtime packages so they aren't discovered at request time
-    // (late discovery triggers a full page reload / dep-optimization loop)
+    // (late discovery triggers a full page reload / dep-optimization loop).
+    // Also pre-bundle shared singletons so Shell can serve them to remotes.
     include: [
       '@module-federation/runtime',
       '@module-federation/runtime-core',
       '@module-federation/sdk',
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'zustand',
     ],
   },
   build: {

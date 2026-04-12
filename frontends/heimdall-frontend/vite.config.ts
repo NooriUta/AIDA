@@ -10,14 +10,24 @@ export default defineConfig({
       filename: 'remoteEntry.js',
       exposes: { './App': './src/App.tsx' },
       shared: {
-        react:              { singleton: true, requiredVersion: '^19.0.0' },
-        'react-dom':        { singleton: true, requiredVersion: '^19.0.0' },
-        'react-router-dom': { singleton: true, requiredVersion: '^7.0.0' },
+        react:              { singleton: true, eager: true, requiredVersion: '^19.0.0' },
+        'react-dom':        { singleton: true, eager: true, requiredVersion: '^19.0.0' },
+        'react-router-dom': { singleton: true, eager: true, requiredVersion: '^7.0.0' },
         'aida-shared':      { singleton: true },
         zustand:            { singleton: true, requiredVersion: '^5.0.0' },
       },
     }),
   ],
+  resolve: {
+    dedupe: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+  },
+  optimizeDeps: {
+    // Exclude react-router-dom so Vite does NOT pre-bundle it into a chunk.
+    // The MF runtime can then redirect to Shell's singleton, preventing
+    // duplicate instances in dev mode. Requires Vite 8 (Vite 6 had a bug
+    // where the virtual loadShare module didn't expose all named exports).
+    exclude: ['react-router-dom'],
+  },
   // Module Federation generates top-level await — requires es2022+ target.
   build: {
     target: 'es2022',

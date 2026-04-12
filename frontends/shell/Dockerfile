@@ -9,10 +9,14 @@ COPY packages/aida-shared ./packages/aida-shared
 
 WORKDIR /app/frontends/shell
 COPY frontends/shell/package*.json ./
-RUN npm ci --legacy-peer-deps
+# npm ci creates a symlink for file: deps — Alpine Docker doesn't follow it reliably.
+# Replace the symlink with an actual copy so CJS require() and Vite alias both work.
+RUN npm ci --legacy-peer-deps && \
+    rm -rf node_modules/aida-shared && \
+    cp -rL /app/packages/aida-shared node_modules/aida-shared
 
 COPY frontends/shell/ .
-RUN npx vite build
+RUN rm -rf .vite && npx vite build
 
 FROM nginx:alpine AS runner
 COPY --from=builder /app/frontends/shell/dist /usr/share/nginx/html

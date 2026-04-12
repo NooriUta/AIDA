@@ -1,17 +1,13 @@
 /* AIDA Design Tokens — единый источник правды для всей платформы.
- * Извлечены из frontends/verdandi/src/styles/globals.css.
- * Verdandi импортирует собственный globals.css (не трогаем).
- * Новые приложения (heimdall-frontend, shell) импортируют этот файл.
+ * Синхронизирован с frontends/verdandi/src/styles/globals.css (источник).
+ * Shell и heimdall-frontend импортируют этот файл.
+ * Verdandi импортирует собственный globals.css (полный, с Tailwind + утилитами).
+ *
+ * При изменении globals.css — обновлять этот файл одновременно.
  */
 
 /* ── Шрифты ─────────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Unbounded:wght@800&display=swap');
-
-:root {
-  --font:         'Manrope', sans-serif;
-  --mono:         'IBM Plex Mono', monospace;
-  --font-display: 'Unbounded', sans-serif;
-}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Fira+Code:wght@400;500&family=Manrope:wght@300;400;500;600;700&family=Unbounded:wght@800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap');
 
 /* ── Spacing ─────────────────────────────────────────────────────────────── */
 :root {
@@ -31,65 +27,179 @@
   --seer-radius-xl: 14px;
 }
 
-/* ── Базовая тёмная тема (amber-forest, совпадает с verdandi default) ─────── */
-[data-theme="dark"] {
-  --bg0: #0e0e0e;
-  --bg1: #161616;
-  --bg2: #1e1e1e;
-  --bg3: #2a2a2a;
-  --t1:  #f0ece4;
-  --t2:  #b0a898;
-  --t3:  #6e6760;
-  --bd:  #2e2e2e;
-  --bdh: #3e3e3e;
-  --acc: #e6a817;
-  --suc: #3fb950;
-  --wrn: #d29922;
-  --inf: #58a6ff;
-  --danger: #f85149;
-}
-
-/* ── Светлая тема ─────────────────────────────────────────────────────────── */
-[data-theme="light"] {
-  --bg0: #fafaf8;
-  --bg1: #f2f0ea;
-  --bg2: #e8e4db;
-  --bg3: #ddd9cf;
-  --t1:  #1a1814;
-  --t2:  #4a4640;
-  --t3:  #7a7670;
-  --bd:  #ccc8bf;
-  --bdh: #b8b4ab;
-  --acc: #c98a0a;
-  --suc: #2a7d3f;
-  --wrn: #a0720c;
-  --inf: #1a6bbf;
-  --danger: #c0392b;
-}
-
-/* ── Палитра: lichen ─────────────────────────────────────────────────────── */
-[data-theme="dark"][data-palette="lichen"]  { --acc: #6db38c; --inf: #5ba3c9; }
-[data-theme="light"][data-palette="lichen"] { --acc: #2e7d5a; --inf: #1a5f8a; }
-
-/* ── Палитра: slate ──────────────────────────────────────────────────────── */
-[data-theme="dark"][data-palette="slate"]   { --acc: #7b9ebf; }
-[data-theme="light"][data-palette="slate"]  { --acc: #3a6a9a; }
-
-/* ── Палитра: juniper ────────────────────────────────────────────────────── */
-[data-theme="dark"][data-palette="juniper"]  { --acc: #8fbc8f; }
-[data-theme="light"][data-palette="juniper"] { --acc: #3a7a3a; }
-
-/* ── Палитра: warm-dark ──────────────────────────────────────────────────── */
-[data-palette="warm-dark"] {
-  --bg0: #120e0a;
-  --bg1: #1a1410;
-  --bg2: #221c16;
-  --bg3: #2e261e;
-  --acc: #d4882a;
-}
-
-/* ── App-специфичные цвета (для AidaNav и компонентов) ───────────────────── */
+/* ── App-специфичные цвета ───────────────────────────────────────────────── */
 :root {
   --aida-app-verdandi: #7F77DD;
   --aida-app-heimdall: #e6a817;
+}
+
+/* ── Базовая тёмная тема: Amber Forest ──────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  /* Backgrounds */
+  --bg0: #141108;
+  --bg1: #1c1810;
+  --bg2: #252019;
+  --bg3: #302a20;
+
+  /* Borders */
+  --bd:  #42382a;
+  --bdh: #584c38;
+
+  /* Text */
+  --t1: #ede5d0;
+  --t2: #9a8c6e;
+  --t3: #665c48;
+
+  /* Semantic */
+  --acc:    #A8B860;
+  --suc:    #7DBF78;
+  --wrn:    #D4922A;
+  --inf:    #88B8A8;
+  --danger: #C85848;
+  --dng:    var(--danger);
+
+  /* seer-* aliases */
+  --seer-bg:          var(--bg1);
+  --seer-surface:     var(--bg2);
+  --seer-surface-2:   var(--bg3);
+  --seer-border:      var(--bd);
+  --seer-border-2:    var(--bdh);
+  --seer-text:        var(--t1);
+  --seer-text-2:      var(--t2);
+  --seer-text-muted:  var(--t3);
+  --seer-accent:      var(--acc);
+  --seer-accent-glow: #A8B86030;
+  --seer-info:        var(--inf);
+  --seer-success:     var(--suc);
+  --seer-warning:     var(--wrn);
+
+  /* Layout */
+  --header-bg:    var(--bg0);
+  --statusbar-bg: var(--bg0);
+  --panel-bg:     var(--bg0);
+
+  /* Typography */
+  --font:         'Manrope', 'DM Sans', system-ui, sans-serif;
+  --mono:         'IBM Plex Mono', 'Fira Code', monospace;
+  --font-display: 'Unbounded', sans-serif;
+}
+
+/* ── Светлая тема ────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg0: #f5f3ee;
+  --bg1: #faf8f3;
+  --bg2: #ffffff;
+  --bg3: #eee9df;
+  --bd:  #d4ccb8;
+  --bdh: #b8ab94;
+  --t1:  #1e1a12;
+  --t2:  #5c5240;
+  --t3:  #9a8a6e;
+  --acc:    #6b7a2a;
+  --suc:    #3d7a38;
+  --wrn:    #a06010;
+  --inf:    #3a7060;
+  --danger: #c03030;
+  --dng:    var(--danger);
+  --seer-accent-glow: #6b7a2a30;
+  --header-bg:    var(--bg0);
+  --statusbar-bg: var(--bg0);
+  --panel-bg:     var(--bg0);
+  --seer-bg:         var(--bg1);
+  --seer-surface:    var(--bg2);
+  --seer-surface-2:  var(--bg3);
+  --seer-border:     var(--bd);
+  --seer-border-2:   var(--bdh);
+  --seer-text:       var(--t1);
+  --seer-text-2:     var(--t2);
+  --seer-text-muted: var(--t3);
+  --seer-accent:     var(--acc);
+  --seer-info:       var(--inf);
+  --seer-success:    var(--suc);
+  --seer-warning:    var(--wrn);
+}
+
+/* ── Palette: Lichen — cool green ───────────────────────────────────────── */
+[data-palette="lichen"] {
+  --bg0: #0b0e0c; --bg1: #0f1412; --bg2: #141b17; --bg3: #1a2320;
+  --bd:  #263329;  --bdh: #334438;
+  --t1: #c8d8cc;   --t2: #6a8a74;   --t3: #3e5848;
+  --acc: #7CB870;  --suc: #60C880;  --wrn: #C0A030;  --inf: #70B0A8;
+  --seer-accent: var(--acc); --seer-accent-glow: #7CB87030;
+  --seer-border: var(--bd);  --seer-border-2: var(--bdh);
+  --seer-bg: var(--bg1);     --seer-surface: var(--bg2);
+  --seer-surface-2: var(--bg3);
+  --seer-text: var(--t1);    --seer-text-2: var(--t2); --seer-text-muted: var(--t3);
+  --seer-info: var(--inf);   --seer-success: var(--suc); --seer-warning: var(--wrn);
+}
+[data-palette="lichen"][data-theme="light"] {
+  --bg0: #eff5ef; --bg1: #f5fbf5; --bg2: #ffffff; --bg3: #e4ede5;
+  --bd:  #b8cfc0; --bdh: #9ab8a4;
+  --t1: #182418;  --t2: #3a6040;   --t3: #80a884;
+  --acc: #3a8035; --suc: #287840;  --wrn: #8a6010; --inf: #286860; --danger: #c03030;
+  --seer-accent-glow: #3a803530;
+}
+
+/* ── Palette: Slate — cool blue-grey ────────────────────────────────────── */
+[data-palette="slate"] {
+  --bg0: #0c0e12; --bg1: #11141e; --bg2: #161b26; --bg3: #1c2230;
+  --bd:  #283044; --bdh: #343f58;
+  --t1: #c8d0e8;  --t2: #6878a0;   --t3: #404860;
+  --acc: #6898D8; --suc: #60C090;  --wrn: #D09030;  --inf: #7AACCF;
+  --seer-accent: var(--acc); --seer-accent-glow: #6898D830;
+  --seer-border: var(--bd);  --seer-border-2: var(--bdh);
+  --seer-bg: var(--bg1);     --seer-surface: var(--bg2);
+  --seer-surface-2: var(--bg3);
+  --seer-text: var(--t1);    --seer-text-2: var(--t2); --seer-text-muted: var(--t3);
+  --seer-info: var(--inf);   --seer-success: var(--suc); --seer-warning: var(--wrn);
+}
+[data-palette="slate"][data-theme="light"] {
+  --bg0: #eff1f8; --bg1: #f6f8fd; --bg2: #ffffff; --bg3: #e4e8f4;
+  --bd:  #bcc4d8; --bdh: #9ca8cc;
+  --t1: #14182a;  --t2: #384468;   --t3: #8090b4;
+  --acc: #3468b8; --suc: #287058;  --wrn: #9a6018; --inf: #2a6088; --danger: #c03030;
+  --seer-accent-glow: #3468b830;
+}
+
+/* ── Palette: Juniper — deep teal-forest ────────────────────────────────── */
+[data-palette="juniper"] {
+  --bg0: #08100e; --bg1: #0d1a16; --bg2: #12221c; --bg3: #182e26;
+  --bd:  #22413a; --bdh: #2e5448;
+  --t1: #c0e0d4;  --t2: #5c8c7c;   --t3: #3a5850;
+  --acc: #50C090; --suc: #7AD08a;  --wrn: #C89030;  --inf: #60A8B8;
+  --seer-accent: var(--acc); --seer-accent-glow: #50C09030;
+  --seer-border: var(--bd);  --seer-border-2: var(--bdh);
+  --seer-bg: var(--bg1);     --seer-surface: var(--bg2);
+  --seer-surface-2: var(--bg3);
+  --seer-text: var(--t1);    --seer-text-2: var(--t2); --seer-text-muted: var(--t3);
+  --seer-info: var(--inf);   --seer-success: var(--suc); --seer-warning: var(--wrn);
+}
+[data-palette="juniper"][data-theme="light"] {
+  --bg0: #edf5f1; --bg1: #f5fbf8; --bg2: #ffffff; --bg3: #deeee8;
+  --bd:  #b4d0c4; --bdh: #94b8ac;
+  --t1: #102820;  --t2: #286050;   --t3: #70a898;
+  --acc: #1a8060; --suc: #289850;  --wrn: #806018; --inf: #1a6878; --danger: #c03030;
+  --seer-accent-glow: #1a806030;
+}
+
+/* ── Palette: Warm Dark — deep amber gold ───────────────────────────────── */
+[data-palette="warm-dark"] {
+  --bg0: #100e06; --bg1: #181408; --bg2: #201a0c; --bg3: #2a2210;
+  --bd:  #3e3018; --bdh: #544220;
+  --t1: #f0e8c8;  --t2: #b09450;   --t3: #7a6030;
+  --acc: #D4A830; --suc: #80C060;  --wrn: #E08020;  --inf: #90B8A0;
+  --seer-accent: var(--acc); --seer-accent-glow: #D4A83030;
+  --seer-border: var(--bd);  --seer-border-2: var(--bdh);
+  --seer-bg: var(--bg1);     --seer-surface: var(--bg2);
+  --seer-surface-2: var(--bg3);
+  --seer-text: var(--t1);    --seer-text-2: var(--t2); --seer-text-muted: var(--t3);
+  --seer-info: var(--inf);   --seer-success: var(--suc); --seer-warning: var(--wrn);
+}
+[data-palette="warm-dark"][data-theme="light"] {
+  --bg0: #f5f0e0; --bg1: #fdfaf2; --bg2: #ffffff; --bg3: #eee8d4;
+  --bd:  #d0c49a; --bdh: #b8a880;
+  --t1: #201808;  --t2: #6a5030;   --t3: #a89060;
+  --acc: #8a6018; --suc: #3a6820;  --wrn: #a04808; --inf: #3a6858; --danger: #c03030;
+  --seer-accent-glow: #8a601830;
 }

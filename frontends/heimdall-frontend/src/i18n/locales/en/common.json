@@ -11,9 +11,12 @@
     ]
   },
   "nav": {
+    "services":  "Services",
     "dashboard": "Dashboard",
+    "dali":      "Dali",
     "events":    "Event Stream",
-    "controls":  "Controls"
+    "demodebug": "DEMODEBUG",
+    "users":     "Users"
   },
   "auth": {
     "login":    "Sign in",
@@ -62,7 +65,9 @@
   },
   "dashboard": {
     "throughput":   "Throughput (events / sec)",
-    "recentEvents": "Recent events (last {{count}})"
+    "recentEvents": "Recent events (last {{count}})",
+    "recentErrors": "Recent Errors ({{count}})",
+    "servicesStrip": "Services"
   },
   "eventLog": {
     "time":      "Time",
@@ -77,9 +82,30 @@
     "filter":    "Filter",
     "component": "Component",
     "level":     "Level",
+    "sessionId": "Session ID",
     "all":       "All",
     "clear":     "Clear",
+    "pause":     "Pause",
+    "paused":    "PAUSED",
+    "resume":    "Resume",
     "events":    "events"
+  },
+  "services": {
+    "title":        "Services",
+    "up":           "UP",
+    "degraded":     "DEGRADED",
+    "down":         "DOWN",
+    "unknown":      "UNKNOWN",
+    "loading":      "Checking…",
+    "responseTime": "{{ms}}ms",
+    "viewEvents":        "View events",
+    "underConstruction": "UNDER CONSTRUCTION",
+    "restart":           "Restart",
+    "restartOk":         "✓ Restarting…",
+    "restartFail":       "✗ Failed"
+  },
+  "stub": {
+    "comingSoon": "Coming soon"
   },
   "controls": {
     "resetTitle":       "Ring Buffer & Metrics Reset",
@@ -98,7 +124,10 @@
     "colName":          "Name",
     "colEvents":        "Events",
     "colTimestamp":     "Timestamp",
-    "colId":            "ID"
+    "colId":            "ID",
+    "colActions":       "Actions",
+    "deleteButton":     "Delete",
+    "deleteConfirm":    "Delete this snapshot? This action cannot be undone."
   },
   "profile": {
     "title":        "Profile",

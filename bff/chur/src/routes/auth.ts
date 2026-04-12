@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
 import { createSession, deleteSession, ensureValidSession } from '../sessions';
+import { emitToHeimdall } from '../middleware/heimdallEmit';
 
 // ── In-memory rate limiter for /auth/login ────────────────────────────────────
 const IS_PROD      = process.env.NODE_ENV === 'production';
@@ -65,6 +66,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       try {
         tokens = await exchangeCredentials(username, password);
       } catch {
+        emitToHeimdall('AUTH_LOGIN_FAILED', 'WARN', { username, reason: 'invalid_credentials' });
         return reply.status(401).send({ error: 'Invalid credentials' });
       }
 
@@ -84,6 +86,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       );
 
       reply.setCookie('sid', sid, COOKIE_OPTS);
+      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
       return { id: userInfo.sub, username: userInfo.username, role: userInfo.role };
     },
   );
@@ -118,7 +121,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (sid) {
       const session = deleteSession(sid);
       // Invalidate refresh token in Keycloak (fire-and-forget)
-      if (session) keycloakLogout(session.refreshToken);
+      if (session) {
+        keycloakLogout(session.refreshToken);
+        emitToHeimdall('AUTH_LOGOUT', 'INFO', { username: session.username }, sid);
+      }
     }
     reply.clearCookie('sid', { path: '/' });
     return { ok: true };

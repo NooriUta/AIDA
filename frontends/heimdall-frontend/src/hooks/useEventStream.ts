@@ -9,11 +9,11 @@ function buildWsUrl(filter?: EventFilter): string {
   if (!filter) return HEIMDALL_WS;
   const parts: string[] = [];
   if (filter.component) parts.push(`component:${filter.component}`);
-  else if (filter.sessionId) parts.push(`session_id:${filter.sessionId}`);
-  else if (filter.level)    parts.push(`level:${filter.level}`);
-  else if (filter.type)     parts.push(`type:${filter.type}`);
+  if (filter.sessionId) parts.push(`session_id:${filter.sessionId}`);
+  if (filter.level)     parts.push(`level:${filter.level}`);
+  if (filter.type)      parts.push(`type:${filter.type}`);
   if (parts.length === 0) return HEIMDALL_WS;
-  return `${HEIMDALL_WS}?filter=${encodeURIComponent(parts[0])}`;
+  return `${HEIMDALL_WS}?filter=${encodeURIComponent(parts.join(','))}`;
 }
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'error';
@@ -28,17 +28,18 @@ export function useEventStream(filter?: EventFilter) {
   const connect = useCallback(() => {
     if (!mountedRef.current) return;
     const url = buildWsUrl(filter);
+    setEvents([]);
     setStatus('connecting');
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      if (mountedRef.current) setStatus('open');
+      if (mountedRef.current && wsRef.current === ws) setStatus('open');
     };
 
     ws.onmessage = (msg: MessageEvent<string>) => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || wsRef.current !== ws) return;
       try {
         const event = JSON.parse(msg.data) as HeimdallEvent;
         setEvents(prev => {
@@ -51,11 +52,14 @@ export function useEventStream(filter?: EventFilter) {
     };
 
     ws.onerror = () => {
-      if (mountedRef.current) setStatus('error');
+      if (mountedRef.current && wsRef.current === ws) setStatus('error');
     };
 
     ws.onclose = () => {
-      if (!mountedRef.current) return;
+      // Guard against stale WebSocket handlers (React StrictMode double-mount
+      // sets mountedRef back to true before the first WS's onclose fires,
+      // which would cause exponential reconnect growth and infinite state updates).
+      if (!mountedRef.current || wsRef.current !== ws) return;
       setStatus('closed');
       reconnectRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
     };
@@ -67,7 +71,10 @@ export function useEventStream(filter?: EventFilter) {
     return () => {
       mountedRef.current = false;
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
-      wsRef.current?.close();
+      // Nullify ref before close() so the onclose handler sees wsRef.current !== ws
+      const current = wsRef.current;
+      wsRef.current = null;
+      current?.close();
     };
   }, [connect]);
 

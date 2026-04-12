@@ -1,14 +1,8 @@
-FROM eclipse-temurin:21-jdk-alpine AS builder
-RUN apk add --no-cache dos2unix
+FROM gradle:9-jdk21-alpine AS builder
 WORKDIR /app
-COPY gradle         gradle
-COPY gradlew        gradlew
-COPY build.gradle   build.gradle
-COPY settings.gradle settings.gradle
-COPY gradle.properties gradle.properties
-RUN dos2unix gradlew && chmod +x gradlew && ./gradlew --version
+COPY build.gradle settings.gradle gradle.properties ./
 COPY src src
-RUN ./gradlew build -x test -Dquarkus.package.jar.type=uber-jar
+RUN gradle build -x test --no-daemon -Dquarkus.package.jar.type=uber-jar
 
 FROM eclipse-temurin:21-jre-alpine AS runner
 WORKDIR /app

@@ -38,7 +38,12 @@ public class LineageResource {
     @Query("overview")
     @Description("L1 — aggregated list of schemas with counts. Role: viewer+")
     public Uni<List<SchemaNode>> overview() {
-        return overviewService.overview();
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0, Map.of("op", "overview"));
+        return overviewService.overview()
+                .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start, Map.of("op", "overview")));
     }
 
     // ── L2: Explore ───────────────────────────────────────────────────────────
@@ -50,7 +55,12 @@ public class LineageResource {
         @Description("'schema-<name>', 'pkg-<name>', or a raw @rid")
         String scope
     ) {
-        return exploreService.explore(scope);
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0, Map.of("op", "explore", "scope", scope != null ? scope : ""));
+        return exploreService.explore(scope)
+                .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start, Map.of("op", "explore")));
     }
 
     // ── L2+: Statement column enrichment ─────────────────────────────────────
@@ -62,6 +72,8 @@ public class LineageResource {
         @Description("List of statement @rids returned by explore")
         List<String> ids
     ) {
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0, Map.of("op", "stmtColumns", "count", ids != null ? ids.size() : 0));
         return exploreService.exploreStmtColumns(ids);
     }
 
@@ -112,7 +124,13 @@ public class LineageResource {
         @Name("query") String query,
         @Name("limit") @DefaultValue("20") int limit
     ) {
-        return searchService.search(query, Math.min(limit, 100));
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0, Map.of("op", "search", "q", query != null ? query : ""));
+        return searchService.search(query, Math.min(limit, 100))
+                .invoke(results -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "search", "hits", results != null ? results.size() : 0)));
     }
 
     // ── Meta ──────────────────────────────────────────────────────────────────

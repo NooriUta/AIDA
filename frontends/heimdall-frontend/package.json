@@ -4,31 +4,39 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-router-dom": "^7.5.1",
+    "@hookform/resolvers": "^3.10.0",
     "@nivo/line": "^0.99.0",
     "@nivo/pie": "^0.99.0",
-    "react-virtuoso": "^4.12.5",
-    "zustand": "^5.0.3",
-    "react-hook-form": "^7.56.0",
-    "@hookform/resolvers": "^3.10.0",
-    "zod": "^3.24.0",
-    "lucide-react": "^0.474.0",
+    "@xyflow/react": "^12.10.2",
+    "aida-shared": "file:../../packages/aida-shared",
     "i18next": "^23.11.5",
-    "react-i18next": "^14.1.3",
     "i18next-browser-languagedetector": "^8.0.0",
-    "aida-shared": "file:../../packages/aida-shared"
+    "lucide-react": "^0.474.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.56.0",
+    "react-i18next": "^14.1.3",
+    "react-router-dom": "^7.5.1",
+    "react-virtuoso": "^4.12.5",
+    "zod": "^3.24.0",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@module-federation/vite": "^1.4.2",
+    "@module-federation/vite": "^1.14.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
-    "@vitejs/plugin-react": "^4.4.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "jsdom": "^25.0.1",
     "typescript": "^5.8.3",
-    "vite": "^6.3.3"
+    "vite": "^8.0.8",
+    "vitest": "^2.1.9"
   }
 }

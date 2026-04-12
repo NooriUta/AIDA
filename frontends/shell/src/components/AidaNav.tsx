@@ -3,13 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { useShellStore }   from '../stores/shellStore';
 
-// ── Design tokens: palettes (matches verdandi + heimdall) ─────────────────────
+// ── Design tokens: palettes (синхронизировано с globals.css + tokens.css) ─────
 const PALETTES: Array<{ id: string; key: string; accent: string }> = [
-  { id: 'amber-forest', key: 'palette.amberForest', accent: '#e6a817' },
-  { id: 'lichen',       key: 'palette.lichen',       accent: '#6db38c' },
-  { id: 'slate',        key: 'palette.slate',         accent: '#7b9ebf' },
-  { id: 'juniper',      key: 'palette.juniper',       accent: '#8fbc8f' },
-  { id: 'warm-dark',    key: 'palette.warmDark',      accent: '#d4882a' },
+  { id: 'amber-forest', key: 'palette.amberForest', accent: '#A8B860' },
+  { id: 'lichen',       key: 'palette.lichen',       accent: '#7CB870' },
+  { id: 'slate',        key: 'palette.slate',         accent: '#6898D8' },
+  { id: 'juniper',      key: 'palette.juniper',       accent: '#50C090' },
+  { id: 'warm-dark',    key: 'palette.warmDark',      accent: '#D4A830' },
 ];
 
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
@@ -21,9 +21,9 @@ function Divider() {
 
 // ── App tab ───────────────────────────────────────────────────────────────────
 function AppTab({
-  app, label, color, active, onClick,
+  label, color, active, onClick,
 }: {
-  app: string; label: string; color: string; active: boolean; onClick: () => void;
+  label: string; color: string; active: boolean; onClick: () => void;
 }) {
   return (
     <button
@@ -31,14 +31,16 @@ function AppTab({
       style={{
         display:        'flex',
         alignItems:     'center',
-        gap:            '7px',
-        padding:        '5px 12px',
-        background:     active ? `color-mix(in srgb, ${color} 10%, transparent)` : 'transparent',
+        gap:            '6px',
+        padding:        '4px 11px',
+        background:     active ? `color-mix(in srgb, ${color} 12%, transparent)` : 'transparent',
         border:         `1px solid ${active ? color : 'transparent'}`,
         borderRadius:   'var(--seer-radius-md)',
         color:          active ? color : 'var(--t2)',
+        fontFamily:     'var(--font)',
         fontSize:       '13px',
-        fontWeight:     active ? 600 : 400,
+        fontWeight:     500,
+        letterSpacing:  '0.01em',
         cursor:         'pointer',
         transition:     'all 0.12s',
         whiteSpace:     'nowrap',
@@ -50,10 +52,15 @@ function AppTab({
         if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent';
       }}
     >
-      {/* App colour dot */}
+      {/* App colour dot — always the app colour, size/opacity indicates active */}
       <div style={{
-        width: 6, height: 6, borderRadius: '50%',
-        background: color, flexShrink: 0,
+        width:      6,
+        height:     6,
+        borderRadius: '50%',
+        background: color,
+        flexShrink: 0,
+        opacity:    active ? 1 : 0.5,
+        transition: 'opacity 0.12s',
       }} />
       {label}
     </button>
@@ -244,14 +251,12 @@ export function AidaNav() {
 
       {/* App tabs */}
       <AppTab
-        app="verdandi"
         label={t('nav.verdandi')}
         color="var(--aida-app-verdandi)"
         active={currentApp === 'verdandi'}
         onClick={() => navigateTo('verdandi')}
       />
       <AppTab
-        app="heimdall"
         label={t('nav.heimdall')}
         color="var(--aida-app-heimdall)"
         active={currentApp === 'heimdall'}

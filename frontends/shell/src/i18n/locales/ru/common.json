@@ -2,7 +2,7 @@
   "app": { "title": "Платформа AIDA" },
   "nav": {
     "verdandi": "Seiðr Studio",
-    "heimdall": "HEIMDALL"
+    "heimdall": "Heimðallr"
   },
   "theme":   { "dark": "Тёмная", "light": "Светлая" },
   "palette": {

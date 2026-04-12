@@ -110,23 +110,11 @@ public class HoundApplication {
     }
 
     /**
-     * Запускает DiagnosticRunner после обработки файлов.
-     * Для embedded — открывает БД напрямую.
-     * Для remote — использует remote query API.
+     * Запускает DiagnosticRunner после обработки файлов (remote only).
      */
     private void runDiagnostics(RunConfig config, ArcadeDBSemanticWriter writer) {
         System.out.println();
-        if (config.arcadeDbPath != null) {
-            // Embedded: close current writer, reopen read-only for diagnostics
-            writer.close();
-            com.arcadedb.database.DatabaseFactory factory =
-                    new com.arcadedb.database.DatabaseFactory(config.arcadeDbPath);
-            if (factory.exists()) {
-                try (com.arcadedb.database.Database diagDb = factory.open()) {
-                    new DiagnosticRunner(diagDb).runAll();
-                }
-            }
-        } else if ("arcadedb".equalsIgnoreCase(config.dbType)) {
+        if ("arcadedb".equalsIgnoreCase(config.dbType)) {
             // Remote: use DiagnosticRunner with RemoteDatabase
             var remoteDb = new com.arcadedb.remote.RemoteDatabase(
                     config.dbHost, config.dbPort, config.dbName,
@@ -146,12 +134,6 @@ public class HoundApplication {
      *   ничего                     → null (без записи)
      */
     private ArcadeDBSemanticWriter createWriter(RunConfig config) {
-        // Embedded mode
-        if (config.arcadeDbPath != null) {
-            logger.info("ArcadeDB : EMBEDDED {}", config.arcadeDbPath);
-            return new ArcadeDBSemanticWriter(config.arcadeDbPath);
-        }
-
         // Remote mode
         if ("arcadedb".equalsIgnoreCase(config.dbType)) {
             logger.info("ArcadeDB : REMOTE{} {}:{}/{} user={}",
@@ -164,7 +146,7 @@ public class HoundApplication {
         }
 
         // Нет записи
-        logger.info("Storage  : disabled (используйте --arcade-db или --db-type arcadedb)");
+        logger.info("Storage  : disabled (используйте --db-type arcadedb)");
         return null;
     }
 
@@ -516,7 +498,6 @@ public class HoundApplication {
         options.addOption("i", "input", true, "Input file or directory path");
         options.addOption("l", "language", true, "SQL dialect: plsql (default)");
         options.addOption("d", "dialect", true, "Alias for --language");
-        options.addOption(null, "arcade-db", true, "ArcadeDB embedded path");
         options.addOption("t", "db-type", true, "Database type: arcadedb");
         options.addOption(null, "db-host", true, "Database host (default: localhost)");
         options.addOption("p", "db-port", true, "Database port (default: 2480)");
@@ -548,11 +529,6 @@ public class HoundApplication {
         if (cmd.hasOption("language")) config.language = cmd.getOptionValue("language");
         else if (cmd.hasOption("dialect")) config.language = cmd.getOptionValue("dialect");
 
-        // ArcadeDB embedded
-        if (cmd.hasOption("arcade-db")) {
-            config.arcadeDbPath = cmd.getOptionValue("arcade-db");
-        }
-
         // ArcadeDB remote
         if (cmd.hasOption("db-type")) config.dbType = cmd.getOptionValue("db-type");
         if (cmd.hasOption("db-host")) config.dbHost = cmd.getOptionValue("db-host");
@@ -582,8 +558,7 @@ public class HoundApplication {
         System.out.println("  hound --input <path> [--language plsql] [storage options]");
         System.out.println("  hound <path>");
         System.out.println();
-        System.out.println("Storage (выберите один):");
-        System.out.println("  --arcade-db <path>           ArcadeDB embedded (файл)");
+        System.out.println("Storage:");
         System.out.println("  --db-type arcadedb           ArcadeDB remote (Docker/сервер)");
         System.out.println("    --db-host localhost");
         System.out.println("    --db-port 2480");
@@ -726,9 +701,6 @@ public class HoundApplication {
     static class RunConfig {
         String inputPath;
         String language = "plsql";
-
-        // Embedded ArcadeDB
-        String arcadeDbPath = null;
 
         // Remote ArcadeDB (Docker)
         String dbType = null;

@@ -38,3 +38,84 @@ button {
 code, pre {
   font-family: var(--mono, 'IBM Plex Mono', monospace);
 }
+
+/* ── Focus-visible: keyboard accessibility ──────────────────────────────────── */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 1px solid var(--acc);
+  outline-offset: 1px;
+}
+
+/* ── Component badges ────────────────────────────────────────────────────────── */
+.comp {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--seer-radius-sm);
+  font-weight: 500;
+  border: 1px solid;
+  display: inline-block;
+}
+.comp-hound   { color: var(--suc);    background: color-mix(in srgb, var(--suc)    10%, transparent); border-color: color-mix(in srgb, var(--suc)    25%, transparent); }
+.comp-dali    { color: var(--acc);    background: color-mix(in srgb, var(--acc)    10%, transparent); border-color: color-mix(in srgb, var(--acc)    25%, transparent); }
+.comp-mimir   { color: #a09ade;       background: color-mix(in srgb, #7F77DD       10%, transparent); border-color: color-mix(in srgb, #7F77DD       25%, transparent); }
+.comp-anvil   { color: var(--inf);    background: color-mix(in srgb, var(--inf)    10%, transparent); border-color: color-mix(in srgb, var(--inf)    25%, transparent); }
+.comp-shuttle { color: var(--wrn);    background: color-mix(in srgb, var(--wrn)    10%, transparent); border-color: color-mix(in srgb, var(--wrn)    25%, transparent); }
+.comp-chur    { color: var(--t2);     background: color-mix(in srgb, var(--t2)     10%, transparent); border-color: color-mix(in srgb, var(--t2)     25%, transparent); }
+.comp-heimdall{ color: var(--inf);    background: color-mix(in srgb, var(--inf)    10%, transparent); border-color: color-mix(in srgb, var(--inf)    25%, transparent); }
+
+/* ── Status / level badges ───────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--seer-radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono);
+  letter-spacing: .04em;
+  border: 1px solid;
+}
+.badge-info    { background: color-mix(in srgb, var(--inf)    14%, transparent); color: var(--inf);    border-color: color-mix(in srgb, var(--inf)    30%, transparent); }
+.badge-warn    { background: color-mix(in srgb, var(--wrn)    14%, transparent); color: var(--wrn);    border-color: color-mix(in srgb, var(--wrn)    30%, transparent); }
+.badge-err     { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+.badge-suc     { background: color-mix(in srgb, var(--suc)    14%, transparent); color: var(--suc);    border-color: color-mix(in srgb, var(--suc)    30%, transparent); }
+.badge-neutral { background: var(--bg3); color: var(--t2); border-color: var(--bd); }
+
+/* ── EventLog 6-column grid ──────────────────────────────────────────────────── */
+.event-grid-head,
+.event-row-grid {
+  display: grid;
+  grid-template-columns: 88px 82px 190px 52px 56px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.event-grid-head {
+  padding: 5px 14px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--bd);
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.event-row-grid {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--bd);
+  font-size: 12px;
+  transition: background .1s;
+}
+.event-row-grid:hover { background: var(--bg2); }
+
+.evt-ts      { font-family: var(--mono); color: var(--t3); font-size: 11px; }
+.evt-type    { font-family: var(--mono); font-size: 11px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.evt-dur     { font-family: var(--mono); font-size: 11px; color: var(--t3); text-align: right; }
+.evt-payload { font-family: var(--mono); font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.evt-row-error .evt-type { color: var(--danger); }
+.evt-row-warn  .evt-type { color: var(--wrn); }
+.evt-row-selected { background: color-mix(in srgb, var(--acc) 12%, var(--bg0)) !important; outline: 1px solid var(--acc); outline-offset: -1px; }
