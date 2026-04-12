@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useControl } from '../hooks/useControl';
-import type { SnapshotInfo } from 'aida-shared';
+import { useTranslation }              from 'react-i18next';
+import { useControl }                  from '../hooks/useControl';
+import type { SnapshotInfo }           from 'aida-shared';
 
 const sectionStyle: React.CSSProperties = {
   background:   'var(--bg1)',
@@ -71,6 +72,7 @@ function Input({ value, onChange, placeholder }: {
 }
 
 export default function ControlsPage() {
+  const { t } = useTranslation();
   const { loading, error, resetBuffer, saveSnapshot, listSnapshots } = useControl();
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshots, setSnapshots]       = useState<SnapshotInfo[]>([]);
@@ -82,7 +84,7 @@ export default function ControlsPage() {
   }, [listSnapshots]);
 
   async function handleReset() {
-    if (!window.confirm('Сбросить ring buffer и метрики? Это действие необратимо.')) return;
+    if (!window.confirm(t('controls.resetConfirm'))) return;
     const ok = await resetBuffer();
     if (ok) setResetDone(true);
     setTimeout(() => setResetDone(false), 3000);
@@ -110,54 +112,54 @@ export default function ControlsPage() {
 
       {/* Reset */}
       <div style={sectionStyle}>
-        <div style={labelStyle}>Ring Buffer &amp; Metrics Reset</div>
+        <div style={labelStyle}>{t('controls.resetTitle')}</div>
         <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: 'var(--seer-space-3)' }}>
-          Clears all in-memory events and resets all metric counters to zero. Requires admin role.
+          {t('controls.resetDesc')}
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-3)' }}>
           <Btn onClick={handleReset} disabled={loading} danger>
-            Reset Buffer
+            {t('controls.resetButton')}
           </Btn>
-          {resetDone && <span style={{ fontSize: '12px', color: 'var(--suc)' }}>✓ Reset complete</span>}
+          {resetDone && <span style={{ fontSize: '12px', color: 'var(--suc)' }}>{t('controls.resetDone')}</span>}
         </div>
       </div>
 
       {/* Save Snapshot */}
       <div style={sectionStyle}>
-        <div style={labelStyle}>Save Snapshot to FRIGG</div>
+        <div style={labelStyle}>{t('controls.saveTitle')}</div>
         <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: 'var(--seer-space-3)' }}>
-          Persists current ring buffer contents to ArcadeDB (FRIGG) with a given name.
+          {t('controls.saveDesc')}
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-3)' }}>
-          <Input value={snapshotName} onChange={setSnapshotName} placeholder="snapshot-name" />
+          <Input value={snapshotName} onChange={setSnapshotName} placeholder={t('controls.savePlaceholder')} />
           <Btn onClick={handleSave} disabled={loading || !snapshotName.trim()}>
-            Save Snapshot
+            {t('controls.saveButton')}
           </Btn>
-          {saveDone && <span style={{ fontSize: '12px', color: 'var(--suc)' }}>✓ Saved</span>}
+          {saveDone && <span style={{ fontSize: '12px', color: 'var(--suc)' }}>{t('controls.saveDone')}</span>}
         </div>
       </div>
 
       {/* Snapshot list */}
       <div style={sectionStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--seer-space-3)' }}>
-          <div style={labelStyle}>Saved Snapshots</div>
+          <div style={labelStyle}>{t('controls.snapshotsTitle')}</div>
           <button
             onClick={() => listSnapshots().then(setSnapshots)}
             style={{ fontSize: '12px', color: 'var(--inf)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)' }}
           >
-            Refresh
+            {t('controls.refresh')}
           </button>
         </div>
         {snapshots.length === 0 ? (
-          <div style={{ fontSize: '13px', color: 'var(--t3)' }}>No snapshots yet.</div>
+          <div style={{ fontSize: '13px', color: 'var(--t3)' }}>{t('controls.noSnapshots')}</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: 'var(--mono)' }}>
             <thead>
               <tr style={{ color: 'var(--t3)', textAlign: 'left', borderBottom: '1px solid var(--bd)' }}>
-                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Name</th>
-                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Events</th>
-                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Timestamp</th>
-                <th style={{ padding: '4px 8px', fontWeight: 500 }}>ID</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colName')}</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colEvents')}</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colTimestamp')}</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colId')}</th>
               </tr>
             </thead>
             <tbody>

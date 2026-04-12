@@ -20,6 +20,10 @@ export default defineConfig({
   ],
   server: {
     port: 5174,
+    host: '0.0.0.0',
     cors: true,
+    proxy: {
+      '/auth': { target: 'http://localhost:3000', changeOrigin: true },
+    },
   },
 });

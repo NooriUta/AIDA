@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { MetricsSnapshot } from 'aida-shared';
 
 interface MetricsBarProps {
@@ -40,21 +41,22 @@ function resolutionColor(rate: number): string {
 }
 
 export function MetricsBar({ metrics }: MetricsBarProps) {
+  const { t } = useTranslation();
   const na = '--';
   return (
     <div style={{ display: 'flex', gap: 'var(--seer-space-3)', padding: 'var(--seer-space-4) var(--seer-space-6)', flexWrap: 'wrap' }}>
-      <MetricCard label="Atoms"       value={metrics ? String(metrics.atomsExtracted)  : na} />
-      <MetricCard label="Files"       value={metrics ? String(metrics.filesParsed)     : na} />
-      <MetricCard label="Tool Calls"  value={metrics ? String(metrics.toolCallsTotal)  : na} />
-      <MetricCard label="Workers"     value={metrics ? String(metrics.activeWorkers)   : na} />
-      <MetricCard label="Queue"       value={metrics ? String(metrics.queueDepth)      : na} />
+      <MetricCard label={t('metrics.atoms')}     value={metrics ? String(metrics.atomsExtracted) : na} />
+      <MetricCard label={t('metrics.files')}     value={metrics ? String(metrics.filesParsed)    : na} />
+      <MetricCard label={t('metrics.toolCalls')} value={metrics ? String(metrics.toolCallsTotal) : na} />
+      <MetricCard label={t('metrics.workers')}   value={metrics ? String(metrics.activeWorkers)  : na} />
+      <MetricCard label={t('metrics.queue')}     value={metrics ? String(metrics.queueDepth)     : na} />
       <MetricCard
-        label="Resolution"
+        label={t('metrics.resolution')}
         value={
           !metrics
             ? na
             : Number.isNaN(metrics.resolutionRate)
-              ? 'N/A'
+              ? t('metrics.na')
               : `${metrics.resolutionRate.toFixed(1)}%`
         }
         accent={metrics ? resolutionColor(metrics.resolutionRate) : undefined}

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ResponsiveLine } from '@nivo/line';
+import { useTranslation } from 'react-i18next';
 import type { HeimdallEvent } from 'aida-shared';
 
 interface ThroughputChartProps {
@@ -24,10 +25,12 @@ function getColor(component: string): string {
 }
 
 export function ThroughputChart({ events }: ThroughputChartProps) {
+  const { t } = useTranslation();
+
   const data = useMemo(() => {
-    const now        = Date.now();
+    const now         = Date.now();
     const windowStart = now - WINDOW_SEC * 1000;
-    const recent     = events.filter(e => e.timestamp >= windowStart);
+    const recent      = events.filter(e => e.timestamp >= windowStart);
 
     // Group by component → bucket by second
     const byComponent: Record<string, Record<number, number>> = {};
@@ -53,7 +56,7 @@ export function ThroughputChart({ events }: ThroughputChartProps) {
   if (data.length === 0) {
     return (
       <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', fontSize: '13px' }}>
-        Waiting for events…
+        {t('metrics.waiting')}
       </div>
     );
   }

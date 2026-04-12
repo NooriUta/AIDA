@@ -1,5 +1,6 @@
 import React from 'react';
 import { Virtuoso } from 'react-virtuoso';
+import { useTranslation } from 'react-i18next';
 import type { HeimdallEvent, EventFilter } from 'aida-shared';
 
 interface EventLogProps {
@@ -39,28 +40,28 @@ function payloadPreview(payload: Record<string, unknown>): string {
 }
 
 const rowStyle: React.CSSProperties = {
-  display:     'grid',
+  display:             'grid',
   gridTemplateColumns: '90px 100px 160px 50px 60px 1fr',
-  gap:         'var(--seer-space-2)',
-  padding:     '4px var(--seer-space-4)',
-  borderBottom: '1px solid var(--bd)',
-  fontSize:    '12px',
-  fontFamily:  'var(--mono)',
-  alignItems:  'center',
-  minHeight:   '28px',
+  gap:                 'var(--seer-space-2)',
+  padding:             '4px var(--seer-space-4)',
+  borderBottom:        '1px solid var(--bd)',
+  fontSize:            '12px',
+  fontFamily:          'var(--mono)',
+  alignItems:          'center',
+  minHeight:           '28px',
 };
 
 const headerStyle: React.CSSProperties = {
   ...rowStyle,
-  background: 'var(--bg2)',
-  color:      'var(--t3)',
-  fontWeight: 500,
-  fontSize:   '11px',
+  background:    'var(--bg2)',
+  color:         'var(--t3)',
+  fontWeight:    500,
+  fontSize:      '11px',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
-  position:   'sticky',
-  top:        0,
-  zIndex:     1,
+  position:      'sticky',
+  top:           0,
+  zIndex:        1,
 };
 
 function EventRow({ event }: { event: HeimdallEvent }) {
@@ -99,21 +100,22 @@ function applyFilter(events: HeimdallEvent[], filter?: EventFilter): HeimdallEve
 }
 
 export function EventLog({ events, filter, maxHeight = '100%' }: EventLogProps) {
+  const { t }    = useTranslation();
   const filtered = applyFilter(events, filter);
 
   return (
     <div style={{ height: maxHeight, display: 'flex', flexDirection: 'column', background: 'var(--bg0)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)', overflow: 'hidden' }}>
       <div style={headerStyle}>
-        <span>Time</span>
-        <span>Component</span>
-        <span>Event Type</span>
-        <span>Level</span>
-        <span>Duration</span>
-        <span>Payload</span>
+        <span>{t('eventLog.time')}</span>
+        <span>{t('eventLog.component')}</span>
+        <span>{t('eventLog.eventType')}</span>
+        <span>{t('eventLog.level')}</span>
+        <span>{t('eventLog.duration')}</span>
+        <span>{t('eventLog.payload')}</span>
       </div>
       {filtered.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', fontSize: '13px' }}>
-          No events
+          {t('eventLog.noEvents')}
         </div>
       ) : (
         <Virtuoso

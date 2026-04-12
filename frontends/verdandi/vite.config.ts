@@ -42,7 +42,7 @@ export default defineConfig({
     },
   },
   server: {
-    host: '127.0.0.1',  // bind to IPv4 so browsers can reach it
+    host: '0.0.0.0',  // bind to all interfaces (IPv4 + IPv6)
     // Dev proxy: forward all API routes through Chur (BFF) on :3000
     proxy: {
       '/graphql': {

@@ -1,4 +1,5 @@
 import { ResponsivePie } from '@nivo/pie';
+import { useTranslation } from 'react-i18next';
 
 interface ResolutionGaugeProps {
   rate: number; // percentage 0-100, NaN if no data
@@ -12,6 +13,7 @@ function gaugeColor(rate: number): string {
 }
 
 export function ResolutionGauge({ rate }: ResolutionGaugeProps) {
+  const { t } = useTranslation();
   const valid = !Number.isNaN(rate);
   const pct   = valid ? Math.min(100, Math.max(0, rate)) : 0;
   const color = gaugeColor(rate);
@@ -38,19 +40,19 @@ export function ResolutionGauge({ rate }: ResolutionGaugeProps) {
       />
       {/* Centre overlay */}
       <div style={{
-        position:  'absolute',
-        inset:     0,
-        display:   'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
+        position:       'absolute',
+        inset:          0,
+        display:        'flex',
+        flexDirection:  'column',
+        alignItems:     'center',
         justifyContent: 'center',
-        pointerEvents: 'none',
+        pointerEvents:  'none',
       }}>
         <span style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--mono)', color }}>
-          {valid ? `${pct.toFixed(1)}%` : 'N/A'}
+          {valid ? `${pct.toFixed(1)}%` : t('metrics.na')}
         </span>
         <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Resolution
+          {t('metrics.resolution')}
         </span>
       </div>
     </div>

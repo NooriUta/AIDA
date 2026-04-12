@@ -1,5 +1,11 @@
 export type UserRole = 'viewer' | 'editor' | 'admin';
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  role: UserRole;
+}
+
 export type EventLevel = 'INFO' | 'WARN' | 'ERROR';
 
 export interface HeimdallEvent {

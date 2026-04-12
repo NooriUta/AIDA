@@ -91,7 +91,7 @@ export function LoginPage() {
 
           {/* Three Norns — mono */}
           <div className="mono" style={{ fontSize: '10px', color: 'var(--t3)', letterSpacing: '0.07em', opacity: 0.7 }}>
-            VERDANDI · URD · SKULD
+            VERðANðI · URð · SKULð
           </div>
         </div>
 
