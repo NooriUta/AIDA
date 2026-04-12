@@ -55,11 +55,11 @@ export function MetricsBar({ metrics }: MetricsBarProps) {
         value={
           !metrics
             ? na
-            : Number.isNaN(metrics.resolutionRate)
+            : Number.isNaN(Number(metrics.resolutionRate))
               ? t('metrics.na')
-              : `${metrics.resolutionRate.toFixed(1)}%`
+              : `${Number(metrics.resolutionRate).toFixed(1)}%`
         }
-        accent={metrics ? resolutionColor(metrics.resolutionRate) : undefined}
+        accent={metrics ? resolutionColor(Number(metrics.resolutionRate)) : undefined}
       />
     </div>
   );

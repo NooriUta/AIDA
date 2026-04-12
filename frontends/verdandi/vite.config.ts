@@ -53,8 +53,10 @@ export default defineConfig({
     host: '0.0.0.0',
     cors: true,           // required for MF remote loading from shell origin
     proxy: {
+      // Dev: proxy GraphQL directly to SHUTTLE (bypasses Chur auth — dev only).
+      // In production the reverse-proxy / Chur handles /graphql.
       '/graphql': {
-        target: 'http://localhost:3000',
+        target: process.env.SHUTTLE_URL ?? 'http://localhost:8080',
         changeOrigin: true,
       },
       '/auth': {

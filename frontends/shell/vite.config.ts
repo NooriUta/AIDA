@@ -8,9 +8,18 @@ export default defineConfig({
     federation({
       name: 'shell',
       remotes: {
-        // Dev URLs — override via VITE_VERDANDI_URL / VITE_HEIMDALL_URL env vars
-        verdandi:            process.env.VITE_VERDANDI_URL    ?? 'http://localhost:5173/remoteEntry.js',
-        'heimdall-frontend': process.env.VITE_HEIMDALL_URL    ?? 'http://localhost:5174/remoteEntry.js',
+        // type: 'module' forces the MF runtime to use import() instead of loadScript()
+        // Required for Vite-generated ES module remoteEntry.js (which uses export {} syntax)
+        verdandi: {
+          type: 'module',
+          name: 'verdandi',
+          entry: process.env.VITE_VERDANDI_URL ?? 'http://localhost:5173/remoteEntry.js',
+        },
+        'heimdall-frontend': {
+          type: 'module',
+          name: 'heimdall-frontend',
+          entry: process.env.VITE_HEIMDALL_URL ?? 'http://localhost:5174/remoteEntry.js',
+        },
       },
       shared: {
         react:              { singleton: true, requiredVersion: '^19.0.0' },

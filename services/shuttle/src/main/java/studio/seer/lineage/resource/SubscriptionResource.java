@@ -1,8 +1,11 @@
 package studio.seer.lineage.resource;
 
+import io.smallrye.graphql.api.Subscription;
 import io.smallrye.mutiny.Multi;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.graphql.*;
+import org.eclipse.microprofile.graphql.Description;
+import org.eclipse.microprofile.graphql.GraphQLApi;
+import org.eclipse.microprofile.graphql.Name;
 import studio.seer.lineage.heimdall.HeimdallEventBus;
 import studio.seer.lineage.heimdall.model.HeimdallEventView;
 
