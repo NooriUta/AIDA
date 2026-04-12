@@ -14,9 +14,9 @@ export default defineConfig({
       filename: 'remoteEntry.js',
       exposes: { './App': './src/App.tsx' },
       shared: {
-        react:              { singleton: true, requiredVersion: '^19.0.0' },
-        'react-dom':        { singleton: true, requiredVersion: '^19.0.0' },
-        'react-router-dom': { singleton: true, requiredVersion: '^7.0.0'  },
+        react:              { singleton: true, eager: true, requiredVersion: '^19.0.0' },
+        'react-dom':        { singleton: true, eager: true, requiredVersion: '^19.0.0' },
+        'react-router-dom': { singleton: true, eager: true, requiredVersion: '^7.0.0'  },
         // aida-shared is NOT listed here — verdandi uses its own globals.css and
         // does not import from aida-shared, so MF should not try to resolve it.
         zustand:            { singleton: true, requiredVersion: '^5.0.0'  },
@@ -27,12 +27,22 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // Dedupe prevents multiple instances when the same package appears in
+    // verdandi's own dep-graph AND is re-injected via the MF runtime.
+    dedupe: ['react', 'react-dom', 'react-router-dom', 'zustand'],
   },
   worker: {
     format: 'es',
   },
   optimizeDeps: {
     include: ['elkjs/lib/elk.bundled.js'],
+    // Exclude react-router-dom so Vite does NOT pre-bundle it into a chunk.
+    // Without this, each dev server inlines its own copy and the MF runtime
+    // cannot redirect to the Shell singleton — causing the "Router inside
+    // another Router" error in dev mode.
+    // react/react-dom are kept pre-bundled (their singleton sharing works
+    // via the MF runtime's own mechanism without this exclusion).
+    exclude: ['react-router-dom'],
   },
   test: {
     globals:     true,
