@@ -1,0 +1,40 @@
+/* HEIMDALL-specific base styles.
+ * Design tokens are provided by aida-shared/styles/tokens.css (imported in main.tsx).
+ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font, 'Manrope', sans-serif);
+  background-color: var(--bg0, #0e0e0e);
+  color: var(--t1, #f0ece4);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--acc);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+}
+
+code, pre {
+  font-family: var(--mono, 'IBM Plex Mono', monospace);
+}
