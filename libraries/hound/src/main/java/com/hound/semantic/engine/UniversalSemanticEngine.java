@@ -458,9 +458,13 @@ public class UniversalSemanticEngine {
             addPendingColumn(fullRef, currentStmt);
         }
 
-        // Add column to structure + usage tracking
+        // Add column to structure + usage tracking.
+        // Guard: skip SubQuery/CTE/MERGE-USING SELECT statement geoids — those atoms link via
+        // ATOM_REF_OUTPUT_COL, not DaliColumn. Physical table geoids are NOT in getStatements().
         if (tableGeoid != null) {
-            builder.addColumn(tableGeoid, columnPart, null, null);
+            if (!builder.getStatements().containsKey(tableGeoid)) {
+                builder.addColumn(tableGeoid, columnPart, null, null);
+            }
             String colGeoid = tableGeoid + "." + columnPart.toUpperCase();
             ColumnInfo colInfo = builder.getColumns().get(colGeoid);
             if (colInfo != null) {
@@ -993,7 +997,10 @@ public class UniversalSemanticEngine {
             }
 
             if (tGeoid != null) {
-                builder.addColumn(tGeoid, cPart, null, null);
+                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
+                if (!builder.getStatements().containsKey(tGeoid)) {
+                    builder.addColumn(tGeoid, cPart, null, null);
+                }
                 resolvedNow++;
             } else {
                 stillPending.add(p);
@@ -1031,7 +1038,10 @@ public class UniversalSemanticEngine {
                 if (ref.isResolved()) tGeoid = ref.getGeoid();
             }
             if (tGeoid != null) {
-                builder.addColumn(tGeoid, cPart, null, null);
+                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
+                if (!builder.getStatements().containsKey(tGeoid)) {
+                    builder.addColumn(tGeoid, cPart, null, null);
+                }
                 resolved.add(i);
             }
         }

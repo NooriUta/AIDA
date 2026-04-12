@@ -709,34 +709,6 @@ class EmbeddedWriter {
                 }
             }
 
-            // ── DaliResolutionLog ──
-            for (Map<String, Object> logEntry : result.getResolutionLog()) {
-                db.newDocument("DaliResolutionLog")
-                        .set("session_id",       sid)
-                        .set("file_path",        result.getFilePath())
-                        .set("statement_geoid",  logEntry.get("statement_geoid"))
-                        .set("raw_input",        logEntry.get("raw_input"))
-                        .set("result_kind",      logEntry.get("result_kind"))
-                        .set("is_function_call", logEntry.get("is_function_call"))
-                        .set("atom_context",     logEntry.get("atom_context"))
-                        .set("parent_context",   logEntry.get("parent_context"))
-                        .set("note",             logEntry.get("note"))
-                        .set("strategy",         logEntry.get("strategy"))
-                        .set("table_name",       logEntry.get("table_name"))
-                        .set("column_name",      logEntry.get("column_name"))
-                        .set("position",         logEntry.get("position"))
-                        .save();
-            }
-
-            // ── DaliSchemaLog ──
-            for (Map<String, Object> schEntry : result.getSchemaRegistrationLog()) {
-                db.newDocument("DaliSchemaLog")
-                        .set("session_id",  sid)
-                        .set("schema_name", schEntry.get("schema_name"))
-                        .set("reason",      schEntry.get("reason"))
-                        .set("backtrace",   schEntry.get("backtrace"))
-                        .save();
-            }
 
             // ── CALLS edges ──
             for (var callerEntry : result.getCalledRoutines().entrySet()) {
@@ -809,38 +781,7 @@ class EmbeddedWriter {
                         int cntTables, int cntColumns, int cntStatements, int cntRoutines,
                         int cntAtoms, int cntJoins, int cntOutputCols, int cntLineage,
                         int atomResolved, int atomConst, int atomFunc, int atomFailed) {
-        try {
-            db.transaction(() ->
-                db.newDocument("DaliPerfStats")
-                    .set("session_id",         sid)
-                    .set("db_name",            dbName)
-                    .set("file_path",          result.getFilePath())
-                    .set("dialect",            result.getDialect())
-                    .set("created_at",         System.currentTimeMillis())
-                    .set("ms_parse",           timer.ms("parse"))
-                    .set("ms_walk",            timer.ms("walk"))
-                    .set("ms_resolve",         timer.ms("resolve"))
-                    .set("ms_write_vtx",       timer.ms("write.vtx"))
-                    .set("ms_write_edge",      timer.ms("write.edge"))
-                    .set("ms_total",           timer.totalMs())
-                    .set("count_tokens",       timer.count("tokens"))
-                    .set("cnt_tables",         cntTables)
-                    .set("cnt_columns",        cntColumns)
-                    .set("cnt_statements",     cntStatements)
-                    .set("cnt_routines",       cntRoutines)
-                    .set("cnt_atoms",          cntAtoms)
-                    .set("cnt_atoms_resolved", atomResolved)
-                    .set("cnt_atoms_const",    atomConst)
-                    .set("cnt_atoms_func",     atomFunc)
-                    .set("cnt_atoms_failed",   atomFailed)
-                    .set("cnt_output_cols",    cntOutputCols)
-                    .set("cnt_joins",          cntJoins)
-                    .set("cnt_lineage",        cntLineage)
-                    .save()
-            );
-        } catch (Exception e) {
-            logger.warn("DaliPerfStats write failed for {}: {}", sid, e.getMessage());
-        }
+        // DaliPerfStats removed from schema — no-op
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -856,7 +797,7 @@ class EmbeddedWriter {
     private int deleteType(String typeName) {
         try {
             if (db.getSchema().existsType(typeName)) {
-                db.transaction(() -> db.command("sql", "DELETE FROM " + typeName));
+                db.command("sql", "TRUNCATE TYPE `" + typeName + "` UNSAFE");
                 return 1;
             }
         } catch (Exception ignored) {}

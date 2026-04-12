@@ -86,10 +86,6 @@ final class RemoteSchemaCommands {
                 // Document types
                 "CREATE DOCUMENT TYPE DaliSnippet IF NOT EXISTS",
                 "CREATE DOCUMENT TYPE DaliSnippetScript IF NOT EXISTS",
-                "CREATE DOCUMENT TYPE DaliPerfStats IF NOT EXISTS",
-                "CREATE DOCUMENT TYPE DaliResolutionLog IF NOT EXISTS",
-                "CREATE DOCUMENT TYPE DaliSchemaLog IF NOT EXISTS",
-                "CREATE DOCUMENT TYPE DaliMeta IF NOT EXISTS",
         };
     }
 
@@ -195,8 +191,6 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliSnippetScript.script_hash IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippetScript.line_count IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliSnippetScript.char_count IF NOT EXISTS INTEGER",
-                // DaliPerfStats
-                "CREATE PROPERTY DaliPerfStats.db_name IF NOT EXISTS STRING",
         };
     }
 

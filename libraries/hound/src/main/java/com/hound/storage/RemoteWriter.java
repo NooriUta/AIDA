@@ -573,12 +573,29 @@ class RemoteWriter {
 
         // ── HAS_COLUMN ──
         if (pool != null) {
+            // 1. New columns — standard path.
             for (String colGeoid : newColumnGeoids) {
                 ColumnInfo c = str.getColumns().get(colGeoid);
                 if (c == null) continue;
                 String fromRid = rid.tables.get(c.getTableGeoid());
                 String toRid   = rid.columns.get(colGeoid);
                 if (fromRid != null && toRid != null) edgeByRid("HAS_COLUMN", fromRid, toRid, sid);
+            }
+            // 2. All existing columns of newly-created tables.
+            // Handles geoid-corrected tables (e.g. double-schema fix) where DaliTable is new
+            // but DaliColumn records already exist in the DB and are absent from newColumnGeoids.
+            // rid.columns covers ALL columns for db_name — sweep by column_geoid prefix.
+            if (!newTableGeoids.isEmpty()) {
+                Set<String> skipGeoids = new HashSet<>(newColumnGeoids); // avoid duplicates
+                for (String tblGeoid : newTableGeoids) {
+                    String fromRid = rid.tables.get(tblGeoid);
+                    if (fromRid == null) continue;
+                    String prefix = tblGeoid + ".";
+                    for (var e : rid.columns.entrySet()) {
+                        if (!skipGeoids.contains(e.getKey()) && e.getKey().startsWith(prefix))
+                            edgeByRid("HAS_COLUMN", fromRid, e.getValue(), sid);
+                    }
+                }
             }
         } else {
             for (var e : str.getColumns().entrySet()) {
@@ -829,23 +846,6 @@ class RemoteWriter {
             }
         }
 
-        // ── DaliResolutionLog ──
-        for (Map<String, Object> logEntry : result.getResolutionLog()) {
-            rcmd("INSERT INTO DaliResolutionLog SET session_id=?, file_path=?, statement_geoid=?, " +
-                 "raw_input=?, result_kind=?, is_function_call=?, atom_context=?, parent_context=?, " +
-                 "note=?, `strategy`=?, table_name=?, column_name=?, position=?",
-                sid, result.getFilePath(), logEntry.get("statement_geoid"),
-                logEntry.get("raw_input"), logEntry.get("result_kind"), logEntry.get("is_function_call"),
-                logEntry.get("atom_context"), logEntry.get("parent_context"),
-                logEntry.get("note"), logEntry.get("strategy"),
-                logEntry.get("table_name"), logEntry.get("column_name"), logEntry.get("position"));
-        }
-
-        // ── DaliSchemaLog ──
-        for (Map<String, Object> schEntry : result.getSchemaRegistrationLog()) {
-            rcmd("INSERT INTO DaliSchemaLog SET session_id=?, schema_name=?, reason=?, backtrace=?",
-                    sid, schEntry.get("schema_name"), schEntry.get("reason"), schEntry.get("backtrace"));
-        }
 
         // ── CALLS edges ──
         Map<String, String> ridBySimpleName = new HashMap<>();
@@ -977,6 +977,7 @@ class RemoteWriter {
                 if (schRid != null && tblRid != null)
                     edgeByRid("CONTAINS_TABLE", schRid, tblRid, sid);
             }
+            // 1. HAS_COLUMN for new columns — standard path.
             for (String colGeoid : newColumnGeoids) {
                 ColumnInfo c = str.getColumns().get(colGeoid);
                 if (c == null) continue;
@@ -984,6 +985,20 @@ class RemoteWriter {
                 String toRid   = rid.columns.get(colGeoid);
                 if (fromRid != null && toRid != null)
                     edgeByRid("HAS_COLUMN", fromRid, toRid, sid);
+            }
+            // 2. HAS_COLUMN for all existing columns of newly-created tables.
+            // rid.columns has ALL columns for db_name — sweep by column_geoid prefix.
+            if (!newTableGeoids.isEmpty()) {
+                Set<String> skipGeoids = new HashSet<>(newColumnGeoids);
+                for (String tblGeoid : newTableGeoids) {
+                    String fromRid = rid.tables.get(tblGeoid);
+                    if (fromRid == null) continue;
+                    String prefix = tblGeoid + ".";
+                    for (var e : rid.columns.entrySet()) {
+                        if (!skipGeoids.contains(e.getKey()) && e.getKey().startsWith(prefix))
+                            edgeByRid("HAS_COLUMN", fromRid, e.getValue(), sid);
+                    }
+                }
             }
 
             // Phase 4: Build batch for session-specific objects (DaliStatement, DaliAtom,
@@ -1030,24 +1045,7 @@ class RemoteWriter {
                         int cntTables, int cntColumns, int cntStatements, int cntRoutines,
                         int cntAtoms, int cntJoins, int cntOutputCols, int cntLineage,
                         int atomResolved, int atomConst, int atomFunc, int atomFailed) {
-        try {
-            rcmd("INSERT INTO DaliPerfStats SET " +
-                    "session_id=?, db_name=?, file_path=?, dialect=?, created_at=?, " +
-                    "ms_parse=?, ms_walk=?, ms_resolve=?, ms_write_vtx=?, ms_write_edge=?, ms_total=?, " +
-                    "count_tokens=?, " +
-                    "cnt_tables=?, cnt_columns=?, cnt_statements=?, cnt_routines=?, " +
-                    "cnt_atoms=?, cnt_atoms_resolved=?, cnt_atoms_const=?, cnt_atoms_func=?, cnt_atoms_failed=?, " +
-                    "cnt_output_cols=?, cnt_joins=?, cnt_lineage=?",
-                sid, dbName, result.getFilePath(), result.getDialect(), System.currentTimeMillis(),
-                timer.ms("parse"), timer.ms("walk"), timer.ms("resolve"),
-                timer.ms("write.vtx"), timer.ms("write.edge"), timer.totalMs(),
-                timer.count("tokens"),
-                cntTables, cntColumns, cntStatements, cntRoutines,
-                cntAtoms, atomResolved, atomConst, atomFunc, atomFailed,
-                cntOutputCols, cntJoins, cntLineage);
-        } catch (Exception e) {
-            logger.warn("DaliPerfStats write failed for {}: {}", sid, e.getMessage());
-        }
+        // DaliPerfStats removed from schema — no-op
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1061,22 +1059,10 @@ class RemoteWriter {
     }
 
     private void deleteTypeRemote(String typeName) {
-        final int BATCH = 500;
         try {
-            for (int i = 0; i < 1_000_000; i++) {
-                var rs = db.query("sql", "SELECT count(*) as cnt FROM " + typeName + " LIMIT 1");
-                long cnt = rs.hasNext()
-                        ? ((Number) rs.next().toMap().getOrDefault("cnt", 0L)).longValue() : 0;
-                if (cnt == 0) break;
-                try {
-                    db.command("sql", "DELETE FROM " + typeName + " LIMIT " + BATCH);
-                } catch (Exception e) {
-                    logger.warn("Batch delete failed for {} (batch {}): {}", typeName, i, e.getMessage());
-                    break;
-                }
-            }
+            db.command("sql", "TRUNCATE TYPE `" + typeName + "` UNSAFE");
         } catch (Exception e) {
-            logger.warn("deleteTypeRemote failed for {}: {}", typeName, e.getMessage());
+            logger.warn("TRUNCATE TYPE {} failed: {}", typeName, e.getMessage());
         }
     }
 

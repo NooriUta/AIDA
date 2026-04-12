@@ -59,45 +59,6 @@ public final class SchemaInitializer {
     public static void ensureSchema(Database db) {
         Schema schema = db.getSchema();
 
-        if (schema.existsType("DaliMeta")) {
-            try {
-                var rs = db.query("sql", "SELECT schema_version FROM DaliMeta LIMIT 1");
-                if (rs.hasNext()) {
-                    int v = ((Number) rs.next().toMap().get("schema_version")).intValue();
-                    if (v >= SCHEMA_VERSION) {
-                        logger.debug("ArcadeDB schema v{} up to date", v);
-                        return;
-                    }
-                    // v24 → v25: FULL_TEXT on DaliSnippetScript(script) caused
-                    // "Key size too big to fit in a single page" (whole-file field, up to 332 KB).
-                    // Drop the broken index before re-initialising so IF NOT EXISTS won't skip it.
-                    if (v < 25) {
-                        logger.info("v24→v25 migration: dropping broken FULL_TEXT index on DaliSnippetScript(script)");
-                        tryDropIndex(db, "DaliSnippetScript[script]");
-                    }
-                    if (v < 26) {
-                        // v25→v26: FULL_TEXT indexes don't support equality lookup ({prop: $val}).
-                        // Convert 13 name-field indexes from FULL_TEXT to NOTUNIQUE LSM_TREE.
-                        // DaliSnippet(snippet) stays FULL_TEXT for SQL text search.
-                        logger.info("v25→v26 migration: converting 13 FULL_TEXT indexes to NOTUNIQUE LSM_TREE");
-                        for (String idx : new String[]{
-                                "DaliApplication[app_name]",  "DaliDatabase[db_name]",
-                                "DaliSchema[schema_name]",    "DaliTable[table_name]",
-                                "DaliColumn[column_name]",    "DaliRoutine[routine_name]",
-                                "DaliPackage[package_name]",  "DaliSession[file_path]",
-                                "DaliStatement[stmt_geoid]",  "DaliAtom[atom_text]",
-                                "DaliParameter[param_name]",  "DaliVariable[var_name]",
-                                "DaliOutputColumn[name]"
-                        }) {
-                            tryDropIndex(db, idx);
-                        }
-                    }
-                    logger.info("ArcadeDB schema upgrade v{} → v{}", v, SCHEMA_VERSION);
-                }
-            } catch (Exception e) {
-                logger.debug("DaliMeta read failed, reinitializing");
-            }
-        }
 
         int c = 0;
 
@@ -144,9 +105,6 @@ public final class SchemaInitializer {
         if (!schema.existsType("DaliSnippet"))        schema.createDocumentType("DaliSnippet");
         // v22: DaliSnippetScript — full raw SQL text of the parsed file, one record per session.
         if (!schema.existsType("DaliSnippetScript"))  schema.createDocumentType("DaliSnippetScript");
-        if (!schema.existsType("DaliPerfStats"))      schema.createDocumentType("DaliPerfStats");
-        if (!schema.existsType("DaliResolutionLog"))  schema.createDocumentType("DaliResolutionLog");
-        if (!schema.existsType("DaliSchemaLog"))      schema.createDocumentType("DaliSchemaLog");
 
         // ── String properties (required for FULLTEXT indexes) ──
         // Namespace / canonical
@@ -283,15 +241,6 @@ public final class SchemaInitializer {
         // file text (up to hundreds of KB) which exceeds ArcadeDB's 255 KB page limit for
         // FULL_TEXT indexes, causing index corruption and multi-GB on-disk bloat (v25 fix).
 
-        // ── Meta version ──
-        if (!schema.existsType("DaliMeta")) schema.createDocumentType("DaliMeta");
-        db.transaction(() -> {
-            db.command("sql", "DELETE FROM DaliMeta");
-            db.newDocument("DaliMeta")
-                    .set("schema_version", SCHEMA_VERSION)
-                    .set("created_at", System.currentTimeMillis())
-                    .save();
-        });
 
         logger.info("ArcadeDB schema v{}: {} types created", SCHEMA_VERSION, c);
     }
