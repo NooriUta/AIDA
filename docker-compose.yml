@@ -43,6 +43,7 @@ services:
       ARCADE_USER:     ${ARCADEDB_USER:-root}
       ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
       QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
+      HEIMDALL_URL:    http://heimdall-backend:9093
     ports:
       - "18080:8080"
 
@@ -92,8 +93,8 @@ services:
   # ── heimdall-frontend (React — HEIMDALL Control Panel) ────────────────────
   heimdall-frontend:
     build:
-      context: ./frontends/heimdall-frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontends/heimdall-frontend/Dockerfile
     ports:
       - "25174:5174"
     depends_on:
@@ -155,11 +156,14 @@ services:
       FRIGG_DB:       heimdall
       FRIGG_USER:     root
       FRIGG_PASSWORD: playwithdata
+      COMPOSE_PROJECT_NAME: aida-root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       frigg:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9093 && echo -e 'GET /q/health HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/q/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

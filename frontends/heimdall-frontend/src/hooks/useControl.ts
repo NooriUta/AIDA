@@ -66,5 +66,23 @@ export function useControl() {
     }
   }, []);
 
-  return { loading, error, resetBuffer, saveSnapshot, listSnapshots };
+  const deleteSnapshot = useCallback(async (id: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${HEIMDALL_API}/control/snapshot/${encodeURIComponent(id)}`, {
+        method:  'DELETE',
+        headers: ADMIN_HEADERS,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { loading, error, resetBuffer, saveSnapshot, listSnapshots, deleteSnapshot };
 }

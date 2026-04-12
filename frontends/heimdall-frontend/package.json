@@ -4,12 +4,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@nivo/line": "^0.99.0",
     "@nivo/pie": "^0.99.0",
+    "@xyflow/react": "^12.10.2",
     "aida-shared": "file:../../packages/aida-shared",
     "i18next": "^23.11.5",
     "i18next-browser-languagedetector": "^8.0.0",
@@ -25,10 +28,15 @@
   },
   "devDependencies": {
     "@module-federation/vite": "^1.14.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^6.0.1",
+    "jsdom": "^25.0.1",
     "typescript": "^5.8.3",
-    "vite": "^8.0.8"
+    "vite": "^8.0.8",
+    "vitest": "^2.1.9"
   }
 }

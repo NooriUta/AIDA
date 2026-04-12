@@ -3,19 +3,23 @@
 // executed in that case).
 import './i18n/config';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
-import { Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { Routes, Route, Navigate, NavLink, Outlet } from 'react-router-dom';
 import { Globe, Paintbrush, Sun, Moon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LoginPage }      from './components/auth/LoginPage';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { ProfileModal }   from './components/profile/ProfileModal';
-import { useAuthStore }   from './stores/authStore';
+import { LoginPage }         from './components/auth/LoginPage';
+import { ProfileModal }      from './components/profile/ProfileModal';
+import { PresentationMode }  from './components/PresentationMode';
+import { useAuthStore }      from './stores/authStore';
+import { useDashboardStore } from './stores/dashboardStore';
 
+const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
+const DaliPage        = React.lazy(() => import('./pages/DaliPage'));
 const EventStreamPage = React.lazy(() => import('./pages/EventStreamPage'));
 const ControlsPage    = React.lazy(() => import('./pages/ControlsPage'));
+const UsersPage       = React.lazy(() => import('./pages/UsersPage'));
 
-// ── Design token palettes (mirrors ProfileModal + verdandi) ───────────────────
+// ── Design token palettes ─────────────────────────────────────────────────────
 const PALETTES: Array<{ id: string; key: string; accent: string }> = [
   { id: 'amber-forest', key: 'palette.amberForest', accent: '#e6a817' },
   { id: 'lichen',       key: 'palette.lichen',       accent: '#6db38c' },
@@ -314,10 +318,14 @@ function AvatarButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-// ── Protected layout ──────────────────────────────────────────────────────────
+// ── App layout (shell around the routed page) ─────────────────────────────────
+// Uses <Outlet /> — child routes are defined inline in App() below.
 function AppLayout() {
   const { t } = useTranslation();
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileOpen,      setProfileOpen]      = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
+  const events  = useDashboardStore(s => s.events);
+  const metrics = useDashboardStore(s => s.metrics);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -344,17 +352,37 @@ function AppLayout() {
         </span>
 
         {/* Nav links */}
+        <NavItem to="services"  label={t('nav.services')} />
         <NavItem to="dashboard" label={t('nav.dashboard')} />
+        <NavItem to="dali"      label={t('nav.dali')} />
         <NavItem to="events"    label={t('nav.events')} />
-        <NavItem to="controls"  label={t('nav.controls')} />
+        <NavItem to="demodebug" label={t('nav.demodebug')} />
+        <NavItem to="users"     label={t('nav.users')} />
 
-        {/* Right-side toolbar (pushed to right) */}
+        {/* Right-side toolbar */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <CmdKButton />
           <ToolbarDivider />
           <LanguageSwitcher />
           <PaletteDropdown />
           <ThemeToggle />
+          <button
+            onClick={() => setPresentationMode(true)}
+            title="Presentation mode (fullscreen)"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--bd)',
+              borderRadius: 'var(--seer-radius-md)',
+              padding: '5px 7px',
+              cursor: 'pointer',
+              color: 'var(--t2)',
+              display: 'flex', alignItems: 'center',
+              fontSize: '13px',
+              transition: 'border-color 0.12s, color 0.12s',
+            }}
+          >
+            ⛶
+          </button>
           <ToolbarDivider />
           <AvatarButton onClick={() => setProfileOpen(true)} />
         </div>
@@ -366,18 +394,28 @@ function AppLayout() {
             {t('status.loading')}
           </div>
         }>
-          <Routes>
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="events"    element={<EventStreamPage />} />
-            <Route path="controls"  element={<ControlsPage />} />
-            <Route path="*"         element={<Navigate to="dashboard" replace />} />
-          </Routes>
+          <Outlet />
         </Suspense>
       </main>
 
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
+      {presentationMode && (
+        <PresentationMode
+          events={events}
+          metrics={metrics}
+          onExit={() => setPresentationMode(false)}
+        />
+      )}
     </div>
   );
+}
+
+// ── Protected layout route ────────────────────────────────────────────────────
+// Renders <Outlet /> when authenticated, redirects to login otherwise.
+function ProtectedRoute() {
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  if (!isAuthenticated) return <Navigate to="login" replace />;
+  return <Outlet />;
 }
 
 // ── Session check on mount ────────────────────────────────────────────────────
@@ -392,18 +430,29 @@ function SessionGuard({ children }: { children: React.ReactNode }) {
  *
  * Does NOT include BrowserRouter — the Router context is provided by the
  * host (Shell) when running as a remote, or by main.tsx when running standalone.
- * Route paths are RELATIVE so they work under both "/" and "/heimdall/*".
+ *
+ * Uses React Router v6 inline nested routes so NavLinks resolve correctly
+ * in both standalone (base "/") and Shell (base "/heimdall/") contexts.
  */
 export default function App() {
   return (
     <SessionGuard>
       <Routes>
         <Route path="login" element={<LoginPage />} />
-        <Route path="*" element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        } />
+
+        {/* Protected area: check auth, then render AppLayout with Outlet */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<Navigate to="services" replace />} />
+            <Route path="services"  element={<ServicesPage />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="dali"      element={<DaliPage />} />
+            <Route path="events"    element={<EventStreamPage />} />
+            <Route path="demodebug" element={<ControlsPage />} />
+            <Route path="users"     element={<UsersPage />} />
+            <Route path="*"         element={<Navigate to="services" replace />} />
+          </Route>
+        </Route>
       </Routes>
     </SessionGuard>
   );

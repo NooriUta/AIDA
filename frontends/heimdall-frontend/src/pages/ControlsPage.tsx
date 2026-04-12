@@ -65,7 +65,6 @@ function Input({ value, onChange, placeholder }: {
         fontSize:     '13px',
         fontFamily:   'var(--mono)',
         width:        '260px',
-        outline:      'none',
       }}
     />
   );
@@ -73,7 +72,7 @@ function Input({ value, onChange, placeholder }: {
 
 export default function ControlsPage() {
   const { t } = useTranslation();
-  const { loading, error, resetBuffer, saveSnapshot, listSnapshots } = useControl();
+  const { loading, error, resetBuffer, saveSnapshot, listSnapshots, deleteSnapshot } = useControl();
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshots, setSnapshots]       = useState<SnapshotInfo[]>([]);
   const [resetDone, setResetDone]       = useState(false);
@@ -97,6 +96,15 @@ export default function ControlsPage() {
       setSaveDone(true);
       setSnapshotName('');
       setTimeout(() => setSaveDone(false), 3000);
+      const updated = await listSnapshots();
+      setSnapshots(updated);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm(t('controls.deleteConfirm'))) return;
+    const ok = await deleteSnapshot(id);
+    if (ok) {
       const updated = await listSnapshots();
       setSnapshots(updated);
     }
@@ -160,6 +168,7 @@ export default function ControlsPage() {
                 <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colEvents')}</th>
                 <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colTimestamp')}</th>
                 <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colId')}</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>{t('controls.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -171,6 +180,25 @@ export default function ControlsPage() {
                     {new Date(s.timestamp).toISOString().replace('T', ' ').substring(0, 19)}
                   </td>
                   <td style={{ padding: '6px 8px', color: 'var(--t3)', fontSize: '11px' }}>{s.id}</td>
+                  <td style={{ padding: '6px 8px' }}>
+                    <button
+                      onClick={() => { void handleDelete(s.id); }}
+                      disabled={loading}
+                      style={{
+                        padding:      '2px 8px',
+                        background:   'rgba(248,81,73,0.08)',
+                        border:       '1px solid var(--danger)',
+                        borderRadius: 'var(--seer-radius-sm)',
+                        color:        'var(--danger)',
+                        fontSize:     '12px',
+                        fontFamily:   'var(--font)',
+                        cursor:       loading ? 'not-allowed' : 'pointer',
+                        opacity:      loading ? 0.5 : 1,
+                      }}
+                    >
+                      {t('controls.deleteButton')}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

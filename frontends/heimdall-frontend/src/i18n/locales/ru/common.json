@@ -11,9 +11,12 @@
     ]
   },
   "nav": {
+    "services":  "Сервисы",
     "dashboard": "Дашборд",
+    "dali":      "Dali",
     "events":    "Поток событий",
-    "controls":  "Контроль"
+    "demodebug": "DEMODEBUG",
+    "users":     "Пользователи"
   },
   "auth": {
     "login":    "Войти",
@@ -62,7 +65,9 @@
   },
   "dashboard": {
     "throughput":   "Пропускная способность (событий / сек)",
-    "recentEvents": "Последние события ({{count}})"
+    "recentEvents": "Последние события ({{count}})",
+    "recentErrors": "Последние ошибки ({{count}})",
+    "servicesStrip": "Сервисы"
   },
   "eventLog": {
     "time":      "Время",
@@ -77,9 +82,30 @@
     "filter":    "Фильтр",
     "component": "Компонент",
     "level":     "Уровень",
+    "sessionId": "Session ID",
     "all":       "Все",
     "clear":     "Очистить",
+    "pause":     "Пауза",
+    "paused":    "НА ПАУЗЕ",
+    "resume":    "Возобновить",
     "events":    "событий"
+  },
+  "services": {
+    "title":        "Сервисы",
+    "up":           "UP",
+    "degraded":     "ДЕГРАДАЦИЯ",
+    "down":         "DOWN",
+    "unknown":      "НЕИЗВЕСТНО",
+    "loading":      "Проверяем…",
+    "responseTime": "{{ms}}мс",
+    "viewEvents":        "События →",
+    "underConstruction": "В РАЗРАБОТКЕ",
+    "restart":           "Перезапуск",
+    "restartOk":         "✓ Перезапускается…",
+    "restartFail":       "✗ Ошибка"
+  },
+  "stub": {
+    "comingSoon": "Скоро"
   },
   "controls": {
     "resetTitle":       "Сброс кольцевого буфера и метрик",
@@ -98,7 +124,10 @@
     "colName":          "Имя",
     "colEvents":        "Событий",
     "colTimestamp":     "Время",
-    "colId":            "ID"
+    "colId":            "ID",
+    "colActions":       "Действия",
+    "deleteButton":     "Удалить",
+    "deleteConfirm":    "Удалить снапшот? Действие необратимо."
   },
   "profile": {
     "title":         "Профиль",
