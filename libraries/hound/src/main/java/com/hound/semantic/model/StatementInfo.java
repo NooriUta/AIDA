@@ -44,6 +44,10 @@ public class StatementInfo {
     // G5: ordered column list from INSERT INTO t (col1, col2, col3)
     private final List<String> insertTargetColumns = new ArrayList<>();
 
+    // G6-EXT: collection variable names referenced in VALUES even when explicit column list present
+    // Used by RemoteWriter/EmbeddedWriter to build RECORD_USED_IN edge for FORALL INSERT patterns
+    private final Set<String> bulkCollectSources = new LinkedHashSet<>();
+
     // G3-MERGE: ordered column refs from WHEN NOT MATCHED INSERT (col1, col2, ...) — for VALUES positional binding
     private final List<String> mergeInsertColumnOrder = new ArrayList<>();
 
@@ -307,5 +311,15 @@ public class StatementInfo {
 
     /** Ordered list of explicit INSERT target columns; empty if none declared. */
     public List<String> getInsertTargetColumns() { return insertTargetColumns; }
+
+    // ═══════ G6-EXT: bulk-collect source tracking for FORALL INSERT ═══════
+
+    /** Records a collection variable name referenced in VALUES (even with explicit column list). */
+    public void addBulkCollectSource(String collectionAlias) {
+        if (collectionAlias != null) bulkCollectSources.add(collectionAlias.toUpperCase());
+    }
+
+    /** Collection variable names whose fields appear in this INSERT's VALUES clause. */
+    public Set<String> getBulkCollectSources() { return Collections.unmodifiableSet(bulkCollectSources); }
 }
  

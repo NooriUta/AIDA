@@ -320,6 +320,19 @@ public class JsonlBatchBuilder {
             }
         }
 
+        // 9c. DaliRecord (G6: BULK COLLECT targets)
+        for (var e : str.getRecords().entrySet()) {
+            RecordInfo rec = e.getValue();
+            b.appendVertex("DaliRecord", rec.getGeoid(), mapOf(
+                    "session_id", sid,
+                    "record_geoid", rec.getGeoid(),
+                    "record_name", rec.getVarName(),
+                    "routine_geoid", rec.getRoutineGeoid(),
+                    "source_stmt_geoid", rec.getSourceStatementGeoid(),
+                    "fields", String.join(",", rec.getFields())
+            ));
+        }
+
         // 10. DaliAtom
         // Build atomId map for edge creation later
         // Mirror saveRemote(): insert ALL atom vertices (even for containers without a statement vertex).
@@ -490,6 +503,23 @@ public class JsonlBatchBuilder {
                 if (tg != null)
                     b.appendEdge("AFFECTED_COL_REF_TABLE", acExtId, tg, sidProps);
                 acIdx++;
+            }
+        }
+
+        // Structural: BULK_COLLECTS_INTO, RECORD_USED_IN (G6: DaliRecord edges)
+        for (var e : str.getRecords().entrySet()) {
+            RecordInfo rec = e.getValue();
+            String recGeoid = rec.getGeoid();
+            // DaliStatement(cursor SELECT) → BULK_COLLECTS_INTO → DaliRecord
+            if (rec.getSourceStatementGeoid() != null)
+                b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
+            // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT)
+            for (var stmtEntry : str.getStatements().entrySet()) {
+                if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
+                boolean usesRecord = stmtEntry.getValue().getAffectedColumns().stream().anyMatch(
+                        ac -> rec.getVarName().equals(ac.get("dataset_alias")));
+                if (usesRecord)
+                    b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
             }
         }
 
@@ -935,6 +965,19 @@ public class JsonlBatchBuilder {
             }
         }
 
+        // 7c. DaliRecord (G6: BULK COLLECT targets)
+        for (var e : str.getRecords().entrySet()) {
+            RecordInfo rec = e.getValue();
+            b.appendVertex("DaliRecord", rec.getGeoid(), mapOf(
+                    "session_id", sid,
+                    "record_geoid", rec.getGeoid(),
+                    "record_name", rec.getVarName(),
+                    "routine_geoid", rec.getRoutineGeoid(),
+                    "source_stmt_geoid", rec.getSourceStatementGeoid(),
+                    "fields", String.join(",", rec.getFields())
+            ));
+        }
+
         // 8. DaliAtom
         Map<String, String> atomIdMap = new LinkedHashMap<>();
         for (var container : result.getAtoms().entrySet()) {
@@ -1088,6 +1131,21 @@ public class JsonlBatchBuilder {
                 if (tg != null)
                     b.appendEdge("AFFECTED_COL_REF_TABLE", acExtId, tg, sidProps);
                 acIdx++;
+            }
+        }
+
+        // BULK_COLLECTS_INTO, RECORD_USED_IN (G6: DaliRecord edges)
+        for (var e : str.getRecords().entrySet()) {
+            RecordInfo rec = e.getValue();
+            String recGeoid = rec.getGeoid();
+            if (rec.getSourceStatementGeoid() != null)
+                b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
+            for (var stmtEntry : str.getStatements().entrySet()) {
+                if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
+                boolean usesRecord = stmtEntry.getValue().getAffectedColumns().stream().anyMatch(
+                        ac -> rec.getVarName().equals(ac.get("dataset_alias")));
+                if (usesRecord)
+                    b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
             }
         }
 

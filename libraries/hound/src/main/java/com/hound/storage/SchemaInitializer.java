@@ -81,6 +81,8 @@ public final class SchemaInitializer {
         c += vtx(schema, "DaliParameter");
         c += vtx(schema, "DaliVariable");
         c += vtx(schema, "DaliAffectedColumn");
+        c += vtx(schema, "DaliRecord");
+        c += vtx(schema, "DaliRecordField");
 
         // ── Edge types ──
         for (String e : new String[]{
@@ -101,7 +103,11 @@ public final class SchemaInitializer {
                 // affected columns
                 "HAS_AFFECTED_COL", "AFFECTED_COL_REF_TABLE",
                 // join sources
-                "JOIN_SOURCE_TABLE", "JOIN_TARGET_TABLE"
+                "JOIN_SOURCE_TABLE", "JOIN_TARGET_TABLE",
+                // G6: BULK COLLECT record edges
+                "BULK_COLLECTS_INTO", "RECORD_USED_IN",
+                // G6: Record field mapping
+                "HAS_RECORD_FIELD", "FIELD_MAPS_TO"
         }) { c += edg(schema, e); }
 
         // ── Document types ──
@@ -215,7 +221,7 @@ public final class SchemaInitializer {
         for (String t : new String[]{
                 "DaliStatement", "DaliRoutine", "DaliAtom", "DaliJoin",
                 "DaliTable", "DaliColumn", "DaliParameter", "DaliVariable",
-                "DaliOutputColumn", "DaliAffectedColumn"
+                "DaliOutputColumn", "DaliAffectedColumn", "DaliRecord", "DaliRecordField"
         }) {
             idx(db, "CREATE INDEX IF NOT EXISTS ON " + t + " (session_id) NOTUNIQUE NULL_STRATEGY SKIP");
         }

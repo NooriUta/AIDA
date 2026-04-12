@@ -44,6 +44,7 @@ final class RemoteSchemaCommands {
                 "CREATE VERTEX TYPE DaliParameter IF NOT EXISTS",
                 "CREATE VERTEX TYPE DaliVariable IF NOT EXISTS",
                 "CREATE VERTEX TYPE DaliAffectedColumn IF NOT EXISTS",
+                "CREATE VERTEX TYPE DaliRecord IF NOT EXISTS",
 
                 // Edge types — namespace hierarchy
                 "CREATE EDGE TYPE BELONGS_TO_APP IF NOT EXISTS",
@@ -77,6 +78,9 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE FILTER_FLOW IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_FLOW IF NOT EXISTS",
                 "CREATE EDGE TYPE UNION_FLOW IF NOT EXISTS",
+                // Edge types — record (BULK COLLECT)
+                "CREATE EDGE TYPE BULK_COLLECTS_INTO IF NOT EXISTS",
+                "CREATE EDGE TYPE RECORD_USED_IN IF NOT EXISTS",
                 // Edge types — affected columns + join sources
                 "CREATE EDGE TYPE HAS_AFFECTED_COL IF NOT EXISTS",
                 "CREATE EDGE TYPE AFFECTED_COL_REF_TABLE IF NOT EXISTS",
@@ -178,6 +182,13 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliAffectedColumn.resolution_status IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAffectedColumn.type_affect IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAffectedColumn.order_affect IF NOT EXISTS INTEGER",
+                // DaliRecord (G6: BULK COLLECT target)
+                "CREATE PROPERTY DaliRecord.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecord.record_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecord.record_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecord.routine_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecord.source_stmt_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecord.fields IF NOT EXISTS STRING",
                 // DaliSnippet (v22: +line_start, +line_end)
                 "CREATE PROPERTY DaliSnippet.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.session_id IF NOT EXISTS STRING",
@@ -216,6 +227,8 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliVariable (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliOutputColumn (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliAffectedColumn (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliRecord (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliRecord (record_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliStatement (short_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippetScript (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
 
