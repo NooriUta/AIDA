@@ -89,17 +89,20 @@ services:
 
   # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────
   # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с HoundArcade (:2480).
-  # Dev: localhost:2481 | Docker: frigg:2480 (внутренняя сеть) / host :12481
+  # HoundArcade = :2480 (hound data)
+  # FRIGG       = :2481 dev / :2481 Docker (внутренняя сеть) / host :12481
   frigg:
     image: arcadedata/arcadedb:26.3.2
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=playwithdata"
+      JAVA_OPTS: >-
+        -Darcadedb.server.rootPassword=playwithdata
+        -Darcadedb.server.httpPort=2481
     ports:
-      - "12481:2480"
+      - "12481:2481"
     volumes:
       - frigg_data:/home/arcadedb/databases
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 200"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2481 && echo -e 'GET /api/v1/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 200"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -116,7 +119,7 @@ services:
       - "19093:9093"
     environment:
       QUARKUS_HTTP_PORT: "9093"
-      QUARKUS_REST_CLIENT_FRIGG_API_URL: http://frigg:2480
+      QUARKUS_REST_CLIENT_FRIGG_API_URL: http://frigg:2481
       FRIGG_DB:       heimdall
       FRIGG_USER:     root
       FRIGG_PASSWORD: playwithdata
