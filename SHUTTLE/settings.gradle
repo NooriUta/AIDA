@@ -1,3 +1,0 @@
-// Standalone settings — used only when running Gradle directly from SHUTTLE/.
-// When running from monorepo root, this file is ignored.
-rootProject.name = 'SHUTTLE'

@@ -1,0 +1,10 @@
+// Standalone settings — used when opening this project directly in IDEA.
+// When running from monorepo root (aida-root/), this file is ignored.
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'shuttle'

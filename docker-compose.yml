@@ -1,5 +1,5 @@
 ###############################################################################
-# VERDANDI LOOM — Full-stack Docker Compose
+# AIDA — Full-stack Docker Compose
 # Services: Keycloak · SHUTTLE · Chur · verdandi
 # ArcadeDB — external container (HoundArcade), joined via shared network
 #
@@ -9,7 +9,7 @@
 
 networks:
   default:
-    name: verdandi_net
+    name: aida_net
 
 services:
   # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ services:
     ports:
       - "18180:8180"
     volumes:
-      - ./keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
+      - ./infra/keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
       interval: 10s
@@ -35,7 +35,7 @@ services:
   # ── SHUTTLE (Quarkus GraphQL API) ──────────────────────────────────────────
   shuttle:
     build:
-      context: ./SHUTTLE
+      context: ./services/shuttle
       dockerfile: Dockerfile
     environment:
       QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://HoundArcade:2480}
@@ -49,7 +49,7 @@ services:
   # ── Chur (auth gateway / BFF) ──────────────────────────────────────────────
   chur:
     build:
-      context: ./Chur
+      context: ./bff/chur
       dockerfile: Dockerfile
     environment:
       NODE_ENV:              ${NODE_ENV:-development}
@@ -79,7 +79,7 @@ services:
   # ── verdandi (React frontend) ──────────────────────────────────────────────
   verdandi:
     build:
-      context: ./verdandi
+      context: ./frontends/verdandi
       dockerfile: Dockerfile
     ports:
       - "15173:5173"
