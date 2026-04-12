@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "id": "tbl-users",
+      "type": "DaliTable",
+      "data": {
+        "label": "users",
+        "nodeType": "DaliTable",
+        "childrenAvailable": true,
+        "schema": "public",
+        "metadata": {},
+        "columns": [
+          { "id": "col-usr-id",         "name": "id",         "type": "uuid",         "isPrimaryKey": true  },
+          { "id": "col-usr-email",      "name": "email",      "type": "varchar(255)", "isPrimaryKey": false },
+          { "id": "col-usr-name",       "name": "name",       "type": "varchar(100)", "isPrimaryKey": false },
+          { "id": "col-usr-created_at", "name": "created_at", "type": "timestamptz",  "isPrimaryKey": false },
+          { "id": "col-usr-updated_at", "name": "updated_at", "type": "timestamptz",  "isPrimaryKey": false }
+        ]
+      }
+    },
+    {
+      "id": "tbl-orders",
+      "type": "DaliTable",
+      "data": {
+        "label": "orders",
+        "nodeType": "DaliTable",
+        "childrenAvailable": true,
+        "schema": "public",
+        "metadata": {},
+        "columns": [
+          { "id": "col-ord-id",           "name": "id",           "type": "uuid",         "isPrimaryKey": true,  "isForeignKey": false },
+          { "id": "col-ord-user_id",      "name": "user_id",      "type": "uuid",         "isPrimaryKey": false, "isForeignKey": true  },
+          { "id": "col-ord-status",       "name": "status",       "type": "varchar(20)",  "isPrimaryKey": false },
+          { "id": "col-ord-total_amount", "name": "total_amount", "type": "numeric(10,2)","isPrimaryKey": false },
+          { "id": "col-ord-created_at",   "name": "created_at",   "type": "timestamptz",  "isPrimaryKey": false },
+          { "id": "col-ord-updated_at",   "name": "updated_at",   "type": "timestamptz",  "isPrimaryKey": false }
+        ]
+      }
+    },
+    {
+      "id": "tbl-products",
+      "type": "DaliTable",
+      "data": {
+        "label": "products",
+        "nodeType": "DaliTable",
+        "childrenAvailable": true,
+        "schema": "public",
+        "metadata": {},
+        "columns": [
+          { "id": "col-prd-id",          "name": "id",          "type": "uuid",         "isPrimaryKey": true  },
+          { "id": "col-prd-name",        "name": "name",        "type": "varchar(200)", "isPrimaryKey": false },
+          { "id": "col-prd-description", "name": "description", "type": "text",         "isPrimaryKey": false },
+          { "id": "col-prd-price",       "name": "price",       "type": "numeric(10,2)","isPrimaryKey": false },
+          { "id": "col-prd-stock_count", "name": "stock_count", "type": "int4",         "isPrimaryKey": false }
+        ]
+      }
+    },
+    {
+      "id": "tbl-order-items",
+      "type": "DaliTable",
+      "data": {
+        "label": "order_items",
+        "nodeType": "DaliTable",
+        "childrenAvailable": true,
+        "schema": "public",
+        "metadata": {},
+        "columns": [
+          { "id": "col-oi-id",          "name": "id",          "type": "uuid",         "isPrimaryKey": true,  "isForeignKey": false },
+          { "id": "col-oi-order_id",    "name": "order_id",    "type": "uuid",         "isPrimaryKey": false, "isForeignKey": true  },
+          { "id": "col-oi-product_id",  "name": "product_id",  "type": "uuid",         "isPrimaryKey": false, "isForeignKey": true  },
+          { "id": "col-oi-quantity",    "name": "quantity",    "type": "int4",         "isPrimaryKey": false },
+          { "id": "col-oi-unit_price",  "name": "unit_price",  "type": "numeric(10,2)","isPrimaryKey": false },
+          { "id": "col-oi-total_price", "name": "total_price", "type": "numeric(10,2)","isPrimaryKey": false }
+        ]
+      }
+    },
+    {
+      "id": "tbl-payments",
+      "type": "DaliTable",
+      "data": {
+        "label": "payments",
+        "nodeType": "DaliTable",
+        "childrenAvailable": true,
+        "schema": "public",
+        "metadata": {},
+        "columns": [
+          { "id": "col-pay-id",             "name": "id",             "type": "uuid",         "isPrimaryKey": true,  "isForeignKey": false },
+          { "id": "col-pay-order_id",       "name": "order_id",       "type": "uuid",         "isPrimaryKey": false, "isForeignKey": true  },
+          { "id": "col-pay-amount",         "name": "amount",         "type": "numeric(10,2)","isPrimaryKey": false },
+          { "id": "col-pay-status",         "name": "status",         "type": "varchar(20)",  "isPrimaryKey": false },
+          { "id": "col-pay-payment_method", "name": "payment_method", "type": "varchar(50)",  "isPrimaryKey": false },
+          { "id": "col-pay-processed_at",   "name": "processed_at",   "type": "timestamptz",  "isPrimaryKey": false }
+        ]
+      }
+    },
+    {
+      "id": "tbl-addresses",
+      "type": "DaliTable",
+      "data": {
+        "label": "addresses",
+        "nodeType": "DaliTable",
+        "childrenAvailable": true,
+        "schema": "public",
+        "metadata": {},
+        "columns": [
+          { "id": "col-adr-id",       "name": "id",       "type": "uuid",         "isPrimaryKey": true,  "isForeignKey": false },
+          { "id": "col-adr-user_id",  "name": "user_id",  "type": "uuid",         "isPrimaryKey": false, "isForeignKey": true  },
+          { "id": "col-adr-street",   "name": "street",   "type": "varchar(200)", "isPrimaryKey": false },
+          { "id": "col-adr-city",     "name": "city",     "type": "varchar(100)", "isPrimaryKey": false },
+          { "id": "col-adr-country",  "name": "country",  "type": "char(2)",      "isPrimaryKey": false },
+          { "id": "col-adr-zip_code", "name": "zip_code", "type": "varchar(20)",  "isPrimaryKey": false }
+        ]
+      }
+    },
+    {
+      "id": "rtn-get-user-orders",
+      "type": "DaliRoutine",
+      "data": {
+        "label": "get_user_orders",
+        "nodeType": "DaliRoutine",
+        "childrenAvailable": false,
+        "language": "SQL",
+        "metadata": { "description": "Fetches paginated orders for a user" }
+      }
+    },
+    {
+      "id": "rtn-calc-total",
+      "type": "DaliRoutine",
+      "data": {
+        "label": "calculate_order_total",
+        "nodeType": "DaliRoutine",
+        "childrenAvailable": false,
+        "language": "SQL",
+        "metadata": { "description": "Recalculates order total from items" }
+      }
+    },
+    {
+      "id": "rtn-sync-inventory",
+      "type": "DaliRoutine",
+      "data": {
+        "label": "sync_inventory",
+        "nodeType": "DaliRoutine",
+        "childrenAvailable": false,
+        "language": "SQL",
+        "metadata": { "description": "Syncs product stock counts" }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e-usr-ord",    "source": "tbl-users",      "target": "tbl-orders",       "type": "READS_FROM" },
+    { "id": "e-ord-items",  "source": "tbl-orders",     "target": "tbl-order-items",  "type": "READS_FROM" },
+    { "id": "e-prd-items",  "source": "tbl-products",   "target": "tbl-order-items",  "type": "READS_FROM" },
+    { "id": "e-ord-pay",    "source": "tbl-orders",     "target": "tbl-payments",     "type": "READS_FROM" },
+    { "id": "e-usr-adr",    "source": "tbl-users",      "target": "tbl-addresses",    "type": "READS_FROM" },
+    { "id": "e-rtn-r-usr",  "source": "rtn-get-user-orders", "target": "tbl-users",   "type": "READS_FROM" },
+    { "id": "e-rtn-r-ord",  "source": "rtn-get-user-orders", "target": "tbl-orders",  "type": "READS_FROM" },
+    { "id": "e-rtn-w-ord",  "source": "rtn-calc-total",      "target": "tbl-orders",  "type": "WRITES_TO"  },
+    { "id": "e-rtn-r-oi",   "source": "rtn-calc-total",      "target": "tbl-order-items", "type": "READS_FROM" },
+    { "id": "e-rtn-w-prd",  "source": "rtn-sync-inventory",  "target": "tbl-products","type": "WRITES_TO"  }
+  ],
+  "metadata": {
+    "level": "L2",
+    "scope": "schema-public",
+    "totalNodes": 9,
+    "totalEdges": 10
+  }
+}

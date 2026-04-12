@@ -1,0 +1,33 @@
+// ─── Shared constants — single source of truth ────────────────────────────────
+// Import from here instead of duplicating magic numbers across files.
+
+/** Layout — ELK & grid sizing */
+export const LAYOUT = {
+  NODE_WIDTH:            400,
+  NODE_HEIGHT_BASE:       80,
+  COL_ROW_HEIGHT:         22,
+  GRID_SPACING:           60,
+  LARGE_GRAPH_THRESHOLD: 500,
+  ELK_BETWEEN_LAYERS:   140,
+  ELK_NODE_SPACING:      60,
+  ELK_COMPONENT_SPACING:  80,
+  TIMEOUT_MS:         15_000,
+} as const;
+
+/** Transform — explore graph processing */
+export const TRANSFORM = {
+  L2_MAX_COLS:       5,
+  MAX_PARTIAL_COLS: 20,
+  EDGE_CURVATURE:   0.15,
+} as const;
+
+/** Canvas — React Flow viewport */
+export const CANVAS = {
+  FIT_VIEW_DURATION: 500,
+  FIT_VIEW_PADDING:  0.15,
+  FIT_VIEW_MAX_ZOOM: 2,
+  LOD_TIMEOUT:       16,
+} as const;
+
+/** SQL operation categories */
+export const WRITE_OPS = new Set(['INSERT', 'UPDATE', 'MERGE'] as const);

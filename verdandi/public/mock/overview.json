@@ -1,0 +1,108 @@
+{
+  "nodes": [
+    {
+      "id": "db-seer-prod",
+      "type": "DaliDatabase",
+      "data": {
+        "label": "seer_prod",
+        "nodeType": "DaliDatabase",
+        "childrenAvailable": true,
+        "metadata": { "host": "localhost", "port": 5432, "engine": "ArcadeDB" }
+      }
+    },
+    {
+      "id": "schema-public",
+      "type": "DaliSchema",
+      "data": {
+        "label": "public",
+        "nodeType": "DaliSchema",
+        "childrenAvailable": true,
+        "tablesCount": 12,
+        "routinesCount": 8,
+        "metadata": {}
+      }
+    },
+    {
+      "id": "schema-analytics",
+      "type": "DaliSchema",
+      "data": {
+        "label": "analytics",
+        "nodeType": "DaliSchema",
+        "childrenAvailable": true,
+        "tablesCount": 6,
+        "routinesCount": 3,
+        "metadata": {}
+      }
+    },
+    {
+      "id": "pkg-etl",
+      "type": "DaliPackage",
+      "data": {
+        "label": "pkg_etl",
+        "nodeType": "DaliPackage",
+        "childrenAvailable": true,
+        "routinesCount": 4,
+        "metadata": { "description": "ETL pipeline routines" }
+      }
+    },
+    {
+      "id": "pkg-auth",
+      "type": "DaliPackage",
+      "data": {
+        "label": "pkg_auth",
+        "nodeType": "DaliPackage",
+        "childrenAvailable": true,
+        "routinesCount": 6,
+        "metadata": { "description": "Authentication & authorization" }
+      }
+    },
+    {
+      "id": "pkg-orders",
+      "type": "DaliPackage",
+      "data": {
+        "label": "pkg_orders",
+        "nodeType": "DaliPackage",
+        "childrenAvailable": true,
+        "routinesCount": 8,
+        "metadata": { "description": "Order management routines" }
+      }
+    },
+    {
+      "id": "pkg-reporting",
+      "type": "DaliPackage",
+      "data": {
+        "label": "pkg_reporting",
+        "nodeType": "DaliPackage",
+        "childrenAvailable": true,
+        "routinesCount": 5,
+        "metadata": { "description": "Reporting & analytics" }
+      }
+    },
+    {
+      "id": "pkg-inventory",
+      "type": "DaliPackage",
+      "data": {
+        "label": "pkg_inventory",
+        "nodeType": "DaliPackage",
+        "childrenAvailable": true,
+        "routinesCount": 3,
+        "metadata": { "description": "Inventory management" }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e-db-pub",  "source": "db-seer-prod",    "target": "schema-public",    "type": "CONTAINS_TABLE" },
+    { "id": "e-db-ana",  "source": "db-seer-prod",    "target": "schema-analytics", "type": "CONTAINS_TABLE" },
+    { "id": "e-pub-etl", "source": "schema-public",   "target": "pkg-etl",          "type": "CONTAINS_PACKAGE" },
+    { "id": "e-pub-auth","source": "schema-public",   "target": "pkg-auth",         "type": "CONTAINS_PACKAGE" },
+    { "id": "e-pub-ord", "source": "schema-public",   "target": "pkg-orders",       "type": "CONTAINS_PACKAGE" },
+    { "id": "e-ana-rep", "source": "schema-analytics","target": "pkg-reporting",    "type": "CONTAINS_PACKAGE" },
+    { "id": "e-ana-inv", "source": "schema-analytics","target": "pkg-inventory",    "type": "CONTAINS_PACKAGE" }
+  ],
+  "metadata": {
+    "level": "L1",
+    "scope": "db-seer-prod",
+    "totalNodes": 8,
+    "totalEdges": 7
+  }
+}

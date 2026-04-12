@@ -1,0 +1,88 @@
+###############################################################################
+# VERDANDI LOOM — Full-stack Docker Compose
+# Services: Keycloak · SHUTTLE · Chur · verdandi
+# ArcadeDB — external container (HoundArcade), joined via shared network
+#
+# Host ports offset +10000 from dev to avoid conflicts:
+#   Keycloak  18180    SHUTTLE  18080    Chur  13000    verdandi  15173
+###############################################################################
+
+networks:
+  default:
+    name: verdandi_net
+
+services:
+  # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8180"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "18180:8180"
+    volumes:
+      - ./keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
+
+  # ── SHUTTLE (Quarkus GraphQL API) ──────────────────────────────────────────
+  shuttle:
+    build:
+      context: ./SHUTTLE
+      dockerfile: Dockerfile
+    environment:
+      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://HoundArcade:2480}
+      ARCADE_DB:       ${ARCADEDB_DB:-hound}
+      ARCADE_USER:     ${ARCADEDB_USER:-root}
+      ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
+    ports:
+      - "18080:8080"
+
+  # ── Chur (auth gateway / BFF) ──────────────────────────────────────────────
+  chur:
+    build:
+      context: ./Chur
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV:              ${NODE_ENV:-development}
+      PORT:                  "3000"
+      CORS_ORIGIN:           "http://localhost:15173"
+      # Keycloak (internal network — no port offset)
+      KEYCLOAK_URL:          http://keycloak:8180
+      KEYCLOAK_REALM:        seer
+      KEYCLOAK_CLIENT_ID:    verdandi-bff
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-verdandi-bff-secret-dev}
+      COOKIE_SECRET:         ${COOKIE_SECRET:-dev-cookie-secret}
+      # ArcadeDB (external container)
+      ARCADEDB_URL:          ${ARCADEDB_URL:-http://HoundArcade:2480}
+      ARCADEDB_DB:           ${ARCADEDB_DB:-hound}
+      ARCADEDB_USER:         ${ARCADEDB_USER:-root}
+      ARCADEDB_PASS:         ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      # SHUTTLE (internal network)
+      LINEAGE_API_URL:       http://shuttle:8080
+    ports:
+      - "13000:3000"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      shuttle:
+        condition: service_started
+
+  # ── verdandi (React frontend) ──────────────────────────────────────────────
+  verdandi:
+    build:
+      context: ./verdandi
+      dockerfile: Dockerfile
+    ports:
+      - "15173:5173"
+    depends_on:
+      chur:
+        condition: service_started

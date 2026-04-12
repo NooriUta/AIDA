@@ -1,0 +1,745 @@
+{
+  "app": {
+    "title": "Seiðr Studio",
+    "tagline": "Make invisible data dependencies visible.",
+    "slogans": [
+      "See what moves your data.",
+      "Every dependency. Made visible.",
+      "Follow the thread. Find the truth.",
+      "Lineage without guesswork.",
+      "Data tells its own story.",
+      "Know where it comes from."
+    ]
+  },
+  "nav": {
+    "loom": "LOOM",
+    "knot": "KNOT",
+    "anvil": "ANVIL",
+    "urd": "URD",
+    "skuld": "SKULD",
+    "comingSoon": "Coming in {{horizon}}",
+    "verdandiDesc": "Present — lineage analysis",
+    "urdDesc": "Past — change history",
+    "skuldDesc": "Future — impact prediction"
+  },
+  "auth": {
+    "login": "Sign In",
+    "logout": "Log Out",
+    "username": "Username",
+    "password": "Password",
+    "signingIn": "Signing in…",
+    "error": {
+      "invalid": "Invalid username or password.",
+      "required": "This field is required",
+      "server": "Server error. Please try again.",
+      "network": "Cannot connect to server. Check your network.",
+      "rateLimit": "Too many login attempts. Try again in 15 minutes."
+    }
+  },
+  "canvas": {
+    "nodes": "nodes",
+    "edges": "edges",
+    "level": "Level",
+    "zoom": "Zoom",
+    "computingLayout": "computing layout…",
+    "nodeCount": "{{count}} nodes",
+    "hasMore": "Showing {{count}} nodes — graph truncated. Narrow your filter."
+  },
+  "breadcrumb": { "overview": "Overview" },
+  "theme": { "dark": "Dark", "light": "Light" },
+  "palette": {
+    "title": "Palette",
+    "amberForest": "Amber Forest",
+    "lichen": "Lichen",
+    "slate": "Slate",
+    "juniper": "Juniper",
+    "warmDark": "Warm Dark"
+  },
+  "language": { "en": "English", "ru": "Русский" },
+  "status": {
+    "loading": "Loading…",
+    "error": "Failed to load data",
+    "empty": "No nodes found",
+    "unauthorized": "Session expired. Please sign in again.",
+    "forbidden": "Access denied",
+    "graphLoading": "Building graph…",
+    "noData": "No lineage data for this object"
+  },
+
+  "toolbar": {
+    "startObject":     "Start object",
+    "changeObject":    "Change",
+    "table":           "Table",
+    "allTables":       "all tables",
+    "stmt":            "Transform",
+    "allStmts":        "all transforms",
+    "field":           "Field",
+    "allColumns":      "all columns",
+    "depth":           "Depth",
+    "upstream":        "Upstream",
+    "downstream":      "Downstream",
+    "tableLevelView":  "Table-level view",
+    "columnLevelView": "Column-level view",
+    "showCfEdges":     "Column flow",
+    "hideCfEdges":     "Column flow",
+    "searchPlaceholder": "Search…",
+    "noMatches":       "No matches",
+    "clearFilter":     "Clear filter",
+    "depthSteps":      "{{n}} steps",
+    "depthInfinity":   "∞ steps"
+  },
+
+  "search": {
+    "placeholder": "tables, columns, routines…",
+    "noResults": "Nothing found",
+    "resultCount": "{{count}} results",
+    "filters": {
+      "all": "All",
+      "tables": "Tables",
+      "routines": "Routines",
+      "statements": "Statements",
+      "columns": "Columns",
+      "databases": "Databases",
+      "applications": "Applications"
+    },
+    "sections": {
+      "sources": "Sources",
+      "transformation": "Transformation",
+      "target": "Target table",
+      "statements": "Root statements",
+      "hidden": "Hidden nodes"
+    },
+    "hidden": {
+      "label": "hidden",
+      "restore": "Restore"
+    },
+    "openLevel": "Open on {{level}}",
+    "notOnCanvas": "Located on {{level}} · {{scope}}",
+    "goToLevel": "Go there →",
+    "recent": "Recent",
+    "recentSearches": "Recent searches",
+    "recentNodes": "Recently viewed",
+    "clearHistory": "Clear"
+  },
+
+  "nodes": {
+    "tables": "tables",
+    "routines": "routines",
+    "columns": "columns",
+    "moreColumns": "+{{count}} more",
+    "statements": "statements",
+    "services": "services",
+    "databases": "databases",
+    "nestedStmts": "{{count}} nested",
+    "outputColumns": "{{count}} output columns",
+    "filterColumns": "filter columns…",
+    "sourceTable": "source",
+    "targetTable": "target",
+    "depth": "depth {{n}}"
+  },
+
+  "nodeTypes": {
+    "DaliApplication": "Application",
+    "DaliService":     "Service",
+    "DaliDatabase":    "Database",
+    "DaliSchema":      "Schema",
+    "DaliPackage":     "Package",
+    "DaliTable":       "Table",
+    "DaliColumn":      "Column",
+    "DaliRoutine":     "Routine",
+    "DaliStatement":   "Statement",
+    "DaliAtom":        "Atom",
+    "DaliOutputColumn":"Output column",
+    "DaliJoin":        "Join",
+    "DaliParameter":   "Parameter",
+    "DaliVariable":    "Variable",
+    "DaliSession":     "Session"
+  },
+
+  "mapping": {
+    "title": "Column mapping",
+    "allMappings": "All {{count}} mappings",
+    "types": {
+      "passthrough": "passthrough",
+      "computed": "computed",
+      "subquery": "subquery",
+      "literal": "literal",
+      "caseWhen": "CASE WHEN",
+      "window": "window function",
+      "null": "null"
+    },
+    "nullable": "nullable",
+    "expression": "Expression",
+    "drilldownHint": "+{{count}} more — drill-down L3"
+  },
+
+  "tableNode": {
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "hide": "Hide from canvas",
+    "moreColumns": "+{{count}} more columns",
+    "allMapped": "all mapped 1:1",
+    "filterPlaceholder": "filter columns…",
+    "pkLabel": "PK",
+    "fkLabel": "FK"
+  },
+
+  "expand": {
+    "upstream": "Upstream",
+    "downstream": "Downstream",
+    "loading": "Loading…",
+    "partialCount": "+{{shown}}/{{total}}",
+    "allLoaded": "All loaded",
+    "collapseUpstream": "Collapse upstream",
+    "collapseDownstream": "Collapse downstream",
+    "noNeighbors": "No neighbors"
+  },
+
+  "statement": {
+    "types": {
+      "query": "Query",
+      "insert": "Insert",
+      "update": "Update",
+      "delete": "Delete",
+      "cursor": "Cursor",
+      "refcursor": "RefCursor",
+      "merge": "Merge",
+      "call": "Call"
+    },
+    "rootStatement": "root statement",
+    "nestedStatements": "{{count}} nested",
+    "reads": "Reads",
+    "writes": "Writes",
+    "expandStatements": "Expand statements",
+    "collapseGroup": "Collapse",
+    "groupLabel":    "{{name}} — statement scope",
+    "noColMapping":  "no col mapping"
+  },
+
+  "subquery": {
+    "types": {
+      "from": "FROM",
+      "where": "WHERE",
+      "select": "SELECT",
+      "exists": "EXISTS",
+      "scalar": "scalar"
+    },
+    "badge": "{{type}} ⊂",
+    "levels": "{{count}} levels",
+    "tables": "{{count}} tables",
+    "drilldown": "Drill-down into subquery →",
+    "cte": "CTE"
+  },
+
+  "impact": {
+    "title": "Impact analysis",
+    "upstream": "Upstream ({{count}})",
+    "downstream": "Downstream ({{count}})",
+    "traceUpstream": "↑ Trace upstream",
+    "traceDownstream": "↓ Impact downstream",
+    "clearHighlight": "Clear highlight",
+    "depth": "Depth",
+    "depthWarning": "More than {{limit}} nodes — performance may degrade",
+    "affected": {
+      "tables": "{{count}} tables affected",
+      "columns": "{{count}} columns affected",
+      "routines": "{{count}} routines affected",
+      "statements": "{{count}} statements affected"
+    },
+    "depthLabel": "depth {{n}}"
+  },
+
+  "knot": {
+    "title": "KNOT Inspector",
+    "empty": "Click any node to inspect",
+    "sessions": "Sessions",
+    "noSession": "Select a session to view report",
+    "openInLoom": "Open in LOOM",
+    "loading": "Loading sessions…",
+    "emptyList": "No sessions found",
+    "searchSessions": "search sessions…",
+    "noSessionsMatch": "No matches",
+    "error": "Failed to load report",
+    "filterTables": "filter tables\u2026",
+    "tabs": {
+      "summary": "Summary",
+      "structure": "Structure",
+      "statements": "Statements",
+      "routines": "Routines",
+      "atoms": "Atoms"
+    },
+    "session": {
+      "tables": "Tables",
+      "columns": "Columns",
+      "schemas": "Schemas",
+      "packages": "Packages",
+      "routines": "Routines",
+      "parameters": "Parameters",
+      "variables": "Variables",
+      "processingMs": "Parse time",
+      "dialect": "Dialect",
+      "file": "File",
+      "processingInfo": "Processing info",
+      "sessionId": "Session ID",
+      "sourceTables": "Source tables",
+      "targetTables": "Target tables",
+      "relationships": "Relationships"
+    },
+    "statements": {
+      "sql": "SQL Statements",
+      "select": "SELECT",
+      "insert": "INSERT",
+      "update": "UPDATE",
+      "delete": "DELETE",
+      "merge": "MERGE",
+      "cursor": "CURSOR",
+      "other": "Other"
+    },
+    "atoms": {
+      "title": "Atoms",
+      "resolved": "Resolved",
+      "failed": "Failed",
+      "constant": "Constants",
+      "funcCall": "Func calls",
+      "columnRef": "Column refs",
+      "unattached": "Unattached",
+      "byContext": "By context",
+      "noFailed": "No failed atoms",
+      "noUnattached": "No unattached atoms",
+      "allAtoms": "All atoms",
+      "searchPlaceholder": "search atom, column, table…"
+    },
+    "edges": {
+      "readsFrom": "READS_FROM",
+      "writesTo": "WRITES_TO",
+      "atomRefColumn": "ATOM_REF_COL",
+      "dataFlow": "DATA_FLOW"
+    },
+    "table": {
+      "name": "Table",
+      "schema": "Schema",
+      "type": "Type",
+      "columns": "Cols",
+      "aliases": "Aliases"
+    },
+    "column": {
+      "name": "Column",
+      "alias": "Alias",
+      "dataType": "Type",
+      "position": "Pos",
+      "refs": "Refs"
+    },
+    "stmt": {
+      "name": "Name",
+      "line": "Line",
+      "type": "Type",
+      "level": "Level",
+      "routine": "Routine",
+      "package": "Package",
+      "sources": "Src tables",
+      "targets": "Tgt tables",
+      "atoms": "Atoms",
+      "total": "Total",
+      "root": "Root",
+      "rootStmts": "{{count}} root statements",
+      "rootAndSubq": "{{root}} root · {{sub}} subqueries",
+      "showingSubq": "Showing root + {{count}} subqueries",
+      "mainInfo": "Main info",
+      "shortName": "Short name",
+      "childStmts": "Child statements",
+      "sourceTables": "Source tables",
+      "sourceSets": "Source sets (tables & queries)",
+      "targetTables": "Target tables",
+      "targetCols": "Affected columns",
+      "tableGeoid": "Source table",
+      "subqueries": "Subqueries",
+      "nestedSubq": "Nested subqueries",
+      "details": "Details",
+      "noAtoms": "No atoms at this level.",
+      "wrapperNoAtoms": "Wrapper statement — atoms are in child subqueries.",
+      "allRoutines": "All routines",
+      "sql": "SQL",
+      "noSql": "No SQL snippet available for this statement",
+      "sqlTitle": "SQL Source",
+      "outputCols": "Output columns",
+      "expression": "Expression",
+      "alias": "Alias",
+      "tableRef": "Table",
+      "atomText": "Atom",
+      "affectedCol": "Affects col",
+      "refSource": "Source field",
+      "status": "Status",
+      "context": "Context",
+      "moreAtoms": "more atoms",
+      "subqueriesCount": "Subq.",
+      "routineType": "Routine type",
+      "aliases": "Aliases",
+      "sourceAtoms": "Source atoms",
+      "mainInfo": "Main info",
+      "sourceType": "Source type",
+      "sourceRef": "Table / Query",
+      "refCol": "Column",
+      "outputCol": "Output col"
+    },
+    "structure": {
+      "usedAsSource": "Used as source",
+      "usedAsTarget": "Used as target"
+    },
+    "sections": {
+      "node": "Node",
+      "field": "Field lineage",
+      "impact": "Impact",
+      "upstream": "Upstream sources",
+      "downstream": "Downstream consumers",
+      "stats": "Stats",
+      "mappings": "Mappings",
+      "subqueryChain": "Subquery chain",
+      "actions": "Actions"
+    },
+    "fields": {
+      "type": "Type",
+      "schema": "Schema",
+      "columns": "Columns",
+      "level": "Level",
+      "language": "Language",
+      "expression": "Expression",
+      "dataType": "Data type",
+      "mappingType": "Mapping",
+      "readsFrom": "Reads from",
+      "writtenBy": "Written by",
+      "usedIn": "Used in",
+      "subqueries": "Subqueries",
+      "currentView": "Current view"
+    }
+  },
+
+  "atom": {
+    "operations": {
+      "SUM": "SUM",
+      "AVG": "AVG",
+      "COUNT": "COUNT",
+      "MIN": "MIN",
+      "MAX": "MAX",
+      "RANK": "RANK",
+      "ROW_NUMBER": "ROW_NUMBER",
+      "DENSE_RANK": "DENSE_RANK",
+      "FILTER": "FILTER",
+      "JOIN": "JOIN",
+      "EXTRACT": "EXTRACT",
+      "CASE": "CASE WHEN",
+      "COALESCE": "COALESCE",
+      "CAST": "CAST",
+      "GROUP_BY": "GROUP BY",
+      "ORDER_BY": "ORDER BY",
+      "UNION_ALL": "UNION ALL",
+      "UNION": "UNION",
+      "PASSTHROUGH": "passthrough",
+      "CTE_REF": "CTE ref"
+    },
+    "partitionBy": "PARTITION BY {{cols}}",
+    "orderBy": "ORDER BY {{cols}}"
+  },
+
+  "roles": {
+    "viewer": "viewer",
+    "editor": "editor",
+    "admin": "admin",
+    "readOnly": "read-only",
+    "readWrite": "read-write"
+  },
+
+  "l1": {
+    "schemas":         "schemas",
+    "dbUnit":          "DB",
+    "appBadge":        "App",
+    "allSystems":      "all systems",
+    "allDbs":          "all DBs",
+    "allSchemas":      "all schemas",
+    "clearScope":      "Clear scope",
+    "systemLevel":     "System-level",
+    "systemLevelHint": "Show applications only, hide databases"
+  },
+
+  "actions": {
+    "drilldownL3": "Drill-down L3",
+    "fullChain": "Full lineage chain",
+    "impactAnalysis": "Impact analysis",
+    "showDiff": "Show diff",
+    "fitView": "Fit to view",
+    "exportPng": "Export PNG",
+    "copyId": "Copy ID",
+    "openInSource": "Open in source",
+    "setAsStart": "Set as start object"
+  },
+
+  "contextMenu": {
+    "drillDown": "Drill-down →",
+    "copyName": "Copy name",
+    "openInKnot": "Open in KNOT"
+  },
+
+  "export": {
+    "title": "Export",
+    "json": "JSON",
+    "png": "PNG",
+    "svg": "SVG",
+    "errorPng": "PNG export failed. Try a smaller canvas.",
+    "errorSvg": "SVG export failed. Try a smaller canvas.",
+    "success": "Export complete"
+  },
+
+  "inspector": {
+    "empty":         "Select a node to inspect its details",
+    "properties":    "Properties",
+    "columns":       "Columns",
+    "outputColumns": "Output columns",
+    "stats":         "Stats",
+    "label":         "Name",
+    "type":          "Type",
+    "schema":        "Schema",
+    "id":            "ID",
+    "path":          "Path",
+    "kind":          "Kind",
+    "language":      "Language",
+    "tables":        "Tables",
+    "routines":      "Routines",
+    "noColumns":     "No columns",
+    "schemas":       "Schemas",
+    "drillDown":     "Drill-down →",
+    "parameters":    "Parameters",
+    "noParameters":  "No parameters",
+    "openInKnot":    "Open in KNOT",
+    "dataType":      "Data type",
+    "operation":     "Operation",
+    "table":         "Table",
+    "sql":           "SQL",
+    "copySql":       "Copy SQL",
+    "copied":        "Copied!",
+    "joinType":      "Join type",
+    "joinLeft":      "Left table",
+    "joinRight":     "Right table",
+    "joinOn":        "Condition",
+    "direction":     "Direction",
+    "routine":       "Routine",
+    "default":       "Default"
+  },
+
+  "stub": {
+    "underConstruction": "Under Construction",
+    "urdDescription": "URD is the Norn of the past. This module will provide historical lineage analysis, change tracking and time-travel queries across data pipelines.",
+    "skuldDescription": "SKULD is the Norn of the future. This module will offer predictive impact analysis, what-if scenarios and proactive lineage recommendations."
+  },
+
+  "panel": {
+    "explorer":  "Explorer",
+    "inspector": "KNOT Inspector",
+    "expand":    "Expand panel",
+    "collapse":  "Collapse panel"
+  },
+
+  "profile": {
+    "title": "Profile settings",
+    "close": "Close",
+    "account": "Account",
+    "interface": "Interface",
+    "system": "System",
+    "save": "Save changes",
+    "saved": "Saved",
+    "tabs": {
+      "profile":       "Profile",
+      "security":      "Security",
+      "access":        "Access & Role",
+      "appearance":    "Appearance",
+      "graph":         "Graph settings",
+      "activity":      "Activity",
+      "notifications": "Notifications",
+      "favorites":     "Favorites",
+      "shortcuts":     "Shortcuts",
+      "tokens":        "API & Export"
+    },
+    "firstName":            "First name",
+    "firstNamePlaceholder": "Enter first name",
+    "lastName":             "Last name",
+    "lastNamePlaceholder":  "Enter last name",
+    "email":                "Email",
+    "emailHint":            "Contact your admin to change the email address.",
+    "displayName":          "Display name",
+    "displayNameHint":      "Shown in the app header and activity log.",
+    "cancel":               "Cancel",
+    "role":                 "Role",
+    "timezone":             "Timezone",
+    "locale":               "Language",
+    "bio":                  "Bio",
+    "security": {
+      "changePassword":    "Change password",
+      "currentPassword":   "Current password",
+      "newPassword":       "New password",
+      "confirmPassword":   "Confirm new password",
+      "updatePassword":    "Update password",
+      "twoFactor":         "Two-factor authentication",
+      "twoFactorDesc":     "Add an extra layer of security to your account.",
+      "twoFactorDisabled": "2FA is not enabled",
+      "setupTwoFactor":    "Set up 2FA",
+      "dangerZone":        "Danger zone",
+      "terminateAll":      "Terminate all other sessions",
+      "deleteAccount":     "Delete account",
+      "deleteAccountDesc": "Permanently delete your account and all data. This action cannot be undone.",
+      "mismatch":          "Passwords do not match"
+    },
+    "access": {
+      "yourRole":      "Your role",
+      "permissions":   "Permissions",
+      "module":        "Module",
+      "view":          "View",
+      "export":        "Export",
+      "edit":          "Edit",
+      "admin":         "Admin",
+      "granted":       "✓",
+      "denied":        "—"
+    },
+    "appearance": {
+      "theme":     "Theme",
+      "dark":      "Dark",
+      "light":     "Light",
+      "palette":   "Palette",
+      "uiFont":    "UI Font",
+      "monoFont":  "Monospace font",
+      "fontSize":  "Font size",
+      "density":   "Density",
+      "compact":   "Compact",
+      "normal":    "Normal",
+      "apply":     "Apply",
+      "reset":     "Reset to defaults",
+      "preview":   "Preview text"
+    },
+    "graph": {
+      "title":          "Graph settings",
+      "autoLayout":     "Auto layout on load",
+      "drillAnimation": "Drill-down animation",
+      "hoverHighlight": "Highlight on hover",
+      "showEdgeLabels": "Show edge labels",
+      "colLevelDefault":"Columns visible by default",
+      "startLevel":     "Default start level",
+      "nodeLimit":      "Node limit",
+      "reset":          "Reset to defaults"
+    },
+    "activity": {
+      "sessions":   "Active sessions",
+      "recent":     "Recent activity",
+      "current":    "CURRENT",
+      "terminate":  "Terminate",
+      "noSessions": "No other active sessions"
+    },
+    "notif": {
+      "channels":          "Notification channels",
+      "loomEvents":        "LOOM events",
+      "inApp":             "In-app notifications",
+      "inAppDesc":         "Show badge and toast notifications inside the app.",
+      "emailDigest":       "Email digest",
+      "emailDigestDesc":   "Receive a daily summary of changes to your email.",
+      "lineageChange":     "Lineage changes",
+      "lineageChangeDesc": "Notify when lineage graph is updated.",
+      "brokenLineage":     "Broken lineage",
+      "brokenLineageDesc": "Alert when lineage chain has missing or broken links.",
+      "myTablesImpact":    "My tables impact",
+      "myTablesImpactDesc":"When tables you own are impacted by upstream changes.",
+      "shuttleSync":       "Shuttle sync",
+      "shuttleSyncDesc":   "Notify on source sync completion or failure.",
+      "anvilComments":     "ANVIL comments",
+      "anvilCommentsDesc": "Notify when someone comments on your annotations."
+    },
+    "favorites": {
+      "hint":     "Starred nodes from the graph appear here for quick access.",
+      "empty":    "No favorites yet. Star a node in the graph to add it here.",
+      "remove":   "Remove from favorites",
+      "syncHint": "Favorites are synced to your account and available across devices."
+    },
+    "shortcuts": {
+      "navigation": "Navigation",
+      "canvas":     "Canvas",
+      "panels":     "Panels",
+      "graph":      "Graph operations",
+      "export":     "Export"
+    },
+    "tokens": {
+      "apiToken":     "API Token",
+      "apiTokenDesc": "Use this token to authenticate requests to the Seiðr Studio API. Keep it secret.",
+      "show":         "Show",
+      "hide":         "Hide",
+      "copy":         "Copy",
+      "copied":       "Copied",
+      "reissue":      "Reissue token",
+      "revoke":       "Revoke",
+      "issued":       "Issued",
+      "lastUsed":     "Last used",
+      "exportGraph":  "Export graph",
+      "includeMeta":  "Include metadata",
+      "webhook":      "Webhook",
+      "webhookDesc":  "Send real-time events to your own service when lineage changes occur.",
+      "comingSoon":   "Coming soon"
+    }
+  },
+
+  "searchPalette": {
+    "title": "Search",
+    "minChars": "Type at least 2 characters…",
+    "hint": "Search tables, columns, routines, packages and more"
+  },
+
+  "commandPalette": {
+    "title": "Command Palette",
+    "placeholder": "Search nodes, commands, navigation…",
+    "noResults": "No results",
+    "results": "Search results",
+    "commands": "Commands",
+    "navigation": "Navigation",
+    "fitView": "Fit view to canvas",
+    "toggleTheme": "Toggle dark / light theme",
+    "deselectNode": "Deselect current node",
+    "goToL1": "Go to L1 Overview",
+    "goToKnot": "Go to KNOT"
+  },
+
+  "errorBoundary": {
+    "message": "Something went wrong while rendering this view.",
+    "retry": "Try again"
+  },
+
+  "legend": {
+    "title": "Legend",
+    "open":  "Show legend",
+    "close": "Hide legend",
+    "section": {
+      "edges": "Edges",
+      "nodes": "Nodes"
+    },
+    "edge": {
+      "readsFrom":     "READS_FROM",
+      "writesTo":      "WRITES_TO",
+      "dataFlow":      "DATA_FLOW",
+      "filterFlow":    "FILTER_FLOW",
+      "joinFlow":      "JOIN_FLOW",
+      "containsStmt":  "CONTAINS_STMT",
+      "atomProduces":  "ATOM_PRODUCES",
+      "atomRefCol":    "ATOM_REF_COLUMN",
+      "hasDatabase":   "HAS_DATABASE",
+      "containsSchema":"CONTAINS_SCHEMA",
+      "usesDatabase":  "USES_DATABASE"
+    },
+    "node": {
+      "application": "Application",
+      "database":    "Database",
+      "schema":      "Schema",
+      "table":       "Table",
+      "package":     "Package",
+      "routine":     "Routine",
+      "statement":   "Statement",
+      "column":      "Column",
+      "atom":        "Atom"
+    },
+    "hint": {
+      "dblclick": "drill-down",
+      "click":    "select / highlight"
+    }
+  }
+}

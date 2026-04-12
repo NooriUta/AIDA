@@ -1,0 +1,95 @@
+{
+  "nodes": [
+    {
+      "id": "col-src-unit-price",
+      "type": "DaliColumn",
+      "data": {
+        "label": "order_items.unit_price",
+        "nodeType": "DaliColumn",
+        "childrenAvailable": false,
+        "dataType": "numeric(10,2)",
+        "metadata": { "table": "order_items", "schema": "public" }
+      }
+    },
+    {
+      "id": "col-src-quantity",
+      "type": "DaliColumn",
+      "data": {
+        "label": "order_items.quantity",
+        "nodeType": "DaliColumn",
+        "childrenAvailable": false,
+        "dataType": "int4",
+        "metadata": { "table": "order_items", "schema": "public" }
+      }
+    },
+    {
+      "id": "col-src-product-price",
+      "type": "DaliColumn",
+      "data": {
+        "label": "products.price",
+        "nodeType": "DaliColumn",
+        "childrenAvailable": false,
+        "dataType": "numeric(10,2)",
+        "metadata": { "table": "products", "schema": "public" }
+      }
+    },
+    {
+      "id": "atom-multiply",
+      "type": "DaliAtom",
+      "data": {
+        "label": "MULTIPLY",
+        "nodeType": "DaliAtom",
+        "childrenAvailable": false,
+        "operation": "unit_price * quantity",
+        "metadata": { "routine": "calculate_order_total" }
+      }
+    },
+    {
+      "id": "atom-sum",
+      "type": "DaliAtom",
+      "data": {
+        "label": "SUM",
+        "nodeType": "DaliAtom",
+        "childrenAvailable": false,
+        "operation": "SUM(unit_price * quantity)",
+        "metadata": { "routine": "calculate_order_total" }
+      }
+    },
+    {
+      "id": "atom-coalesce",
+      "type": "DaliAtom",
+      "data": {
+        "label": "COALESCE",
+        "nodeType": "DaliAtom",
+        "childrenAvailable": false,
+        "operation": "COALESCE(sum, 0)",
+        "metadata": { "routine": "calculate_order_total" }
+      }
+    },
+    {
+      "id": "out-total-amount",
+      "type": "DaliOutputColumn",
+      "data": {
+        "label": "orders.total_amount",
+        "nodeType": "DaliOutputColumn",
+        "childrenAvailable": false,
+        "dataType": "numeric(10,2)",
+        "metadata": { "table": "orders", "schema": "public" }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e-up-mul",  "source": "col-src-unit-price",    "target": "atom-multiply",    "type": "ATOM_REF_COLUMN" },
+    { "id": "e-qty-mul", "source": "col-src-quantity",       "target": "atom-multiply",    "type": "ATOM_REF_COLUMN" },
+    { "id": "e-pp-mul",  "source": "col-src-product-price",  "target": "atom-multiply",    "type": "ATOM_REF_COLUMN" },
+    { "id": "e-mul-sum", "source": "atom-multiply",          "target": "atom-sum",         "type": "HAS_ATOM"        },
+    { "id": "e-sum-coa", "source": "atom-sum",               "target": "atom-coalesce",    "type": "HAS_ATOM"        },
+    { "id": "e-coa-out", "source": "atom-coalesce",          "target": "out-total-amount", "type": "ATOM_PRODUCES"   }
+  ],
+  "metadata": {
+    "level": "L3",
+    "scope": "tbl-orders",
+    "totalNodes": 7,
+    "totalEdges": 6
+  }
+}

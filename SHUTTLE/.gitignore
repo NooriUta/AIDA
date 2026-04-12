@@ -1,0 +1,6 @@
+target/
+.quarkus/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
