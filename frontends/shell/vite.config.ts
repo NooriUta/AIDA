@@ -59,6 +59,13 @@ export default defineConfig({
     host: '0.0.0.0',
     cors: true,
     proxy: {
+      // verdandi's GraphQL requests arrive at the Shell origin when verdandi runs
+      // as an MF remote — the browser fetches /graphql relative to localhost:5175,
+      // not to verdandi's own :5173.  Forward to SHUTTLE directly (dev only).
+      '/graphql': {
+        target:       process.env.SHUTTLE_URL ?? 'http://localhost:8080',
+        changeOrigin: true,
+      },
       '/auth': {
         target:       'http://localhost:3000',
         changeOrigin: true,
