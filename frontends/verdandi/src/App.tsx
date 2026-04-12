@@ -6,6 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // in that case, so we can't rely on main.tsx's import).  ES module singletons
 // guarantee this runs exactly once even when both main.tsx and App.tsx import it.
 import './i18n/config';
+// React Flow CSS must also be imported here for MF-remote mode — main.tsx is
+// not executed when verdandi is loaded as a remote by Shell.
+import '@xyflow/react/dist/style.css';
 import { Shell } from './components/layout/Shell';
 import { LoginPage } from './components/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
