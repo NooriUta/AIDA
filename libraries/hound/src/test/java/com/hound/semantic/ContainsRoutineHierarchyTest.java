@@ -1,8 +1,5 @@
 package com.hound.semantic;
 
-import com.arcadedb.database.Database;
-import com.arcadedb.database.DatabaseFactory;
-import com.arcadedb.query.sql.executor.ResultSet;
 import com.hound.metrics.PipelineTimer;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
@@ -13,9 +10,13 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-import java.io.IOException;
-import java.nio.file.*;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,26 +33,22 @@ import static org.junit.jupiter.api.Assertions.*;
  * producing "DWH.DWH.PK_TEST" as the package key.  That made pkgV.get(packageGeoid)
  * return null → zero Package→Routine edges even though the DaliPackage vertex existed.
  *
- * Run: ./gradlew test --tests "*ContainsRoutineHierarchyTest*"
+ * Run: ./gradlew test --tests "*ContainsRoutineHierarchyTest*" -Dintegration=true
  */
+@Tag("integration")
+@EnabledIfSystemProperty(named = "integration", matches = "true")
 class ContainsRoutineHierarchyTest {
 
-    private static final String DB = "target/test-db-contains-routine";
+    // ── ArcadeDB connection ──────────────────────────────────────────────────
+    private static final String HOST    = "localhost";
+    private static final int    PORT    = 2480;
+    private static final String USER    = "root";
+    private static final String PASS    = "playwithdata";
+    private static final String DB_TEST = "hound_test";
+    private static final HttpClient HTTP = HttpClient.newHttpClient();
 
     // ── Fixture ───────────────────────────────────────────────────────────────
 
-    /**
-     * One package with:
-     *   - PROCEDURE PROC1(p_id IN NUMBER, p_name IN VARCHAR2)
-     *       variables: v_count NUMBER, v_flag VARCHAR2
-     *       body: INSERT INTO DWH.TGT_TBL + nested INNER_FUNC
-     *   - FUNCTION  FUNC1(p_val IN NUMBER) RETURN NUMBER
-     *       body: SELECT … FROM DWH.SRC_TBL
-     * Plus a standalone schema-routed procedure with one parameter.
-     *
-     * Covers: CONTAINS_ROUTINE (L1/L2/L2b), NESTED_IN (L3),
-     *         HAS_PARAMETER, HAS_VARIABLE, CONTAINS_STMT.
-     */
     private static final String SQL = """
             CREATE OR REPLACE PACKAGE BODY DWH.PK_HIER_TEST AS
 
@@ -83,15 +80,9 @@ class ContainsRoutineHierarchyTest {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    @BeforeEach void setUp()    throws IOException { wipe(Path.of(DB)); }
-    @AfterEach  void tearDown() throws IOException { wipe(Path.of(DB)); }
-
-    private static void wipe(Path p) throws IOException {
-        if (!Files.exists(p)) return;
-        try (var w = Files.walk(p)) {
-            w.sorted(Comparator.reverseOrder())
-             .forEach(x -> { try { Files.deleteIfExists(x); } catch (IOException ignored) {} });
-        }
+    @BeforeEach
+    void setUp() throws Exception {
+        recreateDb();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -107,72 +98,43 @@ class ContainsRoutineHierarchyTest {
         return engine;
     }
 
-    /**
-     * Returns stmt_geoid of the first statement of the given type
-     * that belongs to the given routine (via CONTAINS_STMT).
-     */
-    private static String stmtGeoidByType(Database db, String routineGeoid, String stmtType) {
-        String routineRid = null;
-        try (ResultSet rs = db.query("sql",
-                "SELECT @rid AS r FROM DaliRoutine WHERE routine_geoid = :v LIMIT 1",
-                Map.of("v", routineGeoid))) {
-            if (rs.hasNext()) {
-                Object o = rs.next().getProperty("r");
-                if (o != null) routineRid = o.toString();
-            }
-        } catch (Exception e) {
-            System.out.println("[WARN] routine rid: " + e.getMessage());
-        }
-        if (routineRid == null) return null;
-        try (ResultSet rs = db.query("sql",
-                "SELECT stmt_geoid FROM (SELECT expand(out('CONTAINS_STMT')) FROM " + routineRid + ")" +
-                " WHERE type = :t LIMIT 1",
-                Map.of("t", stmtType))) {
-            if (rs.hasNext()) {
-                Object v = rs.next().getProperty("stmt_geoid");
-                return v != null ? v.toString() : null;
-            }
-        } catch (Exception e) {
-            System.out.println("[WARN] stmtGeoidByType: " + e.getMessage());
-        }
-        return null;
+    /** Returns stmt_geoid of first statement of given type in the given routine. */
+    private static String stmtGeoidByType(String routineGeoid, String stmtType) throws Exception {
+        String sql = "SELECT stmt_geoid FROM (SELECT expand(out('CONTAINS_STMT')) FROM DaliRoutine " +
+                     "WHERE routine_geoid = '" + routineGeoid + "') WHERE type = '" + stmtType + "' LIMIT 1";
+        Set<String> geoids = stringField(sql, "stmt_geoid");
+        return geoids.isEmpty() ? null : geoids.iterator().next();
     }
 
-    private static long scalar(Database db, String sql) {
-        try (ResultSet rs = db.query("sql", sql)) {
-            if (rs.hasNext()) {
-                Object v = rs.next().getProperty("cnt");
-                return v instanceof Number n ? n.longValue() : 0L;
-            }
-        } catch (Exception e) {
-            System.out.println("[WARN] scalar: " + e.getMessage());
-        }
-        return 0L;
+    private static long scalar(String sql) throws Exception {
+        String resp = arcadePost(sql);
+        int idx = resp.indexOf("\"cnt\":");
+        if (idx < 0) return 0L;
+        int s = idx + 6;
+        while (s < resp.length() && !Character.isDigit(resp.charAt(s)) && resp.charAt(s) != '-') s++;
+        int e = s;
+        while (e < resp.length() && (Character.isDigit(resp.charAt(e)) || resp.charAt(e) == '-')) e++;
+        try { return Long.parseLong(resp.substring(s, e)); } catch (NumberFormatException ex) { return 0L; }
     }
 
-    private static Set<String> outLabels(Database db, String fromType, String fromField,
-                                         String fromVal, String edgeType, String labelField) {
+    /** Get set of string field values from a traversal query result. */
+    private static Set<String> outLabels(String fromType, String fromField, String fromVal,
+                                          String edgeType, String labelField) throws Exception {
+        String sql = "SELECT " + labelField + " FROM (SELECT expand(out('" + edgeType + "')) FROM "
+                + fromType + " WHERE " + fromField + " = '" + fromVal + "')";
+        return stringField(sql, labelField);
+    }
+
+    private static Set<String> stringField(String sql, String field) throws Exception {
+        String resp   = arcadePost(sql);
         Set<String> result = new LinkedHashSet<>();
-        String schemaRid = null;
-        try (ResultSet rs = db.query("sql",
-                "SELECT @rid AS r FROM " + fromType + " WHERE " + fromField + " = :v LIMIT 1",
-                Map.of("v", fromVal))) {
-            if (rs.hasNext()) {
-                Object o = rs.next().getProperty("r");
-                if (o != null) schemaRid = o.toString();
-            }
-        } catch (Exception e) {
-            System.out.println("[WARN] rid lookup: " + e.getMessage());
-        }
-        if (schemaRid == null) return result;
-        String q = "SELECT " + labelField + " FROM (SELECT expand(out('" + edgeType + "')) FROM " + schemaRid + ")";
-        try (ResultSet rs = db.query("sql", q)) {
-            while (rs.hasNext()) {
-                Object v = rs.next().getProperty(labelField);
-                if (v != null) result.add(v.toString().toUpperCase());
-            }
-        } catch (Exception e) {
-            System.out.println("[WARN] expand: " + e.getMessage());
+        String marker = "\"" + field + "\":\"";
+        int pos = 0;
+        while ((pos = resp.indexOf(marker, pos)) >= 0) {
+            int start = pos + marker.length();
+            int end   = resp.indexOf("\"", start);
+            if (end > start) result.add(resp.substring(start, end).toUpperCase());
+            pos = end > start ? end + 1 : pos + 1;
         }
         return result;
     }
@@ -181,151 +143,158 @@ class ContainsRoutineHierarchyTest {
 
     @Test
     void containsRoutineHierarchy_allThreeLevelsWired() throws Exception {
-        String dbPath = Path.of(DB).toAbsolutePath().toString();
-
-        try (ArcadeDBSemanticWriter writer = new ArcadeDBSemanticWriter(dbPath)) {
+        // Write via REMOTE_BATCH
+        try (ArcadeDBSemanticWriter writer = new ArcadeDBSemanticWriter(HOST, PORT, DB_TEST, USER, PASS, true)) {
             UniversalSemanticEngine engine = parse(SQL, "DWH");
             writer.saveResult(
                     engine.getResult("DWH:pk_hier_test.pck", "pk_hier_test.pck", "PLSQL", 0L),
                     new PipelineTimer(), null, "DWH");
         }
 
-        try (Database db = new DatabaseFactory(dbPath).open()) {
+        // ── Level 0: basic vertex counts ─────────────────────────────────────
+        long pkgCount = scalar("SELECT count(*) AS cnt FROM DaliPackage");
+        long rtnCount = scalar("SELECT count(*) AS cnt FROM DaliRoutine");
 
-            // ── Level 0: basic vertex counts ─────────────────────────────────
-            long pkgCount = scalar(db, "SELECT count(*) AS cnt FROM DaliPackage");
-            long rtnCount = scalar(db, "SELECT count(*) AS cnt FROM DaliRoutine");
+        System.out.println("DaliPackage count: " + pkgCount);
+        System.out.println("DaliRoutine count: " + rtnCount);
 
-            System.out.println("DaliPackage count: " + pkgCount);
-            System.out.println("DaliRoutine count: " + rtnCount);
+        assertEquals(1, pkgCount, "Expected exactly 1 DaliPackage (PK_HIER_TEST)");
+        assertTrue(rtnCount >= 3, "Expected at least 3 DaliRoutine entries; got " + rtnCount);
 
-            assertEquals(1, pkgCount, "Expected exactly 1 DaliPackage (PK_HIER_TEST)");
-            // Routines: PROC1, FUNC1, INNER_FUNC (nested), STANDALONE_PROC = 4
-            assertTrue(rtnCount >= 3, "Expected at least 3 DaliRoutine entries; got " + rtnCount);
+        // ── Verify package vertex fields ──────────────────────────────────────
+        long pkgGeoidOk = scalar("SELECT count(*) AS cnt FROM DaliPackage WHERE package_geoid = 'DWH.PK_HIER_TEST'");
+        assertEquals(1, pkgGeoidOk, "DaliPackage.package_geoid must be 'DWH.PK_HIER_TEST' (no double-schema)");
 
-            // ── Verify package vertex fields ──────────────────────────────────
-            long pkgGeoidOk = scalar(db,
-                    "SELECT count(*) AS cnt FROM DaliPackage WHERE package_geoid = 'DWH.PK_HIER_TEST'");
-            assertEquals(1, pkgGeoidOk, "DaliPackage.package_geoid must be 'DWH.PK_HIER_TEST' (no double-schema)");
+        long pkgNameOk = scalar("SELECT count(*) AS cnt FROM DaliPackage WHERE package_name = 'PK_HIER_TEST'");
+        assertEquals(1, pkgNameOk, "DaliPackage.package_name must be bare 'PK_HIER_TEST', not 'DWH.PK_HIER_TEST'");
 
-            long pkgNameOk = scalar(db,
-                    "SELECT count(*) AS cnt FROM DaliPackage WHERE package_name = 'PK_HIER_TEST'");
-            assertEquals(1, pkgNameOk, "DaliPackage.package_name must be bare 'PK_HIER_TEST', not 'DWH.PK_HIER_TEST'");
+        // ── Level 1: DaliSchema → DaliPackage (CONTAINS_ROUTINE) ─────────────
+        Set<String> schemaToPkg = outLabels("DaliSchema", "schema_geoid", "DWH", "CONTAINS_ROUTINE", "package_geoid");
+        System.out.println("L1 Schema→Package: " + schemaToPkg);
+        assertFalse(schemaToPkg.isEmpty(), "Level 1: DaliSchema must have CONTAINS_ROUTINE → DaliPackage");
+        assertTrue(schemaToPkg.stream().anyMatch(s -> s.contains("PK_HIER_TEST")),
+                "Level 1: Schema must contain PK_HIER_TEST. Found: " + schemaToPkg);
 
-            // ── Level 1: DaliSchema → DaliPackage (CONTAINS_ROUTINE) ──────────
-            Set<String> schemaToPkg = outLabels(db, "DaliSchema", "schema_geoid", "DWH",
-                    "CONTAINS_ROUTINE", "package_geoid");
-            System.out.println("L1 Schema→Package: " + schemaToPkg);
-            assertFalse(schemaToPkg.isEmpty(),
-                    "Level 1: DaliSchema must have CONTAINS_ROUTINE → DaliPackage");
-            assertTrue(schemaToPkg.stream().anyMatch(s -> s.contains("PK_HIER_TEST")),
-                    "Level 1: Schema must contain PK_HIER_TEST. Found: " + schemaToPkg);
+        // ── Level 2: DaliPackage → DaliRoutine (CONTAINS_ROUTINE) ────────────
+        Set<String> pkgToRoutine = outLabels("DaliPackage", "package_geoid", "DWH.PK_HIER_TEST", "CONTAINS_ROUTINE", "routine_name");
+        System.out.println("L2 Package→Routine: " + pkgToRoutine);
+        assertFalse(pkgToRoutine.isEmpty(),
+                "Level 2: DaliPackage must have CONTAINS_ROUTINE → DaliRoutine. " +
+                "Bug was: ensurePackage double-prefixed schema → pkgV lookup returned null.");
+        assertTrue(pkgToRoutine.stream().anyMatch(n -> n.contains("PROC1")),
+                "Level 2: Package must contain PROC1. Found: " + pkgToRoutine);
+        assertTrue(pkgToRoutine.stream().anyMatch(n -> n.contains("FUNC1")),
+                "Level 2: Package must contain FUNC1. Found: " + pkgToRoutine);
 
-            // ── Level 2: DaliPackage → DaliRoutine (CONTAINS_ROUTINE) ─────────
-            Set<String> pkgToRoutine = outLabels(db, "DaliPackage", "package_geoid", "DWH.PK_HIER_TEST",
-                    "CONTAINS_ROUTINE", "routine_name");
-            System.out.println("L2 Package→Routine: " + pkgToRoutine);
-            assertFalse(pkgToRoutine.isEmpty(),
-                    "Level 2: DaliPackage must have CONTAINS_ROUTINE → DaliRoutine. " +
-                    "Bug was: ensurePackage double-prefixed schema → pkgV lookup returned null.");
-            assertTrue(pkgToRoutine.stream().anyMatch(n -> n.contains("PROC1")),
-                    "Level 2: Package must contain PROC1. Found: " + pkgToRoutine);
-            assertTrue(pkgToRoutine.stream().anyMatch(n -> n.contains("FUNC1")),
-                    "Level 2: Package must contain FUNC1. Found: " + pkgToRoutine);
+        // ── Level 2b: Schema → standalone Procedure (CONTAINS_ROUTINE) ────────
+        Set<String> schemaToStandalone = outLabels("DaliSchema", "schema_geoid", "DWH", "CONTAINS_ROUTINE", "routine_name");
+        System.out.println("L2b Schema→standalone Routine: " + schemaToStandalone);
+        assertTrue(schemaToStandalone.stream().anyMatch(n -> n.contains("STANDALONE_PROC")),
+                "Level 2b: Schema must contain STANDALONE_PROC. Found: " + schemaToStandalone);
 
-            // ── Level 2b: Schema → standalone Procedure (CONTAINS_ROUTINE) ────
-            Set<String> schemaToStandalone = outLabels(db, "DaliSchema", "schema_geoid", "DWH",
-                    "CONTAINS_ROUTINE", "routine_name");
-            System.out.println("L2b Schema→standalone Routine: " + schemaToStandalone);
-            assertTrue(schemaToStandalone.stream().anyMatch(n -> n.contains("STANDALONE_PROC")),
-                    "Level 2b: Schema must contain STANDALONE_PROC. Found: " + schemaToStandalone);
+        // ── Level 3: NESTED_IN (Routine → parent Routine) ─────────────────────
+        Set<String> nestedRoutines = outLabels("DaliRoutine",
+                "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1", "NESTED_IN", "routine_name");
+        System.out.println("L3 PROC1 NESTED_IN→: " + nestedRoutines);
+        assertFalse(nestedRoutines.isEmpty(), "Level 3: PROC1 must have NESTED_IN → INNER_FUNC. Found: " + nestedRoutines);
+        assertTrue(nestedRoutines.stream().anyMatch(n -> n.contains("INNER_FUNC")),
+                "Level 3: NESTED_IN must point to INNER_FUNC. Found: " + nestedRoutines);
 
-            // ── Level 3: NESTED_IN (Routine → parent Routine) ─────────────────
-            Set<String> nestedRoutines = outLabels(db, "DaliRoutine",
-                    "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1",
-                    "NESTED_IN", "routine_name");
-            System.out.println("L3 PROC1 NESTED_IN→: " + nestedRoutines);
-            assertFalse(nestedRoutines.isEmpty(),
-                    "Level 3: PROC1 must have NESTED_IN → INNER_FUNC. Found: " + nestedRoutines);
-            assertTrue(nestedRoutines.stream().anyMatch(n -> n.contains("INNER_FUNC")),
-                    "Level 3: NESTED_IN must point to INNER_FUNC. Found: " + nestedRoutines);
+        // ── HAS_PARAMETER ─────────────────────────────────────────────────────
+        Set<String> proc1Params = outLabels("DaliRoutine",
+                "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1", "HAS_PARAMETER", "param_name");
+        System.out.println("HAS_PARAMETER PROC1→: " + proc1Params);
+        assertFalse(proc1Params.isEmpty(), "PROC1 must have HAS_PARAMETER edges. Found: " + proc1Params);
+        assertTrue(proc1Params.stream().anyMatch(n -> n.contains("P_ID")),
+                "PROC1 must have param P_ID. Found: " + proc1Params);
+        assertTrue(proc1Params.stream().anyMatch(n -> n.contains("P_NAME")),
+                "PROC1 must have param P_NAME. Found: " + proc1Params);
 
-            // ── HAS_PARAMETER: DaliRoutine → DaliParameter ────────────────────
-            Set<String> proc1Params = outLabels(db, "DaliRoutine",
-                    "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1",
-                    "HAS_PARAMETER", "param_name");
-            System.out.println("HAS_PARAMETER PROC1→: " + proc1Params);
-            assertFalse(proc1Params.isEmpty(),
-                    "PROC1 must have HAS_PARAMETER edges. Found: " + proc1Params);
-            assertTrue(proc1Params.stream().anyMatch(n -> n.contains("P_ID")),
-                    "PROC1 must have param P_ID. Found: " + proc1Params);
-            assertTrue(proc1Params.stream().anyMatch(n -> n.contains("P_NAME")),
-                    "PROC1 must have param P_NAME. Found: " + proc1Params);
+        Set<String> func1Params = outLabels("DaliRoutine",
+                "routine_geoid", "DWH.PK_HIER_TEST:FUNCTION:FUNC1", "HAS_PARAMETER", "param_name");
+        System.out.println("HAS_PARAMETER FUNC1→: " + func1Params);
+        assertTrue(func1Params.stream().anyMatch(n -> n.contains("P_VAL")),
+                "FUNC1 must have param P_VAL. Found: " + func1Params);
 
-            Set<String> func1Params = outLabels(db, "DaliRoutine",
-                    "routine_geoid", "DWH.PK_HIER_TEST:FUNCTION:FUNC1",
-                    "HAS_PARAMETER", "param_name");
-            System.out.println("HAS_PARAMETER FUNC1→: " + func1Params);
-            assertTrue(func1Params.stream().anyMatch(n -> n.contains("P_VAL")),
-                    "FUNC1 must have param P_VAL. Found: " + func1Params);
+        Set<String> standaloneParams = outLabels("DaliRoutine",
+                "routine_name", "DWH.STANDALONE_PROC", "HAS_PARAMETER", "param_name");
+        System.out.println("HAS_PARAMETER STANDALONE_PROC→: " + standaloneParams);
+        assertTrue(standaloneParams.stream().anyMatch(n -> n.contains("P_CODE")),
+                "STANDALONE_PROC must have param P_CODE. Found: " + standaloneParams);
 
-            // lookup by routine_name — standalone proc geoid includes qualified name
-            Set<String> standaloneParams = outLabels(db, "DaliRoutine",
-                    "routine_name", "DWH.STANDALONE_PROC",
-                    "HAS_PARAMETER", "param_name");
-            System.out.println("HAS_PARAMETER STANDALONE_PROC→: " + standaloneParams);
-            assertTrue(standaloneParams.stream().anyMatch(n -> n.contains("P_CODE")),
-                    "STANDALONE_PROC must have param P_CODE. Found: " + standaloneParams);
+        // ── HAS_VARIABLE ──────────────────────────────────────────────────────
+        Set<String> proc1Vars = outLabels("DaliRoutine",
+                "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1", "HAS_VARIABLE", "var_name");
+        System.out.println("HAS_VARIABLE PROC1→: " + proc1Vars);
+        assertFalse(proc1Vars.isEmpty(), "PROC1 must have HAS_VARIABLE edges. Found: " + proc1Vars);
+        assertTrue(proc1Vars.stream().anyMatch(n -> n.contains("V_COUNT")),
+                "PROC1 must have variable V_COUNT. Found: " + proc1Vars);
+        assertTrue(proc1Vars.stream().anyMatch(n -> n.contains("V_FLAG")),
+                "PROC1 must have variable V_FLAG. Found: " + proc1Vars);
 
-            // ── HAS_VARIABLE: DaliRoutine → DaliVariable ──────────────────────
-            Set<String> proc1Vars = outLabels(db, "DaliRoutine",
-                    "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1",
-                    "HAS_VARIABLE", "var_name");
-            System.out.println("HAS_VARIABLE PROC1→: " + proc1Vars);
-            assertFalse(proc1Vars.isEmpty(),
-                    "PROC1 must have HAS_VARIABLE edges. Found: " + proc1Vars);
-            assertTrue(proc1Vars.stream().anyMatch(n -> n.contains("V_COUNT")),
-                    "PROC1 must have variable V_COUNT. Found: " + proc1Vars);
-            assertTrue(proc1Vars.stream().anyMatch(n -> n.contains("V_FLAG")),
-                    "PROC1 must have variable V_FLAG. Found: " + proc1Vars);
+        // ── CONTAINS_STMT ─────────────────────────────────────────────────────
+        Set<String> proc1Stmts = outLabels("DaliRoutine",
+                "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1", "CONTAINS_STMT", "type");
+        System.out.println("CONTAINS_STMT PROC1→: " + proc1Stmts);
+        assertFalse(proc1Stmts.isEmpty(), "PROC1 must have CONTAINS_STMT edges. Found: " + proc1Stmts);
+        assertTrue(proc1Stmts.stream().anyMatch(n -> n.contains("INSERT")),
+                "PROC1 must contain an INSERT statement. Found: " + proc1Stmts);
+        assertTrue(proc1Stmts.stream().anyMatch(n -> n.contains("SELECT")),
+                "PROC1 must contain a SELECT statement (sub-select of INSERT). Found: " + proc1Stmts);
 
-            // ── CONTAINS_STMT: DaliRoutine → DaliStatement ────────────────────
-            Set<String> proc1Stmts = outLabels(db, "DaliRoutine",
-                    "routine_geoid", "DWH.PK_HIER_TEST:PROCEDURE:PROC1",
-                    "CONTAINS_STMT", "type");
-            System.out.println("CONTAINS_STMT PROC1→: " + proc1Stmts);
-            assertFalse(proc1Stmts.isEmpty(),
-                    "PROC1 must have CONTAINS_STMT edges. Found: " + proc1Stmts);
-            assertTrue(proc1Stmts.stream().anyMatch(n -> n.contains("INSERT")),
-                    "PROC1 must contain an INSERT statement. Found: " + proc1Stmts);
-            assertTrue(proc1Stmts.stream().anyMatch(n -> n.contains("SELECT")),
-                    "PROC1 must contain a SELECT statement (sub-select of INSERT). Found: " + proc1Stmts);
+        // ── CHILD_OF: SELECT is a child of INSERT ─────────────────────────────
+        String insertGeoid = stmtGeoidByType("DWH.PK_HIER_TEST:PROCEDURE:PROC1", "INSERT");
+        String selectGeoid = stmtGeoidByType("DWH.PK_HIER_TEST:PROCEDURE:PROC1", "SELECT");
+        System.out.println("INSERT stmt_geoid: " + insertGeoid);
+        System.out.println("SELECT stmt_geoid: " + selectGeoid);
+        assertNotNull(insertGeoid, "INSERT statement must exist in PROC1");
+        assertNotNull(selectGeoid, "SELECT statement must exist in PROC1");
 
-            // ── CHILD_OF: SELECT is a child of INSERT (не самостоятельный SELECT) ─
-            // Получаем stmt_geoid INSERT и SELECT из PROC1, затем проверяем
-            // что SELECT.out(CHILD_OF) → INSERT.
-            String insertGeoid = stmtGeoidByType(db, "DWH.PK_HIER_TEST:PROCEDURE:PROC1", "INSERT");
-            String selectGeoid = stmtGeoidByType(db, "DWH.PK_HIER_TEST:PROCEDURE:PROC1", "SELECT");
-            System.out.println("INSERT stmt_geoid: " + insertGeoid);
-            System.out.println("SELECT stmt_geoid: " + selectGeoid);
-            assertNotNull(insertGeoid, "INSERT statement must exist in PROC1");
-            assertNotNull(selectGeoid, "SELECT statement must exist in PROC1");
+        Set<String> selectParents = outLabels("DaliStatement", "stmt_geoid", selectGeoid, "CHILD_OF", "type");
+        System.out.println("SELECT CHILD_OF→: " + selectParents);
+        assertTrue(selectParents.stream().anyMatch(n -> n.contains("INSERT")),
+                "SELECT must be CHILD_OF INSERT (not a standalone SELECT). Found: " + selectParents);
 
-            // SELECT -[CHILD_OF]-> INSERT
-            Set<String> selectParents = outLabels(db, "DaliStatement", "stmt_geoid", selectGeoid,
-                    "CHILD_OF", "type");
-            System.out.println("SELECT CHILD_OF→: " + selectParents);
-            assertTrue(selectParents.stream().anyMatch(n -> n.contains("INSERT")),
-                    "SELECT must be CHILD_OF INSERT (not a standalone SELECT). Found: " + selectParents);
+        // ── Total CONTAINS_ROUTINE sanity ─────────────────────────────────────
+        long totalEdges = scalar("SELECT count(*) AS cnt FROM CONTAINS_ROUTINE");
+        System.out.println("Total CONTAINS_ROUTINE edges: " + totalEdges);
+        assertTrue(totalEdges >= 4,
+                "Expected at least 4 CONTAINS_ROUTINE edges. Got: " + totalEdges);
 
-            // ── Total CONTAINS_ROUTINE sanity ─────────────────────────────────
-            long totalEdges = scalar(db, "SELECT count(*) AS cnt FROM CONTAINS_ROUTINE");
-            System.out.println("Total CONTAINS_ROUTINE edges: " + totalEdges);
-            // Schema→Pkg(1) + Pkg→PROC1(1) + Pkg→FUNC1(1) + Schema→STANDALONE_PROC(1) = 4 minimum
-            assertTrue(totalEdges >= 4,
-                    "Expected at least 4 CONTAINS_ROUTINE edges. Got: " + totalEdges);
+        System.out.println("All hierarchy assertions passed.");
+    }
 
-            System.out.println("All hierarchy assertions passed.");
-        }
+    // ── HTTP helpers ──────────────────────────────────────────────────────────
+
+    private static String arcadePost(String sql) throws Exception {
+        String auth = "Basic " + Base64.getEncoder()
+                .encodeToString((USER + ":" + PASS).getBytes(StandardCharsets.UTF_8));
+        String escaped = sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ");
+        String body = "{\"language\":\"sql\",\"command\":\"" + escaped + "\"}";
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("http://" + HOST + ":" + PORT + "/api/v1/command/" + DB_TEST))
+                .header("Authorization", auth)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return HTTP.send(req, HttpResponse.BodyHandlers.ofString()).body();
+    }
+
+    private static void recreateDb() throws Exception {
+        String auth = "Basic " + Base64.getEncoder()
+                .encodeToString((USER + ":" + PASS).getBytes(StandardCharsets.UTF_8));
+        HttpRequest drop = HttpRequest.newBuilder()
+                .uri(URI.create("http://" + HOST + ":" + PORT + "/api/v1/server"))
+                .header("Authorization", auth).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"command\":\"drop database " + DB_TEST + "\"}"))
+                .build();
+        try { HTTP.send(drop, HttpResponse.BodyHandlers.ofString()); } catch (Exception ignored) {}
+        HttpRequest create = HttpRequest.newBuilder()
+                .uri(URI.create("http://" + HOST + ":" + PORT + "/api/v1/server"))
+                .header("Authorization", auth).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"command\":\"create database " + DB_TEST + "\"}"))
+                .build();
+        String res = HTTP.send(create, HttpResponse.BodyHandlers.ofString()).body();
+        if (!res.contains("\"ok\"")) throw new RuntimeException("Failed to create DB " + DB_TEST + ": " + res);
     }
 }
