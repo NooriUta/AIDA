@@ -1,10 +1,13 @@
 // File: src/main/java/com/hound/storage/SchemaInitializer.java
 package com.hound.storage;
 
-// TODO(arcadedb-embed): ensureSchema(Database) removed during 26.x upgrade.
-// Restore full embedded schema initialisation after engine API stabilises.
-// G6/G8/DaliRecordField types (BULK_COLLECT_INTO, RECORD_USED_IN, HAS_RECORD_FIELD,
-// FIELD_MAPS_TO) must be added to remoteSchemaCommands() and ensureSchema() when restored.
+// STATUS: embedded ArcadeDB branch DISABLED as of ArcadeDB 26.x upgrade (chore/arcadedb-26-no-embedded).
+// EmbeddedWriter.java and ensureSchema(Database) were removed — arcadedb-network client only.
+//
+// TODO(arcadedb-embed): restore when ArcadeDB 26 embedded engine API stabilises.
+// When restoring, also add G6/G8/DaliRecordField types to ensureSchema():
+//   edges: BULK_COLLECTS_INTO, RECORD_USED_IN, HAS_RECORD_FIELD, FIELD_MAPS_TO
+//   vertex: DaliRecord, DaliRecordField
 
 /**
  * Creates the ArcadeDB schema for all Dali vertex/edge/document types.
