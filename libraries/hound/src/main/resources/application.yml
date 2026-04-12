@@ -1,0 +1,68 @@
+# ================================================
+# HOUND — Конфигурация приложения
+# ================================================
+
+hound:
+  # === ПУТИ И ВХОДНЫЕ ДАННЫЕ ===
+  input-path: "C:\\AIDA\\Dali4\\HOUND\\test_plsql"   # ← добавь эту строку
+  file-extensions:
+    - ".sql"
+    - ".plsql"
+    - ".pks"
+    - ".pkb"
+
+  # === БАЗА ДАННЫХ ===
+  database:
+    type: "falkordb"                # neo4j | memgraph | falkordb
+    host: "localhost"
+    port: 6379                      # 6379 для FalkorDB, 7687 для Neo4j/Memgraph
+    name: "hound"                   # имя графа/базы
+    user: ""
+    password: ""
+
+  # === ПРОИЗВОДИТЕЛЬНОСТЬ ===
+  threads: 8                        # по умолчанию = количество ядер
+  batch-size: 500                   # сколько узлов/связей в одном пакете
+
+  # === КЭШ ===
+  cache:
+    enabled: true
+    path: ".hound-cache"
+    max-entries: 10000
+    ttl-hours: 24
+
+  # === ПАРСЕР ===
+  parser:
+    max-file-size-mb: 100
+    incremental-mode: false
+
+  # === МЕТРИКИ ===
+  metrics:
+    enabled: true
+    report-interval-seconds: 30
+
+  # === ЛОГИРОВАНИЕ ===
+  logging:
+    level: INFO
+    file: "logs/hound.log"
+    console: true
+
+# ================================================
+# Дополнительные профили (можно расширять)
+# ================================================
+
+---
+spring:
+  profiles: neo4j
+hound:
+  database:
+    type: "neo4j"
+    port: 7687
+
+---
+spring:
+  profiles: memgraph
+hound:
+  database:
+    type: "memgraph"
+    port: 7687

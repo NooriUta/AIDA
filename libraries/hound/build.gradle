@@ -1,0 +1,381 @@
+// build.gradle — Hound (Dali Java-модуль)
+// Версия: 3.0 — monorepo-compatible, self-contained (можно открывать отдельно в IDEA)
+
+plugins {
+    id 'java-library'
+    id 'application'
+    id 'idea'
+}
+
+group = 'com.hound'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://maven.aliyun.com/repository/public' }
+}
+
+// ==================== ЗАВИСИМОСТИ ====================
+
+dependencies {
+    // ANTLR4 runtime (только runtime, генерация — через кастомную задачу)
+    implementation 'org.antlr:antlr4-runtime:4.13.2'
+
+    // CLI
+    implementation 'commons-cli:commons-cli:1.11.0'
+
+    // Jackson (JSON/YAML)
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.19.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.19.0'
+
+    // Logging
+    implementation 'org.slf4j:slf4j-api:2.0.17'
+    implementation 'ch.qos.logback:logback-classic:1.5.18'
+
+    // Utilities
+    implementation 'org.apache.commons:commons-lang3:3.20.0'
+    implementation 'commons-io:commons-io:2.21.0'
+    implementation 'com.google.guava:guava:33.4.8-jre'
+
+    // Tests
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.mockito:mockito-core:5.18.0'
+
+    implementation 'com.arcadedb:arcadedb-engine:25.12.1'
+    implementation 'com.arcadedb:arcadedb-network:25.12.1'
+
+}
+
+// ==================== SOURCE SETS ====================
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+        }
+        resources {
+            srcDir 'src/main/resources'
+            exclude '**/*.g4'
+        }
+    }
+}
+
+// ==================== ОБРАБОТКА РЕСУРСОВ ====================
+
+tasks.processResources {
+    exclude 'grammars/**'
+    exclude 'build/**'
+    exclude 'out/**'
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+// ==================== ГЕНЕРАЦИЯ ГРАММАТИК ====================
+
+def antlrCompleteJar = file("${projectDir}/lib/antlr-4.13.2-complete.jar")
+
+task generateGrammars {
+    description = 'Генерация ANTLR грамматик (пересобирает только при -PforceGenerate=true или если нет сгенерированных файлов)'
+    group = 'antlr'
+
+    def forceGenerate = project.hasProperty('forceGenerate') &&
+            project.property('forceGenerate').toString() == 'true'
+
+    // Inputs/Outputs для Gradle up-to-date check
+    def grammarRoot = file('src/main/resources/grammars')
+    def baseOutputDir = file('src/main/java/com/hound/parser/base/grammars')
+
+    inputs.dir(grammarRoot).optional()
+    outputs.dir(baseOutputDir)
+
+    onlyIf {
+        forceGenerate ||
+                !baseOutputDir.exists() ||
+                fileTree(dir: baseOutputDir, include: '**/*.java').files.isEmpty()
+    }
+
+    doLast {
+        if (!grammarRoot.exists()) {
+            throw new GradleException("Папка грамматик не найдена: ${grammarRoot}")
+        }
+
+        if (!antlrCompleteJar.exists()) {
+            println "Скачиваем ANTLR complete JAR..."
+            antlrCompleteJar.parentFile.mkdirs()
+            def downloadUrl = 'https://www.antlr.org/download/antlr-4.13.2-complete.jar'
+            antlrCompleteJar.withOutputStream { out ->
+                new URL(downloadUrl).withInputStream { from -> out << from }
+            }
+            println "ANTLR скачан: ${antlrCompleteJar}"
+        }
+
+        baseOutputDir.mkdirs()
+
+        println "========================================"
+        println "ГЕНЕРАЦИЯ ANTLR ГРАММАТИК"
+        println "========================================"
+
+        int success = 0
+        int failed = 0
+
+        def excluded = ['teradata', 'examples', 'knowage_base', 'generated', 'generated_code'] as Set
+
+        grammarRoot.eachFileRecurse { grammarFile ->
+            if (!grammarFile.name.endsWith('.g4')) return
+            if (excluded.any { grammarFile.path.contains(it) }) return
+
+            def grammarDir = grammarFile.parentFile
+            def relativePath = grammarRoot.relativePath(grammarDir)
+            def packageName = "com.hound.parser.base.grammars.${relativePath.replace('\\', '.').replace('/', '.')}".replace("..", ".")
+            def outputDir = file("${baseOutputDir}/${relativePath}")
+
+            outputDir.mkdirs()
+
+            println "\n[${relativePath}] Обработка: ${grammarFile.name}"
+
+            def command = [
+                    'java', '-Xmx2g',
+                    '-jar', antlrCompleteJar.absolutePath,
+                    '-visitor', '-listener',
+                    '-package', packageName,
+                    '-o', outputDir.absolutePath,
+                    '-Xexact-output-dir',
+                    '-Xforce-atn',
+                    grammarFile.absolutePath
+            ]
+
+            def process = command.execute(null, grammarDir)
+            def stdout = new StringBuilder()
+            def stderr = new StringBuilder()
+            process.consumeProcessOutput(stdout, stderr)
+            def exitCode = process.waitFor(300, java.util.concurrent.TimeUnit.SECONDS) ? process.exitValue() : -1
+
+            if (exitCode == 0) {
+                success++
+                println "  ✓ Генерация успешна"
+            } else {
+                failed++
+                println "  ✗ Ошибка генерации: ${stderr}"
+                return
+            }
+
+            // Копирование Base-классов из папки Java (если есть)
+            def javaBaseDir = new File(grammarDir, "Java")
+            if (!javaBaseDir.exists() || !javaBaseDir.isDirectory()) {
+                javaBaseDir = new File(grammarDir, "java")
+            }
+
+            if (javaBaseDir.exists() && javaBaseDir.isDirectory()) {
+                println "  → Копируем Base-классы из ${javaBaseDir.name}"
+
+                javaBaseDir.eachFileMatch(~/.*\.java$/) { baseFile ->
+                    def targetFile = new File(outputDir, baseFile.name)
+                    String content = baseFile.text
+
+                    if (!content.trim().startsWith("package ")) {
+                        content = "package " + packageName + ";\n\n" + content
+                    }
+
+                    targetFile.text = content
+                    println "    Скопирован: ${baseFile.name}"
+                }
+            }
+        }
+
+        def generatedCount = fileTree(dir: baseOutputDir, include: '**/*.java').files.size()
+
+        println "\n========================================"
+        println "ГЕНЕРАЦИЯ ЗАВЕРШЕНА"
+        println "Успешно     : ${success}"
+        println "Ошибок      : ${failed}"
+        println "Всего .java : ${generatedCount}"
+        println "========================================"
+    }
+}
+
+// ==================== ВСПОМОГАТЕЛЬНЫЕ ЗАДАЧИ ====================
+
+task cleanGenerated(type: Delete) {
+    delete 'src/main/java/com/hound/parser/base/grammars'
+    description = 'Удаление всех сгенерированных парсеров'
+    group = 'antlr'
+}
+
+task listGrammars {
+    description = 'Список всех .g4 файлов'
+    group = 'antlr'
+
+    doLast {
+        def root = file('src/main/resources/grammars')
+        if (!root.exists()) {
+            println "Папка грамматик не найдена"
+            return
+        }
+        def files = []
+        root.eachFileRecurse { f ->
+            if (f.name.endsWith('.g4') && !f.path.contains('examples')) files << f
+        }
+        println "Найдено ${files.size()} грамматик:"
+        files.each { println "  ${it.name}" }
+    }
+}
+
+// ==================== ЗАВИСИМОСТИ ЗАДАЧ ====================
+
+compileJava.dependsOn generateGrammars
+clean.dependsOn cleanGenerated
+
+// ==================== APPLICATION ====================
+
+application {
+    mainClass = 'com.hound.HoundApplication'
+}
+tasks.withType(Tar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+tasks.withType(Zip).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+// ==================== DIAGNOSTIC ====================
+
+task diagnostic(type: JavaExec) {
+    description = 'Запуск ArcadeDB диагностики качества разбора'
+    group = 'hound'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.hound.diagnostic.DiagnosticRunner'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8'
+    if (project.hasProperty('dbPath')) {
+        args project.property('dbPath')
+    } else {
+        args 'target/hound-diag'
+    }
+}
+
+// ==================== TESTS ====================
+
+test {
+    useJUnitPlatform()
+    maxHeapSize = '2g'
+    // AtomQualityProbeTest reads from external corpus dirs — manual probe, not CI
+    exclude '**/AtomQualityProbeTest.class'
+    // Forward -Dintegration=true to test JVM for @EnabledIfSystemProperty
+    systemProperty 'integration', System.getProperty('integration', 'false')
+    // ArcadeDB embedded needs reflection access to java.nio internals on Java 21
+    jvmArgs(
+        '--add-opens', 'java.base/java.nio.channels.spi=ALL-UNNAMED',
+        '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.util=ALL-UNNAMED'
+    )
+}
+
+// ==================== FAT JAR ====================
+
+task fatJar(type: Jar) {
+    manifest {
+        attributes('Main-Class': 'com.hound.HoundApplication')
+    }
+    archiveClassifier = 'all'
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.collect { f ->
+            f.isDirectory() ? f : (f.name.endsWith('.jar') ? zipTree(f) : [])
+        }
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.EC',
+            'META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*',
+            'module-info.class'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// ==================== REMOTE BATCH (фиксированные параметры) ====================
+
+task runBatchLocal(type: JavaExec) {
+    description = 'Запуск Hound REMOTE_BATCH с фиксированными параметрами (test_plsql → hound @ localhost:2480)'
+    group = 'hound'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.hound.HoundApplication'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8'
+    args(
+        '--input',       'C:/Dali_tests/test_plsql',
+        '--db-type',     'arcadedb',
+        '--db-batch',
+        '--db-host',     'localhost',
+        '--db-port',     '2480',
+        '--db-name',     'hound',
+        '--db-user',     'root',
+        '--db-password', 'playwithdata',
+        '--clean'
+    )
+    doFirst {
+        println ""
+        println "════════════════════════════════════════"
+        println " Hound REMOTE_BATCH (local)"
+        println "════════════════════════════════════════"
+        println " input:    C:/Dali_tests/test_plsql"
+        println " arcadedb: http://localhost:2480"
+        println " database: hound"
+        println " clean:    true"
+        println "════════════════════════════════════════"
+        println ""
+    }
+}
+
+// ==================== RUN ====================
+
+run {
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8'
+    if (project.hasProperty('appArgs')) {
+        args appArgs.split('\\s+')
+    }
+}
+
+// ==================== REMOTE BATCH ====================
+
+task runBatch(type: JavaExec) {
+    description = 'Запуск Hound в режиме REMOTE_BATCH: один HTTP POST на файл в ArcadeDB'
+    group = 'hound'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.hound.HoundApplication'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8'
+
+    doFirst {
+        def inputDir  = project.findProperty('input')    ?: 'C:/Dali_tests/test_plsql'
+        def dbName    = project.findProperty('db')       ?: 'hound'
+        def dbHost    = project.findProperty('host')     ?: 'localhost'
+        def dbPort    = project.findProperty('port')     ?: '2480'
+        def dbUser    = project.findProperty('user')     ?: 'root'
+        def dbPass    = project.findProperty('password') ?: 'playwithdata'
+        def doClean   = project.findProperty('clean')    ?: 'true'
+
+        def argList = [
+            '--input',       inputDir,
+            '--db-type',     'arcadedb',
+            '--db-batch',
+            '--db-host',     dbHost,
+            '--db-port',     dbPort,
+            '--db-name',     dbName,
+            '--db-user',     dbUser,
+            '--db-password', dbPass,
+        ]
+        if (doClean == 'true') argList << '--clean'
+        args argList
+
+        println ""
+        println "════════════════════════════════════════"
+        println " Hound REMOTE_BATCH"
+        println "════════════════════════════════════════"
+        println " input:    ${inputDir}"
+        println " arcadedb: http://${dbHost}:${dbPort}"
+        println " database: ${dbName}"
+        println " clean:    ${doClean}"
+        println "════════════════════════════════════════"
+        println ""
+    }
+}

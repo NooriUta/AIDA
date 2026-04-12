@@ -1,0 +1,206 @@
+package com.hound.storage;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hound.semantic.model.*;
+import org.junit.jupiter.api.Test;
+
+import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Unit tests for {@link JsonlBatchBuilder}.
+ */
+class JsonlBatchBuilderTest {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    @Test
+    void testBuildFromResult_basicStructure() throws Exception {
+        // Build a minimal SemanticResult with 2 tables, 3 columns, 1 statement
+        Map<String, TableInfo> tables = new LinkedHashMap<>();
+        tables.put("SCHEMA1.ORDERS", new TableInfo("SCHEMA1.ORDERS", "ORDERS", "SCHEMA1", "TABLE"));
+        tables.put("SCHEMA1.ITEMS", new TableInfo("SCHEMA1.ITEMS", "ITEMS", "SCHEMA1", "TABLE"));
+
+        Map<String, ColumnInfo> columns = new LinkedHashMap<>();
+        columns.put("SCHEMA1.ORDERS.ID", new ColumnInfo("SCHEMA1.ORDERS.ID", "SCHEMA1.ORDERS", "ID", null, null, false, 0));
+        columns.put("SCHEMA1.ORDERS.NAME", new ColumnInfo("SCHEMA1.ORDERS.NAME", "SCHEMA1.ORDERS", "NAME", null, null, false, 1));
+        columns.put("SCHEMA1.ITEMS.PRICE", new ColumnInfo("SCHEMA1.ITEMS.PRICE", "SCHEMA1.ITEMS", "PRICE", null, null, false, 0));
+
+        Map<String, StatementInfo> statements = new LinkedHashMap<>();
+        StatementInfo stmt = new StatementInfo("STMT:1", "SELECT", "SELECT * FROM ORDERS", 1, 1, null, null);
+        stmt.addSourceTable("SCHEMA1.ORDERS", "O");
+        statements.put("STMT:1", stmt);
+
+        Map<String, Object> schemas = new LinkedHashMap<>();
+        schemas.put("SCHEMA1", Map.of("name", "SCHEMA1"));
+
+        Structure str = new Structure(Map.of(), schemas, Map.of(), tables, columns, Map.of(), statements);
+
+        SemanticResult result = new SemanticResult("test-sid", "/test.sql", "plsql", 100,
+                str, List.of(), Map.of(), List.of(), Map.of(), List.of());
+
+        JsonlBatchBuilder builder = JsonlBatchBuilder.buildFromResult("test-sid", result);
+        String payload = builder.build();
+
+        // Verify basic counts
+        assertTrue(builder.vertexCount() > 0, "Should have vertices");
+        assertTrue(builder.edgeCount() > 0, "Should have edges");
+
+        // Parse each line as JSON
+        String[] lines = payload.split("\n");
+        Set<String> vertexIds = new HashSet<>();
+        boolean foundVertices = false;
+        boolean edgesStarted = false;
+
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+            JsonNode node = MAPPER.readTree(line);
+            assertTrue(node.has("@type"), "Each line must have @type");
+            assertTrue(node.has("@class"), "Each line must have @class");
+
+            String type = node.get("@type").asText();
+            if ("vertex".equals(type)) {
+                assertFalse(edgesStarted, "Vertex found after edges started — order violation");
+                foundVertices = true;
+                String id = node.has("@id") ? node.get("@id").asText() : null;
+                if (id != null) {
+                    assertTrue(vertexIds.add(id), "Duplicate @id: " + id);
+                }
+            } else if ("edge".equals(type)) {
+                edgesStarted = true;
+            } else if ("document".equals(type)) {
+                // Documents go with vertices (before edges)
+                assertFalse(edgesStarted, "Document found after edges started — order violation");
+            }
+        }
+
+        assertTrue(foundVertices, "Should have at least one vertex");
+
+        // Verify specific vertex classes are present
+        Set<String> classes = new HashSet<>();
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+            JsonNode node = MAPPER.readTree(line);
+            classes.add(node.get("@class").asText());
+        }
+        assertTrue(classes.contains("DaliSession"), "Missing DaliSession");
+        assertTrue(classes.contains("DaliSchema"), "Missing DaliSchema");
+        assertTrue(classes.contains("DaliTable"), "Missing DaliTable");
+        assertTrue(classes.contains("DaliColumn"), "Missing DaliColumn");
+        assertTrue(classes.contains("DaliStatement"), "Missing DaliStatement");
+        // DaliSnippet is skipped in REMOTE_BATCH mode (batch endpoint rejects @type "document")
+    }
+
+    @Test
+    void testEscaping_multilineSnippet() throws Exception {
+        String snippet = "SELECT\n  a.id,\r\n  b.\"name\" AS \"full_name\"  -- comment\nFROM accounts a\nJOIN \"user_data\" b ON a.id = b.fk_id\nWHERE a.status = 'active'";
+
+        JsonlBatchBuilder b = new JsonlBatchBuilder();
+        b.appendVertex("DaliStatement", "STMT:1", Map.of(
+                "session_id", "sid",
+                "snippet", snippet
+        ));
+
+        String payload = b.build();
+        String[] lines = payload.split("\n");
+
+        // After escaping, the entire vertex should be on ONE line
+        assertEquals(1, lines.length, "Multiline snippet must produce a single NDJSON line");
+
+        // The line must parse as valid JSON
+        JsonNode node = MAPPER.readTree(lines[0]);
+        assertEquals("DaliStatement", node.get("@class").asText());
+
+        // The snippet value, when parsed, should match the original
+        String parsed = node.get("snippet").asText();
+        assertEquals(snippet, parsed, "JSON-parsed snippet must equal original");
+    }
+
+    @Test
+    void testVerticesBeforeEdges() {
+        JsonlBatchBuilder b = new JsonlBatchBuilder();
+
+        // Vertices must be added before any edge that references them (eager resolution)
+        b.appendVertex("DaliTable", "T1", Map.of("name", "orders"));
+        b.appendVertex("DaliColumn", "C1", Map.of("name", "id"));
+        b.appendEdge("HAS_COLUMN", "T1", "C1", Map.of("session_id", "s1"));
+
+        String payload = b.build();
+        String[] lines = payload.split("\n");
+
+        assertEquals(3, lines.length);
+
+        // First two lines = vertices, third = edge
+        assertTrue(lines[0].contains("\"@type\":\"vertex\""), "Line 0 should be vertex");
+        assertTrue(lines[1].contains("\"@type\":\"vertex\""), "Line 1 should be vertex");
+        assertTrue(lines[2].contains("\"@type\":\"edge\""), "Line 2 should be edge");
+    }
+
+    @Test
+    void testEscapeJson_specialCharacters() {
+        // Test all special characters
+        assertEquals("hello\\nworld", JsonlBatchBuilder.escapeJson("hello\nworld"));
+        assertEquals("tab\\there", JsonlBatchBuilder.escapeJson("tab\there"));
+        assertEquals("quote\\\"here", JsonlBatchBuilder.escapeJson("quote\"here"));
+        assertEquals("back\\\\slash", JsonlBatchBuilder.escapeJson("back\\slash"));
+        assertEquals("cr\\rhere", JsonlBatchBuilder.escapeJson("cr\rhere"));
+        assertEquals("\\u0000", JsonlBatchBuilder.escapeJson("\u0000"));
+        assertEquals("\\u001f", JsonlBatchBuilder.escapeJson("\u001f"));
+    }
+
+    @Test
+    void testNullValuesSkipped() throws Exception {
+        JsonlBatchBuilder b = new JsonlBatchBuilder();
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("name", "test");
+        props.put("alias", null);
+        props.put("order", 1);
+
+        b.appendVertex("DaliColumn", "C1", props);
+        String line = b.build().trim();
+
+        JsonNode node = MAPPER.readTree(line);
+        assertTrue(node.has("name"), "Non-null props must be present");
+        assertFalse(node.has("alias"), "Null props must be skipped");
+        assertTrue(node.has("order"), "Non-null props must be present");
+    }
+
+    @Test
+    void testMd5_consistency() {
+        // Same input must produce same output
+        String a = JsonlBatchBuilder.md5("STMT:1:col_name");
+        String b = JsonlBatchBuilder.md5("STMT:1:col_name");
+        assertEquals(a, b);
+        assertEquals(32, a.length(), "MD5 hex should be 32 chars");
+    }
+
+    @Test
+    void testDocumentType_skippedInBatchMode() {
+        JsonlBatchBuilder b = new JsonlBatchBuilder();
+        b.appendDocument("DaliSnippet", Map.of("snippet", "SELECT 1", "session_id", "s1"));
+
+        // ArcadeDB /api/v1/batch only accepts vertex and edge — documents are skipped
+        assertTrue(b.build().trim().isEmpty(), "Documents should be skipped in REMOTE_BATCH mode");
+    }
+
+    @Test
+    void testBooleanAndNumericValues() throws Exception {
+        JsonlBatchBuilder b = new JsonlBatchBuilder();
+        b.appendVertex("DaliColumn", "C1", Map.of(
+                "is_output", true,
+                "col_order", 42,
+                "name", "test"
+        ));
+
+        String line = b.build().trim();
+        JsonNode node = MAPPER.readTree(line);
+
+        assertTrue(node.get("is_output").isBoolean());
+        assertEquals(true, node.get("is_output").asBoolean());
+        assertTrue(node.get("col_order").isNumber());
+        assertEquals(42, node.get("col_order").asInt());
+        assertTrue(node.get("name").isTextual());
+    }
+}
