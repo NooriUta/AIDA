@@ -1,17 +1,21 @@
 import type { LoomNode, LoomEdge } from '../types/graph';
-import { LAYOUT } from './constants';
+import { LAYOUT, TRANSFORM } from './constants';
 import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 
 // ─── Node dimension hints for ELK (sourced from constants.ts) ────────────────
 const { NODE_WIDTH, NODE_HEIGHT_BASE, COL_ROW_HEIGHT, GRID_SPACING } = LAYOUT;
 
 function getNodeHeight(node: LoomNode): number {
+  // Cap column count used for ELK height so giant statement/table nodes
+  // (e.g. INSERT with 600+ output columns) don't stretch the layout to 20,000 px.
+  // applyStmtColumns already caps at MAX_PARTIAL_COLS; this is a safety net.
+  const maxCols = TRANSFORM.MAX_PARTIAL_COLS;
   if (node.type === 'tableNode') {
-    const cols = node.data.columns?.length ?? 0;
+    const cols = Math.min(node.data.columns?.length ?? 0, maxCols);
     return NODE_HEIGHT_BASE + cols * COL_ROW_HEIGHT + 24;
   }
   if (node.type === 'statementNode') {
-    const cols = node.data.columns?.length ?? 0;
+    const cols = Math.min(node.data.columns?.length ?? 0, maxCols);
     return NODE_HEIGHT_BASE + cols * COL_ROW_HEIGHT + (cols > 0 ? 24 : 0);
   }
   // Routine group: height is pre-computed and stored in style
