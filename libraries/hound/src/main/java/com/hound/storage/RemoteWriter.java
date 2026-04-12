@@ -46,6 +46,10 @@ class RemoteWriter {
         Map<String, String> ocByOrder  = new HashMap<>();
         /** key = "stmtGeoid:column_ref" → RID  (DATA_FLOW → DaliAffectedColumn) */
         Map<String, String> affCols    = new HashMap<>();
+        /** key = record_geoid → RID (BULK_COLLECTS_INTO / RECORD_USED_IN) */
+        Map<String, String> records = new HashMap<>();
+        /** key = field_geoid → RID (HAS_RECORD_FIELD) */
+        Map<String, String> recordFields = new HashMap<>();
         /** RID of the DaliSession vertex (BELONGS_TO_SESSION edges) */
         String sessionRid = null;
     }
@@ -70,17 +74,20 @@ class RemoteWriter {
         cache.packages   = buildRidMap("DaliPackage",     "package_geoid", sid);
         cache.atoms      = buildRidMap("DaliAtom",        "atom_id",       sid);
         cache.outputCols = buildRidMap("DaliOutputColumn","col_key",       sid);
+        cache.records      = buildRidMap("DaliRecord",      "record_geoid",  sid);
+        cache.recordFields = buildRidMap("DaliRecordField", "field_geoid",   sid);
         cache.ocByOrder  = buildOcByOrderMap(sid);
         cache.affCols    = buildAffColMap(sid);
         cache.sessionRid = buildRidMap("DaliSession", "session_id", sid)
                 .values().stream().findFirst().orElse(null);
 
-        logger.info("RID cache [db={}, sid={}]: T:{} C:{} S:{} R:{} P:{} A:{} OC:{} OCo:{} AC:{}",
+        logger.info("RID cache [db={}, sid={}]: T:{} C:{} S:{} R:{} P:{} A:{} OC:{} OCo:{} AC:{} Rec:{}",
                 dbName != null ? dbName : "ad-hoc", sid,
                 cache.tables.size(), cache.columns.size(),
                 cache.statements.size(), cache.routines.size(),
                 cache.packages.size(), cache.atoms.size(),
-                cache.outputCols.size(), cache.ocByOrder.size(), cache.affCols.size());
+                cache.outputCols.size(), cache.ocByOrder.size(), cache.affCols.size(),
+                cache.records.size());
         return cache;
     }
 
@@ -438,6 +445,25 @@ class RemoteWriter {
                     ac.get("column_ref"), ac.get("column_name"), ac.get("table_geoid"),
                     ac.get("dataset_alias"), ac.get("source_type"), ac.get("resolution_status"),
                     typeAffect, orderAffect);
+            }
+        }
+
+        // ── DaliRecord + DaliRecordField (G6: BULK COLLECT targets) ──
+        for (var e : str.getRecords().entrySet()) {
+            RecordInfo rec = e.getValue();
+            String fieldsJson = String.join(",", rec.getFields());
+            rcmd("INSERT INTO DaliRecord SET session_id=?, record_geoid=?, record_name=?, " +
+                    "routine_geoid=?, source_stmt_geoid=?, fields=?",
+                sid, rec.getGeoid(), rec.getVarName(),
+                rec.getRoutineGeoid(), rec.getSourceStatementGeoid(), fieldsJson);
+            // DaliRecordField — one vertex per named field (skipped for wildcard-only records)
+            List<String> fields = rec.getFields();
+            for (int fi = 0; fi < fields.size(); fi++) {
+                String fieldName = fields.get(fi);
+                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fieldName;
+                rcmd("INSERT INTO DaliRecordField SET session_id=?, field_geoid=?, field_name=?, " +
+                        "field_order=?, record_geoid=?",
+                    sid, fieldGeoid, fieldName, fi + 1, rec.getGeoid());
             }
         }
 
@@ -846,6 +872,38 @@ class RemoteWriter {
             }
         }
 
+
+        // ── BULK_COLLECTS_INTO / RECORD_USED_IN / HAS_RECORD_FIELD (G6: DaliRecord edges) ──
+        for (var e : str.getRecords().entrySet()) {
+            RecordInfo rec = e.getValue();
+            String recRid = rid.records.get(rec.getGeoid());
+            if (recRid == null) continue;
+            // DaliStatement(cursor SELECT) → BULK_COLLECTS_INTO → DaliRecord
+            String srcStmtRid = rid.statements.get(rec.getSourceStatementGeoid());
+            if (srcStmtRid != null)
+                edgeByRid("BULK_COLLECTS_INTO", srcStmtRid, recRid, sid);
+            // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (one per named field)
+            for (String fieldName : rec.getFields()) {
+                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fieldName;
+                String fieldRid = rid.recordFields.get(fieldGeoid);
+                if (fieldRid != null)
+                    edgeByRid("HAS_RECORD_FIELD", recRid, fieldRid, sid);
+            }
+            // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT) for each INSERT
+            // that references this record via an AffectedColumn with matching dataset_alias
+            for (var stmtEntry : str.getStatements().entrySet()) {
+                StatementInfo si = stmtEntry.getValue();
+                if (!"INSERT".equals(si.getType())) continue;
+                boolean usesRecord = si.getAffectedColumns().stream().anyMatch(
+                        ac -> rec.getVarName().equals(ac.get("dataset_alias")))
+                    || si.getBulkCollectSources().contains(rec.getVarName().toUpperCase());
+                if (usesRecord) {
+                    String insertRid = rid.statements.get(stmtEntry.getKey());
+                    if (insertRid != null)
+                        edgeByRid("RECORD_USED_IN", recRid, insertRid, sid);
+                }
+            }
+        }
 
         // ── CALLS edges ──
         Map<String, String> ridBySimpleName = new HashMap<>();

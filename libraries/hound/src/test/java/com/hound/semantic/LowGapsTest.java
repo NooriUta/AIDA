@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -311,6 +312,66 @@ class LowGapsTest {
                         "column_name must not contain prefix, got: " + colName);
             }
         }
+    }
+
+    // ═══════ G6: cursor → INSERT VALUES lineage ═══════
+
+    @Test
+    void g6_insertValuesCollectionFields_registersAffectedColumns() {
+        // BULK COLLECT + FORALL INSERT VALUES (SEQ.NEXTVAL, l_tab(i).field, ...)
+        // Fields matching collection(i).field must appear as affected columns on the INSERT statement.
+        // Sequences / constants (no parens-then-dot pattern) must be excluded.
+        String sql = """
+            DECLARE
+              TYPE t_tab IS TABLE OF orders_stg%ROWTYPE;
+              l_tab t_tab;
+            BEGIN
+              SELECT order_id, line_num, customer_id
+              BULK COLLECT INTO l_tab FROM orders_stg;
+
+              FORALL i IN 1..l_tab.COUNT
+                INSERT INTO DWH.FACT_SALES_STG
+                VALUES (SEQ_DWH_SALES.NEXTVAL, l_tab(i).order_id,
+                        l_tab(i).line_num, l_tab(i).customer_id);
+            END;
+            """;
+        var engine = parse(sql);
+        var insertSi = engine.getBuilder().getStatements().values().stream()
+                .filter(si -> "INSERT".equals(si.getType()))
+                .findFirst().orElse(null);
+        assertNotNull(insertSi, "INSERT statement must be parsed");
+
+        List<String> cols = insertSi.getAffectedColumns().stream()
+                .map(a -> (String) a.get("column_name"))
+                .filter(Objects::nonNull)
+                .toList();
+
+        assertTrue(cols.contains("ORDER_ID"),   "ORDER_ID must be in affected columns. Got: " + cols);
+        assertTrue(cols.contains("LINE_NUM"),   "LINE_NUM must be in affected columns. Got: " + cols);
+        assertTrue(cols.contains("CUSTOMER_ID"),"CUSTOMER_ID must be in affected columns. Got: " + cols);
+        assertFalse(cols.stream().anyMatch(c -> c.contains("NEXTVAL")),
+                "Sequence NEXTVAL must NOT appear as a column name. Got: " + cols);
+    }
+
+    @Test
+    void g6_insertValuesWithExplicitColumnList_notDuplicated() {
+        // When INSERT has an explicit column list, G6 must not add duplicate affected columns.
+        String sql = """
+            INSERT INTO orders (order_id, amount) VALUES (1, 100)
+            """;
+        var engine = parse(sql);
+        var insertSi = engine.getBuilder().getStatements().values().stream()
+                .filter(si -> "INSERT".equals(si.getType()))
+                .findFirst().orElse(null);
+        assertNotNull(insertSi);
+
+        // Only columns from the explicit list (order_id, amount) — no duplicates
+        List<String> cols = insertSi.getAffectedColumns().stream()
+                .map(a -> (String) a.get("column_name"))
+                .filter(Objects::nonNull)
+                .toList();
+        long orderIdCount = cols.stream().filter("ORDER_ID"::equalsIgnoreCase).count();
+        assertEquals(1L, orderIdCount, "ORDER_ID must appear exactly once. Got: " + cols);
     }
 
     // ═══════ OC-propagation: SELECT→SUBQUERY→CTE output column lift ═══════

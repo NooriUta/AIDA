@@ -15,7 +15,9 @@ public class Structure {
     private final Map<String, ColumnInfo> columns;
     private final Map<String, RoutineInfo> routines;
     private final Map<String, StatementInfo> statements;
+    private final Map<String, RecordInfo> records;
 
+    /** Backward-compatible constructor — records defaults to empty. */
     public Structure(Map<String, Object> databases,
                      Map<String, Object> schemas,
                      Map<String, Object> packages,
@@ -23,6 +25,17 @@ public class Structure {
                      Map<String, ColumnInfo> columns,
                      Map<String, RoutineInfo> routines,
                      Map<String, StatementInfo> statements) {
+        this(databases, schemas, packages, tables, columns, routines, statements, null);
+    }
+
+    public Structure(Map<String, Object> databases,
+                     Map<String, Object> schemas,
+                     Map<String, Object> packages,
+                     Map<String, TableInfo> tables,
+                     Map<String, ColumnInfo> columns,
+                     Map<String, RoutineInfo> routines,
+                     Map<String, StatementInfo> statements,
+                     Map<String, RecordInfo> records) {
         this.databases = databases != null ? databases : Map.of();
         this.schemas = schemas != null ? schemas : Map.of();
         this.packages = packages != null ? packages : Map.of();
@@ -30,6 +43,7 @@ public class Structure {
         this.columns = columns != null ? columns : Map.of();
         this.routines = routines != null ? routines : Map.of();
         this.statements = statements != null ? statements : Map.of();
+        this.records = records != null ? records : Map.of();
     }
 
     public Map<String, Object> getDatabases() { return databases; }
@@ -39,4 +53,5 @@ public class Structure {
     public Map<String, ColumnInfo> getColumns() { return columns; }
     public Map<String, StatementInfo> getStatements() { return statements; }
     public Map<String, RoutineInfo> getRoutines() { return routines; }
+    public Map<String, RecordInfo> getRecords() { return records; }
 }

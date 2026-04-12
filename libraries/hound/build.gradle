@@ -264,8 +264,10 @@ test {
     maxHeapSize = '2g'
     // AtomQualityProbeTest reads from external corpus dirs — manual probe, not CI
     exclude '**/AtomQualityProbeTest.class'
-    // Forward -Dintegration=true to test JVM for @EnabledIfSystemProperty
+    // Forward -Dintegration=true / -Dcorpus=true to test JVM for @EnabledIfSystemProperty
     systemProperty 'integration', System.getProperty('integration', 'false')
+    systemProperty 'corpus',      System.getProperty('corpus', 'false')
+    if (System.getProperty('corpus.dir')) systemProperty 'corpus.dir', System.getProperty('corpus.dir')
     // ArcadeDB embedded needs reflection access to java.nio internals on Java 21
     jvmArgs(
         '--add-opens', 'java.base/java.nio.channels.spi=ALL-UNNAMED',

@@ -156,6 +156,11 @@ public class ScopeManager {
         return recordVar != null ? cursorRecordAliases.get(recordVar.toUpperCase()) : null;
     }
 
+    /** Returns the SELECT statement geoid for the given cursor name (from CURSOR cur IS SELECT ...), or null. */
+    public String getCursorStmtGeoid(String cursorName) {
+        return cursorName != null ? cursorRegistry.get(cursorName.toUpperCase()) : null;
+    }
+
     /** Clears cursor state — called on routine exit. */
     public void clearCursorState() {
         cursorRegistry.clear();
