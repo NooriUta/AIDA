@@ -1,5 +1,9 @@
+// i18n must be initialised before any component renders — importing here
+// ensures it runs when App is loaded as an MF remote (main.tsx is not
+// executed in that case).
+import './i18n/config';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { Routes, Route, Navigate, NavLink } from 'react-router-dom';
 import { Globe, Paintbrush, Sun, Moon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LoginPage }      from './components/auth/LoginPage';
@@ -340,9 +344,9 @@ function AppLayout() {
         </span>
 
         {/* Nav links */}
-        <NavItem to="/dashboard" label={t('nav.dashboard')} />
-        <NavItem to="/events"    label={t('nav.events')} />
-        <NavItem to="/controls"  label={t('nav.controls')} />
+        <NavItem to="dashboard" label={t('nav.dashboard')} />
+        <NavItem to="events"    label={t('nav.events')} />
+        <NavItem to="controls"  label={t('nav.controls')} />
 
         {/* Right-side toolbar (pushed to right) */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -363,10 +367,10 @@ function AppLayout() {
           </div>
         }>
           <Routes>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/events"    element={<EventStreamPage />} />
-            <Route path="/controls"  element={<ControlsPage />} />
-            <Route path="*"          element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="events"    element={<EventStreamPage />} />
+            <Route path="controls"  element={<ControlsPage />} />
+            <Route path="*"         element={<Navigate to="dashboard" replace />} />
           </Routes>
         </Suspense>
       </main>
@@ -383,20 +387,24 @@ function SessionGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// ── Root ──────────────────────────────────────────────────────────────────────
+/**
+ * Heimdall-frontend root — exported as MF remote (heimdall-frontend/App).
+ *
+ * Does NOT include BrowserRouter — the Router context is provided by the
+ * host (Shell) when running as a remote, or by main.tsx when running standalone.
+ * Route paths are RELATIVE so they work under both "/" and "/heimdall/*".
+ */
 export default function App() {
   return (
-    <BrowserRouter>
-      <SessionGuard>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/*" element={
-            <ProtectedRoute>
-              <AppLayout />
-            </ProtectedRoute>
-          } />
-        </Routes>
-      </SessionGuard>
-    </BrowserRouter>
+    <SessionGuard>
+      <Routes>
+        <Route path="login" element={<LoginPage />} />
+        <Route path="*" element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </SessionGuard>
   );
 }
