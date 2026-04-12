@@ -1,8 +1,9 @@
 // File: src/main/java/com/hound/storage/ArcadeDBSemanticWriter.java
 package com.hound.storage;
 
-import com.arcadedb.database.Database;
-import com.arcadedb.database.DatabaseFactory;
+// TODO(arcadedb-embed): EMBEDDED mode removed during 26.x upgrade.
+// Restore EmbeddedWriter + Mode.EMBEDDED after engine API stabilises.
+
 import com.arcadedb.remote.RemoteDatabase;
 import com.hound.metrics.PipelineTimer;
 import com.hound.semantic.model.*;
@@ -12,13 +13,12 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Thin facade over {@link EmbeddedWriter} and {@link RemoteWriter}.
+ * Thin facade over {@link RemoteWriter}.
  *
  * <p>Lifecycle, public API routing, and shared count computation live here.
  * All heavy write logic is delegated to the mode-specific writer.
  *
  * <ul>
- *   <li>{@link EmbeddedWriter} — ArcadeDB embedded-mode write path</li>
  *   <li>{@link RemoteWriter}   — ArcadeDB remote-mode write path (REMOTE + REMOTE_BATCH)</li>
  *   <li>{@link WriteHelpers}   — pure static helpers shared by both writers</li>
  * </ul>
@@ -27,28 +27,15 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
 
     private static final Logger logger = LoggerFactory.getLogger(ArcadeDBSemanticWriter.class);
 
-    private Database              embeddedDb;   // kept for close()
-    private final EmbeddedWriter  embedded;
     private final RemoteWriter    remote;
     private final HttpBatchClient batchClient;  // non-null only in REMOTE_BATCH mode
     private final Mode            mode;
 
-    public enum Mode { EMBEDDED, REMOTE, REMOTE_BATCH }
+    public enum Mode { REMOTE, REMOTE_BATCH }
 
     // ═══════════════════════════════════════════════════════════════
     // Constructors
     // ═══════════════════════════════════════════════════════════════
-
-    public ArcadeDBSemanticWriter(String dbPath) {
-        this.mode = Mode.EMBEDDED;
-        DatabaseFactory factory = new DatabaseFactory(dbPath);
-        this.embeddedDb = factory.exists() ? factory.open() : factory.create();
-        SchemaInitializer.ensureSchema(embeddedDb);
-        this.embedded    = new EmbeddedWriter(embeddedDb);
-        this.remote      = null;
-        this.batchClient = null;
-        logger.info("ArcadeDB EMBEDDED: {}", dbPath);
-    }
 
     public ArcadeDBSemanticWriter(String host, int port, String dbName,
                                   String user, String password) {
@@ -58,7 +45,6 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
             try { rdb.command("sql", cmd); }
             catch (Exception e) { logger.debug("Schema init cmd skipped ({}): {}", e.getClass().getSimpleName(), e.getMessage()); }
         }
-        this.embedded    = null;
         this.remote      = new RemoteWriter(rdb);
         this.batchClient = null;
         logger.info("ArcadeDB REMOTE: {}:{}/{}", host, port, dbName);
@@ -72,7 +58,6 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
             try { rdb.command("sql", cmd); }
             catch (Exception e) { logger.debug("Schema init cmd skipped ({}): {}", e.getClass().getSimpleName(), e.getMessage()); }
         }
-        this.embedded    = null;
         this.remote      = new RemoteWriter(rdb);
         this.batchClient = useBatch
                 ? new HttpBatchClient(host, port, dbName, user, password)
@@ -96,9 +81,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
         String sid = result.getSessionId();
         long t0 = System.currentTimeMillis();
 
-        if (mode == Mode.EMBEDDED) {
-            embedded.write(sid, result, timer, pool, dbName);
-        } else if (mode == Mode.REMOTE_BATCH) {
+        if (mode == Mode.REMOTE_BATCH) {
             remote.writeBatch(batchClient, sid, result, timer, pool, dbName);
         } else {
             remote.write(sid, result, timer, pool, dbName);
@@ -141,9 +124,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
     }
 
     public CanonicalPool ensureCanonicalPool(String dbName, String appName, String appGeoid) {
-        return mode == Mode.EMBEDDED
-                ? embedded.ensurePool(dbName, appName, appGeoid)
-                : remote.ensurePool(dbName, appName, appGeoid);
+        return remote.ensurePool(dbName, appName, appGeoid);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -175,17 +156,10 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
         final int atomFunc     = atomFuncTmp;
         final int atomFailed   = atomFailedTmp;
 
-        if (mode == Mode.EMBEDDED) {
-            embedded.writePerfStats(sid, result, timer, dbName,
-                    cntTables, cntColumns, cntStatements, cntRoutines,
-                    cntAtoms, cntJoins, cntOutputCols, cntLineage,
-                    atomResolved, atomConst, atomFunc, atomFailed);
-        } else {
-            remote.writePerfStats(sid, result, timer, dbName,
-                    cntTables, cntColumns, cntStatements, cntRoutines,
-                    cntAtoms, cntJoins, cntOutputCols, cntLineage,
-                    atomResolved, atomConst, atomFunc, atomFailed);
-        }
+        remote.writePerfStats(sid, result, timer, dbName,
+                cntTables, cntColumns, cntStatements, cntRoutines,
+                cntAtoms, cntJoins, cntOutputCols, cntLineage,
+                atomResolved, atomConst, atomFunc, atomFailed);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -215,11 +189,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                 "DaliSnippet","DaliSnippetScript"
         };
 
-        if (mode == Mode.EMBEDDED) {
-            embedded.cleanAll(edgeTypes, vtxTypes, docTypes);
-        } else {
-            remote.cleanAll(edgeTypes, vtxTypes, docTypes);
-        }
+        remote.cleanAll(edgeTypes, vtxTypes, docTypes);
         logger.info("ArcadeDB CLEAN: all Dali records deleted ({})", mode);
     }
 
@@ -229,9 +199,6 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
 
     @Override
     public void close() {
-        if (embeddedDb != null && embeddedDb.isOpen()) {
-            embeddedDb.close();
-            logger.info("ArcadeDB EMBEDDED closed");
-        }
+        // Remote connections are stateless HTTP — nothing to close
     }
 }
