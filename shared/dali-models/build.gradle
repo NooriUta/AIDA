@@ -1,4 +1,4 @@
-plugins { id 'java' }
+plugins { id 'java-library' }
 
 group   = 'studio.seer.shared'
 version = '1.0.0-SNAPSHOT'
