@@ -1,0 +1,41 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version "${quarkusPlatformVersion}"
+}
+
+group   = 'studio.seer.heimdall'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    // REST + JSON
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+
+    // WebSocket (Next API — не legacy @ServerEndpoint)
+    implementation 'io.quarkus:quarkus-websockets-next'
+
+    // Metrics + Health
+    implementation 'io.quarkus:quarkus-micrometer'
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
+    // CDI
+    implementation 'io.quarkus:quarkus-arc'
+
+    // Shared schema — HeimdallEvent, EventType, EventLevel
+    implementation project(':shared:dali-models')
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+compileJava.options.encoding     = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'

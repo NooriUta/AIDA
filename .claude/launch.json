@@ -3,21 +3,31 @@
   "configurations": [
     {
       "name": "verdandi",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5173
+      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
+      "runtimeArgs": ["C:/AIDA/aida-root/frontends/verdandi/node_modules/vite/bin/vite.js"],
+      "port": 5173,
+      "cwd": "C:/AIDA/aida-root/frontends/verdandi"
     },
     {
       "name": "chur",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
+      "runtimeArgs": ["C:/AIDA/aida-root/bff/chur/node_modules/tsx/dist/cli.mjs", "watch", "src/server.ts"],
+      "port": 3000,
+      "cwd": "C:/AIDA/aida-root/bff/chur"
     },
     {
       "name": "shuttle",
-      "runtimeExecutable": "./gradlew",
+      "runtimeExecutable": "C:/AIDA/aida-root/gradlew.bat",
       "runtimeArgs": [":services:shuttle:quarkusDev"],
-      "port": 8080
+      "port": 8080,
+      "cwd": "C:/AIDA/aida-root"
+    },
+    {
+      "name": "heimdall-backend",
+      "runtimeExecutable": "C:/AIDA/aida-root/gradlew.bat",
+      "runtimeArgs": [":services:heimdall-backend:quarkusDev"],
+      "port": 9093,
+      "cwd": "C:/AIDA/aida-root"
     }
   ]
 }

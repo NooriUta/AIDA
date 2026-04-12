@@ -107,50 +107,73 @@ export function clearLayoutCache(): void {
   cancelPendingLayouts();
 }
 
-// ─── ELK engine ─────────────────────────────────────────────────────────────
-// Uses elk.bundled.js (pure JS) on the main thread.
+// ─── ELK engine (Web Worker) ─────────────────────────────────────────────────
+// ELK layout runs inside a dedicated Web Worker (workers/elkWorker.ts) so the
+// main thread stays responsive during heavy layouts (500–5000+ nodes).
 //
-// NOTE: A Web Worker approach was attempted (see workers/elkWorker.ts) but
-// Vite's CJS→ESM transform renames the `Worker` global to `_Worker` inside
-// elk.bundled.js, causing "TypeError: _Worker is not a constructor" inside
-// the Worker context.  This is a Vite dev-server limitation; a production-
-// only Worker can be revisited once Vite 6+ ships native CJS Worker support.
+// The worker stubs out `self.Worker` before importing elk.bundled.js, which
+// prevents elkjs from spawning nested workers and avoids the Vite CJS→ESM
+// `_Worker is not a constructor` error that blocked the earlier attempt.
 //
-// The main-thread approach is acceptable:
-//   • < 1 s for typical schemas (< 500 nodes)
-//   • 2–5 s for large schemas (500–1000 nodes) — loading spinner is shown
-//   • 15 s timeout with grid fallback for degenerate cases
+// vite.config.ts is already configured:
+//   worker: { format: 'es' }
+//   optimizeDeps.include: ['elkjs/lib/elk.bundled.js']
 
 const LAYOUT_TIMEOUT = LAYOUT.TIMEOUT_MS;
 
-/** Cancel pending layouts — no-op now but kept for API compat with useLoomLayout. */
-export function cancelPendingLayouts(): void {
-  // Reserved for future Worker re-enablement
+// Worker singleton + in-flight request registry
+let _elkWorker: Worker | null = null;
+let _reqCounter = 0;
+const _pending = new Map<number, {
+  resolve: (r: ElkGraph & { children: ElkNode[] }) => void;
+  reject:  (e: Error) => void;
+}>();
+
+function getElkWorker(): Worker {
+  if (!_elkWorker) {
+    _elkWorker = new Worker(
+      new URL('../workers/elkWorker.ts', import.meta.url),
+      { type: 'module' },
+    );
+    _elkWorker.onmessage = (
+      e: MessageEvent<{ id: number; result?: ElkGraph & { children: ElkNode[] }; error?: string }>,
+    ) => {
+      const { id, result, error } = e.data;
+      const p = _pending.get(id);
+      if (!p) return;
+      _pending.delete(id);
+      if (error) p.reject(new Error(error));
+      else       p.resolve(result!);
+    };
+  }
+  return _elkWorker;
 }
 
-// Singleton bundled-ELK
-let _elkMain: ElkApi | null = null;
-
-async function getElk(): Promise<ElkApi> {
-  if (_elkMain) return _elkMain;
-  const mod = await import('elkjs/lib/elk.bundled.js');
-  const ELK = (mod.default as unknown) as new () => ElkApi;
-  _elkMain = new ELK();
-  return _elkMain;
+/** Cancel all in-flight layout requests (e.g. on schema change). */
+export function cancelPendingLayouts(): void {
+  _pending.forEach(({ reject }) => reject(new Error('cancelled')));
+  _pending.clear();
 }
 
 async function runElkLayout(graph: ElkGraph): Promise<(ElkGraph & { children: ElkNode[] }) | null> {
   const t0 = performance.now();
   try {
-    const elk = await getElk();
+    const id     = ++_reqCounter;
+    const worker = getElkWorker();
     const result = await Promise.race([
-      elk.layout(graph) as Promise<ElkGraph & { children: ElkNode[] }>,
+      new Promise<ElkGraph & { children: ElkNode[] }>((resolve, reject) => {
+        _pending.set(id, { resolve, reject });
+        worker.postMessage({ id, graph });
+      }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`ELK layout timed out after ${LAYOUT_TIMEOUT / 1000}s`)), LAYOUT_TIMEOUT),
+        setTimeout(() => {
+          _pending.delete(id);
+          reject(new Error(`ELK layout timed out after ${LAYOUT_TIMEOUT / 1000}s`));
+        }, LAYOUT_TIMEOUT),
       ),
     ]);
     const ms = (performance.now() - t0).toFixed(0);
-    console.info(`[LOOM] ELK layout (main-thread) — ${ms} ms  (${graph.children.length} nodes, ${graph.edges.length} edges)`);
+    console.info(`[LOOM] ELK layout (worker) — ${ms} ms  (${graph.children.length} nodes, ${graph.edges.length} edges)`);
     return result;
   } catch (err) {
     const ms = (performance.now() - t0).toFixed(0);

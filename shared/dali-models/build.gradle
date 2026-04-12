@@ -1,0 +1,14 @@
+plugins { id 'java' }
+
+group   = 'studio.seer.shared'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories { mavenCentral() }
+
+// Нет внешних зависимостей — чистые Java records и enums.
+// Этот модуль — единственный источник истины для HeimdallEvent schema (Q6).

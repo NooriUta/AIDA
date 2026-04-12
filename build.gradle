@@ -113,10 +113,10 @@ task devAll {
                 "start \"SHUTTLE\" /D \"${rootDir}\" \"${gradleCmd}\" :services:shuttle:quarkusDev")
                 .start()
             new ProcessBuilder('cmd', '/c',
-                "start \"Chur\" /D \"${churDir}\" ${npmCmd} run dev")
+                "start \"Chur\" /D \"${churDir}\" \"${npmCmd}\" run dev")
                 .start()
             new ProcessBuilder('cmd', '/c',
-                "start \"verdandi\" /D \"${verdandiDir}\" ${npmCmd} run dev")
+                "start \"verdandi\" /D \"${verdandiDir}\" \"${npmCmd}\" run dev")
                 .start()
             println '> Opened SHUTTLE (:8080), Chur (:3000) and verdandi (:5173) in separate windows.'
         } else {
