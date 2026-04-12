@@ -24,6 +24,7 @@ public class StructureAndLineageBuilder {
     private final Map<String, ColumnInfo> columns = new LinkedHashMap<>();
     private final Map<String, StatementInfo> statements = new LinkedHashMap<>();
     private final Map<String, RoutineInfo> routines = new LinkedHashMap<>();
+    private final Map<String, RecordInfo> records = new LinkedHashMap<>();
     private final List<LineageEdge> lineageEdges = new ArrayList<>();
 
     // STAB-2: диагностический логгер (null = prod-режим, no-op)
@@ -176,6 +177,26 @@ public class StructureAndLineageBuilder {
         return routines;
     }
 
+    // ═══════ Records (BULK COLLECT targets) ═══════
+
+    /**
+     * Registers a PL/SQL collection variable populated via BULK COLLECT INTO.
+     * Geoid formula: routineGeoid + ":RECORD:" + varNameUpper
+     * Idempotent — returns existing RecordInfo if already registered.
+     */
+    public RecordInfo ensureRecord(String varName, String routineGeoid) {
+        if (varName == null) return null;
+        String upperVar = varName.toUpperCase();
+        String rg = routineGeoid != null ? routineGeoid : "";
+        String geoid = (rg.isBlank() ? "RECORD" : rg) + ":RECORD:" + upperVar;
+        return records.computeIfAbsent(geoid, k -> {
+            logger.debug("New record registered: {} [{}]", upperVar, geoid);
+            return new RecordInfo(geoid, upperVar, routineGeoid);
+        });
+    }
+
+    public Map<String, RecordInfo> getRecords() { return records; }
+
     // ═══════ Routines ═══════
 
     /** Backward-compatible (без parentRoutine) */
@@ -269,7 +290,7 @@ public class StructureAndLineageBuilder {
     // ═══════ Structure ═══════
 
     public Structure getStructure() {
-        return new Structure(databases, schemas, packages, tables, columns, routines, statements);
+        return new Structure(databases, schemas, packages, tables, columns, routines, statements, records);
     }
 
     // ═══════ Schemas / Databases ═══════

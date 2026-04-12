@@ -12,6 +12,9 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -27,6 +30,8 @@ import java.util.regex.Pattern;
  * 3. Никаких BaseSemanticListener.cleanIdentifier() без static — метод public static.
  */
 public class PlSqlSemanticListener extends PlSqlParserBaseListener {
+
+    private static final Logger logger = LoggerFactory.getLogger(PlSqlSemanticListener.class);
 
     private final BaseSemanticListener base;
 
@@ -1049,11 +1054,68 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (ctx == null || ctx.parent == null) return;
         // Only handle SELECT INTO (query_block), not INSERT INTO or RETURNING INTO
         if (!(ctx.parent instanceof PlSqlParser.Query_blockContext)) return;
-        String stmtGeoid = base.currentStatement();
+        // Use ScopeManager geoid (matches StructureAndLineageBuilder.getStatements() keys)
+        // base.currentStatement() returns the internal scope key, not the statement geoid
+        String stmtGeoid = base.engine.getScopeManager().currentStatement();
         if (stmtGeoid == null) return;
         var si = base.engine.getBuilder().getStatements().get(stmtGeoid);
-        if (si != null) si.setSubtype("SELECT_INTO");
-        // Variable names are tracked as column refs via general_element / bind_variable children
+        if (ctx.BULK() != null) {
+            // G6: BULK COLLECT INTO — register the target collection variable
+            if (si != null) si.setSubtype("BULK_COLLECT");
+            List<PlSqlParser.General_elementContext> targets = ctx.general_element();
+            if (targets != null && !targets.isEmpty()) {
+                String varName = targets.get(0).getText().toUpperCase();
+                String routineGeoid = base.currentRoutine();
+                // Create RecordInfo and link it to this SELECT statement
+                var rec = base.engine.getBuilder().ensureRecord(varName, routineGeoid);
+                rec.setSourceStatementGeoid(stmtGeoid);
+                // Register as cursor-record alias so AtomProcessor can resolve collection.field
+                base.engine.getScopeManager().registerCursorRecord(varName, stmtGeoid, true);
+            }
+        } else {
+            if (si != null) si.setSubtype("SELECT_INTO");
+            // Variable names are tracked as column refs via general_element / bind_variable children
+        }
+    }
+
+    // =========================================================================
+    // G8: FETCH cursor BULK COLLECT INTO collection — create RecordInfo
+    // =========================================================================
+
+    @Override
+    public void exitFetch_statement(PlSqlParser.Fetch_statementContext ctx) {
+        if (ctx == null || ctx.BULK() == null) return; // only BULK COLLECT INTO
+        if (ctx.variable_or_collection() == null || ctx.variable_or_collection().isEmpty()) return;
+
+        // Collection variable name (first target after INTO)
+        String varName = BaseSemanticListener.cleanIdentifier(
+                ctx.variable_or_collection(0).getText()).toUpperCase();
+
+        // Cursor name — resolve its SELECT statement geoid
+        String cursorSelectGeoid = null;
+        if (ctx.cursor_name() != null) {
+            String rawCursor = ctx.cursor_name().getText();
+            int paren = rawCursor.indexOf('(');
+            String cursorName = BaseSemanticListener.cleanIdentifier(
+                    paren >= 0 ? rawCursor.substring(0, paren) : rawCursor);
+            cursorSelectGeoid = base.engine.getScopeManager().getCursorStmtGeoid(cursorName);
+        }
+
+        String routineGeoid = base.currentRoutine();
+        var rec = base.engine.getBuilder().ensureRecord(varName, routineGeoid);
+
+        // Link to cursor's SELECT statement (so BULK_COLLECTS_INTO edge can be created)
+        if (cursorSelectGeoid != null && rec.getSourceStatementGeoid() == null) {
+            rec.setSourceStatementGeoid(cursorSelectGeoid);
+        }
+
+        // Register as cursor-record alias for col resolution in INSERT VALUES atoms
+        String stmtGeoid = cursorSelectGeoid != null ? cursorSelectGeoid
+                : base.engine.getScopeManager().currentStatement();
+        if (stmtGeoid != null)
+            base.engine.getScopeManager().registerCursorRecord(varName, stmtGeoid, true);
+
+        logger.debug("G8 FETCH BULK COLLECT: {} → cursor stmt {}", varName, cursorSelectGeoid);
     }
 
     @Override
@@ -1156,8 +1218,9 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
     @Override
     public void enterValues_clause(PlSqlParser.Values_clauseContext ctx) { base.onValuesClauseEnter(); }
+
     @Override
-    public void exitValues_clause(PlSqlParser.Values_clauseContext ctx)  { base.onValuesClauseExit(); }
+    public void exitValues_clause(PlSqlParser.Values_clauseContext ctx) { base.onValuesClauseExit(); }
 
     /**
      * STAB-6: exitExpression — VALUES counter + atom binding.

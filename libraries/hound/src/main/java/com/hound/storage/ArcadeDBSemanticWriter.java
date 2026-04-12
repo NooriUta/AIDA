@@ -202,6 +202,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                 "USES_SUBQUERY","NESTED_IN","CONTAINS_STMT",
                 "HAS_PARAMETER","HAS_VARIABLE","CHILD_OF","CONTAINS_ROUTINE",
                 "ROUTINE_USES_TABLE","CALLS",
+                "BULK_COLLECTS_INTO","RECORD_USED_IN","HAS_RECORD_FIELD","FIELD_MAPS_TO",
                 "HAS_COLUMN","CONTAINS_TABLE","CONTAINS_SCHEMA","BELONGS_TO_APP","BELONGS_TO_SESSION"
         };
         String[] vtxTypes = {
@@ -209,7 +210,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                 "DaliParameter","DaliVariable","DaliStatement",
                 "DaliColumn","DaliPackage","DaliRoutine","DaliTable",
                 "DaliSchema","DaliSession","DaliDatabase",
-                "DaliApplication"
+                "DaliApplication","DaliRecord","DaliRecordField"
         };
         String[] docTypes = {
                 "DaliSnippet","DaliSnippetScript"

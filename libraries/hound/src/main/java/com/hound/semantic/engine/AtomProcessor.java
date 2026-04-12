@@ -1,6 +1,7 @@
 package com.hound.semantic.engine;
 
 import com.hound.semantic.model.AtomInfo;
+import com.hound.semantic.model.RecordInfo;
 import com.hound.semantic.model.RoutineInfo;
 import com.hound.semantic.model.StatementInfo;
 import com.hound.semantic.model.TableInfo;
@@ -197,6 +198,17 @@ public class AtomProcessor {
             }
         }
 
+        // --- G6: Collection field access: collection(index).field — e.g. L_TAB(I).ORDER_ID
+        // Pattern: IDENT LEFT_PAREN ... RIGHT_PAREN PERIOD IDENT
+        // Must be checked BEFORE the generic function_call branch.
+        // Works for complex atoms too (nestedAtomCount > 0 due to the index sub-atom).
+        if (isCollectionFieldAccess(tokens, tokenDetails)) {
+            atomData.put("is_collection_field_access", true);
+            atomData.put("collection_field_name", tokens.get(tokens.size() - 1).toUpperCase());
+            atomData.put("collection_name",        tokens.get(0).toUpperCase());
+            return;
+        }
+
         // --- Вызов функции: ID LEFT_PAREN ... ---
         if (tokens.size() >= 3
                 && getCanonical(tokenDetails.get(0)).isIdentifier()
@@ -355,14 +367,175 @@ public class AtomProcessor {
     }
 
     /**
-     * DaliAffectedColumn = only target table columns (INSERT col list, UPDATE SET cols,
-     * MERGE INSERT/UPDATE targets). Those are registered explicitly during the grammar walk
-     * via onInsertColumnList / onUpdateSetColumn / addMergeTargetColumn.
-     * Atoms (SELECT, WHERE, JOIN, ORDER, HAVING, etc.) do NOT go into affectedColumns.
+     * Post-resolution pass: builds affectedColumns from atoms.
+     * Currently handles G6: INSERT VALUES collection(i).field → target column registration.
      */
     private void buildAffectedColumnsFromAtoms(String statementGeoid,
                                                 Map<String, Map<String, Object>> stmtAtoms) {
-        // Intentionally empty: all affectedColumns entries are registered explicitly.
+        buildInsertValuesAffectedColumns(statementGeoid, stmtAtoms);
+    }
+
+    /**
+     * G6: scans INSERT_VALUES atoms for collection field access patterns,
+     * groups them by VALUES slot (output_column_sequence), and registers
+     * each slot as an INSERT AffectedColumn.
+     *
+     * Positional matching: if the target table has DDL-derived ordinalPosition,
+     * the N-th slot maps to the N-th column. Otherwise falls back to the field
+     * name from the collection record (valid for %ROWTYPE / name-matching records).
+     *
+     * Guard: skipped if the INSERT already has an explicit column list (G5).
+     * For slots with multiple collection fields (arithmetic), target column name
+     * is resolved only from DDL; without DDL the slot is skipped.
+     */
+    @SuppressWarnings("unchecked")
+    private void buildInsertValuesAffectedColumns(String statementGeoid,
+                                                   Map<String, Map<String, Object>> stmtAtoms) {
+        StatementInfo si = builder == null ? null : builder.getStatements().get(statementGeoid);
+        if (si == null || !"INSERT".equals(si.getType())) return;
+        if (!si.getInsertTargetColumns().isEmpty()) {
+            // G5 explicit col list: column bindings already handled, but we still need to
+            // record which collection variables appear in VALUES so that RemoteWriter can
+            // create RECORD_USED_IN edges for FORALL INSERT patterns (G6-EXT).
+            Set<String> collsFound = new java.util.LinkedHashSet<>();
+            for (Map<String, Object> a : stmtAtoms.values()) {
+                if (!Boolean.TRUE.equals(a.get("is_collection_field_access"))) continue;
+                String pCtx = (String) a.get("parent_context");
+                if (!"VALUES".equals(pCtx) && !"INSERT_VALUES".equals(pCtx)) continue;
+                String collName = (String) a.get("collection_name");
+                if (collName != null) { si.addBulkCollectSource(collName); collsFound.add(collName); }
+            }
+            // Populate RecordInfo.fields from cursor SELECT columnsOutput (non-wildcard case)
+            if (builder != null && scopeManager != null) {
+                for (String collName : collsFound) {
+                    String cursorStmtGeoid = scopeManager.getCursorRecordStmt(collName);
+                    if (cursorStmtGeoid == null) continue;
+                    com.hound.semantic.model.RecordInfo rec =
+                            builder.getRecords().values().stream()
+                                    .filter(r -> collName.equals(r.getVarName()))
+                                    .findFirst().orElse(null);
+                    if (rec != null && rec.getFields().isEmpty())
+                        populateRecordFields(rec, cursorStmtGeoid);
+                }
+            }
+            return;
+        }
+
+        List<String> targetGeoids = si.getTargetTableGeoids();
+        String targetGeoid = targetGeoids.isEmpty() ? null : targetGeoids.get(0);
+
+        // slot (1-based VALUES position) → distinct field names from collection accesses
+        Map<Integer, List<String>> slotToFields       = new TreeMap<>();
+        // slot → collection variable name (first one wins; normally all atoms in a slot share one)
+        Map<Integer, String>       slotToCollection   = new TreeMap<>();
+
+        for (Map<String, Object> a : stmtAtoms.values()) {
+            if (!Boolean.TRUE.equals(a.get("is_collection_field_access"))) continue;
+            // parent_context is set from ScopeContext.getActiveClause() = "VALUES"
+            // (not "INSERT_VALUES" — that string lives in BaseSemanticListener.getCurrentParentContext).
+            // Statement type guard below already limits scope to INSERT only.
+            String pCtx = (String) a.get("parent_context");
+            if (!"VALUES".equals(pCtx) && !"INSERT_VALUES".equals(pCtx)) continue;
+            Integer slot       = (Integer) a.get("output_column_sequence");
+            String  field      = (String)  a.get("collection_field_name");
+            String  collName   = (String)  a.get("collection_name");
+            if (slot == null || field == null) continue;
+            slotToFields.computeIfAbsent(slot, k -> new ArrayList<>()).add(field);
+            slotToCollection.putIfAbsent(slot, collName);
+        }
+
+        if (slotToFields.isEmpty()) return;
+
+        for (var entry : slotToFields.entrySet()) {
+            int          slot       = entry.getKey();
+            List<String> fields     = entry.getValue();
+            String       collName   = slotToCollection.get(slot);
+
+            // Positional matching against DDL-registered columns
+            String targetColName = findColumnByOrdinal(targetGeoid, slot);
+
+            // Fallback: single collection field in this slot → field name = target col name
+            if (targetColName == null && fields.size() == 1) {
+                targetColName = fields.get(0);
+            }
+
+            if (targetColName == null) {
+                // Multi-field slot without DDL — cannot name target column; skip
+                logger.debug("G6 slot={} multi-field={} → no DDL, skipping", slot, fields);
+                continue;
+            }
+
+            String columnRef = targetGeoid != null ? targetGeoid + "." + targetColName : targetColName;
+            // dataset_alias = collection variable name → used by RemoteWriter to build RECORD_USED_IN edge
+            si.addAffectedColumn(columnRef, targetColName, targetGeoid, collName,
+                                 "INSERT", "target", slot);
+            logger.debug("G6 INSERT_VALUES [{}] slot={} field(s)={} coll={} → target_col={}",
+                         statementGeoid, slot, fields, collName, targetColName);
+        }
+
+        // Populate RecordInfo.fields from the cursor SELECT output columns (once per collection)
+        if (builder != null && scopeManager != null) {
+            Set<String> seen = new HashSet<>();
+            for (String collName : slotToCollection.values()) {
+                if (collName == null || !seen.add(collName)) continue;
+                String cursorStmtGeoid = scopeManager.getCursorRecordStmt(collName);
+                if (cursorStmtGeoid == null) continue;
+                com.hound.semantic.model.RecordInfo rec =
+                        builder.getRecords().values().stream()
+                                .filter(r -> collName.equals(r.getVarName()))
+                                .findFirst().orElse(null);
+                if (rec != null && rec.getFields().isEmpty())
+                    populateRecordFields(rec, cursorStmtGeoid);
+            }
+        }
+    }
+
+    /**
+     * Populates RecordInfo.fields from the columnsOutput of the cursor SELECT statement.
+     * Skips wildcard entries ("*"). Sorted by "order" attribute.
+     */
+    private void populateRecordFields(com.hound.semantic.model.RecordInfo rec, String cursorStmtGeoid) {
+        if (builder == null || cursorStmtGeoid == null) return;
+        StatementInfo cursorSi = builder.getStatements().get(cursorStmtGeoid);
+        if (cursorSi == null) return;
+        cursorSi.getColumnsOutput().entrySet().stream()
+                .sorted(Comparator.comparingInt(e -> {
+                    Object ord = e.getValue().get("order");
+                    return ord instanceof Number n ? n.intValue() : 0;
+                }))
+                .forEach(e -> {
+                    String name = (String) e.getValue().get("name");
+                    // Skip wildcard — field names unknown without DDL
+                    if (name != null && !"*".equals(name)) rec.addField(name);
+                });
+    }
+
+    /**
+     * G6: detects collection(index).field token pattern.
+     * Requires ≥ 6 tokens: IDENT ( ... ) . IDENT
+     * The last three tokens must be RIGHT_PAREN · PERIOD · IDENTIFIER.
+     */
+    private static boolean isCollectionFieldAccess(List<String> tokens,
+                                                    List<Map<String, String>> tokenDetails) {
+        int n = tokens.size();
+        if (n < 6) return false;
+        if (!getCanonical(tokenDetails.get(0)).isIdentifier()) return false;
+        if (getCanonical(tokenDetails.get(1)) != CanonicalTokenType.LEFT_PAREN) return false;
+        if (getCanonical(tokenDetails.get(n - 3)) != CanonicalTokenType.RIGHT_PAREN) return false;
+        if (getCanonical(tokenDetails.get(n - 2)) != CanonicalTokenType.PERIOD) return false;
+        if (!getCanonical(tokenDetails.get(n - 1)).isIdentifier()) return false;
+        return true;
+    }
+
+    /** Returns the column name registered at the given 1-based ordinal for a table, or null. */
+    private String findColumnByOrdinal(String tableGeoid, int ordinal) {
+        if (builder == null || tableGeoid == null) return null;
+        return builder.getColumns().values().stream()
+                .filter(c -> tableGeoid.equals(c.getTableGeoid())
+                          && c.getOrdinalPosition() == ordinal)
+                .map(com.hound.semantic.model.ColumnInfo::getColumnName)
+                .findFirst()
+                .orElse(null);
     }
 
     // =========================================================================

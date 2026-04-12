@@ -710,6 +710,45 @@ class EmbeddedWriter {
             }
 
 
+            // ── DaliRecord (G6: BULK COLLECT targets) ──
+            Map<String, MutableVertex> recV = new LinkedHashMap<>();
+            for (var e : str.getRecords().entrySet()) {
+                RecordInfo rec = e.getValue();
+                MutableVertex rv = db.newVertex("DaliRecord")
+                        .set("session_id",        sid)
+                        .set("record_geoid",      rec.getGeoid())
+                        .set("record_name",       rec.getVarName())
+                        .set("routine_geoid",     rec.getRoutineGeoid())
+                        .set("source_stmt_geoid", rec.getSourceStatementGeoid())
+                        .set("fields",            String.join(",", rec.getFields()))
+                        .save();
+                recV.put(rec.getGeoid(), rv);
+                if (rec.getSourceStatementGeoid() != null) {
+                    MutableVertex srcStmt = stV.get(rec.getSourceStatementGeoid());
+                    if (srcStmt != null)
+                        srcStmt.newEdge("BULK_COLLECTS_INTO", rv, true, new Object[0])
+                                .set("session_id", sid).save();
+                }
+            }
+            for (var e : str.getRecords().entrySet()) {
+                RecordInfo rec = e.getValue();
+                MutableVertex rv = recV.get(rec.getGeoid());
+                if (rv == null) continue;
+                for (var stmtEntry : str.getStatements().entrySet()) {
+                    StatementInfo si = stmtEntry.getValue();
+                    if (!"INSERT".equals(si.getType())) continue;
+                    boolean usesRecord = si.getAffectedColumns().stream()
+                            .anyMatch(ac -> rec.getVarName().equals(ac.get("dataset_alias")))
+                        || si.getBulkCollectSources().contains(rec.getVarName().toUpperCase());
+                    if (usesRecord) {
+                        MutableVertex insertV = stV.get(stmtEntry.getKey());
+                        if (insertV != null)
+                            rv.newEdge("RECORD_USED_IN", insertV, true, new Object[0])
+                                    .set("session_id", sid).save();
+                    }
+                }
+            }
+
             // ── CALLS edges ──
             for (var callerEntry : result.getCalledRoutines().entrySet()) {
                 MutableVertex callerV = rtV.get(callerEntry.getKey());

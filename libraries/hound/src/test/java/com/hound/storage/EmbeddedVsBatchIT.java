@@ -97,7 +97,7 @@ class EmbeddedVsBatchIT {
         "DaliSession", "DaliSchema", "DaliTable", "DaliColumn",
         "DaliRoutine", "DaliPackage", "DaliStatement",
         "DaliOutputColumn", "DaliJoin",
-        "DaliParameter", "DaliVariable"
+        "DaliParameter", "DaliVariable", "DaliRecord"
     };
 
     // EDGE_TYPES: exact-match types that are structurally stable.
@@ -110,13 +110,15 @@ class EmbeddedVsBatchIT {
     // These are tracked in EDGE_TYPES_TOLERANCE and checked with ±200% tolerance.
     // HAS_JOIN moved to exact-match after fixing the cartesian-product bug in saveRemote().
     private static final String[] EDGE_TYPES = {
-        "CONTAINS_TABLE", "CONTAINS_STMT", "BELONGS_TO_SESSION",
+        "CONTAINS_TABLE", "CONTAINS_STMT",
         "HAS_OUTPUT_COL", "CONTAINS_ROUTINE", "HAS_PARAMETER", "HAS_VARIABLE", "HAS_JOIN"
     };
 
     /** Edge types compared with ±200% tolerance (BATCH between 1/3 and 3× REMOTE). */
     private static final String[] EDGE_TYPES_TOLERANCE = {
-        "READS_FROM", "WRITES_TO", "HAS_COLUMN", "HAS_ATOM", "FILTER_FLOW"
+        "READS_FROM", "WRITES_TO", "HAS_COLUMN", "HAS_ATOM", "FILTER_FLOW",
+        "BELONGS_TO_SESSION",
+        "BULK_COLLECTS_INTO", "RECORD_USED_IN"
     };
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -309,6 +311,69 @@ class EmbeddedVsBatchIT {
         assertTrue(sessions  > 0, "REMOTE_BATCH: DaliSession must exist");
         assertTrue(stmts     > 0, "REMOTE_BATCH: DaliStatement must exist");
         assertTrue(tables    > 0, "REMOTE_BATCH: DaliTable must exist");
+    }
+
+    // ─── Test 6: G6 — DaliRecord appears in both REMOTE and REMOTE_BATCH ────
+
+    /**
+     * Verifies that a BULK COLLECT INTO pattern produces a DaliRecord vertex
+     * and the BULK_COLLECTS_INTO / RECORD_USED_IN edges in both REMOTE and REMOTE_BATCH.
+     */
+    @Test
+    void g6_daliRecord_appearsInBothRemoteAndBatch() throws Exception {
+        String sql = """
+                CREATE OR REPLACE PACKAGE BODY TEST_PKG.PKG_G6_IT AS
+                    PROCEDURE load_sales IS
+                        TYPE t_tab IS TABLE OF orders_stg%ROWTYPE;
+                        l_tab t_tab;
+                    BEGIN
+                        SELECT order_id, line_num, amount
+                        BULK COLLECT INTO l_tab
+                        FROM orders_stg;
+
+                        FORALL i IN 1..l_tab.COUNT
+                            INSERT INTO fact_sales
+                            VALUES (l_tab(i).order_id, l_tab(i).line_num, l_tab(i).amount);
+                    END;
+                END PKG_G6_IT;
+                /
+                """;
+
+        UniversalSemanticEngine engine = new UniversalSemanticEngine();
+        PlSqlSemanticListener listener = new PlSqlSemanticListener(engine);
+        PlSqlLexer lexer = new PlSqlLexer(CharStreams.fromString(sql));
+        PlSqlParser parser = new PlSqlParser(new CommonTokenStream(lexer));
+        new ParseTreeWalker().walk(listener, parser.sql_script());
+        engine.resolvePendingColumns();
+        SemanticResult base = engine.getResult("g6-it-" + System.nanoTime(),
+                "pkg_g6_it.pck", "plsql", 0L);
+
+        assertNotNull(base.getStructure(), "Structure must not be null");
+        assertFalse(base.getStructure().getRecords().isEmpty(),
+                "G6: Structure must contain at least one DaliRecord (BULK COLLECT target)");
+
+        Map<String, Long> remoteCounts = writeRemote(reSid(base, base.getSessionId() + "-r"));
+        Map<String, Long> batchCounts  = writeBatch (reSid(base, base.getSessionId() + "-b"));
+
+        long remoteRec = remoteCounts.getOrDefault("DaliRecord", 0L);
+        long batchRec  = batchCounts .getOrDefault("DaliRecord", 0L);
+
+        System.out.printf("G6 DaliRecord: REMOTE=%d  REMOTE_BATCH=%d%n", remoteRec, batchRec);
+
+        assertTrue(remoteRec > 0,
+                "REMOTE: DaliRecord must be written for BULK COLLECT pattern, got 0");
+        assertTrue(batchRec  > 0,
+                "REMOTE_BATCH: DaliRecord must be written for BULK COLLECT pattern, got 0");
+        assertEquals(remoteRec, batchRec,
+                "REMOTE and REMOTE_BATCH must produce the same DaliRecord count");
+
+        // Verify BULK_COLLECTS_INTO and RECORD_USED_IN edges exist in BATCH DB
+        long bulkEdge = scalarRemote(DB_BATCH, "SELECT count(*) AS cnt FROM BULK_COLLECTS_INTO");
+        long usedEdge = scalarRemote(DB_BATCH, "SELECT count(*) AS cnt FROM RECORD_USED_IN");
+        System.out.printf("G6 edges (BATCH): BULK_COLLECTS_INTO=%d  RECORD_USED_IN=%d%n",
+                bulkEdge, usedEdge);
+        assertTrue(bulkEdge > 0, "REMOTE_BATCH: BULK_COLLECTS_INTO edge must be present");
+        assertTrue(usedEdge > 0, "REMOTE_BATCH: RECORD_USED_IN edge must be present");
     }
 
     // ─── Write helpers ───────────────────────────────────────────────────────

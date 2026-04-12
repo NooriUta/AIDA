@@ -203,4 +203,76 @@ class JsonlBatchBuilderTest {
         assertEquals(42, node.get("col_order").asInt());
         assertTrue(node.get("name").isTextual());
     }
+
+    /**
+     * G6 / REMOTE_BATCH flush-order guard:
+     * DaliRecord vertex MUST appear in the NDJSON payload BEFORE any
+     * BULK_COLLECTS_INTO or RECORD_USED_IN edge that references it.
+     * ArcadeDB rejects dangling edges, so vertex-before-edge is mandatory.
+     */
+    @Test
+    void g6_daliRecord_vertexBeforeEdges_inBatchPayload() throws Exception {
+        // Build a minimal SemanticResult that contains a BULK COLLECT scenario:
+        //   SELECT stmt (cursor) → l_tab → INSERT stmt
+        Map<String, StatementInfo> statements = new LinkedHashMap<>();
+
+        StatementInfo selectStmt = new StatementInfo(
+                "SELECT:1", "SELECT", "SELECT order_id FROM orders_stg BULK COLLECT INTO l_tab",
+                1, 1, null, "PROCEDURE:LOAD");
+        selectStmt.setSubtype("BULK_COLLECT");
+        statements.put("SELECT:1", selectStmt);
+
+        StatementInfo insertStmt = new StatementInfo(
+                "INSERT:2", "INSERT", "INSERT INTO fact_sales VALUES (l_tab(i).order_id)",
+                3, 3, null, "PROCEDURE:LOAD");
+        insertStmt.addAffectedColumn(
+                "FACT_SALES.ORDER_ID", "ORDER_ID", "FACT_SALES", "L_TAB",
+                "INSERT", "target", 1);
+        statements.put("INSERT:2", insertStmt);
+
+        // RecordInfo binding: l_tab → SELECT:1
+        RecordInfo rec = new RecordInfo("PROCEDURE:LOAD:RECORD:L_TAB", "L_TAB", "PROCEDURE:LOAD");
+        rec.setSourceStatementGeoid("SELECT:1");
+        rec.addField("ORDER_ID");
+        Map<String, RecordInfo> records = new LinkedHashMap<>();
+        records.put(rec.getGeoid(), rec);
+
+        Structure str = new Structure(
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
+                statements, records);
+
+        SemanticResult result = new SemanticResult(
+                "test-sid", "/test.sql", "plsql", 0,
+                str, List.of(), Map.of(), List.of(), Map.of(), List.of());
+
+        JsonlBatchBuilder builder = JsonlBatchBuilder.buildFromResult("test-sid", result);
+        String payload = builder.build();
+
+        // Parse lines and record positions
+        String[] lines = payload.split("\n");
+        int daliRecordPos      = -1;
+        int bulkCollectsIntoPos = -1;
+        int recordUsedInPos     = -1;
+
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].isBlank()) continue;
+            JsonNode node = MAPPER.readTree(lines[i]);
+            String cls  = node.has("@class") ? node.get("@class").asText() : "";
+            String type = node.has("@type")  ? node.get("@type").asText()  : "";
+            if ("DaliRecord".equals(cls) && "vertex".equals(type)) daliRecordPos = i;
+            if ("BULK_COLLECTS_INTO".equals(cls) && "edge".equals(type)) bulkCollectsIntoPos = i;
+            if ("RECORD_USED_IN".equals(cls)     && "edge".equals(type)) recordUsedInPos     = i;
+        }
+
+        assertTrue(daliRecordPos >= 0,       "DaliRecord vertex must be present in payload");
+        assertTrue(bulkCollectsIntoPos >= 0, "BULK_COLLECTS_INTO edge must be present in payload");
+        assertTrue(recordUsedInPos >= 0,     "RECORD_USED_IN edge must be present in payload");
+
+        assertTrue(daliRecordPos < bulkCollectsIntoPos,
+                "DaliRecord vertex (line " + daliRecordPos + ") must appear BEFORE " +
+                "BULK_COLLECTS_INTO edge (line " + bulkCollectsIntoPos + ")");
+        assertTrue(daliRecordPos < recordUsedInPos,
+                "DaliRecord vertex (line " + daliRecordPos + ") must appear BEFORE " +
+                "RECORD_USED_IN edge (line " + recordUsedInPos + ")");
+    }
 }
