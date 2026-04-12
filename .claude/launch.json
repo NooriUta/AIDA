@@ -11,7 +11,7 @@
     {
       "name": "chur",
       "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
-      "runtimeArgs": ["C:/AIDA/aida-root/bff/chur/node_modules/tsx/dist/cli.mjs", "watch", "src/server.ts"],
+      "runtimeArgs": ["C:/AIDA/aida-root/bff/chur/node_modules/tsx/dist/cli.mjs", "watch", "--env-file-if-exists=.env", "src/server.ts"],
       "port": 3000,
       "cwd": "C:/AIDA/aida-root/bff/chur"
     },
