@@ -20,11 +20,11 @@ jobs:
       matrix:
         include:
           - service: verdandi
-            context: ./verdandi
+            context: ./frontends/verdandi
           - service: chur
-            context: ./Chur
+            context: ./bff/chur
           - service: shuttle
-            context: ./SHUTTLE
+            context: ./services/shuttle
     steps:
       - uses: actions/checkout@v4
 
@@ -61,7 +61,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          source:   docker-compose.prod.yml,keycloak/
+          source:   docker-compose.prod.yml,infra/keycloak/
           target:   /opt/seer-studio/
 
       - name: Deploy
