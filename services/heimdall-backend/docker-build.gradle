@@ -1,0 +1,3 @@
+// Docker-only root build — намеренно пустой.
+// Исключает Node-задачи (churDev, verdandiDev, etc.) из root build.gradle
+// при Docker-сборке, которой нужны только JVM-модули.

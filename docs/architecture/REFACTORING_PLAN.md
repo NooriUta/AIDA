@@ -18,9 +18,10 @@
 | **C.2 SHUTTLE mutations + subscriptions + clients** | ~7-8 дней | 🔴 высокий | VERDANDI features |
 | **C.2.1 SHUTTLE SQL injection fix** | ~2 часа | 🔴 критический | Prod stability |
 | **C.3 Chur new routes + scopes + WS** | ~4 дня | 🟡 средний | HEIMDALL integration |
+| **C.4.0 VERDANDI ELK Web Worker** | ~0.5 дня | 🟡 средний | LOOM 5K nodes |
 | **C.4 VERDANDI new views (ANVIL, MIMIR, WS)** | ~10-12 дней | 🟡 средний | Demo functionality |
 | **C.5 Infrastructure (Docker, CI, Keycloak)** | ~3 дня | 🟡 средний | Deployment |
-| **Total refactoring** | **~27-33 дня** (пересмотрен: C.1 +2-3 дня за bug fixes) | — | — |
+| **Total refactoring** | **~27.5-33.5 дня** (пересмотрен: C.1 +2-3 дня за bug fixes, C.4.0 +0.5) | — | — |
 
 Плюс параллельно **новая разработка**:
 - Dali Core (Quarkus + JobRunr) ~4-5 недель
@@ -526,6 +527,19 @@ function requireScope(scope: string): FastifyPluginCallback {
 ---
 
 ## C.4 VERDANDI — новые views
+
+### C.4.0 ELK Web Worker activation (~0.5 дня) ✅ DONE
+**Сейчас:** ELK запускается на main thread → freeze UI 2-5 сек при 500-1000 нодах. Для HighLoad demo нужно 5K нодов.
+**Что сделано:**
+- `elkWorker.ts` (уже существовал) содержит `(self as any).Worker = undefined` — фикс Vite CJS→ESM трансформа
+- `vite.config.ts` уже настроен: `worker: { format: 'es' }` + `optimizeDeps.include: ['elkjs/lib/elk.bundled.js']`
+- `layoutGraph.ts` — заменён main-thread singleton на worker singleton + `_pending` Map + `cancelPendingLayouts()` имплементирован
+
+**Верификация:** console должен показывать `[LOOM] ELK layout (worker) — Xms` (не "main-thread").
+**Load test** 500+ нодов — после C.1 Hound + C.0 ArcadeDB → Dali.
+**Reference:** `docs/sprints/SPIKE_ELK_WORKER.md`, branch `feat/elk-web-worker`
+
+---
 
 ### C.4.1 WebSocket client для HEIMDALL events (~1 день)
 **Сейчас:** только graphql-request (HTTP).
