@@ -20,18 +20,18 @@ interface Props {
 }
 
 const TYPE_BADGE: Record<string, { bg: string; color: string }> = {
-  SELECT:   { bg: 'rgba(136,184,168,.15)', color: 'var(--inf)' },
-  INSERT:   { bg: 'rgba(125,191,120,.15)', color: 'var(--suc)' },
-  UPDATE:   { bg: 'rgba(212,146,42,.15)',  color: 'var(--wrn)' },
-  DELETE:   { bg: 'rgba(192,96,96,.15)',   color: 'var(--dan, #C06060)' },
-  MERGE:    { bg: 'rgba(154,140,110,.15)', color: 'var(--t2)' },
-  CURSOR:   { bg: 'rgba(102,92,72,.25)',   color: 'var(--t3)' },
-  DINAMIC_CURSOR: { bg: 'rgba(102,92,72,.25)', color: 'var(--t3)' },
-  DYNAMIC_CURSOR: { bg: 'rgba(102,92,72,.25)', color: 'var(--t3)' },
-  FOR_CURSOR:     { bg: 'rgba(102,92,72,.25)', color: 'var(--t3)' },
-  SUBQUERY: { bg: 'rgba(102,92,72,.25)',   color: 'var(--t3)' },
-  CTE:      { bg: 'rgba(102,92,72,.25)',   color: 'var(--t3)' },
-  UNKNOWN:  { bg: 'rgba(102,92,72,.25)',   color: 'var(--t3)' },
+  SELECT:   { bg: 'color-mix(in srgb, var(--inf) 15%, transparent)', color: 'var(--inf)' },
+  INSERT:   { bg: 'color-mix(in srgb, var(--suc) 15%, transparent)', color: 'var(--suc)' },
+  UPDATE:   { bg: 'color-mix(in srgb, var(--wrn) 15%, transparent)',  color: 'var(--wrn)' },
+  DELETE:   { bg: 'color-mix(in srgb, var(--danger) 15%, transparent)',   color: 'var(--danger)' },
+  MERGE:    { bg: 'color-mix(in srgb, var(--t2) 15%, transparent)', color: 'var(--t2)' },
+  CURSOR:   { bg: 'color-mix(in srgb, var(--t3) 25%, transparent)',   color: 'var(--t3)' },
+  DINAMIC_CURSOR: { bg: 'color-mix(in srgb, var(--t3) 25%, transparent)', color: 'var(--t3)' },
+  DYNAMIC_CURSOR: { bg: 'color-mix(in srgb, var(--t3) 25%, transparent)', color: 'var(--t3)' },
+  FOR_CURSOR:     { bg: 'color-mix(in srgb, var(--t3) 25%, transparent)', color: 'var(--t3)' },
+  SUBQUERY: { bg: 'color-mix(in srgb, var(--t3) 25%, transparent)',   color: 'var(--t3)' },
+  CTE:      { bg: 'color-mix(in srgb, var(--t3) 25%, transparent)',   color: 'var(--t3)' },
+  UNKNOWN:  { bg: 'color-mix(in srgb, var(--t3) 25%, transparent)',   color: 'var(--t3)' },
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -879,11 +879,11 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
                         <td style={{ ...pTblTdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {(() => {
                             const badges: React.ReactNode[] = [];
-                            if (a.complex)       badges.push(<AtomFlag key="c" bg="rgba(154,140,110,.18)" color="var(--wrn)" title="s_complex">∑</AtomFlag>);
-                            if (a.routineParam)  badges.push(<AtomFlag key="p" bg="rgba(136,184,168,.15)" color="var(--inf)" title="routine param">P</AtomFlag>);
-                            if (a.routineVar)    badges.push(<AtomFlag key="v" bg="rgba(212,146,42,.12)"  color="var(--wrn)" title="routine var">V</AtomFlag>);
+                            if (a.complex)       badges.push(<AtomFlag key="c" bg="color-mix(in srgb, var(--t2) 18%, transparent)" color="var(--wrn)" title="s_complex">∑</AtomFlag>);
+                            if (a.routineParam)  badges.push(<AtomFlag key="p" bg="color-mix(in srgb, var(--inf) 15%, transparent)" color="var(--inf)" title="routine param">P</AtomFlag>);
+                            if (a.routineVar)    badges.push(<AtomFlag key="v" bg="color-mix(in srgb, var(--wrn) 12%, transparent)"  color="var(--wrn)" title="routine var">V</AtomFlag>);
                             if ((a.nestedAtomsCount || 0) > 0) badges.push(
-                              <AtomFlag key="n" bg="rgba(125,191,120,.12)" color="var(--suc)" title="nested atoms count">{a.nestedAtomsCount}</AtomFlag>
+                              <AtomFlag key="n" bg="color-mix(in srgb, var(--suc) 12%, transparent)" color="var(--suc)" title="nested atoms count">{a.nestedAtomsCount}</AtomFlag>
                             );
                             return badges.length > 0
                               ? <div style={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'nowrap' }}>{badges}</div>
@@ -1046,10 +1046,10 @@ function atomColor(a: KnotAtom): string {
 
 function atomStatusBg(status: string): string {
   switch (status.toLowerCase()) {
-    case 'обработано': return 'rgba(125,191,120,.15)';
-    case 'unresolved': return 'rgba(192,96,96,.15)';
-    case 'constant':   return 'rgba(212,146,42,.12)';
-    case 'function_call': return 'rgba(136,184,168,.15)';
+    case 'обработано': return 'color-mix(in srgb, var(--suc) 15%, transparent)';
+    case 'unresolved': return 'color-mix(in srgb, var(--danger) 15%, transparent)';
+    case 'constant':   return 'color-mix(in srgb, var(--wrn) 12%, transparent)';
+    case 'function_call': return 'color-mix(in srgb, var(--inf) 15%, transparent)';
     default: return 'var(--bg3)';
   }
 }
@@ -1057,7 +1057,7 @@ function atomStatusBg(status: string): string {
 function atomStatusColor(status: string): string {
   switch (status.toLowerCase()) {
     case 'обработано': return 'var(--suc)';
-    case 'unresolved': return 'var(--dan, #C06060)';
+    case 'unresolved': return 'var(--danger)';
     case 'constant':   return 'var(--wrn)';
     case 'function_call': return 'var(--inf)';
     default: return 'var(--t3)';
@@ -1073,7 +1073,7 @@ function AtomsBreakdown({ stmt, t }: { stmt: KnotStatement; t: (k: string) => st
     }}>
       <AtomStat label={t('knot.stmt.total')} value={stmt.atomTotal} color="var(--t1)" />
       <AtomStat label={t('knot.atoms.resolved')} value={stmt.atomResolved} color="var(--suc)" />
-      <AtomStat label={t('knot.atoms.failed')} value={stmt.atomFailed} color="var(--dan, #C06060)" />
+      <AtomStat label={t('knot.atoms.failed')} value={stmt.atomFailed} color="var(--danger)" />
       <AtomStat label={t('knot.atoms.constant')} value={stmt.atomConstant} color="var(--t3)" />
       {other > 0 && <AtomStat label={t('knot.atoms.funcCall')} value={other} color="var(--inf)" />}
     </div>

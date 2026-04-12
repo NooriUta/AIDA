@@ -213,11 +213,11 @@ KnotRoutines.displayName = 'KnotRoutines';
 // ── RoutineRow ─────────────────────────────────────────────────────────────────
 
 const TYPE_COLOR: Record<string, { bg: string; color: string }> = {
-  SELECT: { bg: 'rgba(136,184,168,.15)', color: 'var(--inf)' },
-  INSERT: { bg: 'rgba(125,191,120,.15)', color: 'var(--suc)' },
-  UPDATE: { bg: 'rgba(212,146,42,.15)',  color: 'var(--wrn)' },
-  DELETE: { bg: 'rgba(192,96,96,.15)',   color: 'var(--dan, #C06060)' },
-  MERGE:  { bg: 'rgba(154,140,110,.15)', color: 'var(--t2)' },
+  SELECT: { bg: 'color-mix(in srgb, var(--inf) 15%, transparent)', color: 'var(--inf)' },
+  INSERT: { bg: 'color-mix(in srgb, var(--suc) 15%, transparent)', color: 'var(--suc)' },
+  UPDATE: { bg: 'color-mix(in srgb, var(--wrn) 15%, transparent)',  color: 'var(--wrn)' },
+  DELETE: { bg: 'color-mix(in srgb, var(--danger) 15%, transparent)',   color: 'var(--danger)' },
+  MERGE:  { bg: 'color-mix(in srgb, var(--t2) 15%, transparent)', color: 'var(--t2)' },
 };
 
 const DIR_COLOR: Record<string, string> = {
@@ -259,8 +259,8 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {r.routineType.toUpperCase().includes('FUNCTION')
-              ? <Badge bg="rgba(136,184,168,.15)" color="var(--inf)">FUNC</Badge>
-              : <Badge bg="rgba(125,191,120,.12)" color="var(--suc)">PROC</Badge>
+              ? <Badge bg="color-mix(in srgb, var(--inf) 15%, transparent)" color="var(--inf)">FUNC</Badge>
+              : <Badge bg="color-mix(in srgb, var(--suc) 12%, transparent)" color="var(--suc)">PROC</Badge>
             }
             <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 500, color: 'var(--t1)' }}>
               {r.name}
@@ -288,7 +288,7 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
             {r.stmtList.length === 0
               ? <div style={{ fontSize: 11, color: 'var(--t3)' }}>No statements</div>
               : r.stmtList.slice(0, 15).map((st, i) => {
-                  const tc = TYPE_COLOR[st.stmtType] || { bg: 'rgba(102,92,72,.15)', color: 'var(--t3)' };
+                  const tc = TYPE_COLOR[st.stmtType] || { bg: 'color-mix(in srgb, var(--t3) 15%, transparent)', color: 'var(--t3)' };
                   return (
                     <div key={i} style={{
                       display: 'flex', alignItems: 'center', gap: 6,

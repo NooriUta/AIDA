@@ -86,8 +86,8 @@ export const DatabaseNode = memo(({ data, selected, id }: NodeProps<DatabaseNode
             fontSize:   8,
             padding:    '1px 4px',
             borderRadius: 2,
-            background:  'rgba(168,184,96,0.08)',
-            border:      '0.5px solid rgba(168,184,96,0.3)',
+            background:  'color-mix(in srgb, var(--acc) 8%, transparent)',
+            border:      '0.5px solid color-mix(in srgb, var(--acc) 30%, transparent)',
             color:       'var(--acc)',
             flexShrink:  0,
           }}>

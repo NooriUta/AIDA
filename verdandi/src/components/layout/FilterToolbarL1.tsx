@@ -73,7 +73,7 @@ function CascadePill({ icon, placeholder, value, options, onChange, onClear, act
       padding:      '1px 5px',
       borderRadius: 4,
       border:       `0.5px solid ${active ? 'var(--acc)' : 'var(--bd)'}`,
-      background:   active ? 'rgba(168,184,96,.07)' : 'transparent',
+      background:   active ? 'color-mix(in srgb, var(--acc) 7%, transparent)' : 'transparent',
       fontSize:     9,
       color:        active ? 'var(--acc)' : 'var(--t3)',
       whiteSpace:   'nowrap',
@@ -193,7 +193,7 @@ export const FilterToolbarL1 = memo(() => {
               border: `0.5px solid ${isOn ? 'var(--acc)' : 'var(--bd)'}`,
               fontSize: 9, color: isOn ? 'var(--acc)' : 'var(--t3)',
               cursor: 'pointer',
-              background: isOn ? 'rgba(168,184,96,.08)' : 'transparent',
+              background: isOn ? 'color-mix(in srgb, var(--acc) 8%, transparent)' : 'transparent',
               fontWeight: isOn ? 600 : 400, fontFamily: 'var(--font)',
             }}>
               {depthLabel(d)}
@@ -275,7 +275,7 @@ export const FilterToolbarL1 = memo(() => {
             border: '0.5px solid var(--wrn)',
             fontSize: 8, color: 'var(--wrn)',
             cursor: 'pointer',
-            background: 'rgba(212,146,42,.06)',
+            background: 'color-mix(in srgb, var(--wrn) 6%, transparent)',
             whiteSpace: 'nowrap', flexShrink: 0,
             fontFamily: 'var(--font)',
           }}
