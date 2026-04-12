@@ -9,6 +9,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import studio.seer.heimdall.RingBuffer;
+import studio.seer.heimdall.metrics.MetricsCollector;
 import studio.seer.shared.HeimdallEvent;
 
 import java.util.List;
@@ -33,6 +34,9 @@ public class EventResource {
     @Inject
     RingBuffer ringBuffer;
 
+    @Inject
+    MetricsCollector metricsCollector;
+
     @POST
     public Response ingest(HeimdallEvent event) {
         if (event == null || event.sourceComponent() == null || event.eventType() == null) {
@@ -53,6 +57,7 @@ public class EventResource {
                         event.payload());
 
         ringBuffer.push(enriched);
+        metricsCollector.record(enriched);
         LOG.debugf("Ingested event: %s from %s", enriched.eventType(), enriched.sourceComponent());
         return Response.accepted().build();
     }
@@ -66,7 +71,7 @@ public class EventResource {
 
         long count = events.stream()
                 .filter(e -> e != null && e.sourceComponent() != null && e.eventType() != null)
-                .peek(ringBuffer::push)
+                .peek(e -> { ringBuffer.push(e); metricsCollector.record(e); })
                 .count();
 
         LOG.debugf("Ingested batch of %d events", count);

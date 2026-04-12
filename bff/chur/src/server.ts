@@ -8,6 +8,7 @@ import rbacPlugin         from './plugins/rbac';
 import { authRoutes }     from './routes/auth';
 import { queryRoutes }    from './routes/query';
 import { graphqlRoutes }  from './routes/graphql';
+import { heimdallRoutes } from './routes/heimdall';
 
 async function start(): Promise<void> {
   const app = Fastify({
@@ -53,6 +54,7 @@ async function start(): Promise<void> {
   await app.register(authRoutes,    { prefix: '/auth'    });
   await app.register(queryRoutes,   { prefix: '/api'     });
   await app.register(graphqlRoutes, { prefix: '/graphql' });
+  await app.register(heimdallRoutes);
 
   // ── Health ───────────────────────────────────────────────────────────────────
 
