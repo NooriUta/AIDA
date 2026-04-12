@@ -19,8 +19,14 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    // dedupe prevents multiple instances within the same server's dep graph.
     dedupe: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+  },
+  optimizeDeps: {
+    // Exclude react-router-dom so Vite does NOT pre-bundle it into a chunk.
+    // The MF runtime can then redirect to Shell's singleton, preventing
+    // duplicate instances in dev mode. Requires Vite 8 (Vite 6 had a bug
+    // where the virtual loadShare module didn't expose all named exports).
+    exclude: ['react-router-dom'],
   },
   // Module Federation generates top-level await — requires es2022+ target.
   build: {
