@@ -3,6 +3,7 @@ import type { SocketStream }            from '@fastify/websocket';
 import { WebSocket }                    from 'ws';
 import { requireAdmin }                 from '../middleware/requireAdmin';
 import { ensureValidSession }           from '../sessions';
+import { listUsers, setUserEnabled }    from '../keycloakAdmin';
 
 const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://localhost:9093';
 const HEIMDALL_WS     = HEIMDALL_ORIGIN.replace(/^http/, 'ws');
@@ -98,6 +99,40 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // ── GET /heimdall/users — list users from Keycloak + KC attributes ────────
+  // Returns KcUserView[] (profile + prefs attrs stored in KC).
+  // Quotas / source bindings come from FRIGG (R4.3 — not yet wired).
+  app.get(
+    '/heimdall/users',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (_request, reply) => {
+      try {
+        const users = await listUsers();
+        return reply.send(users);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'KC_ADMIN_ERROR';
+        return reply.status(502).send({ error: msg });
+      }
+    },
+  );
+
+  // ── PUT /heimdall/users/:userId/enabled — block/unblock user ──────────────
+  app.put(
+    '/heimdall/users/:userId/enabled',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const { enabled } = request.body as { enabled: boolean };
+      try {
+        await setUserEnabled(userId, enabled);
+        return reply.send({ ok: true });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'KC_ADMIN_ERROR';
+        return reply.status(502).send({ error: msg });
+      }
+    },
+  );
+
   // ── GET /heimdall/ws/events — WebSocket proxy (T3.2) ─────────────────────
   // Authenticates via session cookie, then proxies to HEIMDALL native WS.
   // Forwards ?filter= query param if present.
@@ -117,7 +152,8 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const sessionUser = await ensureValidSession(sid).catch(() => null);
-      if (!sessionUser || sessionUser.role !== 'admin') {
+      const hasAdminScope = sessionUser?.scopes?.includes('aida:admin') ?? false;
+      if (!sessionUser || !hasAdminScope) {
         ws.close(1008, 'Forbidden');
         return;
       }

@@ -46,6 +46,9 @@ services:
       HEIMDALL_URL:    http://heimdall-backend:9093
     ports:
       - "18080:8080"
+    depends_on:
+      houndarcade:
+        condition: service_healthy
 
   # ── Chur (auth gateway / BFF) ──────────────────────────────────────────────
   chur:
@@ -71,6 +74,9 @@ services:
       LINEAGE_API_URL:       http://shuttle:8080
       # HEIMDALL (internal network)
       HEIMDALL_URL:          http://heimdall-backend:9093
+      # Keycloak Admin API — master realm bootstrap creds (used by /heimdall/users)
+      KC_ADMIN_USER:         ${KC_ADMIN_USER:-admin}
+      KC_ADMIN_PASS:         ${KC_ADMIN_PASS:-admin}
     ports:
       - "13000:3000"
     depends_on:
@@ -78,6 +84,8 @@ services:
         condition: service_healthy
       shuttle:
         condition: service_started
+      houndarcade:
+        condition: service_healthy
 
   # ── verdandi (React frontend — Seiðr Studio) ──────────────────────────────
   verdandi:
@@ -121,6 +129,34 @@ services:
       heimdall-frontend:
         condition: service_started
 
+  # ── Dali (async PL/SQL parse service) ────────────────────────────────────
+  # ВАЖНО: context = . (монорепо root), НЕ services/dali/.
+  # Причина: сервис зависит от libraries:hound и shared:dali-models.
+  dali:
+    build:
+      context: .
+      dockerfile: services/dali/Dockerfile
+    ports:
+      - "19090:9090"
+    environment:
+      QUARKUS_HTTP_PORT: "9090"
+      FRIGG_URL:      http://frigg:2480
+      FRIGG_DB:       dali
+      FRIGG_USER:     root
+      FRIGG_PASSWORD: playwithdata
+      HEIMDALL_URL:   http://heimdall-backend:9093
+      YGG_URL:        http://HoundArcade:2480
+      COMPOSE_PROJECT_NAME: aida-root
+    depends_on:
+      frigg:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/q/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────
   # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с HoundArcade.
   # ArcadeDB всегда слушает :2480 внутри контейнера.
@@ -134,6 +170,27 @@ services:
       - "2481:2480"
     volumes:
       - frigg_data:/home/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── HoundArcade (ArcadeDB — Hound lineage database) ───────────────────────
+  houndarcade:
+    image: arcadedata/arcadedb:26.3.2
+    environment:
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:-playwithdata}"
+      ARCADEDB_OPTS_MEMORY: "-Xms2G -Xmx2G"
+    ports:
+      - "2480:2480"   # HTTP API  (dev: localhost:2480)
+      - "2424:2424"   # Binary protocol
+    volumes:
+      - hound_databases:/home/arcadedb/databases
+      - hound_config:/home/arcadedb/config
+      - hound_logs:/home/arcadedb/log
+      - hound_backups:/home/arcadedb/backups
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready"]
       interval: 10s
@@ -171,3 +228,11 @@ services:
 
 volumes:
   frigg_data:
+  hound_databases:
+    external: true
+  hound_config:
+    external: true
+  hound_logs:
+    external: true
+  hound_backups:
+    external: true

@@ -23,8 +23,10 @@ public class JsonlBatchBuilder {
 
     private final StringBuilder vertices = new StringBuilder(64 * 1024);
     private final StringBuilder edges    = new StringBuilder(32 * 1024);
-    private int vertexCount;
-    private int edgeCount;
+
+    /** Accumulates per-type insert/duplicate counts for all vertices and edges. */
+    private final WriteStats writeStats = new WriteStats();
+
     /**
      * Tracks all vertex @id values added to this batch.
      * appendEdge() guards against referencing vertices not in this batch,
@@ -49,9 +51,12 @@ public class JsonlBatchBuilder {
      * saveRemote() uses UPSERT; batch mode must deduplicate manually to avoid duplicate vertices.
      */
     public void appendVertex(String type, String extId, Map<String, Object> props) {
-        if (extId != null && !vertexIds.add(extId)) return; // already added
+        if (extId != null && !vertexIds.add(extId)) {
+            writeStats.markDuplicate(type); // in-batch dedup guard triggered
+            return;
+        }
         vertices.append(toJsonLine("vertex", type, extId, null, null, props)).append('\n');
-        vertexCount++;
+        writeStats.insert(type);
     }
 
     /**
@@ -75,12 +80,12 @@ public class JsonlBatchBuilder {
      * </ol>
      */
     public void appendEdge(String edgeType, String fromExtId, String toExtId, Map<String, Object> props) {
-        if (fromExtId == null || toExtId == null) return;
+        if (fromExtId == null || toExtId == null) { writeStats.dropEdge(); return; }
         String resolvedFrom = resolveEndpoint(fromExtId);
         String resolvedTo   = resolveEndpoint(toExtId);
-        if (resolvedFrom == null || resolvedTo == null) return;
+        if (resolvedFrom == null || resolvedTo == null) { writeStats.dropEdge(); return; }
         edges.append(toJsonLine("edge", edgeType, null, resolvedFrom, resolvedTo, props)).append('\n');
-        edgeCount++;
+        writeStats.addEdge();
     }
 
     /**
@@ -101,8 +106,26 @@ public class JsonlBatchBuilder {
         return sb.toString();
     }
 
-    public int vertexCount() { return vertexCount; }
-    public int edgeCount()   { return edgeCount; }
+    // ── Counters (derived from writeStats) ────────────────────────────────────
+
+    public int vertexCount()      { return writeStats.totalInserted(); }
+    public int edgeCount()        { return writeStats.edgeCount(); }
+    public int droppedEdgeCount() { return writeStats.droppedEdgeCount(); }
+
+    /** Full per-type breakdown (inserted + duplicate). */
+    public WriteStats writeStats() { return writeStats; }
+
+    /**
+     * Records a canonical vertex that was inserted into YGG via individual rcmd()
+     * before this batch (new object, not seen before in the pool/db).
+     */
+    public void recordInserted(String type)  { writeStats.insert(type); }
+
+    /**
+     * Records a canonical vertex that was skipped because it already exists in YGG
+     * (pool hit, pre-existing schema/table/column, or explicitly excluded from this batch).
+     */
+    public void recordDuplicate(String type) { writeStats.markDuplicate(type); }
 
     // ═══════════════════════════════════════════════════════════════
     // Factory: SemanticResult → NDJSON builder
@@ -115,7 +138,27 @@ public class JsonlBatchBuilder {
      * Vertex order mirrors {@code saveRemote()} in {@link ArcadeDBSemanticWriter}.
      */
     public static JsonlBatchBuilder buildFromResult(String sid, SemanticResult result) {
+        return buildFromResult(sid, result, null);
+    }
+
+    /**
+     * Ad-hoc batch mode with schema deduplication support.
+     *
+     * <p>If {@code preInsertedSchemaRids} is non-null and non-empty, those DaliSchema vertices
+     * have already been inserted into ArcadeDB via individual rcmd() calls before this batch.
+     * They are skipped from the NDJSON payload (to avoid DuplicatedKeyException) and their
+     * actual DB RIDs are registered in canonicalRids so edges can reference them correctly.
+     *
+     * @param preInsertedSchemaRids schema_geoid → actual DB RID for pre-existing DaliSchema vertices,
+     *                              or null/empty to include all schemas in the batch as usual.
+     */
+    public static JsonlBatchBuilder buildFromResult(String sid, SemanticResult result,
+                                                    Map<String, String> preInsertedSchemaRids) {
         JsonlBatchBuilder b = new JsonlBatchBuilder();
+        // Register pre-existing schema RIDs so edges resolve to actual DB RIDs, not temp IDs
+        if (preInsertedSchemaRids != null && !preInsertedSchemaRids.isEmpty()) {
+            b.canonicalRids.putAll(preInsertedSchemaRids);
+        }
         Structure str = result.getStructure();
         if (str == null) return b;
 
@@ -145,8 +188,11 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 3. DaliSchema
+        // 3. DaliSchema — skip if geoid is in canonicalRids (pre-existing in DB)
+        // NOTE: schema new/dup split is tracked externally by RemoteWriter (preInsertAdHocSchemas).
+        // Here we only skip — no recordDuplicate to avoid double-counting.
         for (var e : str.getSchemas().entrySet()) {
+            if (b.canonicalRids.containsKey(e.getKey())) continue; // already in DB, use RID for edges
             @SuppressWarnings("unchecked")
             Map<String, Object> sc = (Map<String, Object>) e.getValue();
             b.appendVertex("DaliSchema", e.getKey(), mapOf(
@@ -172,8 +218,9 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 5. DaliTable
+        // 5. DaliTable — skip if geoid is in canonicalRids (pre-existing in DB)
         for (var e : str.getTables().entrySet()) {
+            if (b.canonicalRids.containsKey(e.getKey())) { b.recordDuplicate("DaliTable"); continue; }
             TableInfo t = e.getValue();
             b.appendVertex("DaliTable", e.getKey(), mapOf(
                     "session_id", sid,
@@ -185,8 +232,9 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 6. DaliColumn
+        // 6. DaliColumn — skip if geoid is in canonicalRids (pre-existing in DB)
         for (var e : str.getColumns().entrySet()) {
+            if (b.canonicalRids.containsKey(e.getKey())) { b.recordDuplicate("DaliColumn"); continue; }
             ColumnInfo c = e.getValue();
             b.appendVertex("DaliColumn", e.getKey(), mapOf(
                     "session_id", sid,
@@ -334,13 +382,17 @@ public class JsonlBatchBuilder {
         }
 
         // 10. DaliAtom
-        // Build atomId map for edge creation later
-        // Mirror saveRemote(): insert ALL atom vertices (even for containers without a statement vertex).
-        // HAS_ATOM edges are guarded by appendEdge() vertexIds check (stmtGeoid must be in batch).
+        // Build atomId map for edge creation later.
+        // IMPORTANT: skip "routine" containers — they aggregate the same atoms already present
+        // in "statement" containers. Including them would insert duplicate DaliAtom vertices
+        // (different atomId = md5(routineGeoid:key) vs md5(stmtGeoid:key)) and inflate counts.
+        // Only "statement" and "unattached" containers contain unique atoms.
         Map<String, String> atomIdMap = new LinkedHashMap<>(); // "stmtGeoid:atomText" → atomId
         for (var container : result.getAtoms().entrySet()) {
             @SuppressWarnings("unchecked")
             Map<String, Object> cont = (Map<String, Object>) container.getValue();
+            String sourceType = (String) cont.get("source_type");
+            if ("routine".equals(sourceType)) continue; // duplicate view — skip
             String stmtGeoid = (String) cont.get("source_geoid");
             @SuppressWarnings("unchecked")
             Map<String, Map<String, Object>> atoms =
@@ -978,11 +1030,13 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 8. DaliAtom
+        // 8. DaliAtom — skip "routine" containers (same atoms as statement containers, duplicate view)
         Map<String, String> atomIdMap = new LinkedHashMap<>();
         for (var container : result.getAtoms().entrySet()) {
             @SuppressWarnings("unchecked")
             Map<String, Object> cont = (Map<String, Object>) container.getValue();
+            String sourceType = (String) cont.get("source_type");
+            if ("routine".equals(sourceType)) continue; // duplicate view — skip
             String stmtGeoid = (String) cont.get("source_geoid");
             @SuppressWarnings("unchecked")
             Map<String, Map<String, Object>> atoms =

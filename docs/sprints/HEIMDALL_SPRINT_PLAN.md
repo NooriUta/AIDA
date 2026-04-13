@@ -1,9 +1,9 @@
 # HEIMDALL — Sprint Plan: первые два спринта + контурная интеграция
 
 **Документ:** `HEIMDALL_SPRINT_PLAN`
-**Версия:** 1.2
+**Версия:** 1.3
 **Дата:** 12.04.2026
-**Статус:** Sprint 1 ✅ DONE · Sprint 2 ✅ DONE · Sprint 3 (future)
+**Статус:** Sprint 1 ✅ DONE · Sprint 2 ✅ DONE · M1 Integration ✅ DONE
 
 ## Sprint 2 — Completion Summary (12.04.2026)
 
@@ -913,10 +913,36 @@ demo-snapshot:
 - **ControlResource** вызывает `metricsCollector.reset()` явно — MetricsCollector **не подписан** на RingBuffer (намеренно, чтобы метрики не зависели от порядка событий).
 - **SnapshotManager** — полная Reactive цепочка (`Uni`) как в SHUTTLE `ArcadeGateway`. Не смешивать с blocking calls.
 
+
+## M1 Integration — Completion (12.04.2026)
+
+| Компонент | Статус | Детали |
+|---|---|---|
+| SHUTTLE MutationResource | ✅ DONE | resetDemoState, startParseSession, cancelSession |
+| HeimdallControlClient | ✅ DONE | REST client → /control/reset |
+| HeimdallEventBus | ✅ DONE | Mutiny BroadcastProcessor (hot fan-out, не SmallRye) |
+| SubscriptionResource | ✅ DONE | heimdallEvents + sessionProgress (Multi<HeimdallEventView>) |
+| HeimdallEventView | ✅ DONE | payloadJson: String (Map→JSON via Jackson, GQL-compatible) |
+| Chur requireAdmin | ✅ DONE | preHandler role === 'admin' |
+| Chur WS proxy | ✅ DONE | /heimdall/ws/events → :9093, session+role check |
+| Shell MF host | ✅ DONE | port 5175, lazy verdandi+heimdall-frontend |
+| AidaNav | ✅ DONE | wordmark + AppTab + tools |
+| shellStore | ✅ DONE | navigateTo via buildAppUrl (ADR-DA-013) |
+| NavigateBridge | ✅ DONE | URL↔store bidirectional sync |
+| verdandi MF remote | ✅ DONE | exposes ./App, base: /verdandi/ |
+| Docker все сервисы | ✅ DONE | 25173/25174/25175 |
+
+**Arch notes (зафиксированы в DECISIONS_LOG #16):**
+- `HeimdallEventBus` — Mutiny `BroadcastProcessor` (hot fan-out). SmallRye Messaging отклонён: избыточен для in-process.
+- `HeimdallEventView.payloadJson` — `Map<String,Object>` сериализуется через Jackson в строку. Позволяет передавать произвольный payload через GraphQL без кастомного scalar.
+- `requireAdmin` M1 — `role === 'admin'` (без scope lookup). Scope-based auth — Sprint 4.
+- `NavigateBridge` — двунаправленная синхронизация URL ↔ `shellStore.currentApp`. Обеспечивает корректную работу browser back/forward.
+
 ## История изменений
 
 | Дата | Версия | Что |
 |---|---|---|
+| 12.04.2026 | 1.3 | **M1 Integration DONE.** SHUTTLE mutations+subscriptions. HeimdallEventBus Mutiny BroadcastProcessor. Chur requireAdmin + WS proxy. Shell MF host. verdandi MF remote. NavigateBridge. Docker 25173/25174/25175. Arch decisions: HeimdallEventView payloadJson Jackson, requireAdmin role-based M1. |
 | 12.04.2026 | 1.2 | **Sprint 2 DONE.** Completion summary добавлен. R1 fixed (HandshakeRequest.query() manual parse). R2 resolved (FriggGateway + FRIGG healthcheck). EventFilter поддерживает все 4 типа. HeimdallEmitter в SHUTTLE (model copies). Chur proxy /heimdall/* done. docs/internal/FRIGG.md создан. |
 | 12.04.2026 | 1.1 | Sprint 2 технические уточнения: AtomicLong вместо Micrometer Counter (точность snapshot), SnapshotManager Reactive chain, EventFilter AND в Sprint 3, ControlResource явный reset(). Риски R1/R2/R3/R6 зафиксированы. |
 | 12.04.2026 | 1.0 | Initial. Sprint 1 (event pipeline), Sprint 2 (metrics + control + первые эмиттеры). Контурная интеграция: Chur proxy, VERDANDI subscription, все эмиттеры по очереди, HEIMDALL frontend skeleton. Demo safety Makefile targets. |

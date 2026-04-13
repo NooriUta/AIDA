@@ -18,12 +18,12 @@ dev-hybrid: ## Keycloak in Docker + Chur + verdandi locally (рекоменду�
 	cd frontends/verdandi && npm run dev
 
 build: ## Build all projects
-	./gradlew :libraries:hound:build :services:shuttle:build :services:heimdall-backend:build
+	./gradlew :libraries:hound:build :services:shuttle:build :services:heimdall-backend:build :services:dali:build
 	cd bff/chur && npm ci && npm run build
 	cd frontends/verdandi && npm ci && npm run build
 
 test: ## Run all tests
-	./gradlew :libraries:hound:test :services:shuttle:test :services:heimdall-backend:test
+	./gradlew :libraries:hound:test :services:shuttle:test :services:heimdall-backend:test :services:dali:test
 	cd bff/chur && npm test
 	cd frontends/verdandi && npm test
 
@@ -47,6 +47,8 @@ demo-start: ## Поднять полный AIDA demo-стек через Docker
 	@sleep 5
 	@curl -sf http://localhost:19093/q/health | grep -q UP \
 	    && echo "✓ HEIMDALL ready on :19093" || echo "✗ HEIMDALL not yet ready — check: docker compose logs heimdall-backend"
+	@curl -sf http://localhost:19090/q/health | grep -q UP \
+	    && echo "✓ DALI ready on :19090" || echo "✗ DALI not yet ready — check: docker compose logs dali"
 	@echo "✓ Demo stack started"
 
 demo-reset: ## Сбросить demo-состояние (clear HEIMDALL ring buffer + cancel sessions)

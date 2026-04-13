@@ -1,7 +1,7 @@
 # Sprint M1 — Apr 13 → May 9 (Core Engines)
 
 **Документ:** `SPRINT_APR13_MAY9_M1`
-**Версия:** 1.1
+**Версия:** 1.3
 **Дата:** 12.04.2026
 **Milestone:** M1 — Core Engines (май 9)
 
@@ -22,6 +22,33 @@
 | C.2.1 SQL injection fix (SearchService.java:86-87) | ✅ DONE |
 | R1 HandshakeRequest.queryParam() | ✅ FIXED — manual query string parse |
 | R2 FRIGG not running | ✅ RESOLVED — FriggGateway + Docker healthcheck |
+| **Track 1 HEIMDALL frontend (T1.0-T1.9)** | ✅ **DONE** |
+| — packages/aida-shared/ (tokens.css, types, initTheme) | ✅ DONE |
+| — heimdall-frontend/ scaffold + все хуки + все страницы | ✅ DONE |
+| — LoginPage, ProfileModal, ProtectedRoute, toolbar (⌘K) | ✅ DONE |
+| — i18n EN/RU | ✅ DONE |
+| — CORS fix application.properties (+:5174) | ✅ DONE |
+| C.5.2 Keycloak rename (verdandi-bff → aida-bff) + scopes | ✅ DONE |
+| **Track 2 SHUTTLE (T2.1-T2.2)** | ✅ **DONE** |
+| — MutationResource.java (resetDemoState, startParseSession, cancelSession) | ✅ DONE |
+| — HeimdallControlClient.java (REST /control/reset) | ✅ DONE |
+| — HeimdallEventBus.java (BroadcastProcessor Mutiny hot fan-out) | ✅ DONE |
+| — SubscriptionResource.java (heimdallEvents + sessionProgress) | ✅ DONE |
+| — HeimdallEventView.java (payloadJson via Jackson, GQL-compatible) | ✅ DONE |
+| **Track 3 Chur (T3.1-T3.2)** | ✅ **DONE** |
+| — requireAdmin.ts middleware (role === 'admin') | ✅ DONE |
+| — heimdall.ts admin routes (preHandler authenticate + requireAdmin) | ✅ DONE |
+| — WebSocket proxy /heimdall/ws/events (session + role check) | ✅ DONE |
+| — @fastify/websocket@^9 installed (Fastify 4 compat) | ✅ DONE |
+| **Track 4 Shell MF Host (T4.1-T4.4)** | ✅ **DONE** |
+| — frontends/shell/ scaffold (MF host, port 5175) | ✅ DONE |
+| — AidaNav (wordmark + AppTab verdandi/heimdall + tools) | ✅ DONE |
+| — shellStore (currentApp + navigateTo via buildAppUrl ADR-DA-013) | ✅ DONE |
+| — RemoteErrorBoundary + NavigateBridge (URL↔store sync) | ✅ DONE |
+| — i18n EN/RU + Dockerfile + nginx.conf + docker-compose 25175:5175 | ✅ DONE |
+| — verdandi vite.config.ts: MF remote (exposes ./App) | ✅ DONE |
+| **HEIMDALL frontend (T1.9)** | ✅ **DONE** |
+| — Dockerfile (multi-stage) + nginx.conf + docker-compose 25174:5174 | ✅ DONE |
 
 **Разблокировано:** HEIMDALL frontend может подключаться к реальному backend. SHUTTLE mutations можно строить на чистой кодовой базе.
 
@@ -55,7 +82,7 @@ Canonical ID = ArcadeDB geoid (`DaliTable:prod.orders`).
 
 ## Треки спринта (4 параллельных)
 
-### Track 1 — HEIMDALL Frontend
+### Track 1 — HEIMDALL Frontend ✅ DONE (Apr 13-18)
 
 **Стек:** React 19 + Vite 6 + TypeScript + Tailwind 4 + @nivo/line + @nivo/bar + @nivo/pie + native WebSocket + react-virtuoso + zustand + aida-shared
 
@@ -456,9 +483,54 @@ M1 May 9       ✅ Milestone: Core Engines
 
 ---
 
+
+## M2 / Prem2 — Completion Summary (Apr 13 – Apr 2026)
+
+| Компонент | Задачи | Статус |
+|---|---|---|
+| **HEIMDALL Frontend S3** | DashboardPage live stats · ServiceHealthStrip · RecentErrors · ServiceTopology · ServicesPage · EventStreamPage фильтры+группировка · PresentationMode · DaliPage skeleton · UsersPage skeleton · dashboardStore (Zustand) · eventFormat util + тесты · useControl рефакторинг · i18n 35+ ключей | ✅ DONE |
+| **Vite/MF upgrade** | Vite 8 + plugin-react 6 + Module Federation 1.14.2 · vitest.config.ts + unit тесты | ✅ DONE |
+| **HEIMDALL Backend** | ServicesResource.java `GET /api/services` · EventFilter расширение · application.properties | ✅ DONE |
+| **Shell** | AidaNav nav style parity · Router singleton fix для MF dev-mode · Vite config | ✅ DONE |
+| **Hound C.0.1 — ArcadeDB 26.x** | arcadedb-engine:25.12.1 удалён · arcadedb-network → 26.3.1 · EmbeddedWriter.java удалён · только REMOTE/REMOTE_BATCH · SchemaInitializer → remoteSchemaCommands() · HoundApplication --arcade-db убрана · тесты переведены на REMOTE_BATCH (hound_test) | ✅ DONE |
+| **Tokens** | aida-shared/styles/tokens.css синхронизирован с verdandi globals.css | ✅ DONE |
+| **Infra / CI** | Dockerfiles (heimdall-frontend, shell, heimdall-backend, shuttle) · .dockerignore · .env.example · **.env.k8s.example** ✅ (T-K0.2) · docker-compose.yml · CI jobs heimdall-backend + heimdall-frontend | ✅ DONE |
+| **Docs** | g6-cursor-insert-values-lineage.md · HEIMDALL_SPRINT3_PREM2.md · PLAN_ARCADEDB_26_NO_EMBEDDED.md · PLAN_SPRINT_M2_APR13_MAY31.md | ✅ DONE |
+
+## Sprint 3 — Completion (12.04.2026) ✅
+
+| Задача | Статус |
+|---|---|
+| H3.5 EventLog 6-col + badges + payload | ✅ DONE |
+| H3.9 Chur auth events | ✅ DONE |
+| H3.4 ServicesResource + ServicesPage (real data) | ✅ DONE |
+| H3.1 ServiceHealthStrip + RecentErrors | ✅ DONE |
+| H3.7 PresentationMode ⛶ | ✅ DONE |
+| VFX focus rings, i18n, responsive grid | ✅ DONE |
+| Tests 21/21 GREEN | ✅ DONE |
+| ServiceTopology (IDE + Docker lanes) | ✅ DONE |
+| EventStream breakdown bar | ✅ DONE |
+| EventLog detail panel (click-to-expand) | ✅ DONE |
+| Filter fix (useMemo + clear on reconnect) | ✅ DONE |
+| EventFilter multi-filter backend | ✅ DONE |
+| SHUTTLE event emission (7 queries) | ✅ DONE |
+| docker-compose HEIMDALL_URL env var | ✅ DONE |
+
+**Беклог Sprint 3 (pending):**
+
+| Item | Блокер |
+|---|---|
+| H3.8 HoundHeimdallListener | C.1.3 HoundEventListener (Track A, W3 May 4–9) |
+| H3.8 CompositeListener | то же |
+| EventLog: экспорт CSV/JSON | — |
+| Replay > 200 событий через FRIGG | — |
+
 ## История изменений
+
 
 | Дата | Версия | Что |
 |---|---|---|
+| 12.04.2026 | 1.3 | **M1 ALL TRACKS DONE.** Track 2: MutationResource, HeimdallControlClient, HeimdallEventBus (BroadcastProcessor Mutiny), SubscriptionResource, HeimdallEventView. Track 3: requireAdmin.ts, WebSocket proxy /heimdall/ws/events, @fastify/websocket@^9. Track 4: Shell MF host (port 5175), AidaNav, shellStore, RemoteErrorBoundary, NavigateBridge, verdandi как MF remote, i18n, Docker. T1.9: Dockerfile + docker-compose 25174:5174. |
+| 12.04.2026 | 1.2 | **Track 1 HEIMDALL frontend DONE.** packages/aida-shared/ (tokens, types, initTheme). heimdall-frontend полный scaffold: хуки, страницы, LoginPage, ProtectedRoute, toolbar, i18n EN/RU. CORS fix. C.5.2 Keycloak rename done. Секция "остаток M1" добавлена с T1.9, T2.1-2.2, T3.1-3.2, T4.1-4.4. Arch decisions зафиксированы (requireAdmin M1, SHUTTLE subscriptions in-process, aida-shared location). |
 | 12.04.2026 | 1.1 | Статус обновлён: HEIMDALL+FRIGG integration DONE, HeimdallEmitter DONE, Chur proxy DONE, R1/R2 resolved. Track 3 Chur актуализирован. |
 | 12.04.2026 | 1.0 | Initial. Объединённый спринт Apr 13–May 9. Учтён статус DONE: HEIMDALL back S1+S2, repo migration, SQL fix. Shell B2 MF решение задокументировано. |

@@ -21,12 +21,14 @@ export interface Session {
   sub:              string;
   username:         string;
   role:             UserRole;
+  scopes:           string[];
 }
 
 export interface SessionUser {
   sub:      string;
   username: string;
   role:     UserRole;
+  scopes:   string[];
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
@@ -52,6 +54,7 @@ export function createSession(
   sub:          string,
   username:     string,
   role:         UserRole,
+  scopes:       string[] = [],
 ): string {
   const sid = randomUUID();
   sessions.set(sid, {
@@ -61,6 +64,7 @@ export function createSession(
     sub,
     username,
     role,
+    scopes,
   });
   return sid;
 }
@@ -124,6 +128,7 @@ async function doRefresh(sid: string, session: Session): Promise<Session> {
     sub:             userInfo.sub,
     username:        userInfo.username,
     role:            userInfo.role,
+    scopes:          userInfo.scopes,
   };
 
   sessions.set(sid, updated);

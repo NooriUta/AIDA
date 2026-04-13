@@ -129,6 +129,34 @@
     "deleteButton":     "Delete",
     "deleteConfirm":    "Delete this snapshot? This action cannot be undone."
   },
+  "users": {
+    "title":          "Users",
+    "subtitle":       "Role, scope and quota management · Extended model over Keycloak",
+    "invite":         "Invite",
+    "edit":           "Edit",
+    "block":          "Block",
+    "unblock":        "Unblock",
+    "save":           "Save changes",
+    "cancel":         "Cancel",
+    "confirm":        "Confirm",
+    "total":          "Total users",
+    "active":         "Active",
+    "admins":         "Admin rights",
+    "sourceBindings": "Source bindings",
+    "filterRole":     "All roles",
+    "filterStatus":   "All statuses",
+    "filterSearch":   "Name or email…",
+    "clearFilters":   "Clear",
+    "sections": {
+      "profile":     "Profile",
+      "role":        "Role",
+      "permissions": "Permissions",
+      "quotas":      "Quotas",
+      "sources":     "Sources",
+      "activity":    "Activity",
+      "prefs":       "Settings"
+    }
+  },
   "profile": {
     "title":        "Profile",
     "appearance":   "Appearance",

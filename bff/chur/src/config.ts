@@ -21,6 +21,12 @@ export const config = {
   cookieSecret:     requireInProd('COOKIE_SECRET',
                       process.env.COOKIE_SECRET, 'dev-cookie-secret'),
 
+  // ── Keycloak Admin API (master realm bootstrap creds) ────────────────────
+  // Used by /heimdall/users to read user list + attributes via Admin REST API.
+  // In production: replace with a dedicated service account.
+  kcAdminUser:  process.env.KC_ADMIN_USER ?? 'admin',
+  kcAdminPass:  process.env.KC_ADMIN_PASS ?? 'admin',
+
   // ── ArcadeDB (for /api/query proxy — not auth) ────────────────────────────
   arcadeUrl:     process.env.ARCADEDB_URL  ?? 'http://localhost:2480',
   arcadeDb:      process.env.ARCADEDB_DB   ?? 'hound',

@@ -1,0 +1,230 @@
+/**
+ * Keycloak Admin REST API client.
+ * Uses the Keycloak master-realm bootstrap admin to read users + attributes
+ * from the `seer` realm.
+ *
+ * Storage split (what lives where):
+ *   KEYCLOAK attributes — profile (title, dept, phone), avatarColor,
+ *                         tz, dateFmt, startPage, notify.*
+ *   FRIGG (future R4.3) — quotas, source bindings, session history
+ *   localStorage (client)— theme, palette, uiFont, monoFont, fontSize,
+ *                          density, lang  (synced by verdandi / ProfileModal)
+ */
+
+import { config } from './config';
+import type { UserRole } from './types';
+
+const KC_BASE  = config.keycloakUrl;
+const KC_REALM = config.keycloakRealm;
+
+// ── Keycloak raw shapes ───────────────────────────────────────────────────────
+
+interface KcUser {
+  id:         string;
+  username:   string;
+  firstName?: string;
+  lastName?:  string;
+  email?:     string;
+  enabled:    boolean;
+  /** KC attributes: each value is a string array  */
+  attributes?: Record<string, string[]>;
+}
+
+interface KcRole {
+  id:   string;
+  name: string;
+}
+
+// ── Public shape returned to HEIMDALL frontend ────────────────────────────────
+
+export interface KcUserView {
+  id:        string;    // KC UUID
+  name:      string;    // KC username
+  firstName: string;
+  lastName:  string;
+  email:     string;
+  role:      UserRole;
+  active:    boolean;
+  // ── Keycloak attributes ──
+  title:       string;
+  dept:        string;
+  phone:       string;
+  avatarColor: string;
+  lang:        string;  // KC attr "pref.lang" — "ru" | "en" | ...
+  tz:          string;
+  dateFmt:     string;
+  startPage:   string;
+  notifyEmail:    boolean;
+  notifyBrowser:  boolean;
+  notifyHarvest:  boolean;
+  notifyErrors:   boolean;
+  notifyDigest:   boolean;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const ROLE_PRIORITY: UserRole[] = [
+  'super-admin', 'admin', 'local-admin', 'tenant-owner',
+  'auditor', 'operator', 'editor', 'viewer',
+];
+
+function pickRole(roles: string[]): UserRole {
+  for (const r of ROLE_PRIORITY) {
+    if (roles.includes(r)) return r;
+  }
+  return 'viewer';
+}
+
+function attr(u: KcUser, key: string, fallback = ''): string {
+  return u.attributes?.[key]?.[0] ?? fallback;
+}
+
+function attrBool(u: KcUser, key: string, fallback = false): boolean {
+  const v = u.attributes?.[key]?.[0];
+  if (v === undefined) return fallback;
+  return v === 'true';
+}
+
+// ── Admin token (master realm, admin-cli client) ──────────────────────────────
+
+async function getAdminToken(): Promise<string> {
+  const res = await fetch(
+    `${KC_BASE}/realms/master/protocol/openid-connect/token`,
+    {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    new URLSearchParams({
+        grant_type: 'password',
+        client_id:  'admin-cli',
+        username:   config.kcAdminUser,
+        password:   config.kcAdminPass,
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`KC admin auth failed: ${res.status} ${res.statusText}`);
+  }
+  const data = await res.json() as { access_token: string };
+  return data.access_token;
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * List all users in the seer realm with their attributes and highest role.
+ * Returns a flat array ready for HEIMDALL UsersPage.
+ */
+export async function listUsers(): Promise<KcUserView[]> {
+  const token = await getAdminToken();
+  const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+
+  // 1. Fetch all users (includes attributes)
+  const usersRes = await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/users?max=200&briefRepresentation=false`,
+    { headers },
+  );
+  if (!usersRes.ok) {
+    throw new Error(`KC users list failed: ${usersRes.status}`);
+  }
+  const kcUsers = await usersRes.json() as KcUser[];
+
+  // 2. Fetch realm roles for each user (parallel)
+  const views = await Promise.all(
+    kcUsers.map(async (u): Promise<KcUserView> => {
+      const rolesRes = await fetch(
+        `${KC_BASE}/admin/realms/${KC_REALM}/users/${u.id}/role-mappings/realm`,
+        { headers },
+      );
+      const kcRoles: KcRole[] = rolesRes.ok
+        ? await rolesRes.json() as KcRole[]
+        : [];
+
+      const roleNames = kcRoles.map(r => r.name);
+      return {
+        id:        u.id,
+        name:      u.username,
+        firstName: u.firstName ?? '',
+        lastName:  u.lastName  ?? '',
+        email:     u.email     ?? '',
+        role:      pickRole(roleNames),
+        active:    u.enabled,
+        // KC attributes
+        title:       attr(u, 'title'),
+        dept:        attr(u, 'dept'),
+        phone:       attr(u, 'phone'),
+        avatarColor: attr(u, 'avatarColor', '#A8B860'),
+        lang:        attr(u, 'pref.lang',   'ru'),
+        tz:          attr(u, 'tz',          'Europe/Moscow'),
+        dateFmt:     attr(u, 'dateFmt',     'DD.MM.YYYY'),
+        startPage:   attr(u, 'startPage',   'dashboard'),
+        notifyEmail:    attrBool(u, 'notify.email',    true),
+        notifyBrowser:  attrBool(u, 'notify.browser',  false),
+        notifyHarvest:  attrBool(u, 'notify.harvest',  false),
+        notifyErrors:   attrBool(u, 'notify.errors',   true),
+        notifyDigest:   attrBool(u, 'notify.digest',   false),
+      };
+    }),
+  );
+
+  return views;
+}
+
+/**
+ * Update user attributes in Keycloak (profile + prefs).
+ * Does NOT change role or enabled state — those are separate KC operations.
+ */
+export async function updateUserAttrs(
+  userId: string,
+  patch: Partial<Omit<KcUserView, 'id' | 'name' | 'email' | 'role' | 'active'>>,
+): Promise<void> {
+  const token = await getAdminToken();
+
+  // Build KC attributes object (all values are string arrays)
+  const attributes: Record<string, string[]> = {};
+  if (patch.title       !== undefined) attributes['title']           = [patch.title];
+  if (patch.dept        !== undefined) attributes['dept']            = [patch.dept];
+  if (patch.phone       !== undefined) attributes['phone']           = [patch.phone];
+  if (patch.avatarColor !== undefined) attributes['avatarColor']     = [patch.avatarColor];
+  if (patch.lang        !== undefined) attributes['pref.lang']       = [patch.lang];
+  if (patch.tz          !== undefined) attributes['tz']              = [patch.tz];
+  if (patch.dateFmt     !== undefined) attributes['dateFmt']         = [patch.dateFmt];
+  if (patch.startPage   !== undefined) attributes['startPage']       = [patch.startPage];
+  if (patch.notifyEmail    !== undefined) attributes['notify.email']   = [String(patch.notifyEmail)];
+  if (patch.notifyBrowser  !== undefined) attributes['notify.browser'] = [String(patch.notifyBrowser)];
+  if (patch.notifyHarvest  !== undefined) attributes['notify.harvest'] = [String(patch.notifyHarvest)];
+  if (patch.notifyErrors   !== undefined) attributes['notify.errors']  = [String(patch.notifyErrors)];
+  if (patch.notifyDigest   !== undefined) attributes['notify.digest']  = [String(patch.notifyDigest)];
+
+  const res = await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}`,
+    {
+      method:  'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        firstName:  patch.firstName,
+        attributes,
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`KC updateUser failed: ${res.status}`);
+  }
+}
+
+/**
+ * Enable or disable a user in Keycloak.
+ */
+export async function setUserEnabled(userId: string, enabled: boolean): Promise<void> {
+  const token = await getAdminToken();
+  const res = await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}`,
+    {
+      method:  'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ enabled }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`KC setUserEnabled failed: ${res.status}`);
+  }
+}

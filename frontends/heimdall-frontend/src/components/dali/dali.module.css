@@ -1,0 +1,355 @@
+/* ── Progress bar ─────────────────────────────────────────────────────────────── */
+.prog {
+  background: var(--bg3);
+  border-radius: 2px;
+  height: 3px;
+  overflow: hidden;
+  min-width: 60px;
+}
+.progFill {
+  height: 3px;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.progInd .progFill {
+  width: 40%;
+  animation: progIndAnim 1.4s ease-in-out infinite;
+}
+@keyframes progIndAnim {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* ── Pulse dot for RUNNING badge ─────────────────────────────────────────────── */
+.pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--inf);
+  display: inline-block;
+  flex-shrink: 0;
+  animation: pulseAnim 1.4s ease-in-out infinite;
+}
+@keyframes pulseAnim {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* ── Stats strip ─────────────────────────────────────────────────────────────── */
+.statsStrip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.statCard {
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-md);
+  padding: 12px 14px;
+}
+.statLabel {
+  font-size: 10px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: var(--mono);
+  margin-bottom: 5px;
+}
+.statVal {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--mono);
+  line-height: 1;
+}
+.statSub {
+  font-size: 10px;
+  color: var(--t3);
+  margin-top: 3px;
+}
+
+/* ── Panel ───────────────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-md);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--bd);
+  background: color-mix(in srgb, var(--bg2) 60%, transparent);
+}
+.panelTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panelBody {
+  padding: 14px 16px;
+}
+
+/* ── Parse form grid ─────────────────────────────────────────────────────────── */
+.formRow {
+  display: grid;
+  grid-template-columns: 148px 1fr 120px auto;
+  gap: 10px;
+  align-items: end;
+}
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.fieldLabel {
+  font-size: 10px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: var(--mono);
+}
+.fieldError {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 3px;
+  font-family: var(--mono);
+  min-height: 16px;
+}
+.checkboxStack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.previewRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+}
+.previewRow input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--acc);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.previewRow label {
+  font-size: 12px;
+  color: var(--t2);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ── Session table ───────────────────────────────────────────────────────────── */
+.sessionTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+.sessionTable th {
+  font-size: 10px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bd);
+  text-align: left;
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--bg2) 50%, transparent);
+  font-weight: 500;
+}
+.sessionTable td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bd);
+  font-size: 12px;
+  vertical-align: middle;
+}
+.dataRow:hover td {
+  background: color-mix(in srgb, var(--bg3) 40%, transparent);
+  cursor: pointer;
+}
+.dataRowSelected td {
+  background: color-mix(in srgb, var(--acc) 6%, transparent);
+}
+
+/* ── Detail expand row ───────────────────────────────────────────────────────── */
+.detailTd {
+  padding: 0;
+  border-bottom: 1px solid var(--bd);
+}
+.detailInner {
+  padding: 12px 14px 14px;
+  background: color-mix(in srgb, var(--bg2) 40%, transparent);
+  border-top: 1px solid var(--bd);
+}
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.dstat {
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-sm);
+  padding: 10px 12px;
+}
+.dstatLabel {
+  font-size: 10px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--mono);
+  margin-bottom: 4px;
+}
+.dstatVal {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+.dstatSub {
+  font-size: 10px;
+  color: var(--t3);
+  margin-top: 2px;
+}
+
+/* ── Warnings list ───────────────────────────────────────────────────────────── */
+.warnToggle {
+  font-size: 11px;
+  color: var(--t3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-family: var(--mono);
+  background: none;
+  border: none;
+  padding: 0;
+}
+.warnToggle:hover { color: var(--t2); }
+.warnList {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.warnItem {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--wrn);
+  background: color-mix(in srgb, var(--wrn) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wrn) 20%, transparent);
+  border-radius: var(--seer-radius-sm);
+  padding: 3px 8px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: var(--t3);
+}
+.emptyTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t2);
+  margin-bottom: 4px;
+  margin-top: 12px;
+}
+.emptySub {
+  font-size: 12px;
+  color: var(--t3);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ── Toast stack ─────────────────────────────────────────────────────────────── */
+.toastStack {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toastItem {
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-md);
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--t1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  max-width: 320px;
+  animation: toastIn 0.22s ease;
+}
+.toastItem.suc { border-left: 3px solid var(--suc); }
+.toastItem.err { border-left: 3px solid var(--danger); }
+.toastItem.inf { border-left: 3px solid var(--inf); }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────────── */
+.footer {
+  height: 26px;
+  background: var(--bg0);
+  border-top: 1px solid var(--bd);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+.footerItem {
+  font-size: 11px;
+  color: var(--t3);
+  font-family: var(--mono);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.footerSep {
+  width: 1px;
+  height: 14px;
+  background: var(--bd);
+}
+.footerDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+/* ── Session badge variants ───────────────────────────────────────────────────── */
+.badgeQueued    { background: var(--bg3); color: var(--t2); border-color: var(--bd); gap: 4px; }
+.badgeRunning   { background: color-mix(in srgb, var(--inf) 12%, transparent); color: var(--inf); border-color: color-mix(in srgb, var(--inf) 28%, transparent); gap: 4px; }
+.badgeCompleted { background: color-mix(in srgb, var(--suc) 12%, transparent); color: var(--suc); border-color: color-mix(in srgb, var(--suc) 28%, transparent); gap: 4px; }
+.badgeFailed    { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 28%, transparent); gap: 4px; }
+.badgeCancelled { background: var(--bg3); color: var(--t3); border-color: var(--bd); gap: 4px; }
+
+/* ── Chevron ─────────────────────────────────────────────────────────────────── */
+.chevron {
+  transition: transform 0.15s ease;
+}
+.chevronOpen {
+  transform: rotate(180deg);
+}

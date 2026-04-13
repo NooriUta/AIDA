@@ -12,6 +12,7 @@ import {
   applyL1HierarchyFilter,
   applyL1SchemaChipDim,
 } from '../../utils/displayPipeline';
+import { LAYOUT } from '../../utils/constants';
 
 interface Graph {
   nodes: LoomNode[];
@@ -52,9 +53,11 @@ export function useDisplayGraph(rawGraph: Graph | null) {
     let g = scopedGraph;
     g = applyL1DepthFilter(g, viewLevel, l1Filter);
     g = applyHiddenNodes(g, hiddenNodeIds);
-    g = applyTableLevelView(g, viewLevel, filter.tableLevelView);
+    // M-5: auto-enable tableLevelView for large graphs (hides ~17K cf-edges → ~3.5K)
+    const effectiveTLV = g.nodes.length > LAYOUT.TABLE_LEVEL_THRESHOLD ? true : filter.tableLevelView;
+    g = applyTableLevelView(g, viewLevel, effectiveTLV);
     g = applyDirectionFilter(g, viewLevel, filter.upstream, filter.downstream);
-    g = applyCfEdgeToggle(g, viewLevel, filter.showCfEdges, filter.tableLevelView);
+    g = applyCfEdgeToggle(g, viewLevel, filter.showCfEdges, effectiveTLV);
     g = applyL1HierarchyFilter(g, viewLevel, l1HierarchyFilter);
     g = applyL1SchemaChipDim(g, viewLevel, selectedNodeId, expandedDbs);
     return g;

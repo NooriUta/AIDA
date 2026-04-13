@@ -37,15 +37,26 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
     ? 'color-mix(in srgb, #2496ED 50%, var(--bd))'
     : (data.color ?? 'var(--bd)');
 
+  // Double-click → open service in new tab
+  // Docker: use host-mapped extPort; dev/no-mode: use port directly
+  const hostPort = isDocker ? (data.extPort ?? data.port) : data.port;
+  const handleDoubleClick = () => {
+    window.open(`http://localhost:${hostPort}`, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div style={{
-      background:   'var(--bg1)',
-      border:       `1px solid ${borderColor}`,
-      borderRadius: 'var(--seer-radius-md)',
-      padding:      '5px 10px',
-      minWidth:     118,
-      textAlign:    'center',
-    }}>
+    <div
+      onDoubleClick={handleDoubleClick}
+      title={`Double-click to open http://localhost:${hostPort}`}
+      style={{
+        background:   'var(--bg1)',
+        border:       `1px solid ${borderColor}`,
+        borderRadius: 'var(--seer-radius-md)',
+        padding:      '5px 10px',
+        minWidth:     118,
+        textAlign:    'center',
+        cursor:       'pointer',
+      }}>
       <Handle id="t" type="target" position={Position.Top}    style={{ background: 'var(--bd)' }} />
       <Handle id="l" type="target" position={Position.Left}   style={{ background: 'var(--bd)' }} />
 
@@ -163,18 +174,24 @@ const NODES: Node[] = [
   { id: 'shuttle-docker',  type: 'service', position: { x: 600,  y: 430 },
     data: { label: 'Shuttle',  port: '8080', extPort: '18080', mode: 'docker', color: 'var(--suc)' } },
 
-  // ── Row 4: Storage ───────────────────────────────────────────────────────────
+  // ── Row 4: Dali (async PL/SQL parser, port 9090) ─────────────────────────────
+  { id: 'dali-dev',    type: 'service', position: { x: 130, y: 550 },
+    data: { label: 'Dali (Parser)', port: '9090', mode: 'dev',    color: 'var(--acc)' } },
+  { id: 'dali-docker', type: 'service', position: { x: 600, y: 550 },
+    data: { label: 'Dali (Parser)', port: '9090', extPort: '19090', mode: 'docker', color: 'var(--acc)' } },
+
+  // ── Row 5: Storage ────────────────────────────────────────────────────────────
   // Ygg = HoundArcade external container, same instance for both lanes
   // IDE: localhost:2480 | Docker: HoundArcade:2480 (internal docker net)
-  { id: 'ygg', type: 'service', position: { x: 350, y: 570 },
+  { id: 'ygg', type: 'service', position: { x: 350, y: 700 },
     data: { label: 'Ygg (HoundArcade)', port: '2480', color: 'var(--t3)' } },
 
   // Frigg — separate access paths
   // IDE: localhost:2481 (host-mapped from Frigg container)
   // Docker: frigg:2480 (internal container port, no offset inside network)
-  { id: 'frigg-dev',    type: 'service', position: { x: 130, y: 570 },
+  { id: 'frigg-dev',    type: 'service', position: { x: 130, y: 700 },
     data: { label: 'Frigg',  port: '2481', mode: 'dev',    color: 'var(--t3)' } },
-  { id: 'frigg-docker', type: 'service', position: { x: 600, y: 570 },
+  { id: 'frigg-docker', type: 'service', position: { x: 600, y: 700 },
     data: { label: 'Frigg',  port: '2480', extPort: '2481', mode: 'docker', color: 'var(--t3)' } },
 ];
 
@@ -201,19 +218,23 @@ const EDGES: Edge[] = [
   e('cd-kd',    'chur-dev',     'keycloak-dev',    'OAuth2',     'var(--wrn)'),
   e('cd-std',   'chur-dev',     'shuttle-dev',     'GraphQL',    'var(--acc)'),
   e('cd-hbd',   'chur-dev',     'hb-dev',          'events',     'var(--t3)'),
-  e('std-ygg',  'shuttle-dev',  'ygg',             'ArcadeDB',   'var(--t3)'),
-  e('hbd-fri',  'hb-dev',       'frigg-dev',       'ArcadeDB',   'var(--t3)'),
+  e('std-ygg',   'shuttle-dev',  'ygg',             'ArcadeDB',   'var(--t3)'),
+  e('hbd-fri',   'hb-dev',       'frigg-dev',       'ArcadeDB',   'var(--t3)'),
+  e('cd-dali',   'chur-dev',     'dali-dev',        'REST',       'var(--acc)'),
+  e('dali-fri',  'dali-dev',     'frigg-dev',       'JobRunr',    'var(--t3)'),
 
   // ── Docker lane (internal ports, docker network) ──────────────────────────
-  e('sk-vk',    'shell-docker',    'verdandi-docker',    'MF',         'var(--inf)'),
-  e('sk-hfk',   'shell-docker',    'hf-docker',          'MF',         'var(--inf)'),
-  e('vk-ck',    'verdandi-docker', 'chur-docker',        'auth/proxy', 'var(--suc)'),
-  e('hfk-hbk',  'hf-docker',      'hb-docker',          'REST/WS',    'var(--suc)', true),
-  e('ck-kk',    'chur-docker',     'keycloak-docker',    'OAuth2',     'var(--wrn)'),
-  e('ck-stk',   'chur-docker',     'shuttle-docker',     'GraphQL',    'var(--acc)'),
-  e('ck-hbk',   'chur-docker',     'hb-docker',          'events',     'var(--t3)'),
-  e('stk-ygg',  'shuttle-docker',  'ygg',                'ArcadeDB',   'var(--t3)'),
-  e('hbk-frik', 'hb-docker',       'frigg-docker',       'ArcadeDB',   'var(--t3)'),
+  e('sk-vk',     'shell-docker',    'verdandi-docker',    'MF',         'var(--inf)'),
+  e('sk-hfk',    'shell-docker',    'hf-docker',          'MF',         'var(--inf)'),
+  e('vk-ck',     'verdandi-docker', 'chur-docker',        'auth/proxy', 'var(--suc)'),
+  e('hfk-hbk',   'hf-docker',      'hb-docker',          'REST/WS',    'var(--suc)', true),
+  e('ck-kk',     'chur-docker',     'keycloak-docker',    'OAuth2',     'var(--wrn)'),
+  e('ck-stk',    'chur-docker',     'shuttle-docker',     'GraphQL',    'var(--acc)'),
+  e('ck-hbk',    'chur-docker',     'hb-docker',          'events',     'var(--t3)'),
+  e('stk-ygg',   'shuttle-docker',  'ygg',                'ArcadeDB',   'var(--t3)'),
+  e('hbk-frik',  'hb-docker',       'frigg-docker',       'ArcadeDB',   'var(--t3)'),
+  e('ck-dalik',  'chur-docker',     'dali-docker',        'REST',       'var(--acc)'),
+  e('dalik-frik','dali-docker',     'frigg-docker',       'JobRunr',    'var(--t3)'),
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -236,7 +257,7 @@ export function ServiceTopology() {
       }}>
         Service Topology
       </div>
-      <div style={{ height: 700 }}>
+      <div style={{ height: 860 }}>
         <ReactFlow
           defaultNodes={NODES}
           defaultEdges={EDGES}

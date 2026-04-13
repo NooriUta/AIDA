@@ -23,10 +23,12 @@ repositories {
 // ==================== ЗАВИСИМОСТИ ====================
 
 dependencies {
-    // ANTLR4 runtime (только runtime, генерация — через кастомную задачу)
-    implementation 'org.antlr:antlr4-runtime:4.13.2'
+    // ── api{} — transitive: consumers (Dali) see these ───────────
+    // ANTLR4 runtime: transitive so Dali can reference grammar types if needed
+    api 'org.antlr:antlr4-runtime:4.13.2'
 
-    // CLI
+    // ── implementation{} — internal: Dali does NOT see these ─────
+    // CLI (only for standalone HoundApplication / HoundMain)
     implementation 'commons-cli:commons-cli:1.11.0'
 
     // Jackson (JSON/YAML)
@@ -43,14 +45,14 @@ dependencies {
     implementation 'commons-io:commons-io:2.21.0'
     implementation 'com.google.guava:guava:33.4.8-jre'
 
+    // ArcadeDB network client (internal write path)
+    // arcadedb-engine removed — Embedded mode temporarily disabled (Q31)
+    implementation 'com.arcadedb:arcadedb-network:26.3.1'
+
     // Tests
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testImplementation 'org.mockito:mockito-core:5.18.0'
-
-    // arcadedb-engine removed — Embedded mode temporarily disabled (TODO: restore after 26.x API stabilisation)
-    implementation 'com.arcadedb:arcadedb-network:26.3.1'
-
 }
 
 // ==================== SOURCE SETS ====================

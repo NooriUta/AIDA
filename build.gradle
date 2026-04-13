@@ -103,7 +103,7 @@ task churStart(type: Exec) {
 
 task devAll {
     group       = 'Development'
-    description = 'Start all services: SHUTTLE (:8080) + Chur (:3000) + verdandi (:5173)'
+    description = 'Start all services: SHUTTLE (:8080) + Chur (:3000) + verdandi (:5173) + Dali (:9090)'
     dependsOn   churInstall, verdandiInstall
 
     doLast {
@@ -118,21 +118,27 @@ task devAll {
             new ProcessBuilder('cmd', '/c',
                 "start \"verdandi\" /D \"${verdandiDir}\" \"${npmCmd}\" run dev")
                 .start()
-            println '> Opened SHUTTLE (:8080), Chur (:3000) and verdandi (:5173) in separate windows.'
+            new ProcessBuilder('cmd', '/c',
+                "start \"Dali\" /D \"${rootDir}\" \"${gradleCmd}\" :services:dali:quarkusDev")
+                .start()
+            println '> Opened SHUTTLE (:8080), Chur (:3000), verdandi (:5173) and Dali (:9090) in separate windows.'
         } else {
-            // Unix/macOS — run all three in parallel, inherit output to this terminal
+            // Unix/macOS — run all in parallel, inherit output to this terminal
             def shuttleProc = new ProcessBuilder(gradleCmd, ':services:shuttle:quarkusDev')
                 .directory(rootDir).inheritIO().start()
             def churProc = new ProcessBuilder(npmCmd, 'run', 'dev')
                 .directory(churDir).inheritIO().start()
             def verdandiProc = new ProcessBuilder(npmCmd, 'run', 'dev')
                 .directory(verdandiDir).inheritIO().start()
+            def daliProc = new ProcessBuilder(gradleCmd, ':services:dali:quarkusDev')
+                .directory(rootDir).inheritIO().start()
             Runtime.runtime.addShutdownHook(new Thread({
                 shuttleProc.destroyForcibly()
                 churProc.destroyForcibly()
                 verdandiProc.destroyForcibly()
+                daliProc.destroyForcibly()
             }))
-            [shuttleProc, churProc, verdandiProc]*.waitFor()
+            [shuttleProc, churProc, verdandiProc, daliProc]*.waitFor()
         }
     }
 }

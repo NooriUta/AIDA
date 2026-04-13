@@ -1,0 +1,47 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version "${quarkusPlatformVersion}"
+}
+
+group   = 'studio.seer.dali'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    // REST + JSON
+    implementation 'io.quarkus:quarkus-rest-jackson'
+
+    // CDI
+    implementation 'io.quarkus:quarkus-arc'
+
+    // Health + Metrics
+    implementation 'io.quarkus:quarkus-smallrye-health'
+    implementation 'io.quarkus:quarkus-micrometer'
+
+    // REST Client — FRIGG (ArcadeDB :2481)
+    implementation 'io.quarkus:quarkus-rest-client'
+    implementation 'io.quarkus:quarkus-rest-client-jackson'
+
+    // JobRunr — async job queue (OSS core; configured via CDI producer)
+    implementation 'org.jobrunr:jobrunr:7.3.0'
+
+    // Hound library — in-JVM parse (no subprocess)
+    implementation project(':libraries:hound')
+
+    // Shared models — ParseSessionInput, Session, SessionStatus, HeimdallEvent
+    implementation project(':shared:dali-models')
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+compileJava.options.encoding     = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'

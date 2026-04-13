@@ -1,5 +1,7 @@
 package com.hound.semantic.engine;
 
+import com.hound.api.HoundEventListener;
+import com.hound.api.NoOpHoundEventListener;
 import com.hound.semantic.model.AtomInfo;
 import com.hound.semantic.model.RecordInfo;
 import com.hound.semantic.model.RoutineInfo;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * AtomProcessor — сбор, классификация и разрешение атомарных выражений.
@@ -34,10 +37,25 @@ public class AtomProcessor {
     // G3: current MERGE UPDATE target column (set at enterMerge_element, cleared at exit)
     private String currentMergeTargetColumn = null;
 
+    // ═══════ Listener (C.1.3) ═══════
+    private final HoundEventListener listener;
+    private final String file;
+    private final AtomicInteger atomCounter = new AtomicInteger(0);
+
     // External dependencies
     private NameResolver nameResolver;
     private StructureAndLineageBuilder builder;
     private ScopeManager scopeManager;
+
+    /** Backward-compatible no-arg constructor. */
+    public AtomProcessor() {
+        this(NoOpHoundEventListener.INSTANCE, "");
+    }
+
+    public AtomProcessor(HoundEventListener listener, String file) {
+        this.listener = listener != null ? listener : NoOpHoundEventListener.INSTANCE;
+        this.file = file != null ? file : "";
+    }
 
     public void wire(NameResolver nameResolver, StructureAndLineageBuilder builder, ScopeManager scopeManager) {
         this.nameResolver = nameResolver;
@@ -86,6 +104,9 @@ public class AtomProcessor {
         stmtAtoms.put(atomKey, atomData);
         logger.debug("ATOM REGISTER '{}' → stmt={} ctx={} line={}",
                 text, statementGeoid, parentContext, line);
+
+        // C.1.3: notify listener
+        listener.onAtomExtracted(file, atomCounter.incrementAndGet(), context != null ? context : "UNKNOWN");
     }
 
     /**

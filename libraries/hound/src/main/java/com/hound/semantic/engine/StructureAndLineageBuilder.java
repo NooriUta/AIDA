@@ -1,5 +1,7 @@
 package com.hound.semantic.engine;
 
+import com.hound.api.HoundEventListener;
+import com.hound.api.NoOpHoundEventListener;
 import com.hound.diagnostic.ResolutionLogger;
 import com.hound.semantic.model.*;
 import org.slf4j.Logger;
@@ -32,6 +34,20 @@ public class StructureAndLineageBuilder {
 
     // S1.SCH: log of suspicious schema registrations with call backtrace
     private final List<Map<String, Object>> schemaRegistrationLog = new ArrayList<>();
+
+    // C.1.3: event listener
+    private final HoundEventListener listener;
+    private final String file;
+
+    /** Backward-compatible no-arg constructor. */
+    public StructureAndLineageBuilder() {
+        this(NoOpHoundEventListener.INSTANCE, "");
+    }
+
+    public StructureAndLineageBuilder(HoundEventListener listener, String file) {
+        this.listener = listener != null ? listener : NoOpHoundEventListener.INSTANCE;
+        this.file = file != null ? file : "";
+    }
 
     public void setResolutionLogger(ResolutionLogger rl) { this.resolutionLogger = rl; }
 
@@ -189,10 +205,17 @@ public class StructureAndLineageBuilder {
         String upperVar = varName.toUpperCase();
         String rg = routineGeoid != null ? routineGeoid : "";
         String geoid = (rg.isBlank() ? "RECORD" : rg) + ":RECORD:" + upperVar;
-        return records.computeIfAbsent(geoid, k -> {
+        boolean[] isNew = {false};
+        RecordInfo rec = records.computeIfAbsent(geoid, k -> {
             logger.debug("New record registered: {} [{}]", upperVar, geoid);
+            isNew[0] = true;
             return new RecordInfo(geoid, upperVar, routineGeoid);
         });
+        // C.1.3: notify listener on first registration only
+        if (isNew[0]) {
+            listener.onRecordRegistered(file, varName);
+        }
+        return rec;
     }
 
     public Map<String, RecordInfo> getRecords() { return records; }
