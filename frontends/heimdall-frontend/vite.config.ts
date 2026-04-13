@@ -38,6 +38,7 @@ export default defineConfig({
     cors: true,
     proxy: {
       '/auth': { target: 'http://localhost:3000', changeOrigin: true },
+      '/dali': { target: 'http://localhost:9090', changeOrigin: true, rewrite: (path: string) => path.replace(/^\/dali/, '') },
     },
   },
 });

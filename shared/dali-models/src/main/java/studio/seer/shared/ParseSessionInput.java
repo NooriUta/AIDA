@@ -10,5 +10,7 @@ package studio.seer.shared;
 public record ParseSessionInput(
         String  dialect,
         String  source,
-        boolean preview
+        boolean preview,
+        /** If true, all Dali YGG data is truncated before this session writes. Default: true. */
+        boolean clearBeforeWrite
 ) {}

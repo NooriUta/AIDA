@@ -50,4 +50,15 @@ public interface HoundParser {
      * @return one {@link ParseResult} per file, in the same order as {@code files}
      */
     List<ParseResult> parseBatch(List<Path> files, HoundConfig config, HoundEventListener listener);
+
+    /**
+     * Truncates all Dali vertex/edge types in YGG (TRUNCATE TYPE … UNSAFE).
+     *
+     * <p>Call this before the first {@link #parse} / {@link #parseBatch} call when you want
+     * a clean slate (i.e. {@code clearBeforeWrite = true} in the UI). No-op when
+     * {@code config.writeMode()} is {@link ArcadeWriteMode#DISABLED}.
+     *
+     * @param config must have a valid {@code arcadeUrl} if writeMode is REMOTE or REMOTE_BATCH
+     */
+    void cleanAll(HoundConfig config);
 }

@@ -129,6 +129,34 @@
     "deleteButton":     "Удалить",
     "deleteConfirm":    "Удалить снапшот? Действие необратимо."
   },
+  "users": {
+    "title":          "Пользователи",
+    "subtitle":       "Управление ролями, scopes и квотами · Extended model поверх Keycloak",
+    "invite":         "Пригласить",
+    "edit":           "Редакт.",
+    "block":          "Заблокировать",
+    "unblock":        "Разблокировать",
+    "save":           "Сохранить изменения",
+    "cancel":         "Отмена",
+    "confirm":        "Подтвердить",
+    "total":          "Пользователей",
+    "active":         "Активных",
+    "admins":         "С правами admin",
+    "sourceBindings": "Source bindings",
+    "filterRole":     "Все роли",
+    "filterStatus":   "Все статусы",
+    "filterSearch":   "Имя или email…",
+    "clearFilters":   "Сбросить",
+    "sections": {
+      "profile":     "Профиль",
+      "role":        "Роль",
+      "permissions": "Разрешения",
+      "quotas":      "Квоты",
+      "sources":     "Источники",
+      "activity":    "Активность",
+      "prefs":       "Настройки"
+    }
+  },
   "profile": {
     "title":         "Профиль",
     "appearance":    "Внешний вид",

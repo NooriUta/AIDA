@@ -11,8 +11,9 @@ import studio.seer.shared.ParseSessionInput;
  * REST API for Dali parse sessions.
  *
  * <pre>
- * POST  /api/sessions          — enqueue a new parse session → 202 Accepted + Session
- * GET   /api/sessions/{id}     — poll session status         → 200 OK + Session | 404
+ * GET   /api/sessions             — list recent sessions (newest first) → 200 OK + Session[]
+ * POST  /api/sessions             — enqueue a new parse session         → 202 Accepted + Session
+ * GET   /api/sessions/{id}        — poll session status                 → 200 OK + Session | 404
  * </pre>
  */
 @Path("/api/sessions")
@@ -21,6 +22,11 @@ import studio.seer.shared.ParseSessionInput;
 public class SessionResource {
 
     @Inject SessionService sessionService;
+
+    @GET
+    public Response list(@QueryParam("limit") @DefaultValue("50") int limit) {
+        return Response.ok(sessionService.listRecent(limit)).build();
+    }
 
     @POST
     public Response create(ParseSessionInput input) {

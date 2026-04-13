@@ -1,4 +1,5 @@
 import type { LoomStore } from '../loomStore';
+import { usePrefsStore } from '../prefsStore';
 
 type Set = (partial: Partial<LoomStore> | ((s: LoomStore) => Partial<LoomStore>)) => void;
 type Get = () => LoomStore;
@@ -10,6 +11,7 @@ export function themeActions(set: Set, get: Get) {
       localStorage.setItem('seer-theme', next);
       document.documentElement.setAttribute('data-theme', next);
       set({ theme: next });
+      usePrefsStore.getState().savePrefs({ theme: next });
     },
 
     setPalette: (name: string) => {
@@ -20,6 +22,7 @@ export function themeActions(set: Set, get: Get) {
         document.documentElement.setAttribute('data-palette', name);
       }
       set({ palette: name });
+      usePrefsStore.getState().savePrefs({ palette: name });
     },
 
     setGraphStats:     (nodeCount: number, edgeCount: number) => set({ nodeCount, edgeCount }),

@@ -129,6 +129,18 @@ public class HoundParserImpl implements HoundParser {
         }
     }
 
+    @Override
+    public void cleanAll(HoundConfig config) {
+        try (ArcadeDBSemanticWriter writer = createWriter(config)) {
+            if (writer != null) {
+                writer.cleanAll();
+                logger.info("cleanAll: YGG truncated (writeMode={})", config.writeMode());
+            }
+        } catch (Exception e) {
+            logger.warn("cleanAll failed: {}", e.getMessage());
+        }
+    }
+
     // ─── Core parse logic ─────────────────────────────────────────
 
     /**

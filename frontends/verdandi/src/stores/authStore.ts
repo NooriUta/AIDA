@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { usePrefsStore } from './prefsStore';
 
 export interface AuthUser {
   id: string;
@@ -71,6 +72,8 @@ export const useAuthStore = create<AuthStore>()(
           const user: AuthUser = await res.json();
           set({ user, isAuthenticated: true, isLoading: false, error: null });
           startRefreshTimer(() => get().refreshToken());
+          // Fetch server prefs from FRIGG and merge into localStorage/DOM
+          usePrefsStore.getState().fetchPrefs().catch(() => {});
         } catch {
           set({ isLoading: false, error: 'auth.error.network' });
         }
@@ -101,6 +104,10 @@ export const useAuthStore = create<AuthStore>()(
           } else {
             // Session still valid — start silent refresh cycle.
             startRefreshTimer(() => get().refreshToken());
+            // Hydrate prefs if not yet synced (e.g. page reload)
+            if (!usePrefsStore.getState().synced) {
+              usePrefsStore.getState().fetchPrefs().catch(() => {});
+            }
           }
         } catch {
           // Network down — keep existing state, will fail on next API call

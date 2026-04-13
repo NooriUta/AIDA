@@ -1,4 +1,12 @@
-export type UserRole = 'viewer' | 'editor' | 'admin';
+export type UserRole =
+  | 'viewer'
+  | 'editor'
+  | 'operator'
+  | 'auditor'
+  | 'local-admin'
+  | 'tenant-owner'
+  | 'admin'
+  | 'super-admin';
 
 export interface AuthUser {
   id: string;

@@ -10,6 +10,7 @@ import { authRoutes }     from './routes/auth';
 import { queryRoutes }    from './routes/query';
 import { graphqlRoutes }  from './routes/graphql';
 import { heimdallRoutes } from './routes/heimdall';
+import { prefsRoutes }    from './routes/prefs';
 
 async function start(): Promise<void> {
   const app = Fastify({
@@ -37,7 +38,7 @@ async function start(): Promise<void> {
     const allowed = origin ? allowedOrigins.has(origin) : false;
     reply.header('Access-Control-Allow-Origin',      allowed ? origin! : 'null');
     reply.header('Access-Control-Allow-Credentials', 'true');
-    reply.header('Access-Control-Allow-Methods',     'GET, POST, OPTIONS');
+    reply.header('Access-Control-Allow-Methods',     'GET, POST, PUT, OPTIONS');
     reply.header('Access-Control-Allow-Headers',     'Content-Type, Authorization');
     if (request.method === 'OPTIONS') {
       return reply.status(204).send();
@@ -57,6 +58,7 @@ async function start(): Promise<void> {
   await app.register(queryRoutes,   { prefix: '/api'     });
   await app.register(graphqlRoutes, { prefix: '/graphql' });
   await app.register(heimdallRoutes);
+  await app.register(prefsRoutes,    { prefix: '/prefs'   });
 
   // ── Health ───────────────────────────────────────────────────────────────────
 

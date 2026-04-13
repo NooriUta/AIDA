@@ -35,7 +35,8 @@ public class FriggSchemaInitializer {
         "jobrunr_jobs",
         "jobrunr_recurring_jobs",
         "jobrunr_servers",
-        "jobrunr_metadata"
+        "jobrunr_metadata",
+        "dali_sessions"
     };
 
     @Inject FriggGateway frigg;
@@ -48,7 +49,7 @@ public class FriggSchemaInitializer {
                 createDocumentType(type);
             }
             createIndexes();
-            log.info("FriggSchemaInitializer: JobRunr schema ready (4 document types)");
+            log.info("FriggSchemaInitializer: schema ready (5 document types)");
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not initialise FRIGG schema (FRIGG may be unavailable): {}",
                     e.getMessage());
@@ -65,17 +66,21 @@ public class FriggSchemaInitializer {
     }
 
     private void createIndexes() {
-        createIndex("jobrunr_jobs",           "id",    true);
-        createIndex("jobrunr_jobs",           "state", false);
-        createIndex("jobrunr_recurring_jobs", "id",    true);
-        createIndex("jobrunr_servers",        "id",    true);
-        createIndex("jobrunr_metadata",       "id",    true);
+        createIndex("jobrunr_jobs",           "id",        true);
+        createIndex("jobrunr_jobs",           "state",     false);
+        createIndex("jobrunr_recurring_jobs", "id",        true);
+        createIndex("jobrunr_servers",        "id",        true);
+        createIndex("jobrunr_metadata",       "id",        true);
+        createIndex("dali_sessions",          "id",        true);
+        createIndex("dali_sessions",          "startedAt", false);
     }
 
     private void createIndex(String type, String property, boolean unique) {
         String indexType = unique ? "UNIQUE" : "NOTUNIQUE";
+        // ArcadeDB requires an explicit index name: <type>_<property>
+        String indexName = type.replace("-", "_") + "_" + property;
         String sql = String.format(
-                "CREATE INDEX IF NOT EXISTS ON `%s` (`%s`) %s", type, property, indexType);
+                "CREATE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`) %s", indexName, type, property, indexType);
         try {
             frigg.sql(sql);
             log.debug("FriggSchemaInitializer: index ensured — {} ({}) on {}", property, indexType, type);

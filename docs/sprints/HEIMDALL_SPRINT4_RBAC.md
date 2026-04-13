@@ -1,7 +1,7 @@
 # HEIMDALL — Sprint 4: RBAC & User Management
 
 **Документ:** `HEIMDALL_SPRINT4_RBAC`
-**Версия:** 1.0
+**Версия:** 1.3
 **Дата:** 13.04.2026
 **Владелец трека:** Track B
 **Горизонт:** W6 May 19 → W8 Jun 6
@@ -20,12 +20,16 @@
 
 ```
 Admin открывает HEIMDALL → Users
-  → видит список пользователей с ролями
+  → видит список пользователей с ролями, статусами и квотами
   → приглашает нового пользователя с ролью
   → редактирует роль, scopes, source bindings, квоты
+  → редактирует профиль пользователя (должность, отдел, телефон)
+  → настраивает персональные предпочтения (язык, тема, уведомления)
   → блокирует пользователя
   → Chur enforces scope на каждом маршруте
   → HEIMDALL backend проксирует в Keycloak Admin API
+  → пользователь логинится — его настройки (тема, плотность, стартовая страница)
+     применяются автоматически в HEIMDALL и Verdandi (sync через Keycloak attributes)
 ```
 
 ---
@@ -39,6 +43,8 @@ Admin открывает HEIMDALL → Users
 | Chur auth middleware (authenticate) | ✅ DONE | |
 | HEIMDALL backend :9093 running | ✅ DONE Sprint 2 | |
 | `RBAC_MULTITENANT.md` | ✅ | reference для всех решений |
+| `UsersPage.tsx` (заглушка) | ⏳ | полная реализация в R4.5 |
+| Прототип Users UI | ✅ | `docs/sprints/heimdall_users_prototype.html` |
 
 ---
 
@@ -46,16 +52,35 @@ Admin открывает HEIMDALL → Users
 
 | ID | Задача | Слой | Неделя | Оценка |
 |---|---|---|---|---|
+| **W6** | | | | |
 | R4.1 | Keycloak scopes + realm export | Keycloak | W6 | 2 ч |
 | R4.2 | Chur requireScope middleware | Chur | W6 | 3 ч |
 | R4.3 | HEIMDALL backend TenantContext + AdminResource | Backend | W6–W7 | 4 ч |
+| **W7** | | | | |
 | R4.4 | KeycloakAdminClient (REST proxy) | Backend | W7 | 3 ч |
-| R4.5 | UsersPage — список + invite | Frontend | W7 | 3 ч |
-| R4.6 | UserModal — Profile / Permissions / Quotas | Frontend | W7–W8 | 4 ч |
+| R4.9 | UserProfile attributes — хранение в Keycloak (title, dept, phone) | Backend | W7 | 2 ч |
+| R4.10 | UserPreferences — хранение в Keycloak + API endpoints | Backend | W7–W8 | 3 ч |
+| R4.5 | UsersPage — полная реализация (заменить заглушку) | Frontend | W7 | 4 ч |
+| R4.6 | UserModal — sidebar nav, 6 секций (Профиль/Роль/Разрешения/Квоты/Источники/Активность) | Frontend | W7–W8 | 6 ч |
+| **W8** | | | | |
+| R4.11 | Chur: proxy profile/prefs + self-service `/me/` routes | Chur | W8 | 2 ч |
+| R4.12 | UserModal «Настройки» — wire API (load/save profile + prefs) | Frontend | W8 | 2 ч |
+| R4.13 | Apply prefs on login — usePrefsStore (тема, язык, плотность, стартовая страница) | Frontend | W8 | 2 ч |
+| R4.14 | Verdandi prefs sync — appearance + graph settings → Keycloak + restore on login | Verdandi | W8 | 3 ч |
 | R4.7 | Navigation guards (scope-based) | Frontend | W8 | 1 ч |
-| R4.8 | Tests | All | W8 | 3 ч |
+| R4.8 | Tests (AdminResource, Chur rbac, UsersPage, usePrefsStore, usePrefsSync) | All | W8 | 3 ч |
 
-**Итого: ~23 ч**
+**Итого: ~39 ч**
+
+### Критический путь
+
+```
+R4.1 → R4.2 → R4.3 → R4.4 ──┬──→ R4.5 → R4.6 ──→ R4.7
+                               ├──→ R4.9 ──→ R4.10 → R4.11 → R4.12
+                               └──────────────────────────────→ R4.13
+R4.10 → R4.11 → R4.14
+R4.6 + R4.12 + R4.13 → R4.8
+```
 
 ---
 
@@ -469,82 +494,183 @@ quarkus.oidc-client.heimdall-admin.grant.type=client_credentials
 
 ---
 
-## R4.5 · UsersPage — список + invite (~3 ч)
+## R4.5 · UsersPage — полная реализация (~4 ч)
 
-**`src/pages/UsersPage.tsx`** — расширение существующего скелета:
+> **Статус:** `src/pages/UsersPage.tsx` — чистая заглушка «Coming Soon».
+> Требуется полная замена. Эталон: `docs/sprints/heimdall_users_prototype.html`.
+
+### Структура страницы
+
+```
+UsersPage
+├── Stats grid (4 карточки)
+│   ├── Пользователей (всего / активных)
+│   ├── Активных (заблокировано)
+│   ├── С правами admin (local-admin и выше)
+│   └── Source bindings (ограничены по источникам)
+├── Filter bar
+│   ├── select: Роль (viewer / editor / ... / super-admin)
+│   ├── select: Статус (active / disabled)
+│   ├── input: поиск по имени или email
+│   └── кнопка «Сбросить» + счётчик «N из M»
+├── Data table (8 колонок)
+│   ├── Пользователь (аватар-инициалы + имя + email)
+│   ├── Роль (цветной badge)
+│   ├── Статус (active/disabled badge)
+│   ├── Scopes (первые 2 + «+N»)
+│   ├── Источники (первый + «+N» или «все»)
+│   ├── Квоты (mimir/ч · sessions)
+│   ├── Активность (lastActive)
+│   └── Actions (Редакт. / Блок. / Разблок.)
+├── UserEditModal (R4.6)
+├── InviteModal (480px, email + имя + выбор роли)
+└── ConfirmModal (блокировка пользователя)
+```
+
+### Управление доступом
 
 ```typescript
-export function UsersPage() {
-  const { isAdmin, isSuperAdmin, isLocalAdmin, isTenantOwner, tenantId } =
-    useTenantContext();
+// Кнопка «Пригласить» видна только local-admin+
+const canInvite = isLocalAdmin || isTenantOwner || isAdmin || isSuperAdmin;
 
-  const { data: users, refetch } = useQuery({
-    queryKey: ['users', tenantId],
-    queryFn: () => api.get(`/admin/tenants/${tenantId ?? 'default'}/users`),
-  });
+// Кнопка «Блок./Редакт.» — только local-admin+
+const canManage = isLocalAdmin || isTenantOwner || isAdmin || isSuperAdmin;
+```
 
-  return (
-    <div>
-      {/* Header */}
-      <div style={{ display:'flex', justifyContent:'space-between' }}>
-        <PageTitle>Пользователи</PageTitle>
-        {(isLocalAdmin || isTenantOwner || isAdmin) && (
-          <Button onClick={() => openInviteModal()}>+ Пригласить</Button>
-        )}
-      </div>
+### Polling
 
-      {/* Table */}
-      <UserTable
-        users={users}
-        canEdit={isLocalAdmin || isTenantOwner || isAdmin}
-        canAssignElevated={isTenantOwner || isAdmin}
-        onEdit={openEditModal}
-        onDisable={handleDisable}
-      />
+```typescript
+const POLL_MS = 30_000;
+// refetch списка пользователей каждые 30с
+```
 
-      {/* Modals */}
-      <UserModal ref={modalRef} onSave={refetch} />
-    </div>
-  );
-}
+### Definition of Done R4.5
+```
+- Страница /users показывает таблицу (не заглушку)
+- Stats grid обновляется при изменении данных
+- Фильтр по роли / статусу / поиску работает без перезагрузки
+- Invite modal: email + роль → POST /admin/tenants/default/users/invite → toast «Приглашение отправлено»
+- Confirm modal перед блокировкой
+- viewer не видит кнопки Редакт./Блок.
 ```
 
 ---
 
-## R4.6 · UserModal — три вкладки (~4 ч)
+## R4.6 · UserModal — sidebar nav, 6 секций (~6 ч)
 
-Три вкладки: **Профиль** · **Разрешения** · **Квоты**
+> Эталон: `docs/sprints/heimdall_users_prototype.html` — modal 820×580, sidebar 192px.
 
-```typescript
-// Вкладка 1: Профиль
-// - имя, email (readonly после создания), статус (active/disabled)
-// - роль (select с видимыми только доступными ролями)
+### Структура модала
 
-// Вкладка 2: Разрешения
-// - Scopes checklist (только те что может назначить текущий пользователь)
-// - Source bindings (checkbox list по источникам из Dali Sources)
-// - Примечание: "Scopes дополняют роль"
-
-// Вкладка 3: Квоты
-// - MIMIR запросов / час (range slider, 0–100)
-// - Параллельных сессий (range slider, 0–10)
-// - Max atoms / сессия (range slider)
-// - Воркеров из пула (range slider, 1–8)
+```
+UserEditModal (820×580)
+├── Header (48px) — аватар-инициалы + имя + email + статус-badge + close
+├── Body
+│   ├── Sidebar nav (192px)
+│   │   ├── [Аккаунт]
+│   │   │   ├── Профиль
+│   │   │   ├── Роль
+│   │   │   └── Разрешения
+│   │   ├── [Ресурсы]
+│   │   │   ├── Квоты
+│   │   │   └── Источники
+│   │   ├── [Мониторинг]
+│   │   │   └── Активность
+│   │   └── [Личный кабинет]
+│   │       └── Настройки  ← реализуется в R4.12
+│   └── Content area
+│       ├── sec-profile   — Профиль
+│       ├── sec-role      — Роль
+│       ├── sec-permissions — Разрешения
+│       ├── sec-quotas    — Квоты
+│       ├── sec-sources   — Источники
+│       ├── sec-activity  — Активность
+│       └── sec-prefs     — Настройки (структура в R4.12)
+└── Footer — [Заблокировать] ··· [Отмена] [Сохранить]
 ```
 
-**Ограничения видимости в Permissions tab:**
+### sec-profile
+
+```
+Поля (2-колоночный grid):
+  Имя пользователя | Email (readonly)
+  Должность        | Отдел / Команда
+Телефон (full-width, необязательно)
+
+Блок «Статус аккаунта»:
+  Активен  — toggle
+  2FA      — badge «keycloak» (управляется KC)
+```
+
+### sec-role
+
+```
+Info banner: «Роль определяет базовый набор scopes»
+Список role-карточек с tier-badge (user / tenant / platform):
+  viewer · editor · operator · auditor
+  local-admin · tenant-owner · admin · super-admin
+Elevated роли (admin+) недоступны для local-admin
+```
+
+### sec-permissions
+
+```
+Info banner: «Scopes дополняют роль»
+Таблица: Scope | Описание | Включён (✓ / —)
+8 scopes из SCOPE_INFO
+Elevated scopes (aida:admin, aida:superadmin, aida:tenant:owner)
+  → disabled для local-admin
+```
+
+### sec-quotas
+
+```
+Блок «MIMIR & ANVIL»:
+  Запросов MIMIR / час    [slider 0–100, step 5]
+  Traversals ANVIL / час  [slider 0–200, step 10]
+
+Блок «Dali — Парсинг»:
+  Параллельных сессий     [slider 0–10]
+  Max atoms / сессия      [slider 1K–100K, step 1K]
+  Воркеров из пула (макс) [slider 1–8]
+```
+
+### sec-sources
+
+```
+Info banner: «Пустой список — доступ ко всем источникам по роли»
+Toggle-список источников (из Dali Sources API)
+```
+
+### sec-activity
+
+```
+Stat cards (3): Сессий всего · MIMIR запросов · Последняя активность
+Event log: timestamp | event_type | OK/FAIL badge
+```
+
+### Управление доступом в модале
 
 ```typescript
-// local-admin не видит и не может назначить elevated scopes
-const assignableScopes = isAdmin || isSuperAdmin
-  ? ALL_SCOPES
-  : ALL_SCOPES.filter(s => !ELEVATED_SCOPES.includes(s));
+const ELEVATED_SCOPES = ['aida:tenant:owner', 'aida:admin', 'aida:superadmin'];
+const ELEVATED_ROLES  = ['admin', 'super-admin', 'tenant-owner', 'auditor'];
 
-const ELEVATED_SCOPES = [
-  'aida:tenant:owner',
-  'aida:admin',
-  'aida:superadmin',
-];
+// local-admin не видит и не назначает elevated
+const assignableRoles  = isAdmin ? ALL_ROLES  : ALL_ROLES.filter(r => !ELEVATED_ROLES.includes(r.id));
+const assignableScopes = isAdmin ? ALL_SCOPES : ALL_SCOPES.filter(s => !ELEVATED_SCOPES.includes(s));
+```
+
+### Definition of Done R4.6
+```
+- Открыть карточку любого пользователя → все 6 секций переключаются
+- Профиль: name/email/title/dept/phone отображаются (заполнение из API — R4.12)
+- Роль: выбрать другую → badge в header обновляется
+- Разрешения: смена роли автоматически обновляет таблицу scopes
+- Квоты: слайдеры двигаются, значения обновляются real-time
+- Источники: toggle включает/выключает доступ
+- Активность: лог событий виден
+- Footer «Заблокировать» → confirm modal → пользователь заблокирован
+- local-admin не видит карточки admin/super-admin/tenant-owner в sec-role
 ```
 
 ---
@@ -600,6 +726,512 @@ class AdminResourceTest {
 
 ---
 
+---
+
+## R4.9 · UserProfile attributes — Keycloak (~2 ч)
+
+Хранение расширенных полей профиля как Keycloak user attributes (ключ-значение).
+
+### Атрибуты в Keycloak
+
+```
+profile.title   → "Senior Data Engineer"
+profile.dept    → "Analytics Team"
+profile.phone   → "+7 900 000-00-00"
+```
+
+### `KeycloakAdminClient` — дополнить интерфейс
+
+```java
+// GET /admin/realms/seer/users/{id}  уже возвращает attributes map
+// Добавить PUT для записи:
+@PUT @Path("/users/{id}")
+void updateUser(@PathParam("id") String id, UserRepresentation user);
+// UserRepresentation.attributes = Map<String, List<String>>
+```
+
+### `AdminResource` — новые endpoints
+
+```java
+// GET /admin/tenants/{tenantId}/users/{userId}/profile
+@GET @Path("/tenants/{tenantId}/users/{userId}/profile")
+public UserProfileDto getProfile(...) {
+    requireScope("aida:tenant:admin");
+    requireSameTenant(tenantId);
+    UserRepresentation u = keycloak.getUser(userId);
+    return UserProfileDto.from(u.getAttributes());
+}
+
+// PUT /admin/tenants/{tenantId}/users/{userId}/profile
+@PUT @Path("/tenants/{tenantId}/users/{userId}/profile")
+public Response updateProfile(..., UserProfileDto dto) {
+    requireScope("aida:tenant:admin");
+    requireSameTenant(tenantId);
+    keycloak.patchAttributes(userId, dto.toAttributes());
+    return Response.ok().build();
+}
+```
+
+### `UserProfileDto`
+
+```java
+public record UserProfileDto(String title, String dept, String phone) {
+    static UserProfileDto from(Map<String, List<String>> attrs) { ... }
+    Map<String, List<String>> toAttributes() {
+        return Map.of(
+            "profile.title", List.of(title != null ? title : ""),
+            "profile.dept",  List.of(dept  != null ? dept  : ""),
+            "profile.phone", List.of(phone != null ? phone : "")
+        );
+    }
+}
+```
+
+### Definition of Done R4.9
+```bash
+curl -X PUT .../admin/tenants/default/users/{id}/profile \
+  -H "X-Seer-Scopes: aida:tenant:admin" \
+  -d '{"title":"Lead Engineer","dept":"Platform","phone":"+7 900 111"}'
+# → 200
+
+curl .../admin/tenants/default/users/{id}/profile \
+  -H "X-Seer-Scopes: aida:tenant:admin"
+# → {"title":"Lead Engineer","dept":"Platform","phone":"+7 900 111"}
+
+# Keycloak Admin UI: пользователь → Attributes → profile.title присутствует
+```
+
+---
+
+## R4.10 · UserPreferences — хранение + API (~3 ч)
+
+Персональные настройки UI хранятся как Keycloak user attributes с префиксом `prefs.*`.
+Endpoint доступен как admin (любой пользователь), так и в self-service (`/me/prefs`).
+
+### Поля
+
+| Ключ атрибута | Тип | Значения |
+|---|---|---|
+| `prefs.lang` | string | `ru` \| `en` |
+| `prefs.theme` | string | `dark` \| `light` \| `auto` |
+| `prefs.tz` | string | IANA timezone, напр. `Europe/Moscow` |
+| `prefs.dateFmt` | string | `DD.MM.YYYY` \| `YYYY-MM-DD` \| `MM/DD/YYYY` |
+| `prefs.density` | string | `compact` \| `normal` \| `comfortable` |
+| `prefs.startPage` | string | `dashboard` \| `loom` \| `events` \| `services` |
+| `prefs.avatarColor` | string | hex, напр. `#A8B860` |
+| `prefs.notify.email` | bool | `true` \| `false` |
+| `prefs.notify.browser` | bool | |
+| `prefs.notify.harvest` | bool | |
+| `prefs.notify.errors` | bool | |
+| `prefs.notify.digest` | bool | |
+
+### `UserPreferencesDto`
+
+```java
+public record UserPreferencesDto(
+    String lang, String theme, String tz, String dateFmt,
+    String density, String startPage, String avatarColor,
+    boolean notifyEmail, boolean notifyBrowser,
+    boolean notifyHarvest, boolean notifyErrors, boolean notifyDigest
+) {
+    static UserPreferencesDto from(Map<String, List<String>> attrs) { ... }
+    Map<String, List<String>> toAttributes() { ... }
+
+    /** Дефолтные значения для новых пользователей */
+    static UserPreferencesDto defaults() {
+        return new UserPreferencesDto("ru","dark","Europe/Moscow",
+            "DD.MM.YYYY","normal","dashboard","#A8B860",
+            true,false,true,true,false);
+    }
+}
+```
+
+### `AdminResource` — новые endpoints
+
+```java
+// Admin: GET/PUT любого пользователя
+@GET  @Path("/tenants/{tenantId}/users/{userId}/prefs")
+@PUT  @Path("/tenants/{tenantId}/users/{userId}/prefs")
+
+// Self-service: пользователь читает/пишет свои настройки
+@GET  @Path("/me/prefs")
+@PUT  @Path("/me/prefs")
+// Использует ctx.getUserId() вместо PathParam
+```
+
+### Definition of Done R4.10
+```bash
+# Admin читает prefs другого пользователя
+curl .../admin/tenants/default/users/{id}/prefs \
+  -H "X-Seer-Scopes: aida:tenant:admin"
+# → {"lang":"ru","theme":"dark","tz":"Europe/Moscow", ...}
+
+# Self-service: пользователь меняет свою тему
+curl -X PUT .../admin/me/prefs \
+  -H "X-Seer-User-Id: {myId}" \
+  -d '{"theme":"light"}'  # partial update — merge with existing
+# → 200
+```
+
+---
+
+## R4.11 · Chur — proxy profile/prefs + self-service routes (~2 ч)
+
+### `bff/chur/src/routes/admin.ts` — добавить маршруты
+
+```typescript
+// ── Profile ───────────────────────────────────────
+// Читать профиль — local-admin+
+app.get('/admin/tenants/:tenantId/users/:userId/profile', {
+  preHandler: [authenticate, requireScope('aida:tenant:admin'), requireSameTenant()]
+}, proxy);
+
+// Обновить профиль — local-admin+
+app.put('/admin/tenants/:tenantId/users/:userId/profile', {
+  preHandler: [authenticate, requireScope('aida:tenant:admin'), requireSameTenant()]
+}, proxy);
+
+// ── Preferences ───────────────────────────────────
+// Admin смотрит чужие prefs
+app.get('/admin/tenants/:tenantId/users/:userId/prefs', {
+  preHandler: [authenticate, requireScope('aida:tenant:admin'), requireSameTenant()]
+}, proxy);
+
+app.put('/admin/tenants/:tenantId/users/:userId/prefs', {
+  preHandler: [authenticate, requireScope('aida:tenant:admin'), requireSameTenant()]
+}, proxy);
+
+// Self-service — любой авторизованный пользователь
+app.get('/admin/me/prefs',  { preHandler: [authenticate] }, proxy);
+app.put('/admin/me/prefs',  { preHandler: [authenticate] }, proxy);
+app.get('/admin/me/profile',{ preHandler: [authenticate] }, proxy);
+app.put('/admin/me/profile',{ preHandler: [authenticate] }, proxy);
+```
+
+### Definition of Done R4.11
+```bash
+# Viewer может читать свои prefs (self-service)
+curl -H "Cookie: sid=viewer-sid" GET /admin/me/prefs  # 200
+
+# Viewer не может читать чужие prefs (admin route)
+curl -H "Cookie: sid=viewer-sid" \
+  GET /admin/tenants/default/users/other-id/prefs     # 403
+```
+
+---
+
+## R4.12 · UserModal «Настройки» — wire API (~2 ч)
+
+### `src/pages/UsersPage.tsx` — загрузка profile + prefs
+
+```typescript
+// В openEdit — параллельная загрузка profile и prefs:
+const [profileRes, prefsRes] = await Promise.all([
+  api.get(`/admin/tenants/${tenantId}/users/${u.id}/profile`),
+  api.get(`/admin/tenants/${tenantId}/users/${u.id}/prefs`),
+]);
+
+// Заполнить поля вкладки Профиль:
+setField('e-title', profileRes.title);
+setField('e-dept',  profileRes.dept);
+setField('e-phone', profileRes.phone);
+
+// Заполнить вкладку Настройки (уже реализовано через setVal/setTog):
+populatePrefs(prefsRes);
+```
+
+### В saveUser — сохранение patch
+
+```typescript
+// PUT profile (если изменились поля)
+await api.put(`/admin/tenants/${tenantId}/users/${u.id}/profile`, {
+  title: getValue('e-title'),
+  dept:  getValue('e-dept'),
+  phone: getValue('e-phone'),
+});
+
+// PUT prefs
+await api.put(`/admin/tenants/${tenantId}/users/${u.id}/prefs`, collectPrefs());
+```
+
+### `collectPrefs()` helper
+
+```typescript
+function collectPrefs(): UserPreferences {
+  return {
+    lang:          getSelectValue('e-lang'),
+    theme:         getSelectValue('e-theme'),
+    tz:            getSelectValue('e-tz'),
+    dateFmt:       getSelectValue('e-datefmt'),
+    density:       getSelectValue('e-density'),
+    startPage:     getSelectValue('e-startpage'),
+    avatarColor:   document.querySelector('#avatar-swatches .selected')?.dataset.color ?? '#A8B860',
+    notifyEmail:   isToggleOn('tog-email'),
+    notifyBrowser: isToggleOn('tog-browser'),
+    notifyHarvest: isToggleOn('tog-harvest'),
+    notifyErrors:  isToggleOn('tog-errors'),
+    notifyDigest:  isToggleOn('tog-digest'),
+  };
+}
+```
+
+### Definition of Done R4.12
+```
+- Открыть карточку пользователя — вкладка Профиль показывает title/dept/phone из Keycloak
+- Вкладка Настройки показывает сохранённые prefs
+- Сохранить → GET prefs снова → значения совпадают
+- Network tab: 2 параллельных запроса GET profile + GET prefs при открытии модала
+```
+
+---
+
+## R4.13 · Apply prefs on login — usePrefsStore (~2 ч)
+
+При успешном логине читаем prefs текущего пользователя (`/admin/me/prefs`) и применяем к UI.
+
+### `src/stores/prefsStore.ts`
+
+```typescript
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+interface PrefsState {
+  lang:      string;
+  theme:     'dark' | 'light' | 'auto';
+  density:   'compact' | 'normal' | 'comfortable';
+  startPage: string;
+  avatarColor: string;
+  loaded:    boolean;
+  load: () => Promise<void>;
+  apply: () => void;
+}
+
+export const usePrefsStore = create<PrefsState>()(
+  persist((set, get) => ({
+    lang: 'ru', theme: 'dark', density: 'normal',
+    startPage: 'dashboard', avatarColor: '#A8B860', loaded: false,
+
+    load: async () => {
+      const prefs = await fetch('/admin/me/prefs').then(r => r.json());
+      set({ ...prefs, loaded: true });
+      get().apply();
+    },
+
+    apply: () => {
+      const { theme, density, lang } = get();
+      // Тема
+      document.documentElement.setAttribute('data-theme',
+        theme === 'auto'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : theme);
+      // Плотность
+      document.documentElement.setAttribute('data-density', density);
+      // Язык — передать в i18n
+      import('../i18n').then(({ default: i18n }) => i18n.changeLanguage(lang));
+    },
+  }), { name: 'aida-prefs' })
+);
+```
+
+### Вызов при логине
+
+```typescript
+// src/App.tsx — после успешной аутентификации
+useEffect(() => {
+  if (user) usePrefsStore.getState().load();
+}, [user]);
+```
+
+### `data-density` CSS переменные
+
+```css
+/* src/index.css */
+[data-density="compact"]     { --row-py: 6px;  --card-p: 12px; }
+[data-density="normal"]      { --row-py: 10px; --card-p: 16px; }
+[data-density="comfortable"] { --row-py: 14px; --card-p: 22px; }
+```
+
+### Стартовая страница
+
+```typescript
+// src/App.tsx — после load()
+const { startPage, loaded } = usePrefsStore();
+if (loaded && location.pathname === '/') {
+  navigate(`/${startPage}`);
+}
+```
+
+### Definition of Done R4.13
+```
+- Войти как пользователь с theme=light → UI переключается в светлую тему
+- Войти с density=compact → строки таблицы сжимаются
+- Войти с startPage=events → редирект на /events после логина
+- Обновить страницу → настройки сохранены (zustand persist)
+- Сменить prefs через admin → при следующем логине применяются новые значения
+```
+
+---
+
+---
+
+## R4.14 · Verdandi prefs sync — appearance + graph → Keycloak (~3 ч)
+
+Сейчас все настройки Verdandi (тема, палитра, шрифты, graph prefs) живут только в
+`localStorage` под ключами `seer-*`. При смене браузера или устройства они теряются.
+Задача — синхронизировать их с Keycloak user attributes через уже реализованный
+`/admin/me/prefs` endpoint (R4.10/R4.11).
+
+### Ключи localStorage → атрибуты Keycloak
+
+| localStorage key | Keycloak attribute | Источник |
+|---|---|---|
+| `seer-theme` | `prefs.theme` | `themeSlice.ts` |
+| `seer-palette` | `verdandi.palette` | `themeSlice.ts` |
+| `seer-ui-font` | `verdandi.uiFont` | `ProfileTabAppearance.tsx` |
+| `seer-mono-font` | `verdandi.monoFont` | `ProfileTabAppearance.tsx` |
+| `seer-font-size` | `verdandi.fontSize` | `ProfileTabAppearance.tsx` |
+| `seer-density` | `prefs.density` | `ProfileTabAppearance.tsx` (уже в R4.10) |
+| `seer-graph-prefs` | `verdandi.graphPrefs` | `ProfileTabGraph.tsx` (JSON string) |
+
+> `prefs.theme` и `prefs.density` уже описаны в R4.10 — переиспользуются.
+
+### Расширить `UserPreferencesDto` (Backend, R4.10)
+
+```java
+public record UserPreferencesDto(
+    // ... поля из R4.10 ...
+    // Verdandi-specific:
+    String verdandiPalette,    // "amber-forest" | "slate" | "lichen" | "juniper" | "warm-dark"
+    String verdandiUiFont,     // "Manrope" | "DM Sans" | "Inter" | "IBM Plex Sans" | "Geist" | ...
+    String verdandiMonoFont,   // "IBM Plex Mono" | "Fira Code" | "JetBrains Mono" | ...
+    String verdandiFontSize,   // "13" (px as string)
+    String verdandiGraphPrefs  // JSON string: {"autoLayout":true,"drillAnimation":true,...}
+) { ... }
+```
+
+**Keycloak attributes:**
+```
+verdandi.palette      = "amber-forest"
+verdandi.uiFont       = "Manrope"
+verdandi.monoFont     = "IBM Plex Mono"
+verdandi.fontSize     = "13"
+verdandi.graphPrefs   = "{\"autoLayout\":true,\"drillAnimation\":true,\"hoverHighlight\":true,\"showEdgeLabels\":false,\"colLevelDefault\":false,\"startLevel\":\"L2\",\"nodeLimit\":\"400\"}"
+```
+
+### `usePrefsSync.ts` — новый хук, Verdandi
+
+```typescript
+// frontends/verdandi/src/hooks/usePrefsSync.ts
+
+/**
+ * Синхронизирует localStorage seer-* настройки с /admin/me/prefs.
+ * Вызывается один раз при монтировании (restore on login) и
+ * подписывается на изменения настроек (debounce 1500ms save).
+ */
+export function usePrefsSync() {
+  // ── RESTORE on login ──────────────────────────────────
+  useEffect(() => {
+    fetch('/auth/me/prefs')            // проксируется через Chur nginx
+      .then(r => r.ok ? r.json() : null)
+      .then(prefs => {
+        if (!prefs) return;
+        // Применить к localStorage и живому DOM
+        if (prefs.theme)               applyTheme(prefs.theme);
+        if (prefs.verdandiPalette)     applyPalette(prefs.verdandiPalette);
+        if (prefs.verdandiUiFont)      applyUiFont(prefs.verdandiUiFont);
+        if (prefs.verdandiMonoFont)    applyMonoFont(prefs.verdandiMonoFont);
+        if (prefs.verdandiFontSize)    applyFontSize(prefs.verdandiFontSize);
+        if (prefs.density)             applyDensity(prefs.density);
+        if (prefs.verdandiGraphPrefs)  restoreGraphPrefs(prefs.verdandiGraphPrefs);
+      });
+  }, []);
+
+  // ── SAVE on change (debounced) ────────────────────────
+  // Подписка на storage-события от ProfileTabAppearance / ProfileTabGraph
+  useEffect(() => {
+    const handler = debounce(() => {
+      const payload = buildPrefsPayload();  // читает текущие seer-* из localStorage
+      fetch('/auth/me/prefs', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }, 1500);
+
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+}
+
+function buildPrefsPayload() {
+  return {
+    theme:              localStorage.getItem('seer-theme') ?? 'dark',
+    density:            localStorage.getItem('seer-density') ?? 'compact',
+    verdandiPalette:    localStorage.getItem('seer-palette') ?? 'amber-forest',
+    verdandiUiFont:     localStorage.getItem('seer-ui-font') ?? 'Manrope',
+    verdandiMonoFont:   localStorage.getItem('seer-mono-font') ?? 'IBM Plex Mono',
+    verdandiFontSize:   localStorage.getItem('seer-font-size') ?? '13',
+    verdandiGraphPrefs: localStorage.getItem('seer-graph-prefs') ?? null,
+  };
+}
+```
+
+### Интеграция в Verdandi App
+
+```typescript
+// frontends/verdandi/src/App.tsx
+import { usePrefsSync } from './hooks/usePrefsSync';
+
+function App() {
+  const { isAuthenticated } = useAuthStore();
+  usePrefsSync();   // ← добавить здесь (no-op если не авторизован)
+  // ...
+}
+```
+
+### Nginx proxy в Verdandi (если нет)
+
+Verdandi пингует `/auth/me/prefs` — это роутится через Chur (уже есть прокси `/auth/`).
+Chur добавляет `X-Seer-User-Id` header и форвардит в HEIMDALL backend `/admin/me/prefs`.
+
+```nginx
+# frontends/verdandi/nginx.conf (если отдельный)
+location /auth/ {
+    proxy_pass http://chur:3000;
+    proxy_set_header Host $host;
+}
+```
+
+### ProfileTabAppearance + ProfileTabGraph — fire storage event
+
+Текущий код пишет в localStorage напрямую без `StorageEvent`. Нужно добавить:
+
+```typescript
+// После записи в localStorage:
+localStorage.setItem('seer-palette', selected);
+window.dispatchEvent(new StorageEvent('storage', {
+  key: 'seer-palette', newValue: selected
+}));
+```
+
+Это триггерит debounced save в `usePrefsSync`.
+
+### Definition of Done R4.14
+```
+- Войти в Verdandi на браузере A, выбрать палитру "slate" и граф-пресет autoLayout=false
+- Открыть Verdandi на браузере B (другой браузер / инкогнито)
+- → palette = "slate", autoLayout = false применились без ручной настройки
+
+- Network: при смене палитры — PUT /auth/me/prefs через ~1500ms debounce
+- При логине — GET /auth/me/prefs до первого рендера (no flash of default theme)
+
+- Keycloak Admin: пользователь → Attributes:
+    verdandi.palette = "slate"
+    verdandi.graphPrefs = "{\"autoLayout\":false,...}"
+```
+
+---
+
 ## Definition of Done Sprint 4
 
 ```bash
@@ -620,8 +1252,10 @@ curl -H "X-Seer-Scopes: aida:tenant:admin" \
 # Frontend
 # - Users tab видна admin/local-admin, скрыта viewer/editor
 # - Invite modal открывается, создаёт пользователя в Keycloak
-# - Edit modal: вкладки Profile / Permissions / Quotas работают
+# - Edit modal: вкладки Profile / Permissions / Quotas / Настройки работают
 # - Scopes checklist: viewer видит только assignable scopes
+# - Поля title/dept/phone сохраняются в Keycloak attributes
+# - Prefs (тема, язык, плотность) применяются сразу после логина
 
 # Tests
 ./gradlew :services:heimdall-backend:test  # GREEN
@@ -648,3 +1282,6 @@ npm test --workspace=frontends/heimdall-frontend  # GREEN
 | Дата | Версия | Что |
 |---|---|---|
 | 13.04.2026 | 1.0 | Initial. Phase 1 single-tenant. R4.1 Keycloak scopes, R4.2 Chur middleware, R4.3 TenantContext + AdminResource, R4.4 KeycloakAdminClient, R4.5–R4.7 Frontend, R4.8 Tests. |
+| 13.04.2026 | 1.1 | Добавлены R4.9–R4.13: UserProfile attributes (title/dept/phone), UserPreferences (lang/theme/tz/density/startPage/avatarColor/notifications), Chur self-service /me/ routes, UserModal wire API, usePrefsStore apply on login. Итого +11 ч → 34 ч. |
+| 13.04.2026 | 1.3 | R4.5 переписана: полная замена заглушки, структура страницы из прототипа (+1 ч → 4 ч). R4.6 переписана: modal 820×580 sidebar-nav, 6 секций вместо 3 вкладок (+2 ч → 6 ч). Итого → 39 ч. |
+| 13.04.2026 | 1.2 | Добавлена R4.14: Verdandi prefs sync — palette, uiFont, monoFont, fontSize, graphPrefs (autoLayout/drillAnimation/hoverHighlight/showEdgeLabels/colLevelDefault/startLevel/nodeLimit) → Keycloak user attributes + restore on login через usePrefsSync hook. +3 ч → 37 ч. |
