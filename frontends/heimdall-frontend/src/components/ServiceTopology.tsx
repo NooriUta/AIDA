@@ -37,15 +37,26 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
     ? 'color-mix(in srgb, #2496ED 50%, var(--bd))'
     : (data.color ?? 'var(--bd)');
 
+  // Double-click → open service in new tab
+  // Docker: use host-mapped extPort; dev/no-mode: use port directly
+  const hostPort = isDocker ? (data.extPort ?? data.port) : data.port;
+  const handleDoubleClick = () => {
+    window.open(`http://localhost:${hostPort}`, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div style={{
-      background:   'var(--bg1)',
-      border:       `1px solid ${borderColor}`,
-      borderRadius: 'var(--seer-radius-md)',
-      padding:      '5px 10px',
-      minWidth:     118,
-      textAlign:    'center',
-    }}>
+    <div
+      onDoubleClick={handleDoubleClick}
+      title={`Double-click to open http://localhost:${hostPort}`}
+      style={{
+        background:   'var(--bg1)',
+        border:       `1px solid ${borderColor}`,
+        borderRadius: 'var(--seer-radius-md)',
+        padding:      '5px 10px',
+        minWidth:     118,
+        textAlign:    'center',
+        cursor:       'pointer',
+      }}>
       <Handle id="t" type="target" position={Position.Top}    style={{ background: 'var(--bd)' }} />
       <Handle id="l" type="target" position={Position.Left}   style={{ background: 'var(--bd)' }} />
 
