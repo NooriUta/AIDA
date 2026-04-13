@@ -20,6 +20,7 @@ export interface KeycloakUserInfo {
   sub:      string;
   username: string;
   role:     UserRole;
+  scopes:   string[];   // from JWT scope claim
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,7 +134,10 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
   const roles = seerRoles ?? realmRoles ?? [];
   const role  = pickHighestRole(roles);
 
-  return { sub, username, role };
+  // Extract scopes from the JWT `scope` claim (space-separated string)
+  const scopes = (payload as { scope?: string }).scope?.split(' ').filter(Boolean) ?? [];
+
+  return { sub, username, role, scopes };
 }
 
 /** Server-side logout: invalidate the refresh token in Keycloak. */
@@ -151,7 +155,10 @@ export async function keycloakLogout(refreshToken: string): Promise<void> {
 
 // ── Internal ─────────────────────────────────────────────────────────────────
 
-const ROLE_PRIORITY: UserRole[] = ['admin', 'editor', 'viewer'];
+const ROLE_PRIORITY: UserRole[] = [
+  'super-admin', 'admin', 'local-admin', 'tenant-owner',
+  'auditor', 'operator', 'editor', 'viewer',
+];
 
 function pickHighestRole(roles: string[]): UserRole {
   for (const r of ROLE_PRIORITY) {

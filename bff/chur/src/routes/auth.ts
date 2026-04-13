@@ -83,6 +83,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         userInfo.sub,
         userInfo.username,
         userInfo.role,
+        userInfo.scopes,
       );
 
       reply.setCookie('sid', sid, COOKIE_OPTS);

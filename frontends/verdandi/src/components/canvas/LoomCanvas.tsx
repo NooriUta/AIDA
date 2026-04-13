@@ -102,7 +102,7 @@ const LoomCanvasInner = memo(() => {
   const { rawGraph, activeQuery, stmtColsReady } = useGraphData();
   useExpansion();
   const { displayGraph }           = useDisplayGraph(rawGraph);
-  const { layouting, layoutError } = useLoomLayout(displayGraph, setNodes, setEdges, stmtColsReady);
+  const { layouting, layoutError, layoutWarning, triggerFullLayout } = useLoomLayout(displayGraph, setNodes, setEdges, stmtColsReady);
   const { onMoveEnd }              = useFitView(layouting);
   useFilterSync(rawGraph);
 
@@ -286,6 +286,28 @@ const LoomCanvasInner = memo(() => {
           <span style={{ fontSize: '13px', color: 'var(--t3)', letterSpacing: '0.04em' }}>
             {t(statusKey)}
           </span>
+        </div>
+      )}
+
+      {/* M-3: grid layout warning banner */}
+      {layoutWarning && !isLoading && (
+        <div style={{
+          position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+          background: 'color-mix(in srgb, var(--wrn) 12%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--wrn) 35%, transparent)',
+          borderRadius: 6, padding: '5px 12px',
+          fontSize: 12, color: 'var(--wrn)',
+          display: 'flex', alignItems: 'center', gap: 8, zIndex: 10,
+          whiteSpace: 'nowrap',
+        }}>
+          ⚠ {layoutWarning}
+          <button
+            onClick={triggerFullLayout}
+            style={{ fontSize: 11, color: 'var(--acc)', background: 'none',
+                     border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            {t('canvas.computeFullLayout')}
+          </button>
         </div>
       )}
 

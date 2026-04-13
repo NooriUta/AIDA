@@ -12,9 +12,14 @@ export function isWriteQuery(command: string): boolean {
 const WRITE_MIN_ROLE: UserRole = 'admin';
 
 const ROLE_RANK: Record<UserRole, number> = {
-  viewer: 0,
-  editor: 1,
-  admin:  2,
+  viewer:          0,
+  editor:          1,
+  operator:        2,
+  auditor:         3,
+  'local-admin':   4,
+  'tenant-owner':  5,
+  admin:           6,
+  'super-admin':   7,
 };
 
 function hasMinRole(userRole: UserRole, minRole: UserRole): boolean {
@@ -45,6 +50,7 @@ const rbacPlugin: FastifyPluginAsync = async (app) => {
           sub:      session.sub,
           username: session.username,
           role:     session.role,
+          scopes:   session.scopes,
         };
       } catch {
         return reply.status(401).send({ error: 'Unauthorized' });
@@ -66,6 +72,7 @@ const rbacPlugin: FastifyPluginAsync = async (app) => {
           sub:      session.sub,
           username: session.username,
           role:     session.role,
+          scopes:   session.scopes,
         };
       } catch {
         return reply.status(401).send({ error: 'Unauthorized' });

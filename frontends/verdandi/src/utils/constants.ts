@@ -7,7 +7,10 @@ export const LAYOUT = {
   NODE_HEIGHT_BASE:       80,
   COL_ROW_HEIGHT:         22,
   GRID_SPACING:           60,
-  LARGE_GRAPH_THRESHOLD: 500,
+  LARGE_GRAPH_THRESHOLD:  500,   // switches ELK strategy to LINEAR_SEGMENTS
+  AUTO_GRID_THRESHOLD:    800,   // M-3: skip ELK entirely, use grid directly
+  TABLE_LEVEL_THRESHOLD:  500,   // M-5: auto-enable tableLevelView (hides cf-edges)
+  ELK_TIMEOUT_LARGE:    8_000,   // M-7: reduced timeout when nodeCount > 1000
   ELK_BETWEEN_LAYERS:   140,
   ELK_NODE_SPACING:      60,
   ELK_COMPONENT_SPACING:  80,

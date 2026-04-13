@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useReactFlow } from '@xyflow/react';
 
 import { useLoomStore }              from '../../stores/loomStore';
 import { applyELKLayout, cancelPendingLayouts } from '../../utils/layoutGraph';
+import { LAYOUT } from '../../utils/constants';
 import { applyL1Layout }             from '../../utils/layoutL1';
 import { edgeTypeClass }             from '../../utils/displayPipeline';
 import type { LoomNode, LoomEdge }   from '../../types/graph';
@@ -57,8 +58,11 @@ export function useLoomLayout(
 ) {
   const { fitView, getEdges, getNodes } = useReactFlow();
 
-  const [layouting,   setLayouting]   = useState(false);
-  const [layoutError, setLayoutError] = useState(false);
+  const [layouting,     setLayouting]     = useState(false);
+  const [layoutError,   setLayoutError]   = useState(false);
+  const [layoutWarning, setLayoutWarning] = useState<string | null>(null);
+  // M-3: incremented when user clicks "full layout" to bypass the grid guard
+  const [forceELKCount, setForceELKCount] = useState(0);
 
   // Track whether post-layout dimming is active to skip no-op cleanup cycles
   const isDimmedRef = useRef(false);
@@ -116,12 +120,21 @@ export function useLoomLayout(
     setLayouting(true);
     setLayoutError(false);
 
-    applyELKLayout(displayGraph.nodes, displayGraph.edges)
-      .then((layoutedNodes) => {
+    const nodeCount  = displayGraph.nodes.length;
+    const forceELK   = forceELKCount > 0;
+
+    applyELKLayout(displayGraph.nodes, displayGraph.edges, { forceELK })
+      .then(({ nodes: layoutedNodes, isGrid }) => {
         if (cancelled) return;
         setNodes(layoutedNodes);
         setEdges(displayGraph.edges);
         setGraphStats(layoutedNodes.length, displayGraph.edges.length);
+        // M-3: show warning when grid was used proactively (not for ELK fallback)
+        setLayoutWarning(
+          isGrid && nodeCount > LAYOUT.AUTO_GRID_THRESHOLD
+            ? `Граф содержит ${nodeCount} узлов — layout упрощён.`
+            : null,
+        );
       })
       .catch((err) => {
         console.error('[LOOM] ELK layout failed', err);
@@ -150,7 +163,7 @@ export function useLoomLayout(
 
     return () => { cancelled = true; cancelPendingLayouts(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayGraph, viewLevel, expandedDbs, l1Filter.depth, l1Filter.systemLevel, stmtColsReady]);
+  }, [displayGraph, viewLevel, expandedDbs, l1Filter.depth, l1Filter.systemLevel, stmtColsReady, forceELKCount]);
 
   // ── Post-layout dimming — tableFilter, stmtFilter, fieldFilter + depth ───────
   // These phases are intentionally separate from displayGraph to avoid ELK re-runs.
@@ -330,5 +343,10 @@ export function useLoomLayout(
   }, [filter.tableFilter, filter.stmtFilter, filter.fieldFilter, filter.depth,
       filter.upstream, filter.downstream, viewLevel, layouting, getEdges, getNodes, fitView]);
 
-  return { layouting, layoutError };
+  // M-3: callback for "Вычислить полный layout" button
+  const triggerFullLayout = useCallback(() => {
+    setForceELKCount((c) => c + 1);
+  }, []);
+
+  return { layouting, layoutError, layoutWarning, triggerFullLayout };
 }

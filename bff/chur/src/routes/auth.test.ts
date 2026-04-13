@@ -26,7 +26,7 @@ async function buildApp() {
     if (!sid) return reply.status(401).send({ error: 'Unauthorized' });
     try {
       const session = await sessions.ensureValidSession(sid);
-      request.user = { sub: session.sub, username: session.username, role: session.role };
+      request.user = { sub: session.sub, username: session.username, role: session.role, scopes: session.scopes };
     } catch {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -65,7 +65,7 @@ describe('POST /auth/login', () => {
       expires_in:    300,
       token_type:    'Bearer',
     });
-    mockExtract.mockReturnValue({ sub: 'kc-001', username: 'admin', role: 'admin' });
+    mockExtract.mockReturnValue({ sub: 'kc-001', username: 'admin', role: 'admin', scopes: [] });
 
     const res = await app.inject({
       method: 'POST',

@@ -42,6 +42,7 @@
     "level": "Уровень",
     "zoom": "Масштаб",
     "computingLayout": "вычисляется граф…",
+    "computeFullLayout": "Вычислить полный layout",
     "nodeCount": "{{count}} узлов",
     "hasMore": "Показано {{count}} узлов — граф усечён. Уточните фильтр."
   },

@@ -42,6 +42,7 @@
     "level": "Level",
     "zoom": "Zoom",
     "computingLayout": "computing layout…",
+    "computeFullLayout": "Compute full layout",
     "nodeCount": "{{count}} nodes",
     "hasMore": "Showing {{count}} nodes — graph truncated. Narrow your filter."
   },
