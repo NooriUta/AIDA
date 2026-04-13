@@ -41,17 +41,14 @@ public class SessionRepository {
     public void save(Session session) {
         try {
             String json = MAPPER.writeValueAsString(session);
-            // Escape single quotes inside JSON for SQL string literal
-            String escaped = json.replace("'", "\\'");
-
             // Delete existing record (idempotent)
-            frigg.sql("DELETE FROM dali_sessions WHERE id = '" + session.id() + "'");
-
-            // Insert fresh record
-            frigg.sql(String.format(
-                    "INSERT INTO dali_sessions SET id = '%s', startedAt = '%s', sessionJson = '%s'",
-                    session.id(), session.startedAt().toString(), escaped));
-
+            frigg.sql("DELETE FROM dali_sessions WHERE id = :id",
+                    Map.of("id", session.id()));
+            // Insert fresh record — use params to avoid JSON escaping issues
+            frigg.sql("INSERT INTO dali_sessions SET id = :id, startedAt = :startedAt, sessionJson = :json",
+                    Map.of("id", session.id(),
+                           "startedAt", session.startedAt().toString(),
+                           "json", json));
         } catch (JsonProcessingException e) {
             log.error("[SessionRepository] Failed to serialise session {}: {}", session.id(), e.getMessage());
         } catch (Exception e) {
@@ -66,6 +63,7 @@ public class SessionRepository {
         try {
             List<Map<String, Object>> rows = frigg.sql(
                     "SELECT sessionJson FROM dali_sessions ORDER BY startedAt DESC LIMIT " + limit);
+            if (rows == null) return Collections.emptyList();
             return rows.stream()
                     .map(row -> row.get("sessionJson"))
                     .filter(v -> v instanceof String)
@@ -85,7 +83,9 @@ public class SessionRepository {
     public Optional<Session> findById(String id) {
         try {
             List<Map<String, Object>> rows = frigg.sql(
-                    "SELECT sessionJson FROM dali_sessions WHERE id = '" + id + "' LIMIT 1");
+                    "SELECT sessionJson FROM dali_sessions WHERE id = :id LIMIT 1",
+                    Map.of("id", id));
+            if (rows == null) return Optional.empty();
             return rows.stream()
                     .map(row -> row.get("sessionJson"))
                     .filter(v -> v instanceof String)

@@ -15,6 +15,7 @@ import studio.seer.shared.FileResult;
 import studio.seer.shared.ParseSessionInput;
 import studio.seer.shared.Session;
 import studio.seer.shared.SessionStatus;
+import studio.seer.shared.VertexTypeStat;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -36,6 +37,8 @@ public class SessionService {
 
     private final ConcurrentMap<String, Session> sessions = new ConcurrentHashMap<>();
 
+    private volatile boolean friggHealthy = false;
+
     /**
      * Loads persisted sessions from FRIGG into the in-memory cache on startup.
      * Runs after FriggSchemaInitializer (both observe StartupEvent; schema init
@@ -53,23 +56,36 @@ public class SessionService {
                     Session failed = new Session(
                             s.id(), SessionStatus.FAILED,
                             s.progress(), s.total(), s.batch(),
+                            s.clearBeforeWrite(),    // preserve from loaded session
                             s.dialect(), s.source(), s.startedAt(), Instant.now(),
-                            s.atomCount(), s.vertexCount(), s.edgeCount(),
+                            s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
+                            s.vertexStats(),
                             s.resolutionRate(), s.durationMs(),
                             s.warnings(),
                             List.of("Server restarted — job was not executed (in-memory queue lost)"),
-                            s.fileResults());
+                            s.fileResults(),
+                            false); // will be set true after persist()
                     sessions.put(failed.id(), failed);
                     persist(failed);
                     reset++;
                 } else {
-                    sessions.put(s.id(), s);
+                    // Sessions loaded from FRIGG are by definition persisted
+                    Session withFrigg = s.friggPersisted() ? s : new Session(
+                            s.id(), s.status(), s.progress(), s.total(), s.batch(),
+                            s.clearBeforeWrite(), s.dialect(), s.source(),
+                            s.startedAt(), s.updatedAt(),
+                            s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
+                            s.vertexStats(), s.resolutionRate(), s.durationMs(),
+                            s.warnings(), s.errors(), s.fileResults(), true);
+                    sessions.put(withFrigg.id(), withFrigg);
                     loaded++;
                 }
             }
+            friggHealthy = true;
             log.info("SessionService: loaded {} session(s) from FRIGG, reset {} stale QUEUED/RUNNING → FAILED",
                     loaded, reset);
         } catch (Exception e) {
+            friggHealthy = false;
             log.warn("SessionService: could not load sessions from FRIGG (FRIGG may be unavailable): {}",
                     e.getMessage());
         }
@@ -77,15 +93,41 @@ public class SessionService {
 
     /** Enqueue a new parse session. */
     public Session enqueue(ParseSessionInput input) {
+        // Concurrency guard for clearBeforeWrite operations
+        if (!input.preview()) {
+            if (input.clearBeforeWrite()) {
+                // clearBeforeWrite=true: no other active session allowed
+                boolean conflict = sessions.values().stream()
+                        .anyMatch(s -> s.status() == SessionStatus.QUEUED
+                                    || s.status() == SessionStatus.RUNNING);
+                if (conflict) {
+                    throw new IllegalStateException(
+                            "Cannot start clearBeforeWrite session: another session is active. " +
+                            "Wait for it to complete first.");
+                }
+            } else {
+                // clearBeforeWrite=false: block if a clear-session is active
+                boolean clearRunning = sessions.values().stream()
+                        .anyMatch(s -> (s.status() == SessionStatus.QUEUED
+                                     || s.status() == SessionStatus.RUNNING)
+                                     && s.clearBeforeWrite());
+                if (clearRunning) {
+                    throw new IllegalStateException(
+                            "Cannot start session: a clearBeforeWrite operation is in progress. " +
+                            "Wait for it to complete first.");
+                }
+            }
+        }
         String sessionId = UUID.randomUUID().toString();
         Instant now = Instant.now();
         Session session = new Session(
                 sessionId, SessionStatus.QUEUED,
                 0, 0, false,
+                input.clearBeforeWrite(),
                 input.dialect(), input.source(),
                 now, now,
-                null, null, null, null, null,
-                List.of(), List.of(), List.of());
+                null, null, null, null, List.of(), null, null,
+                List.of(), List.of(), List.of(), false);
         sessions.put(sessionId, session);
         persist(session);
         jobScheduler.get().<ParseJob>enqueue(j -> j.execute(sessionId, input));
@@ -103,9 +145,10 @@ public class SessionService {
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
                 s.id(), SessionStatus.RUNNING,
                 0, total, batch,
+                s.clearBeforeWrite(),   // preserve
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
-                null, null, null, null, null,
-                List.of(), List.of(), List.of()));
+                null, null, null, null, List.of(), null, null,
+                List.of(), List.of(), List.of(), false));
         if (updated != null) persist(updated);
         log.debug("Session started: id={} batch={} total={}", id, batch, total);
     }
@@ -118,10 +161,12 @@ public class SessionService {
             return new Session(
                     s.id(), s.status(),
                     s.progress() + 1, s.total(), s.batch(),
+                    s.clearBeforeWrite(),   // preserve
                     s.dialect(), s.source(), s.startedAt(), Instant.now(),
-                    s.atomCount(), s.vertexCount(), s.edgeCount(),
+                    s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
+                    s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), s.errors(), List.copyOf(list));
+                    s.warnings(), s.errors(), List.copyOf(list), false);
         });
         if (updated != null) persist(updated);
     }
@@ -130,10 +175,12 @@ public class SessionService {
     public void updateStatus(String id, SessionStatus status) {
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
                 s.id(), status, s.progress(), s.total(), s.batch(),
+                s.clearBeforeWrite(),   // preserve
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
-                s.atomCount(), s.vertexCount(), s.edgeCount(),
+                s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
+                s.vertexStats(),
                 s.resolutionRate(), s.durationMs(),
-                s.warnings(), s.errors(), s.fileResults()));
+                s.warnings(), s.errors(), s.fileResults(), false));
         if (updated != null) persist(updated);
         log.debug("Session status updated: id={} status={}", id, status);
     }
@@ -150,10 +197,12 @@ public class SessionService {
             }
             return new Session(
                     s.id(), SessionStatus.FAILED, s.progress(), s.total(), s.batch(),
+                    s.clearBeforeWrite(),   // preserve
                     s.dialect(), s.source(), s.startedAt(), Instant.now(),
-                    s.atomCount(), s.vertexCount(), s.edgeCount(),
+                    s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
+                    s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), List.copyOf(errors), s.fileResults());
+                    s.warnings(), List.copyOf(errors), s.fileResults(), false);
         });
         if (updated != null) persist(updated);
         log.debug("Session failed: id={} error={}", id, errorMessage);
@@ -161,20 +210,24 @@ public class SessionService {
 
     /** Called when parse finishes successfully — stores aggregate result. */
     public void completeSession(String id, ParseResult result, List<FileResult> fileResults) {
+        List<VertexTypeStat> vtxStats = toVertexTypeStats(result.vertexStats());
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
                 s.id(), SessionStatus.COMPLETED,
                 s.total() > 0 ? s.total() : 1,
                 s.total() > 0 ? s.total() : 1,
                 s.batch(),
+                s.clearBeforeWrite(),   // preserve
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
                 result.atomCount(),
                 result.vertexCount(),
                 result.edgeCount(),
+                result.droppedEdgeCount(),
+                vtxStats,
                 result.resolutionRate(),
                 result.durationMs(),
                 result.warnings() != null ? result.warnings() : List.of(),
                 result.errors()   != null ? result.errors()   : List.of(),
-                fileResults));
+                fileResults, false));
         if (updated != null) persist(updated);
         log.info("Session completed: id={} atoms={} files={} duration={}ms",
                 id, result.atomCount(), fileResults.size(), result.durationMs());
@@ -188,12 +241,35 @@ public class SessionService {
                 .toList();
     }
 
+    /** Returns true if the last FRIGG operation succeeded. */
+    public boolean isFriggHealthy() { return friggHealthy; }
+
     // ── Internal ───────────────────────────────────────────────────────────────
+
+    /** Converts ParseResult's internal Map<type,[ins,dup]> to shared VertexTypeStat list. */
+    private static List<VertexTypeStat> toVertexTypeStats(java.util.Map<String, int[]> map) {
+        if (map == null || map.isEmpty()) return List.of();
+        var out = new java.util.ArrayList<VertexTypeStat>(map.size());
+        map.forEach((type, counts) -> out.add(new VertexTypeStat(type, counts[0], counts[1])));
+        return List.copyOf(out);
+    }
 
     private void persist(Session session) {
         try {
             repository.save(session);
+            friggHealthy = true;
+            // Mark as persisted in the in-memory map (only if the session is still there)
+            if (!session.friggPersisted()) {
+                sessions.computeIfPresent(session.id(), (k, s) -> new Session(
+                        s.id(), s.status(), s.progress(), s.total(), s.batch(),
+                        s.clearBeforeWrite(), s.dialect(), s.source(),
+                        s.startedAt(), s.updatedAt(),
+                        s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
+                        s.vertexStats(), s.resolutionRate(), s.durationMs(),
+                        s.warnings(), s.errors(), s.fileResults(), true));
+            }
         } catch (Exception e) {
+            friggHealthy = false;
             log.warn("SessionService: failed to persist session {} to FRIGG: {}", session.id(), e.getMessage());
         }
     }

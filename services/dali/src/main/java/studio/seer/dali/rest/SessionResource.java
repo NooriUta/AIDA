@@ -5,7 +5,10 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import studio.seer.dali.service.SessionService;
+import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.ParseSessionInput;
+
+import java.util.Map;
 
 /**
  * REST API for Dali parse sessions.
@@ -21,7 +24,8 @@ import studio.seer.shared.ParseSessionInput;
 @Consumes(MediaType.APPLICATION_JSON)
 public class SessionResource {
 
-    @Inject SessionService sessionService;
+    @Inject SessionService    sessionService;
+    @Inject SessionRepository sessionRepository;
 
     @GET
     public Response list(@QueryParam("limit") @DefaultValue("50") int limit) {
@@ -35,7 +39,13 @@ public class SessionResource {
                     .entity("{\"error\":\"dialect and source are required\"}")
                     .build();
         }
-        return Response.accepted(sessionService.enqueue(input)).build();
+        try {
+            return Response.accepted(sessionService.enqueue(input)).build();
+        } catch (IllegalStateException e) {
+            return Response.status(Response.Status.CONFLICT)
+                    .entity("{\"error\":\"" + e.getMessage() + "\"}")
+                    .build();
+        }
     }
 
     @GET
@@ -46,5 +56,26 @@ public class SessionResource {
                 .orElse(Response.status(Response.Status.NOT_FOUND)
                         .entity("{\"error\":\"session not found\"}")
                         .build());
+    }
+
+    /**
+     * FRIGG archive — sessions stored in FRIGG, bypassing the in-memory cache.
+     * Used by the UI "Archive" section to show the authoritative historical record.
+     */
+    @GET
+    @Path("/archive")
+    public Response archive(@QueryParam("limit") @DefaultValue("200") int limit) {
+        return Response.ok(sessionRepository.findAll(limit)).build();
+    }
+
+    @GET
+    @Path("/health")
+    public Response health() {
+        boolean friggOk = sessionService.isFriggHealthy();
+        int sessionCount = sessionService.listRecent(200).size();
+        return Response.ok(Map.of(
+                "frigg",    friggOk ? "ok" : "error",
+                "sessions", sessionCount
+        )).build();
     }
 }

@@ -3,6 +3,7 @@ package com.hound;
 
 import com.hound.api.*;
 import com.hound.metrics.PipelineTimer;
+import com.hound.semantic.model.AtomInfo;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
 import com.hound.processor.ThreadPoolManager;
@@ -25,6 +26,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import com.hound.storage.WriteStats;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -104,10 +107,11 @@ public class HoundParserImpl implements HoundParser {
                     AnalysisResult ar = futures.get(i).get();
                     ParseResult pr;
                     if (ar.semantic() != null) {
+                        WriteStats ws = null;
                         if (writer != null) {
-                            writer.saveResult(ar.semantic(), ar.timer(), pool, schema);
+                            ws = writer.saveResult(ar.semantic(), ar.timer(), pool, schema);
                         }
-                        pr = toParseResult(ar.semantic(), ar.timer());
+                        pr = toParseResult(ar.semantic(), ar.timer(), ws);
                     } else {
                         pr = emptyResult(file.toString());
                     }
@@ -192,25 +196,57 @@ public class HoundParserImpl implements HoundParser {
                 new AtomicLong(System.currentTimeMillis()), dbName, listener);
         if (ar.semantic() == null) return emptyResult(file.toString());
 
+        WriteStats ws = null;
         if (writer != null) {
-            writer.saveResult(ar.semantic(), ar.timer(), pool, dbName);
+            ws = writer.saveResult(ar.semantic(), ar.timer(), pool, dbName);
         }
-        return toParseResult(ar.semantic(), ar.timer());
+        return toParseResult(ar.semantic(), ar.timer(), ws);
     }
 
     // ─── SemanticResult → ParseResult ────────────────────────────
 
-    private static ParseResult toParseResult(SemanticResult sem, PipelineTimer timer) {
+    private static ParseResult toParseResult(SemanticResult sem, PipelineTimer timer, WriteStats ws) {
         Structure s = sem.getStructure();
 
-        int atomCount = sem.getAtoms() != null ? sem.getAtoms().size() : 0;
+        int atomCount;
+        int vertexCount;
+        int edgeCount;
+        int droppedEdgeCount;
+        Map<String, int[]> vertexStats;
 
-        int vertexCount = s == null ? 0 :
-                mapSize(s.getTables()) + mapSize(s.getColumns()) + mapSize(s.getRoutines())
-                + mapSize(s.getStatements()) + mapSize(s.getPackages())
-                + mapSize(s.getSchemas()) + mapSize(s.getDatabases());
-
-        int edgeCount = sem.getLineage() != null ? sem.getLineage().size() : 0;
+        if (ws != null && ws.totalInserted() > 0) {
+            // REMOTE_BATCH mode: use actual per-type stats from the batch write
+            atomCount        = ws.atomsInserted();
+            vertexCount      = ws.totalInserted();
+            edgeCount        = ws.edgeCount();
+            droppedEdgeCount = ws.droppedEdgeCount();
+            vertexStats      = ws.snapshot();
+        } else {
+            // DISABLED or REMOTE mode: use semantic model as best approximation
+            // Count individual atoms across statement + unattached containers only.
+            // "routine" containers are a duplicate view of statement atoms — exclude them
+            // to avoid double-counting. "summary" has no "atoms" key — skipped automatically.
+            int totalAtoms = 0;
+            if (sem.getAtoms() != null) {
+                for (var entry : sem.getAtoms().entrySet()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> cont = (Map<String, Object>) entry.getValue();
+                    String srcType = (String) cont.get("source_type");
+                    if ("routine".equals(srcType)) continue; // duplicate view
+                    @SuppressWarnings("unchecked")
+                    Map<?, ?> atoms = (Map<?, ?>) cont.get("atoms");
+                    if (atoms != null) totalAtoms += atoms.size();
+                }
+            }
+            atomCount = totalAtoms;
+            vertexCount = s == null ? 0 :
+                    mapSize(s.getTables()) + mapSize(s.getColumns()) + mapSize(s.getRoutines())
+                    + mapSize(s.getStatements()) + mapSize(s.getPackages())
+                    + mapSize(s.getSchemas()) + mapSize(s.getDatabases());
+            edgeCount        = sem.getLineage() != null ? sem.getLineage().size() : 0;
+            droppedEdgeCount = 0;
+            vertexStats      = Map.of();
+        }
 
         double resolutionRate = calcResolutionRate(sem);
 
@@ -218,24 +254,48 @@ public class HoundParserImpl implements HoundParser {
                 + timer.ms("resolve") + timer.writeMs();
 
         return new ParseResult(sem.getFilePath(), atomCount, vertexCount, edgeCount,
-                resolutionRate, List.of(), List.of(), durationMs);
+                droppedEdgeCount, vertexStats, resolutionRate, List.of(), List.of(), durationMs);
     }
 
+    /**
+     * Column-level semantic resolution rate.
+     *
+     * <p>Formula: {@code resolved / (resolved + unresolved)}, where:
+     * <ul>
+     *   <li><b>resolved</b>   — atoms with {@code status = AtomInfo.STATUS_RESOLVED}
+     *       (successfully linked to a physical table.column)
+     *   <li><b>unresolved</b> — atoms where column resolution was attempted but failed
+     *       (status = "unresolved")
+     * </ul>
+     *
+     * <p>Constants and function-call atoms are excluded from both numerator and denominator
+     * because they never require column resolution — counting them would artificially inflate
+     * the denominator and dilute the rate.
+     *
+     * <p>Returns 1.0 (100%) when there are no column-reference atoms (nothing to resolve).
+     */
     private static double calcResolutionRate(SemanticResult sem) {
         List<Map<String, Object>> log = sem.getResolutionLog();
         if (log == null || log.isEmpty()) return 1.0;
-        long resolved = log.stream()
-                .filter(e -> "RESOLVED".equals(e.get("result_kind")))
+
+        // Column-level rate: only consider atoms where resolution was attempted
+        long resolved   = log.stream()
+                .filter(e -> AtomInfo.STATUS_RESOLVED.equals(e.get("result_kind")))
                 .count();
-        return (double) resolved / log.size();
+        long unresolved = log.stream()
+                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .count();
+        long denominator = resolved + unresolved;
+        if (denominator == 0) return 1.0;   // only constants/functions — nothing to resolve
+        return (double) resolved / denominator;
     }
 
     private static ParseResult emptyResult(String file) {
-        return new ParseResult(file, 0, 0, 0, 1.0, List.of(), List.of(), 0L);
+        return new ParseResult(file, 0, 0, 0, 0, Map.of(), 1.0, List.of(), List.of(), 0L);
     }
 
     private static ParseResult errorResult(String file, String message) {
-        return new ParseResult(file, 0, 0, 0, 0.0,
+        return new ParseResult(file, 0, 0, 0, 0, Map.of(), 0.0,
                 List.of(), List.of("ERROR: " + message), 0L);
     }
 

@@ -33,7 +33,13 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
       setSource('');
       onSessionCreated(session);
     } catch (err: unknown) {
-      setError((err as Error).message ?? 'request failed');
+      const msg = (err as Error).message ?? 'request failed';
+      // Make concurrency-conflict messages more readable
+      if (msg.includes('clearBeforeWrite') || msg.includes('active')) {
+        setError('Another session is active — wait for it to finish before starting a new one');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

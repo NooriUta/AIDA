@@ -37,10 +37,15 @@ public class FriggGateway {
      */
     public List<Map<String, Object>> sql(String query) {
         log.debug("[FRIGG] {}", query);
-        return client.command(db, basicAuth(), new FriggCommand("sql", query, null))
-                .map(FriggResponse::result)
-                .onFailure().invoke(ex -> log.error("[FRIGG FAILED] {} — {}", query, ex.getMessage()))
-                .await().atMost(TIMEOUT);
+        try {
+            var result = client.command(db, basicAuth(), new FriggCommand("sql", query, null))
+                    .map(FriggResponse::result)
+                    .await().atMost(TIMEOUT);
+            return result != null ? result : List.of();
+        } catch (Exception ex) {
+            log.error("[FRIGG FAILED] {} — {}", query, ex.getMessage());
+            throw ex;
+        }
     }
 
     /**
@@ -48,10 +53,28 @@ public class FriggGateway {
      */
     public List<Map<String, Object>> sql(String query, Map<String, Object> params) {
         log.debug("[FRIGG] {}", query);
-        return client.command(db, basicAuth(), new FriggCommand("sql", query, params))
-                .map(FriggResponse::result)
-                .onFailure().invoke(ex -> log.error("[FRIGG FAILED] {} — {}", query, ex.getMessage()))
-                .await().atMost(TIMEOUT);
+        try {
+            var result = client.command(db, basicAuth(), new FriggCommand("sql", query, params))
+                    .map(FriggResponse::result)
+                    .await().atMost(TIMEOUT);
+            return result != null ? result : List.of();
+        } catch (Exception ex) {
+            log.error("[FRIGG FAILED] {} params={} — {}", query, params.keySet(), ex.getMessage());
+            throw ex;
+        }
+    }
+
+    /**
+     * Quick health check — returns true if FRIGG responds to a simple query.
+     */
+    public boolean ping() {
+        try {
+            sql("SELECT 1");
+            return true;
+        } catch (Exception e) {
+            log.debug("[FRIGG] ping failed: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**

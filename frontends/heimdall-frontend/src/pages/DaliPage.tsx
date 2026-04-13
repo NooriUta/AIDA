@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { type DaliSession, getSessions } from '../api/dali';
+import { type DaliSession, getDaliHealth, getSessions, getSessionsArchive } from '../api/dali';
 import { ParseForm } from '../components/dali/ParseForm';
 import { SessionList } from '../components/dali/SessionList';
 import css from '../components/dali/dali.module.css';
@@ -19,11 +19,17 @@ let _toastId = 0;
 
 // ── DaliPage ─────────────────────────────────────────────────────────────────
 export default function DaliPage() {
-  const [sessions,   setSessions]   = useState<DaliSession[]>([]);
-  const [toasts,     setToasts]     = useState<Toast[]>([]);
-  const [daliState,  setDaliState]  = useState<DaliState>('connecting');
-  const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const retryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [sessions,      setSessions]      = useState<DaliSession[]>([]);
+  const [archive,       setArchive]       = useState<DaliSession[]>([]);
+  const [archiveOpen,   setArchiveOpen]   = useState(false);
+  const [archiveLoaded, setArchiveLoaded] = useState(false);
+  const [archiveLoading,setArchiveLoading]= useState(false);
+  const [toasts,        setToasts]        = useState<Toast[]>([]);
+  const [daliState,     setDaliState]     = useState<DaliState>('connecting');
+  const [friggHealthy,  setFriggHealthy]  = useState<boolean | null>(null);
+  const clockRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const friggPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [clock, setClock] = useState('');
 
   // Load sessions + check Dali availability; auto-retry until online
@@ -54,6 +60,18 @@ export default function DaliPage() {
     loadSessions();
     return () => { if (retryRef.current) clearInterval(retryRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // FRIGG health polling — independent of Dali availability, every 15s
+  useEffect(() => {
+    function checkFrigg() {
+      getDaliHealth()
+        .then(h => setFriggHealthy(h.frigg === 'ok'))
+        .catch(() => setFriggHealthy(false));
+    }
+    checkFrigg();
+    friggPollRef.current = setInterval(checkFrigg, 15_000);
+    return () => { if (friggPollRef.current) clearInterval(friggPollRef.current); };
   }, []);
 
   // Footer clock
@@ -87,6 +105,19 @@ export default function DaliPage() {
       addToastRef.current(`Session ${updated.id.slice(0, 8)}: parse failed`, 'err');
     }
   }, []);
+
+  function loadArchive() {
+    setArchiveLoading(true);
+    getSessionsArchive(200)
+      .then(data => { setArchive(data); setArchiveLoaded(true); })
+      .catch(() => addToastRef.current('FRIGG archive unavailable', 'err'))
+      .finally(() => setArchiveLoading(false));
+  }
+
+  function toggleArchive() {
+    if (!archiveOpen && !archiveLoaded) loadArchive();
+    setArchiveOpen(o => !o);
+  }
 
   // Derived stats
   const running   = sessions.filter(s => s.status === 'RUNNING').length;
@@ -193,8 +224,56 @@ export default function DaliPage() {
         {/* Parse form */}
         <ParseForm onSessionCreated={handleSessionCreated} />
 
-        {/* Session list */}
+        {/* Active sessions (current Dali process, in-memory) */}
         <SessionList sessions={sessions} onSessionUpdate={handleSessionUpdate} />
+
+        {/* FRIGG Archive — lazy-loaded on expand */}
+        <div style={{ marginTop: 16, marginBottom: 16 }}>
+          <button
+            onClick={toggleArchive}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              width: '100%', padding: '9px 14px',
+              background: 'var(--bg2)', border: '1px solid var(--bd)',
+              borderRadius: archiveOpen ? '6px 6px 0 0' : 6,
+              cursor: 'pointer', color: 'var(--t2)', fontSize: 12, fontWeight: 600,
+            }}
+          >
+            <svg
+              width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: archiveOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.18s' }}
+            >
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            <span>Архив сессий (FRIGG)</span>
+            {archiveLoaded && (
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)', marginLeft: 4 }}>
+                {archive.length} записей
+              </span>
+            )}
+            {archiveLoading && (
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--acc)', marginLeft: 4 }}>
+                загрузка…
+              </span>
+            )}
+            <div style={{
+              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5,
+              fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)',
+            }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: friggHealthy === null ? 'var(--wrn)' : friggHealthy ? 'var(--suc)' : 'var(--danger)',
+              }}/>
+              frigg :2481
+            </div>
+          </button>
+          {archiveOpen && (
+            <div style={{ border: '1px solid var(--bd)', borderTop: 'none', borderRadius: '0 0 6px 6px', overflow: 'hidden' }}>
+              <SessionList sessions={archive} onSessionUpdate={() => {}} />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer */}
@@ -210,7 +289,12 @@ export default function DaliPage() {
           {sessions.length > 0 ? `${sessions.length} jobs tracked` : 'jobrunr ready'}
         </div>
         <div className={css.footerSep}/>
-        <div className={css.footerItem}>frigg :2481</div>
+        <div className={css.footerItem}>
+          <div className={css.footerDot} style={{
+            background: friggHealthy === null ? 'var(--wrn)' : friggHealthy ? 'var(--suc)' : 'var(--danger)',
+          }}/>
+          frigg :2481
+        </div>
         <div className={css.footerSep}/>
         <div className={css.footerItem}>ygg :2480</div>
         <div className={css.footerSep}/>

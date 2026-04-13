@@ -14,10 +14,13 @@ import org.slf4j.LoggerFactory;
 import studio.seer.dali.service.SessionService;
 import studio.seer.shared.FileResult;
 import studio.seer.shared.ParseSessionInput;
+import studio.seer.shared.VertexTypeStat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -165,8 +168,18 @@ public class ParseJob {
                 r.file(),
                 r.errors().isEmpty(),
                 r.atomCount(), r.vertexCount(), r.edgeCount(),
+                r.droppedEdgeCount(),
+                toVertexTypeStats(r.vertexStats()),
                 r.resolutionRate(), r.durationMs(),
                 r.warnings(), r.errors());
+    }
+
+    /** Converts ParseResult's internal Map<type,[inserted,dup]> to a shared VertexTypeStat list. */
+    private static List<VertexTypeStat> toVertexTypeStats(java.util.Map<String, int[]> map) {
+        if (map == null || map.isEmpty()) return List.of();
+        List<VertexTypeStat> out = new ArrayList<>(map.size());
+        map.forEach((type, counts) -> out.add(new VertexTypeStat(type, counts[0], counts[1])));
+        return List.copyOf(out);
     }
 
     /** Builds a readable error string including cause chain, deduplicating repeated messages. */
@@ -183,10 +196,21 @@ public class ParseJob {
     }
 
     private static ParseResult merge(String source, List<FileResult> results) {
-        int atoms    = results.stream().mapToInt(FileResult::atomCount).sum();
-        int vertices = results.stream().mapToInt(FileResult::vertexCount).sum();
-        int edges    = results.stream().mapToInt(FileResult::edgeCount).sum();
-        long duration = results.stream().mapToLong(FileResult::durationMs).sum();
+        int atoms        = results.stream().mapToInt(FileResult::atomCount).sum();
+        int vertices     = results.stream().mapToInt(FileResult::vertexCount).sum();
+        int edges        = results.stream().mapToInt(FileResult::edgeCount).sum();
+        int droppedEdges = results.stream().mapToInt(FileResult::droppedEdgeCount).sum();
+        long duration    = results.stream().mapToLong(FileResult::durationMs).sum();
+
+        // Aggregate per-type stats across all files
+        var aggMap = new LinkedHashMap<String, int[]>();
+        for (FileResult fr : results) {
+            for (VertexTypeStat s : fr.vertexStats()) {
+                aggMap.computeIfAbsent(s.type(), k -> new int[2]);
+                aggMap.get(s.type())[0] += s.inserted();
+                aggMap.get(s.type())[1] += s.duplicate();
+            }
+        }
 
         // Weighted average by atomCount — gives true resolved/total ratio
         double rate = atoms > 0
@@ -200,6 +224,7 @@ public class ParseJob {
                 .flatMap(r -> r.errors().stream())
                 .toList();
 
-        return new ParseResult(source, atoms, vertices, edges, rate, warnings, errors, duration);
+        return new ParseResult(source, atoms, vertices, edges, droppedEdges,
+                aggMap, rate, warnings, errors, duration);
     }
 }

@@ -72,19 +72,21 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
     // Main entry point
     // ═══════════════════════════════════════════════════════════════
 
-    public String saveResult(SemanticResult result, PipelineTimer timer) {
+    public WriteStats saveResult(SemanticResult result, PipelineTimer timer) {
         return saveResult(result, timer, null, null);
     }
 
-    public String saveResult(SemanticResult result, PipelineTimer timer,
-                             CanonicalPool pool, String dbName) {
+    public WriteStats saveResult(SemanticResult result, PipelineTimer timer,
+                                 CanonicalPool pool, String dbName) {
         String sid = result.getSessionId();
         long t0 = System.currentTimeMillis();
 
+        WriteStats ws;
         if (mode == Mode.REMOTE_BATCH) {
-            remote.writeBatch(batchClient, sid, result, timer, pool, dbName);
+            ws = remote.writeBatch(batchClient, sid, result, timer, pool, dbName);
         } else {
             remote.write(sid, result, timer, pool, dbName);
+            ws = new WriteStats(); // REMOTE mode: no per-type stats available
         }
 
         long ms = System.currentTimeMillis() - t0;
@@ -112,7 +114,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
         writePerfStats(sid, result, timer, dbName,
                 cntTables, cntColumns, cntStatements, cntRoutines,
                 cntAtoms, cntJoins, oc, cntLineage);
-        return sid;
+        return ws;
     }
 
     // ═══════════════════════════════════════════════════════════════

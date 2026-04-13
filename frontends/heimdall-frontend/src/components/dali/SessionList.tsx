@@ -210,7 +210,8 @@ function DetailRow({ session }: { session: DaliSession }) {
 
   const displayAtoms    = session.atomCount    ?? partialAtoms;
   const displayVertices = session.vertexCount  ?? partialVertices;
-  const displayEdges    = session.edgeCount    ?? 0;
+  const displayEdges    = session.edgeCount       ?? 0;
+  const displayDropped  = session.droppedEdgeCount ?? 0;
 
   return (
     <tr>
@@ -243,28 +244,32 @@ function DetailRow({ session }: { session: DaliSession }) {
             </div>
           )}
 
-          {/* Aggregate stats */}
+          {/* Aggregate stats strip */}
           <div className={css.detailGrid}>
             <div className={css.dstat}>
               <div className={css.dstatLabel}>Atoms</div>
               <div className={css.dstatVal} style={{ color: 'var(--acc)' }}>
                 {(displayAtoms ?? 0).toLocaleString()}
               </div>
-              <div className={css.dstatSub}>{isFailed && partialAtoms != null ? 'partial' : 'extracted'}</div>
+              <div className={css.dstatSub}>{isFailed && partialAtoms != null ? 'partial' : 'in YGG'}</div>
             </div>
             <div className={css.dstat}>
               <div className={css.dstatLabel}>Vertices</div>
               <div className={css.dstatVal} style={{ color: 'var(--t2)' }}>
                 {(displayVertices ?? 0).toLocaleString()}
               </div>
-              <div className={css.dstatSub}>{isFailed && partialVertices != null ? 'partial' : 'in YGG'}</div>
+              <div className={css.dstatSub}>{isFailed && partialVertices != null ? 'partial' : 'inserted'}</div>
             </div>
             <div className={css.dstat}>
               <div className={css.dstatLabel}>Edges</div>
               <div className={css.dstatVal} style={{ color: 'var(--t2)' }}>
                 {displayEdges.toLocaleString()}
               </div>
-              <div className={css.dstatSub}>lineage links</div>
+              <div className={css.dstatSub}>
+                {displayDropped > 0
+                  ? <span style={{ color: 'var(--wrn)' }}>↓{displayDropped.toLocaleString()} dropped</span>
+                  : 'lineage links'}
+              </div>
             </div>
             <div className={css.dstat}>
               <div className={css.dstatLabel}>Resolution</div>
@@ -287,6 +292,57 @@ function DetailRow({ session }: { session: DaliSession }) {
               </div>
             </div>
           </div>
+
+          {/* Per-type vertex breakdown */}
+          {session.vertexStats && session.vertexStats.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--t2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Vertex breakdown
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg2)' }}>
+                    {['Type', 'Inserted', 'Duplicate', 'Total'].map(h => (
+                      <th key={h} style={{ padding: '4px 8px', textAlign: h === 'Type' ? 'left' : 'right', fontWeight: 600, color: 'var(--t2)', borderBottom: '1px solid var(--bd)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {session.vertexStats.map((s, i) => {
+                    const isCanonical = ['DaliSchema','DaliTable','DaliColumn','DaliDatabase'].includes(s.type);
+                    return (
+                      <tr key={s.type} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg2)' }}>
+                        <td style={{ padding: '3px 8px', fontFamily: 'var(--mono)', color: isCanonical ? 'var(--acc)' : 'var(--t1)', borderBottom: '1px solid var(--bd)' }}>
+                          {s.type}
+                        </td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right', color: 'var(--suc)', borderBottom: '1px solid var(--bd)' }}>
+                          {s.inserted.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right', color: s.duplicate > 0 ? 'var(--wrn)' : 'var(--t3)', borderBottom: '1px solid var(--bd)' }}>
+                          {s.duplicate > 0 ? s.duplicate.toLocaleString() : '—'}
+                        </td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right', color: 'var(--t2)', borderBottom: '1px solid var(--bd)' }}>
+                          {(s.inserted + s.duplicate).toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ background: 'var(--bg2)', fontWeight: 600 }}>
+                    <td style={{ padding: '4px 8px', color: 'var(--t2)' }}>Total</td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--suc)' }}>
+                      {session.vertexStats.reduce((a, s) => a + s.inserted, 0).toLocaleString()}
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--wrn)' }}>
+                      {session.vertexStats.reduce((a, s) => a + s.duplicate, 0).toLocaleString()}
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--t2)' }}>
+                      {session.vertexStats.reduce((a, s) => a + s.inserted + s.duplicate, 0).toLocaleString()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Warnings toggle (aggregate) */}
           {ws.length > 0 && (
@@ -372,19 +428,42 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
 
   const s = live ?? session;
 
-  const canExpand = s.status === 'COMPLETED' || s.status === 'FAILED';
+  const chevronColor =
+    s.status === 'FAILED'    ? 'var(--danger)' :
+    s.status === 'RUNNING'   ? 'var(--acc)'    :
+    s.status === 'COMPLETED' ? 'var(--suc)'    : 'var(--t3)';
 
   return (
     <>
       <tr
         className={`${css.dataRow} ${expanded ? css.dataRowSelected : ''}`}
-        onClick={() => { if (canExpand) onToggle(); }}
-        title={canExpand ? 'Click to expand details' : undefined}
+        onClick={onToggle}
+        title="Click to expand details"
+        style={{ cursor: 'pointer' }}
       >
         <td>
-          <span style={{ fontFamily: 'var(--mono)', color: 'var(--t2)', fontSize: 12 }} title={s.id}>
-            {s.id.slice(0, 8)}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t2)', fontSize: 12 }} title={s.id}>
+              {s.id.slice(0, 8)}
+            </span>
+            <span
+              title={s.friggPersisted ? 'Saved to FRIGG' : 'Not yet saved to FRIGG'}
+              style={{
+                fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
+                padding: '1px 4px', borderRadius: 3,
+                background: s.friggPersisted
+                  ? 'color-mix(in srgb, var(--suc) 14%, transparent)'
+                  : 'color-mix(in srgb, var(--wrn) 14%, transparent)',
+                color: s.friggPersisted ? 'var(--suc)' : 'var(--wrn)',
+                border: `1px solid ${s.friggPersisted
+                  ? 'color-mix(in srgb, var(--suc) 30%, transparent)'
+                  : 'color-mix(in srgb, var(--wrn) 30%, transparent)'}`,
+                lineHeight: '1.2',
+              }}
+            >
+              {s.friggPersisted ? 'F✓' : 'F?'}
+            </span>
+          </div>
         </td>
         <td><StatusBadge status={s.status} /></td>
         <td>
@@ -400,19 +479,17 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
           </span>
         </td>
         <td style={{ textAlign: 'center' }}>
-          {canExpand && (
-            <svg
-              width="13" height="13" viewBox="0 0 24 24" fill="none"
-              stroke={s.status === 'FAILED' ? 'var(--danger)' : 'var(--t3)'}
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              className={expanded ? css.chevronOpen : css.chevron}
-            >
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          )}
+          <svg
+            width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke={chevronColor}
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className={expanded ? css.chevronOpen : css.chevron}
+          >
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
         </td>
       </tr>
-      {expanded && canExpand && <DetailRow session={s} />}
+      {expanded && <DetailRow session={s} />}
     </>
   );
 }

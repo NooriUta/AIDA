@@ -128,6 +128,116 @@ class RemoteWriter {
         return map;
     }
 
+    /**
+     * Ad-hoc mode: resolves canonical vertex deduplication before the NDJSON batch.
+     *
+     * <p>Strategy:
+     * <ol>
+     *   <li>DaliSchema — pre-inserted via individual rcmd() with DuplicatedKeyException handling.
+     *       Then all DaliSchema RIDs are queried and returned.
+     *   <li>DaliTable / DaliColumn — queried for pre-existing records (those from prior files
+     *       in the same batch). Existing geoids are returned so the batch builder can skip them.
+     *       New tables/columns (not yet in DB) are still included in the batch payload.
+     * </ol>
+     *
+     * <p>The returned map (geoid → actual DB RID) is merged into {@code canonicalRids} of the
+     * {@link JsonlBatchBuilder}, causing those vertices to be skipped from the batch payload
+     * and edges to use actual DB RIDs instead of batch-local temporary IDs.
+     *
+     * @return geoid → actual DB RID for all pre-existing canonical vertices.
+     *         Empty map if {@code str} has no canonical vertices or queries fail.
+     */
+    /** Result of ad-hoc schema pre-insertion: RID map + which schema geoids are brand-new. */
+    private record AdHocInsertResult(Map<String, String> rids, Set<String> newSchemaGeoids) {}
+
+    @SuppressWarnings("unchecked")
+    private AdHocInsertResult preInsertAdHocSchemas(String sid, Structure str) {
+        if (str == null) return new AdHocInsertResult(Map.of(), Set.of());
+        Map<String, String> result = new HashMap<>();
+        Set<String> newSchemaGeoids = new LinkedHashSet<>();
+
+        // ── DaliSchema: pre-insert individually (UPSERT semantics) ────────────────
+        if (str.getSchemas() != null && !str.getSchemas().isEmpty()) {
+            for (var e : str.getSchemas().entrySet()) {
+                Map<String, Object> sc = (Map<String, Object>) e.getValue();
+                try {
+                    rcmd("INSERT INTO DaliSchema SET session_id=?, schema_geoid=?, schema_name=?, db_name=?, db_geoid=?",
+                            sid, e.getKey(), sc.get("name"), null, null);
+                    newSchemaGeoids.add(e.getKey()); // INSERT succeeded → this is a new schema
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                        logger.debug("[ad-hoc] DaliSchema '{}' already exists — reusing", e.getKey());
+                        // not added to newSchemaGeoids → will be counted as duplicate
+                    } else {
+                        throw ex;
+                    }
+                }
+            }
+            // Query actual RIDs for all schemas (newly inserted or pre-existing)
+            try {
+                Set<String> wanted = str.getSchemas().keySet();
+                var rs = db.query("sql",
+                        "SELECT @rid AS rid, schema_geoid FROM DaliSchema WHERE db_name IS NULL",
+                        Map.of());
+                while (rs.hasNext()) {
+                    var doc = rs.next().toMap();
+                    String geoid = (String) doc.get("schema_geoid");
+                    String rid   = (String) doc.get("rid");
+                    if (geoid != null && rid != null && wanted.contains(geoid)) {
+                        result.put(geoid, rid);
+                    }
+                }
+            } catch (Exception ex) {
+                logger.warn("[ad-hoc] Failed to query DaliSchema RIDs: {}", ex.getMessage());
+            }
+        }
+
+        // ── DaliTable: query pre-existing records (batch handles new ones) ─────────
+        if (str.getTables() != null && !str.getTables().isEmpty()) {
+            try {
+                Set<String> wanted = str.getTables().keySet();
+                var rs = db.query("sql",
+                        "SELECT @rid AS rid, table_geoid FROM DaliTable WHERE db_name IS NULL",
+                        Map.of());
+                while (rs.hasNext()) {
+                    var doc = rs.next().toMap();
+                    String geoid = (String) doc.get("table_geoid");
+                    String rid   = (String) doc.get("rid");
+                    if (geoid != null && rid != null && wanted.contains(geoid)) {
+                        result.put(geoid, rid);
+                    }
+                }
+            } catch (Exception ex) {
+                logger.warn("[ad-hoc] Failed to query DaliTable RIDs: {}", ex.getMessage());
+            }
+        }
+
+        // ── DaliColumn: query pre-existing records (batch handles new ones) ────────
+        if (str.getColumns() != null && !str.getColumns().isEmpty()) {
+            try {
+                Set<String> wanted = str.getColumns().keySet();
+                var rs = db.query("sql",
+                        "SELECT @rid AS rid, column_geoid FROM DaliColumn WHERE db_name IS NULL",
+                        Map.of());
+                while (rs.hasNext()) {
+                    var doc = rs.next().toMap();
+                    String geoid = (String) doc.get("column_geoid");
+                    String rid   = (String) doc.get("rid");
+                    if (geoid != null && rid != null && wanted.contains(geoid)) {
+                        result.put(geoid, rid);
+                    }
+                }
+            } catch (Exception ex) {
+                logger.warn("[ad-hoc] Failed to query DaliColumn RIDs: {}", ex.getMessage());
+            }
+        }
+
+        logger.debug("[ad-hoc] preInsertAdHocSchemas: {} canonical RIDs resolved (schemas+tables+columns), {} new schemas",
+                result.size(), newSchemaGeoids.size());
+        return new AdHocInsertResult(result, Collections.unmodifiableSet(newSchemaGeoids));
+    }
+
     private Map<String, String> buildOcByOrderMap(String sid) {
         Map<String, String> map = new HashMap<>();
         try {
@@ -487,10 +597,12 @@ class RemoteWriter {
             }
         }
 
-        // ── DaliAtom ──
+        // ── DaliAtom ── skip "routine" containers (duplicate view of statement atoms)
         for (var container : result.getAtoms().entrySet()) {
             @SuppressWarnings("unchecked")
             Map<String, Object> cont = (Map<String, Object>) container.getValue();
+            String sourceTypeAtom = (String) cont.get("source_type");
+            if ("routine".equals(sourceTypeAtom)) continue;
             String stmtGeoid = (String) cont.get("source_geoid");
             @SuppressWarnings("unchecked")
             Map<String, Map<String, Object>> atoms =
@@ -963,10 +1075,10 @@ class RemoteWriter {
      * Namespace-aware REMOTE_BATCH write: canonical phase via individual rcmd() calls,
      * session-specific objects via a single HTTP POST batch.
      */
-    void writeBatch(HttpBatchClient client, String sid, SemanticResult result,
-                    PipelineTimer timer, CanonicalPool pool, String dbName) {
+    WriteStats writeBatch(HttpBatchClient client, String sid, SemanticResult result,
+                          PipelineTimer timer, CanonicalPool pool, String dbName) {
         Structure str = result.getStructure();
-        if (str == null) return;
+        if (str == null) return new WriteStats();
 
         timer.start("write.batch");
 
@@ -984,10 +1096,19 @@ class RemoteWriter {
                 Map<String, Object> sc = (Map<String, Object>) e.getValue();
                 String cg = pool.canonicalSchema(e.getKey());
                 if (!pool.hasSchemaRid(cg)) {
-                    rcmd("INSERT INTO DaliSchema SET db_name=?, db_geoid=?, schema_geoid=?, schema_name=?",
-                            dbName, dbName, e.getKey(), sc.get("name"));
-                    pool.putSchemaRid(cg, cg);
-                    newSchemaGeoids.add(e.getKey());
+                    try {
+                        rcmd("INSERT INTO DaliSchema SET db_name=?, db_geoid=?, schema_geoid=?, schema_name=?",
+                                dbName, dbName, e.getKey(), sc.get("name"));
+                        pool.putSchemaRid(cg, cg);
+                        newSchemaGeoids.add(e.getKey());
+                    } catch (RuntimeException ex) {
+                        String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                            pool.putSchemaRid(cg, cg); // register to avoid re-attempting
+                            logger.debug("[pool] DaliSchema '{}' already exists in db '{}' — reusing", e.getKey(), dbName);
+                            // not in newSchemaGeoids → counted as duplicate below
+                        } else throw ex;
+                    }
                 }
             }
 
@@ -995,11 +1116,19 @@ class RemoteWriter {
                 TableInfo t = e.getValue();
                 String cg = pool.canonical(e.getKey());
                 if (!pool.hasTableRid(cg)) {
-                    rcmd("INSERT INTO DaliTable SET db_name=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?",
-                            dbName, e.getKey(), t.tableName(), t.schemaGeoid(), t.tableType(),
-                            toJson(new ArrayList<>(t.aliases())), t.columnCount());
-                    pool.putTableRid(cg, cg);
-                    newTableGeoids.add(e.getKey());
+                    try {
+                        rcmd("INSERT INTO DaliTable SET db_name=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?",
+                                dbName, e.getKey(), t.tableName(), t.schemaGeoid(), t.tableType(),
+                                toJson(new ArrayList<>(t.aliases())), t.columnCount());
+                        pool.putTableRid(cg, cg);
+                        newTableGeoids.add(e.getKey());
+                    } catch (RuntimeException ex) {
+                        String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                            pool.putTableRid(cg, cg);
+                            logger.debug("[pool] DaliTable '{}' already exists in db '{}' — reusing", e.getKey(), dbName);
+                        } else throw ex;
+                    }
                 }
             }
 
@@ -1007,13 +1136,21 @@ class RemoteWriter {
                 ColumnInfo c = e.getValue();
                 String cg = pool.canonicalCol(c.getTableGeoid(), c.getColumnName());
                 if (!pool.hasColumnRid(cg)) {
-                    rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?",
-                            dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
-                            c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
-                            c.getOrdinalPosition(),
-                            toJson(new ArrayList<>(c.getUsedInStatements())));
-                    pool.putColumnRid(cg, cg);
-                    newColumnGeoids.add(e.getKey());
+                    try {
+                        rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?",
+                                dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
+                                c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
+                                c.getOrdinalPosition(),
+                                toJson(new ArrayList<>(c.getUsedInStatements())));
+                        pool.putColumnRid(cg, cg);
+                        newColumnGeoids.add(e.getKey());
+                    } catch (RuntimeException ex) {
+                        String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                            pool.putColumnRid(cg, cg);
+                            logger.debug("[pool] DaliColumn '{}' already exists in db '{}' — reusing", e.getKey(), dbName);
+                        } else throw ex;
+                    }
                 }
             }
 
@@ -1068,14 +1205,43 @@ class RemoteWriter {
             builder = JsonlBatchBuilder.buildFromResult(sid, result,
                     rid.tables, rid.columns, rid.schemas);
 
+            // Register canonical type stats (DaliDatabase/Schema/Table/Column are outside the batch
+            // in pool mode; we know new vs duplicate from the rcmd phase above).
+            if (str.getDatabases() != null)
+                str.getDatabases().keySet().forEach(g -> builder.recordDuplicate("DaliDatabase"));
+            for (String geoid : str.getSchemas().keySet()) {
+                if (newSchemaGeoids.contains(geoid)) builder.recordInserted("DaliSchema");
+                else builder.recordDuplicate("DaliSchema");
+            }
+            for (String geoid : str.getTables().keySet()) {
+                if (newTableGeoids.contains(geoid)) builder.recordInserted("DaliTable");
+                else builder.recordDuplicate("DaliTable");
+            }
+            for (String geoid : str.getColumns().keySet()) {
+                if (newColumnGeoids.contains(geoid)) builder.recordInserted("DaliColumn");
+                else builder.recordDuplicate("DaliColumn");
+            }
+
         } else {
-            // ── Ad-hoc mode: all objects in one batch ──────────────────────────────
-            builder = JsonlBatchBuilder.buildFromResult(sid, result);
+            // ── Ad-hoc mode ──────────────────────────────────────────────────────────
+            // Pre-insert DaliSchema vertices individually with duplicate-key resilience.
+            // Without this, two files referencing the same schema (e.g. CRM) would both try
+            // to INSERT DaliSchema in their respective batches → DuplicatedKeyException.
+            AdHocInsertResult adHoc = preInsertAdHocSchemas(sid, str);
+            builder = JsonlBatchBuilder.buildFromResult(sid, result,
+                    adHoc.rids().isEmpty() ? null : adHoc.rids());
+
+            // Register schema new/dup counts (Table/Column duplicates are tracked in the factory
+            // via recordDuplicate; new Tables/Columns are tracked via appendVertex).
+            for (String geoid : str.getSchemas().keySet()) {
+                if (adHoc.newSchemaGeoids().contains(geoid)) builder.recordInserted("DaliSchema");
+                else builder.recordDuplicate("DaliSchema");
+            }
         }
 
         String payload = builder.build();
-        logger.debug("Batch payload: {} vertices, {} edges, {} bytes",
-                builder.vertexCount(), builder.edgeCount(), payload.length());
+        logger.debug("Batch payload: {} vertices, {} edges, {} dropped, {} bytes",
+                builder.vertexCount(), builder.edgeCount(), builder.droppedEdgeCount(), payload.length());
         client.send(payload, sid);
 
         // Post-batch: DaliSnippet (document type — batch endpoint rejects @type "document")
@@ -1087,11 +1253,15 @@ class RemoteWriter {
                     e.getValue().getLineStart(), e.getValue().getLineEnd());
         }
 
+        WriteStats ws = builder.writeStats();
         timer.stop("write.batch");
-        logger.info("ArcadeDB REMOTE_BATCH: sid={} db={} V:{} E:{} raw:{}b [{}]",
+        logger.info("ArcadeDB REMOTE_BATCH: sid={} db={} V:{} (dup:{}) E:{} dropped:{} atoms:{} raw:{}b [{}]",
                 sid, dbName != null ? dbName : "ad-hoc",
-                builder.vertexCount(), builder.edgeCount(),
+                ws.totalInserted(), ws.totalDuplicate(),
+                ws.edgeCount(), ws.droppedEdgeCount(),
+                ws.atomsInserted(),
                 payload.length(), formatTime(timer.ms("write.batch")));
+        return ws;
     }
 
     // ═══════════════════════════════════════════════════════════════
