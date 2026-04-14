@@ -595,11 +595,14 @@ public class KnotService {
     public Uni<String> knotSnippet(String idOrGeoid) {
         if (idOrGeoid == null || idOrGeoid.isBlank()) return Uni.createFrom().nullItem();
         boolean isRid = idOrGeoid.startsWith("#");
+        // ArcadeDB SQL subqueries return a result set, so the RID path must use
+        // `IN (SELECT …)` — `= (SELECT …)` compares a string to a record and
+        // always yields no rows (discovered the hard way during LOOM wire-up).
         String sql = isRid
             ? """
                 SELECT snippet
                 FROM DaliSnippet
-                WHERE stmt_geoid = (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid LIMIT 1)
+                WHERE stmt_geoid IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid)
                 LIMIT 1
                 """
             : """
