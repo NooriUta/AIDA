@@ -51,7 +51,15 @@ export type DaliEdgeType =
   | 'ROUTINE_USES_TABLE';
 
 // ─── Visualisation levels ────────────────────────────────────────────────────
-export type ViewLevel = 'L1' | 'L2' | 'L3';
+//
+// Per the 5-level plan in docs/loom/LOOM_5LEVEL_ARCHITECTURE.md:
+//   L1 — database/schema overview
+//   L2 — routines+tables aggregated (when filter.routineAggregate = true) or
+//        detailed table+stmt exploration (toggle off)
+//   L3 — legacy column-atom lineage (reachable via direct navigation)
+//   L4 — single-statement drill (subquery tree + output column flow)
+//   L5 — expression-column breakdown (deferred)
+export type ViewLevel = 'L1' | 'L2' | 'L3' | 'L4';
 
 // ─── Column info (used inside TableNodeData) ─────────────────────────────────
 export interface ColumnInfo {

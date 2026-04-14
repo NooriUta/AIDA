@@ -20,6 +20,9 @@ const FILTER_DEFAULTS = {
   // Default off — the canvas stays scoped to the current schema unless the
   // user explicitly opts in to seeing cross-schema lineage.
   includeExternal:  false,
+  // L2 view selector — Phase S2. Default true = new routines+tables
+  // aggregate view; flip to false for the legacy detailed exploration.
+  routineAggregate: true,
 };
 
 export function filterActions(set: Set) {
@@ -58,6 +61,8 @@ export function filterActions(set: Set) {
       set((s) => ({ filter: { ...s.filter, tableLevelView: !s.filter.tableLevelView } })),
     toggleIncludeExternal:  () =>
       set((s) => ({ filter: { ...s.filter, includeExternal: !s.filter.includeExternal } })),
+    toggleRoutineAggregate: () =>
+      set((s) => ({ filter: { ...s.filter, routineAggregate: !s.filter.routineAggregate } })),
     toggleCfEdges:          () =>
       set((s) => ({ filter: { ...s.filter, showCfEdges: !s.filter.showCfEdges } })),
     /** Switch between column mapping (cf edges + column level) and table mapping */

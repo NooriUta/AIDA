@@ -39,6 +39,12 @@ export interface FilterState {
   /** When true, L2 explore query fetches cross-schema READS_FROM / WRITES_TO
    *  edges (external sources). Default false — scoped to current schema. */
   includeExternal:  boolean;
+  /** Phase S2 — L2 view selector. When true, L2 fetches the new
+   *  `exploreRoutineAggregate` (routines + tables with aggregated edges).
+   *  When false, L2 uses the legacy `explore` path (tables + stmts + columns).
+   *  Defaults to true so the new drill chain L1 → L2agg → L3 → L4 is the
+   *  default experience. Toggle is exposed on the FilterToolbar. */
+  routineAggregate: boolean;
 }
 
 export interface L1ScopeItem {
@@ -157,6 +163,7 @@ export interface LoomStore {
   toggleCfEdges:         () => void;
   toggleMappingMode:     () => void;
   toggleIncludeExternal: () => void;
+  toggleRoutineAggregate: () => void;
   clearFilter:          () => void;
   setAvailableFields:   (fields: string[]) => void;
   setAvailableTables:   (tables: { id: string; label: string }[]) => void;
@@ -209,6 +216,7 @@ export const FILTER_DEFAULTS: FilterState = {
   tableLevelView:   false,
   showCfEdges:      true,
   includeExternal:  false,
+  routineAggregate: true,
 };
 
 // ─── Store ────────────────────────────────────────────────────────────────────
