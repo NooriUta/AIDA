@@ -1,6 +1,7 @@
 import { memo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { FileCode } from 'lucide-react';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { useKnotSnippet } from '../../services/hooks';
 import { InspectorSection, InspectorRow } from './InspectorSection';
@@ -15,17 +16,102 @@ const OP_COLORS: Record<string, string> = {
   DROP:   '#c85c5c', TRUNCATE: '#c85c5c', SQ: '#88B8A8', CURSOR: '#88B8A8',
 };
 
-function OpBadge({ op }: { op: string }) {
-  const color = OP_COLORS[op] ?? 'var(--t3)';
+// (OpBadge removed — operation is now rendered inside StatementHeaderCard
+// via the per-op colour on the icon + badge; the old Type row is gone from
+// the Properties section.)
+
+// ── Header card ─────────────────────────────────────────────────────────────
+// Mirrors the canvas StatementNode header (src/components/canvas/nodes/StatementNode.tsx):
+// FileCode icon on the left, vertical groupPath breadcrumb, bold statement
+// label, and an op-colour badge on the right. Beneath the header we show the
+// output-column count as a subline, same as the canvas card.
+
+function StatementHeaderCard({
+  label, groupPath, operation, columnCount,
+}: {
+  label: string;
+  groupPath: string[];
+  operation: string;
+  columnCount: number;
+}) {
+  const { t } = useTranslation();
+  const typeColor = OP_COLORS[operation] ?? 'var(--t3)';
   return (
-    <span style={{
-      fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em',
-      padding: '1px 6px', borderRadius: 4,
-      background: `color-mix(in srgb, ${color} 18%, transparent)`,
-      color, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
-    }}>
-      {op}
-    </span>
+    <div
+      role="heading"
+      aria-level={2}
+      style={{
+        display:      'flex',
+        alignItems:   'flex-start',
+        gap:          'var(--seer-space-2)',
+        padding:      '10px 12px',
+        background:   'var(--bg3)',
+        borderBottom: '1px solid var(--bd)',
+      }}
+    >
+      <FileCode size={14} color={typeColor} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        {groupPath.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 3 }}>
+            {groupPath.map((seg, i) => (
+              <div
+                key={i}
+                title={seg}
+                style={{
+                  fontSize:     '9px',
+                  color:        'var(--t3)',
+                  opacity:      0.6 + i * 0.15,
+                  overflow:     'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace:   'nowrap',
+                  lineHeight:   '13px',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {seg}
+              </div>
+            ))}
+          </div>
+        )}
+        <div
+          title={label}
+          style={{
+            fontWeight:   600,
+            fontSize:     '13px',
+            color:        'var(--t1)',
+            overflow:     'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace:   'nowrap',
+          }}
+        >
+          {label}
+        </div>
+        {columnCount > 0 && (
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: 1 }}>
+            {t('nodes.outputColumns', { count: columnCount })}
+          </div>
+        )}
+      </div>
+      {operation && (
+        <span
+          style={{
+            fontSize:      '9px',
+            padding:       '2px 6px',
+            borderRadius:  3,
+            fontFamily:    'var(--mono)',
+            border:        `0.5px solid ${typeColor}`,
+            color:         typeColor,
+            opacity:       0.85,
+            flexShrink:    0,
+            letterSpacing: '0.04em',
+            fontWeight:    700,
+            marginTop:     2,
+          }}
+        >
+          {operation}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -153,8 +239,27 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
     navigate(`/knot?${params.toString()}`);
   };
 
+  // Short display label for the header card: if `data.label` is already the
+  // short form (e.g. "MERGE:46") use it as-is, otherwise split the full
+  // geoid-style label on the last ':' to keep it tight.
+  const shortLabel = (() => {
+    const l = data.label || 'Statement';
+    if (l === fullLabel && l.includes(':')) {
+      const tail = l.split(':').slice(-2).join(':');
+      return tail || l;
+    }
+    return l;
+  })();
+
   return (
     <>
+      <StatementHeaderCard
+        label={shortLabel}
+        groupPath={groupPath}
+        operation={operation || data.nodeType}
+        columnCount={columns.length}
+      />
+
       <TabBar
         active={tab}
         onChange={setTab}
@@ -164,11 +269,9 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
       {tab === 'main' ? (
         <div role="tabpanel" aria-label={t('inspector.tabMain')}>
           <InspectorSection title={t('inspector.properties')}>
-            <InspectorRow label={t('inspector.type')}  value={<OpBadge op={operation || data.nodeType} />} />
-            <InspectorRow label={t('inspector.label')} value={fullLabel} />
-            {groupPath.length > 0 && (
-              <InspectorRow label={t('inspector.path')} value={groupPath.join(' › ')} />
-            )}
+            {/* Type / Label / Path are now shown in the header card above —
+                keep only the database RID here since the user needs it for
+                DB-level cross-referencing. */}
             <InspectorRow label={t('inspector.id')} value={nodeId} />
             <div style={{ padding: '6px 10px 4px' }}>
               <button

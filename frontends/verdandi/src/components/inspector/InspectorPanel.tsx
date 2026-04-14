@@ -53,13 +53,12 @@ export const InspectorPanel = memo(() => {
     );
   }
 
-  // DaliStatement
+  // DaliStatement — no InspectorHeader; InspectorStatement renders its own
+  // rich header that mirrors the canvas StatementNode card (icon, groupPath,
+  // title, op-badge, column-count subline).
   if (nodeType === 'DaliStatement') {
     return wrapPanel(
-      <>
-        <InspectorHeader label={selectedNodeData.label} />
-        <InspectorStatement data={selectedNodeData} nodeId={selectedNodeId} />
-      </>
+      <InspectorStatement data={selectedNodeData} nodeId={selectedNodeId} />
     );
   }
 
