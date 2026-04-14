@@ -300,6 +300,133 @@ public class ExploreService {
             .flatMap(this::enrichDataSource);
     }
 
+    // ── Routine aggregate scope (new L2) ─────────────────────────────────────
+    //
+    // Phase S2.1 / Phase 2 from the original 5-level plan. Returns routines +
+    // tables with aggregated READS_FROM / WRITES_TO edges: for every DaliRoutine
+    // in the given schema/package scope, unions the edges of every DaliStatement
+    // contained in that routine via CONTAINS_STMT and collapses them to a
+    // single (routine → table) per (direction, table). Each edge carries a
+    // stmt_count — how many distinct statements inside the routine hit that
+    // table — via the meta-scope field so the frontend transform can pick it
+    // up and draw thicker/labelled lines when the count is high.
+    //
+    // Scope parsing uses the same "schema-<name>" / "pkg-<name>" prefix
+    // convention as explore(). Package scope resolves routines under that
+    // package directly; schema scope covers both schema-direct routines and
+    // routines nested inside packages (via CONTAINS_ROUTINE*0..1).
+
+    public Uni<ExploreResult> exploreRoutineAggregate(String scope) {
+        ScopeRef ref = ScopeRef.parse(scope);
+        boolean isPackage = "pkg".equals(ref.type());
+        String scopeName  = ref.name();
+
+        // Scope match differs per kind — but we avoid stacking two variable-
+        // length patterns with the data-flow walk because the combination
+        // timed out at 30s on real schemas. Use TWO explicit schema branches
+        // (direct routine + package-mediated routine) for schema scope, and
+        // a single branch for package scope. No CHILD_OF hoist for the first
+        // pass — aggregation counts direct-level reads/writes only. If
+        // missing-hoist turns out to hide real sources, Phase S2.3 can add
+        // it back with a careful Cypher budget.
+        String cypher;
+        Map<String, Object> params;
+        if (isPackage) {
+            cypher = """
+                MATCH (p:DaliPackage {package_name: $scope})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
+                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
+                WHERE coalesce(stmt.parent_statement, '') = ''
+                OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
+                OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
+                WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
+                RETURN id(r) AS src, r.routine_name AS srcLabel, reads, writes
+                LIMIT 300
+                """;
+            params = Map.of("scope", scopeName);
+        } else {
+            cypher = """
+                MATCH (s:DaliSchema) WHERE s.schema_geoid = $scope
+                MATCH (s)-[:CONTAINS_ROUTINE]->(n1)
+                OPTIONAL MATCH (n1)-[:CONTAINS_ROUTINE]->(nested:DaliRoutine)
+                WITH s, CASE WHEN n1:DaliRoutine THEN n1 ELSE nested END AS r
+                WHERE r IS NOT NULL
+                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
+                WHERE coalesce(stmt.parent_statement, '') = ''
+                OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
+                OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
+                WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
+                RETURN id(r) AS src, r.routine_name AS srcLabel, reads, writes
+                LIMIT 300
+                """;
+            params = Map.of("scope", scopeName);
+        }
+
+        // Post-process rows in Java: flatten (routine, table) pairs into
+        // ExploreResult rows. buildResult() will dedup and build the node
+        // map. We also emit one "node-only" row per routine so routines
+        // with zero reads/writes still render as standalone nodes.
+        return arcade.cypher(cypher, params)
+            .map(rows -> {
+                var flatRows = new ArrayList<Map<String, Object>>();
+                for (var row : rows) {
+                    String rId    = str(row, "src");
+                    String rLabel = str(row, "srcLabel");
+                    if (rId == null || rId.isEmpty()) continue;
+
+                    // Routine self-node — emitted via a dummy edge so
+                    // buildResult registers the routine even without any reads/writes
+                    var selfRow = new HashMap<String, Object>();
+                    selfRow.put("srcId",       rId);
+                    selfRow.put("srcLabel",    rLabel);
+                    selfRow.put("srcType",     "DaliRoutine");
+                    selfRow.put("tgtId",       rId);
+                    selfRow.put("tgtLabel",    rLabel);
+                    selfRow.put("tgtScope",    "");
+                    selfRow.put("tgtType",     "DaliRoutine");
+                    selfRow.put("edgeType",    "NODE_ONLY");
+                    selfRow.put("sourceHandle", "");
+                    selfRow.put("targetHandle", "");
+                    flatRows.add(selfRow);
+
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> reads = (List<Map<String, Object>>) row.get("reads");
+                    if (reads != null) {
+                        for (var t : reads) {
+                            if (t == null) continue;
+                            flatRows.add(makeRoutineTableRow(rId, rLabel, t, "READS_FROM"));
+                        }
+                    }
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> writes = (List<Map<String, Object>>) row.get("writes");
+                    if (writes != null) {
+                        for (var t : writes) {
+                            if (t == null) continue;
+                            flatRows.add(makeRoutineTableRow(rId, rLabel, t, "WRITES_TO"));
+                        }
+                    }
+                }
+                return buildResult(flatRows, scopeName, isPackage ? "DaliPackage" : "DaliSchema");
+            })
+            .flatMap(this::enrichDataSource);
+    }
+
+    /** Helper: build one (routine → table) row in the uniform format buildResult() expects. */
+    private static Map<String, Object> makeRoutineTableRow(String rId, String rLabel,
+                                                           Map<String, Object> t, String edgeType) {
+        var row = new HashMap<String, Object>();
+        row.put("srcId",       rId);
+        row.put("srcLabel",    rLabel);
+        row.put("srcType",     "DaliRoutine");
+        row.put("tgtId",       str(t, "@rid"));
+        row.put("tgtLabel",    str(t, "table_name"));
+        row.put("tgtScope",    str(t, "schema_geoid"));
+        row.put("tgtType",     "DaliTable");
+        row.put("edgeType",    edgeType);
+        row.put("sourceHandle", "");
+        row.put("targetHandle", "");
+        return row;
+    }
+
     // ── Database scope (all schemas in a DB) ─────────────────────────────────
 
     /**

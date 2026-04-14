@@ -51,6 +51,30 @@ public class LineageResource {
 
     // ── L2: Explore ───────────────────────────────────────────────────────────
 
+    @Query("exploreRoutineAggregate")
+    @Description("New L2 — routines + tables with aggregated READS_FROM / WRITES_TO edges (cross-routine data flow at a glance, no per-statement explosion). Role: viewer+")
+    public Uni<ExploreResult> exploreRoutineAggregate(
+        @Name("scope")
+        @Description("'schema-<name>' or 'pkg-<name>'")
+        String scope
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "exploreRoutineAggregate", "scope", scope != null ? scope : "",
+                       "call", call("exploreRoutineAggregate", "scope", scope != null ? scope : "")));
+        return exploreService.exploreRoutineAggregate(scope)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",    "exploreRoutineAggregate",
+                               "scope", scope != null ? scope : "",
+                               "nodes", result != null ? result.nodes().size() : 0,
+                               "edges", result != null ? result.edges().size() : 0,
+                               "call",  call("exploreRoutineAggregate", "scope", scope != null ? scope : "")
+                                        + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                        + (result != null ? result.edges().size() : 0) + " edges")));
+    }
+
     @Query("explore")
     @Description("L2 — tables and routines within a schema or package scope. Role: viewer+")
     public Uni<ExploreResult> explore(
