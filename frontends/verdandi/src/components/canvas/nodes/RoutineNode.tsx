@@ -22,7 +22,7 @@ export const RoutineNode = memo(({ data, selected, id }: NodeProps<RoutineNodeTy
       }}
       onClick={() => selectNode(id)}
     >
-      <NodeExpandButtons nodeId={id} show={selected ?? false} />
+      <NodeExpandButtons nodeId={id} show />
       <Handle type="target" position={Position.Left}  style={{ background: 'var(--suc)' }} />
 
       <div style={{ padding: 'var(--seer-space-3)' }}>

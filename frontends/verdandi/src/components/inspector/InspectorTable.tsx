@@ -1,10 +1,91 @@
 import { memo } from 'react';
-import { KeyRound, Link2 } from 'lucide-react';
+import { KeyRound, Link2, Table2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { InspectorSection, InspectorRow } from './InspectorSection';
 
 interface Props { data: DaliNodeData; nodeId: string }
+
+// ── Header card ─────────────────────────────────────────────────────────────
+// Mirrors the canvas TableNode header: Table2 icon, small schema label above,
+// bold table name, column-count subline with optional data-source badge.
+// Background uses var(--bg0) (darkest) + a left-accent border so the header
+// reads as a distinct heading zone compared to the content area.
+
+function TableHeaderCard({
+  label, schema, columnCount, dataSource,
+}: {
+  label: string;
+  schema: string | undefined;
+  columnCount: number;
+  dataSource: string | undefined;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="heading"
+      aria-level={2}
+      style={{
+        display:      'flex',
+        alignItems:   'flex-start',
+        gap:          'var(--seer-space-2)',
+        padding:      '12px 14px',
+        background:   'var(--bg0)',
+        borderBottom: '1px solid var(--bd)',
+        borderLeft:   '3px solid var(--acc)',
+      }}
+    >
+      <Table2 size={14} color="var(--acc)" strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        {schema && (
+          <div style={{
+            fontSize:     '9px',
+            color:        'var(--t3)',
+            opacity:      0.7,
+            overflow:     'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace:   'nowrap',
+            marginBottom: 2,
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+          }}>
+            {schema}
+          </div>
+        )}
+        <div
+          title={label}
+          style={{
+            fontWeight:   700,
+            fontSize:     '13px',
+            color:        'var(--t1)',
+            overflow:     'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace:   'nowrap',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {label}
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+          {columnCount} {t('nodes.columns')}
+          {dataSource && (
+            <span style={{
+              fontSize: 8, padding: '1px 4px', borderRadius: 2, flexShrink: 0,
+              fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.03em',
+              background: dataSource === 'master'
+                ? 'color-mix(in srgb, var(--suc) 15%, transparent)'
+                : 'color-mix(in srgb, var(--wrn) 15%, transparent)',
+              border: `0.5px solid ${dataSource === 'master' ? 'var(--suc)' : 'var(--wrn)'}`,
+              color: dataSource === 'master' ? 'var(--suc)' : 'var(--wrn)',
+            }}>
+              {dataSource}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ColBadge({ label, color }: { label: string; color: string }) {
   return (
@@ -56,14 +137,24 @@ function ColumnRow({ col }: { col: ColumnInfo }) {
 export const InspectorTable = memo(({ data, nodeId }: Props) => {
   const { t } = useTranslation();
   const columns = data.columns ?? [];
+  const dataSource = typeof data.metadata?.dataSource === 'string' ? data.metadata.dataSource : undefined;
 
   return (
     <>
+      <TableHeaderCard
+        label={data.label}
+        schema={data.schema}
+        columnCount={columns.length}
+        dataSource={dataSource}
+      />
+
       <InspectorSection title={t('inspector.properties')}>
-        <InspectorRow label={t('inspector.label')}  value={data.label} />
-        <InspectorRow label={t('inspector.type')}   value={data.nodeType} />
-        {data.schema && <InspectorRow label={t('inspector.schema')} value={data.schema} />}
-        <InspectorRow label={t('inspector.id')}     value={nodeId} />
+        {/* @rid row + standard ID row for fast copy-paste into ArcadeDB
+            queries (`WHERE @rid = '#25:1234'`). Same value in both — kept
+            for debugging ergonomics. Table label / schema / type are
+            already shown in the header card above, so they're omitted here. */}
+        <InspectorRow label="@rid" value={nodeId} />
+        <InspectorRow label={t('inspector.id')} value={nodeId} />
       </InspectorSection>
 
       <InspectorSection title={`${t('inspector.columns')} (${columns.length})`} defaultOpen={columns.length > 0}>

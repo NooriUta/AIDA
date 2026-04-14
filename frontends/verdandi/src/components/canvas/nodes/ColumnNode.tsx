@@ -28,7 +28,7 @@ export const ColumnNode = memo(({ data, selected, id }: NodeProps<ColumnNodeType
       }}
       onClick={() => selectNode(id)}
     >
-      <NodeExpandButtons nodeId={id} show={selected ?? false} />
+      <NodeExpandButtons nodeId={id} show />
       <Handle type="target" position={Position.Left}  style={{ background: 'var(--inf)' }} />
 
       <div style={{ padding: 'var(--seer-space-2) var(--seer-space-3)' }}>

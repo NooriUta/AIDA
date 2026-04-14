@@ -11,7 +11,10 @@ import { ToolbarDivider, IconLayers, ToolbarToggleButton } from '../ui/ToolbarPr
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEPTH_STEPS = [1, 2, 3, 5, 7, Infinity] as const;
-const DEPTH_DEFAULT = 5;
+// Default depth = ∞ so sources/sinks load lazily without arbitrary cap —
+// user-requested: "не должно быть ограничений подгрузки". The user can
+// still click a numeric preset if they want to narrow down.
+const DEPTH_DEFAULT = Infinity;
 
 // ─── Icons (inline SVG — no dependency) ──────────────────────────────────────
 function IconRoutine() {

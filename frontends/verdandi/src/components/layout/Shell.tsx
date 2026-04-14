@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Header } from './Header';
@@ -12,10 +12,27 @@ import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useLoomStore } from '../../stores/loomStore';
 import { useHotkeys } from '../../hooks/useHotkeys';
 
+/** Inspector panel maximum width = 40% of the viewport (floored at 480px).
+ *  Tracked with a window resize listener so dragging the browser wider / narrower
+ *  keeps the upper bound in sync without forcing the user to reload. */
+function useInspectorMaxWidth(): number {
+  const compute = () => Math.max(480, Math.round(window.innerWidth * 0.4));
+  const [max, setMax] = useState<number>(() =>
+    typeof window === 'undefined' ? 480 : compute(),
+  );
+  useEffect(() => {
+    const onResize = () => setMax(compute());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return max;
+}
+
 export const Shell = memo(() => {
   const { t } = useTranslation();
   const { viewLevel, jumpTo, selectNode, requestFitView, undo, redo } = useLoomStore();
   const [searchParams, setSearchParams] = useSearchParams();
+  const inspectorMaxWidth = useInspectorMaxWidth();
 
   // KNOT → LOOM: auto-navigate to package when ?pkg= param is present
   useEffect(() => {
@@ -56,8 +73,15 @@ export const Shell = memo(() => {
           </div>
         </div>
 
-        {/* Right panel — KNOT Inspector */}
-        <ResizablePanel side="right" defaultWidth={300} minWidth={200} maxWidth={480} title={t('panel.inspector')}>
+        {/* Right panel — KNOT Inspector. Max width = 40% of the viewport so
+            large SQL snippets or wide column lists can be dragged out. */}
+        <ResizablePanel
+          side="right"
+          defaultWidth={320}
+          minWidth={240}
+          maxWidth={inspectorMaxWidth}
+          title={t('panel.inspector')}
+        >
           <InspectorPanel />
         </ResizablePanel>
 

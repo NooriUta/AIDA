@@ -43,13 +43,11 @@ export const InspectorPanel = memo(() => {
     </div>
   );
 
-  // DaliTable
+  // DaliTable — InspectorTable renders its own rich header (schema + table
+  // name + type badge + column count), mirroring the canvas TableNode.
   if (nodeType === 'DaliTable') {
     return wrapPanel(
-      <>
-        <InspectorHeader label={selectedNodeData.label} />
-        <InspectorTable data={selectedNodeData} nodeId={selectedNodeId} />
-      </>
+      <InspectorTable data={selectedNodeData} nodeId={selectedNodeId} />
     );
   }
 

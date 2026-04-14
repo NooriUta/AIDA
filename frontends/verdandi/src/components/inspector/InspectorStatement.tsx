@@ -8,7 +8,7 @@ import { InspectorSection, InspectorRow } from './InspectorSection';
 
 interface Props { data: DaliNodeData; nodeId: string }
 
-type InspectorTab = 'main' | 'sql';
+type InspectorTab = 'main' | 'extra' | 'stats' | 'sql';
 
 const OP_COLORS: Record<string, string> = {
   INSERT: '#D4922A', UPDATE: '#D4922A', MERGE: '#D4922A', DELETE: '#c85c5c',
@@ -16,15 +16,11 @@ const OP_COLORS: Record<string, string> = {
   DROP:   '#c85c5c', TRUNCATE: '#c85c5c', SQ: '#88B8A8', CURSOR: '#88B8A8',
 };
 
-// (OpBadge removed — operation is now rendered inside StatementHeaderCard
-// via the per-op colour on the icon + badge; the old Type row is gone from
-// the Properties section.)
-
 // ── Header card ─────────────────────────────────────────────────────────────
-// Mirrors the canvas StatementNode header (src/components/canvas/nodes/StatementNode.tsx):
-// FileCode icon on the left, vertical groupPath breadcrumb, bold statement
-// label, and an op-colour badge on the right. Beneath the header we show the
-// output-column count as a subline, same as the canvas card.
+// Mirrors the canvas StatementNode header — FileCode icon, groupPath breadcrumb
+// with a left-accent border, bold title, op-colour badge, column-count subline.
+// Background uses var(--bg0) (darkest panel token) so the header reads as a
+// distinct "heading" zone compared to the content below (var(--bg2)).
 
 function StatementHeaderCard({
   label, groupPath, operation, columnCount,
@@ -41,18 +37,19 @@ function StatementHeaderCard({
       role="heading"
       aria-level={2}
       style={{
-        display:      'flex',
-        alignItems:   'flex-start',
-        gap:          'var(--seer-space-2)',
-        padding:      '10px 12px',
-        background:   'var(--bg3)',
-        borderBottom: '1px solid var(--bd)',
+        display:        'flex',
+        alignItems:     'flex-start',
+        gap:            'var(--seer-space-2)',
+        padding:        '12px 14px',
+        background:     'var(--bg0)',
+        borderBottom:   '1px solid var(--bd)',
+        borderLeft:     `3px solid ${typeColor}`,
       }}
     >
       <FileCode size={14} color={typeColor} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 2 }} />
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {groupPath.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 4 }}>
             {groupPath.map((seg, i) => (
               <div
                 key={i}
@@ -65,7 +62,8 @@ function StatementHeaderCard({
                   textOverflow: 'ellipsis',
                   whiteSpace:   'nowrap',
                   lineHeight:   '13px',
-                  letterSpacing: '0.02em',
+                  letterSpacing: '0.03em',
+                  textTransform: i === 0 ? 'uppercase' : 'none',
                 }}
               >
                 {seg}
@@ -76,18 +74,19 @@ function StatementHeaderCard({
         <div
           title={label}
           style={{
-            fontWeight:   600,
+            fontWeight:   700,
             fontSize:     '13px',
             color:        'var(--t1)',
             overflow:     'hidden',
             textOverflow: 'ellipsis',
             whiteSpace:   'nowrap',
+            letterSpacing: '0.02em',
           }}
         >
           {label}
         </div>
         {columnCount > 0 && (
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: 1 }}>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: 2 }}>
             {t('nodes.outputColumns', { count: columnCount })}
           </div>
         )}
@@ -96,12 +95,12 @@ function StatementHeaderCard({
         <span
           style={{
             fontSize:      '9px',
-            padding:       '2px 6px',
+            padding:       '2px 7px',
             borderRadius:  3,
             fontFamily:    'var(--mono)',
             border:        `0.5px solid ${typeColor}`,
             color:         typeColor,
-            opacity:       0.85,
+            opacity:       0.9,
             flexShrink:    0,
             letterSpacing: '0.04em',
             fontWeight:    700,
@@ -151,7 +150,7 @@ function TabBar({
 }: {
   active: InspectorTab;
   onChange: (t: InspectorTab) => void;
-  labels: { main: string; sql: string };
+  labels: Record<InspectorTab, string>;
 }) {
   return (
     <div
@@ -166,16 +165,10 @@ function TabBar({
         zIndex: 1,
       }}
     >
-      <TabButton
-        active={active === 'main'}
-        onClick={() => onChange('main')}
-        label={labels.main}
-      />
-      <TabButton
-        active={active === 'sql'}
-        onClick={() => onChange('sql')}
-        label={labels.sql}
-      />
+      <TabButton active={active === 'main'}  onClick={() => onChange('main')}  label={labels.main} />
+      <TabButton active={active === 'extra'} onClick={() => onChange('extra')} label={labels.extra} />
+      <TabButton active={active === 'stats'} onClick={() => onChange('stats')} label={labels.stats} />
+      <TabButton active={active === 'sql'}   onClick={() => onChange('sql')}   label={labels.sql} />
     </div>
   );
 }
@@ -194,18 +187,21 @@ function TabButton({
       onClick={onClick}
       style={{
         flex: 1,
-        padding: '8px 12px',
+        padding: '8px 6px',
         background: 'transparent',
         border: 'none',
         borderBottom: `2px solid ${active ? 'var(--acc)' : 'transparent'}`,
         color: active ? 'var(--acc)' : 'var(--t2)',
-        fontSize: '10px',
+        fontSize: '9px',
         fontWeight: active ? 700 : 500,
-        letterSpacing: '0.08em',
+        letterSpacing: '0.06em',
         textTransform: 'uppercase',
         cursor: 'pointer',
         transition: 'color 0.12s, border-color 0.12s, background 0.08s',
         fontFamily: 'inherit',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
       }}
       onMouseEnter={(e) => {
         if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--bg2)';
@@ -263,15 +259,22 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
       <TabBar
         active={tab}
         onChange={setTab}
-        labels={{ main: t('inspector.tabMain'), sql: t('inspector.sql') }}
+        labels={{
+          main:  t('inspector.tabMain'),
+          extra: t('inspector.tabExtra'),
+          stats: t('inspector.tabStats'),
+          sql:   t('inspector.sql'),
+        }}
       />
 
-      {tab === 'main' ? (
+      {tab === 'main' && (
         <div role="tabpanel" aria-label={t('inspector.tabMain')}>
           <InspectorSection title={t('inspector.properties')}>
-            {/* Type / Label / Path are now shown in the header card above —
-                keep only the database RID here since the user needs it for
-                DB-level cross-referencing. */}
+            {/* @rid row — same value as the React Flow node id, labeled
+                verbatim for fast copy-paste into ArcadeDB Cypher / SQL
+                queries (`WHERE @rid = '#25:6150'`). Kept alongside the
+                standard ID row so both styles of debugging work. */}
+            <InspectorRow label="@rid" value={nodeId} />
             <InspectorRow label={t('inspector.id')} value={nodeId} />
             <div style={{ padding: '6px 10px 4px' }}>
               <button
@@ -294,7 +297,6 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
               </button>
             </div>
           </InspectorSection>
-
           <InspectorSection
             title={`${t('inspector.outputColumns')} (${columns.length})`}
             defaultOpen={columns.length > 0}
@@ -310,7 +312,34 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
             )}
           </InspectorSection>
         </div>
-      ) : (
+      )}
+
+      {tab === 'extra' && (
+        <div role="tabpanel" aria-label={t('inspector.tabExtra')}>
+          <ExtraPanel stmtGeoid={nodeId} />
+          <InspectorSection title={t('inspector.metadata')}>
+            <InspectorRow label={t('inspector.fullLabel')} value={fullLabel} />
+            {data.schema && <InspectorRow label={t('inspector.schema')} value={data.schema} />}
+            {groupPath.length > 0 && (
+              <InspectorRow label={t('inspector.path')} value={groupPath.join(' › ')} />
+            )}
+            {typeof data.metadata?.dataSource === 'string' && (
+              <InspectorRow label={t('inspector.dataSource')} value={data.metadata.dataSource} />
+            )}
+            {typeof data.metadata?.session_id === 'string' && (
+              <InspectorRow label={t('inspector.sessionId')} value={data.metadata.session_id as string} />
+            )}
+          </InspectorSection>
+        </div>
+      )}
+
+      {tab === 'stats' && (
+        <div role="tabpanel" aria-label={t('inspector.tabStats')}>
+          <StatsPanel data={data} columns={columns} groupPath={groupPath} />
+        </div>
+      )}
+
+      {tab === 'sql' && (
         <div role="tabpanel" aria-label={t('inspector.sql')}>
           <SqlPanel data={data} stmtGeoid={nodeId} />
         </div>
@@ -321,6 +350,80 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
 
 InspectorStatement.displayName = 'InspectorStatement';
 
+// ── Extra panel ──────────────────────────────────────────────────────────────
+//
+// Surfaces data that requires a backend lookup beyond the L2 `explore` query:
+//   * all recursive CHILD_OF / USES_SUBQUERY descendants of this stmt
+//   * DaliAtom statistics grouped by parent_context (WHERE / HAVING / JOIN / SELECT)
+//   * counts of join / filter / subquery atoms
+//
+// The fetch is wired to a new `statementExtras(idOrRid)` GraphQL resolver
+// (KnotService.knotStatementExtras) that is added in the same commit as
+// this component. Until the resolver ships, this renders a placeholder.
+
+function ExtraPanel({ stmtGeoid }: { stmtGeoid: string }) {
+  const { t } = useTranslation();
+  // TODO: swap this placeholder for useStatementExtras(stmtGeoid) once the
+  // backend resolver is live (tracking in the current sprint plan, Phase 6c).
+  return (
+    <>
+      <InspectorSection title={t('inspector.subqueries')}>
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)', fontStyle: 'italic' }}>
+          {t('inspector.extraPending')}
+        </div>
+        <div style={{ padding: '2px 10px 6px', fontSize: '10px', color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
+          @rid = {stmtGeoid}
+        </div>
+      </InspectorSection>
+      <InspectorSection title={t('inspector.filters')}>
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)', fontStyle: 'italic' }}>
+          {t('inspector.extraPending')}
+        </div>
+      </InspectorSection>
+      <InspectorSection title={t('inspector.atomStats')}>
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)', fontStyle: 'italic' }}>
+          {t('inspector.extraPending')}
+        </div>
+      </InspectorSection>
+    </>
+  );
+}
+
+// ── Stats panel ──────────────────────────────────────────────────────────────
+
+function StatsPanel({
+  data, columns, groupPath,
+}: {
+  data: DaliNodeData;
+  columns: ColumnInfo[];
+  groupPath: string[];
+}) {
+  const { t } = useTranslation();
+  const pkCount = columns.filter((c) => c.isPrimaryKey).length;
+  const fkCount = columns.filter((c) => c.isForeignKey).length;
+  const typedCount = columns.filter((c) => !!c.type).length;
+  const lineStart = typeof data.metadata?.line_start === 'number' ? data.metadata.line_start : null;
+  const lineEnd   = typeof data.metadata?.line_end   === 'number' ? data.metadata.line_end   : null;
+
+  return (
+    <InspectorSection title={t('inspector.statistics')}>
+      <InspectorRow label={t('inspector.statsOutputCount')} value={String(columns.length)} />
+      {pkCount > 0 && <InspectorRow label={t('inspector.statsPkCount')} value={String(pkCount)} />}
+      {fkCount > 0 && <InspectorRow label={t('inspector.statsFkCount')} value={String(fkCount)} />}
+      {typedCount > 0 && (
+        <InspectorRow label={t('inspector.statsTypedCount')} value={`${typedCount} / ${columns.length}`} />
+      )}
+      <InspectorRow label={t('inspector.statsScopeDepth')} value={String(groupPath.length)} />
+      {(lineStart !== null || lineEnd !== null) && (
+        <InspectorRow
+          label={t('inspector.statsLineRange')}
+          value={`${lineStart ?? '?'}–${lineEnd ?? '?'}`}
+        />
+      )}
+    </InspectorSection>
+  );
+}
+
 // ── SQL panel ────────────────────────────────────────────────────────────────
 //
 // Source of the SQL text, in priority order:
@@ -329,14 +432,14 @@ InspectorStatement.displayName = 'InspectorStatement';
 //   3. useKnotSnippet(geoid)   — lazy GraphQL fetch from DaliSnippet via
 //                                services/shuttle KnotService.knotSnippet.
 //
-// The DaliStatement's React Flow node id equals the stmt_geoid (see
-// transformExplore.ts where allStmtIds feeds rfNodes[].id), so we pass
-// the inspector's nodeId directly to useKnotSnippet.
+// The DaliStatement's React Flow node id equals the ArcadeDB @rid, so we
+// pass the inspector's nodeId directly to useKnotSnippet. The backend
+// accepts either @rid (#25:1234) or stmt_geoid (ADR: see KnotService.java).
 //
 // Because the SQL panel is only mounted when tab === 'sql', the query hook
-// stays lazy for free: it first fires the moment the user clicks the tab,
-// and React Query caches for staleTime (5 min) so re-opening the tab for
-// the same statement is instant.
+// stays lazy for free: it fires the moment the user clicks the tab, and
+// React Query caches for staleTime (5 min) so re-opening the tab for the
+// same statement is instant.
 
 function SqlPanel({ data, stmtGeoid }: { data: DaliNodeData; stmtGeoid: string }) {
   const { t } = useTranslation();
@@ -363,8 +466,36 @@ function SqlPanel({ data, stmtGeoid }: { data: DaliNodeData; stmtGeoid: string }
   }, [sqlText]);
 
   if (sqlText) {
+    // Two-row layout: a toolbar strip with the Copy button, then the <pre>.
+    // Previously the button was position:absolute over the pre, which hid
+    // the first ~20 chars of every line — user complained ("Скопировать SQL
+    // закрывает часть кода"). Moving it into its own strip keeps the code
+    // fully legible regardless of line length.
     return (
-      <div style={{ position: 'relative', padding: '8px 10px' }}>
+      <div style={{ padding: '8px 10px' }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          padding: '0 0 6px',
+        }}>
+          <button
+            onClick={handleCopy}
+            aria-label={t('inspector.copySql')}
+            style={{
+              fontSize: '9px', fontWeight: 600,
+              padding: '3px 10px', borderRadius: 3,
+              background: copied ? 'var(--suc)' : 'var(--bg3)',
+              border: '1px solid var(--bd)',
+              color: copied ? 'var(--bg0)' : 'var(--t2)',
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {copied ? t('inspector.copied') : t('inspector.copySql')}
+          </button>
+        </div>
         <pre style={{
           padding: '8px 10px', margin: 0,
           fontSize: '11px', lineHeight: '1.5',
@@ -372,29 +503,13 @@ function SqlPanel({ data, stmtGeoid }: { data: DaliNodeData; stmtGeoid: string }
           background: 'var(--bg0)',
           border: '1px solid var(--bd)',
           borderRadius: 4,
-          maxHeight: 'calc(100vh - 200px)',
+          maxHeight: 'calc(100vh - 280px)',
           overflow: 'auto',
           whiteSpace: 'pre',
           fontFamily: 'var(--mono)',
         }}>
           {sqlText}
         </pre>
-        <button
-          onClick={handleCopy}
-          aria-label={t('inspector.copySql')}
-          style={{
-            position: 'absolute', top: 12, right: 14,
-            fontSize: '9px', fontWeight: 500,
-            padding: '3px 8px', borderRadius: 3,
-            background: copied ? 'var(--suc)' : 'var(--bg3)',
-            border: '1px solid var(--bd)',
-            color: copied ? 'var(--bg0)' : 'var(--t2)',
-            cursor: 'pointer',
-            transition: 'background 0.15s, color 0.15s',
-          }}
-        >
-          {copied ? t('inspector.copied') : t('inspector.copySql')}
-        </button>
       </div>
     );
   }

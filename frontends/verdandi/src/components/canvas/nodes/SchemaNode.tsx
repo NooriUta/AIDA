@@ -27,7 +27,7 @@ export const SchemaNode = memo(({ data, selected, id }: NodeProps<SchemaNodeType
         if (data.childrenAvailable) drillDown(id, data.label, data.nodeType);
       }}
     >
-      <NodeExpandButtons nodeId={id} show={selected ?? false} />
+      <NodeExpandButtons nodeId={id} show />
       <Handle type="target" position={Position.Left}  style={{ background: 'var(--bd)' }} />
 
       <div style={{ padding: 'var(--seer-space-3) var(--seer-space-3)' }}>
