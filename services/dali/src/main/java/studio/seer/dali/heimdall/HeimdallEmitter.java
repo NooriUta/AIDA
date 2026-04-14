@@ -47,15 +47,23 @@ public class HeimdallEmitter {
     // ── Layer 2: generic ──────────────────────────────────────────────────────
 
     public void info(EventType type, String sessionId, Map<String, Object> payload) {
-        emit(build(type, EventLevel.INFO, sessionId, 0, payload));
+        emit(build("dali",  type, EventLevel.INFO,  sessionId, 0, payload));
     }
 
     public void warn(EventType type, String sessionId, Map<String, Object> payload) {
-        emit(build(type, EventLevel.WARN, sessionId, 0, payload));
+        emit(build("dali",  type, EventLevel.WARN,  sessionId, 0, payload));
     }
 
     public void error(EventType type, String sessionId, Map<String, Object> payload) {
-        emit(build(type, EventLevel.ERROR, sessionId, 0, payload));
+        emit(build("dali",  type, EventLevel.ERROR, sessionId, 0, payload));
+    }
+
+    private void houndInfo(EventType type, String sessionId, Map<String, Object> payload) {
+        emit(build("hound", type, EventLevel.INFO,  sessionId, 0, payload));
+    }
+
+    private void houndWarn(EventType type, String sessionId, Map<String, Object> payload) {
+        emit(build("hound", type, EventLevel.WARN,  sessionId, 0, payload));
     }
 
     // ── Layer 3: typed Dali events ────────────────────────────────────────────
@@ -69,18 +77,19 @@ public class HeimdallEmitter {
 
     /** Emitted by ParseJob when the job worker picks up the session. */
     public void sessionStarted(String sessionId, String source, String dialect,
-                               boolean preview, boolean clearBeforeWrite) {
+                               boolean preview, boolean clearBeforeWrite, int threads) {
         info(EventType.SESSION_STARTED, sessionId, Map.of(
                 "source",           source,
                 "dialect",          dialect,
                 "preview",          preview,
-                "clearBeforeWrite", clearBeforeWrite));
+                "clearBeforeWrite", clearBeforeWrite,
+                "threads",          threads));
     }
 
     /** Emitted by ParseJob on successful completion. */
     public void sessionCompleted(String sessionId, int atomCount,
                                  double resolutionRate, long durationMs, int files) {
-        emit(build(EventType.SESSION_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
+        emit(build("dali", EventType.SESSION_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
                 "atomCount",      atomCount,
                 "resolutionRate", resolutionRate,
                 "files",          files)));
@@ -88,13 +97,13 @@ public class HeimdallEmitter {
 
     /** Emitted by ParseJob when an unrecoverable error aborts the session. */
     public void sessionFailed(String sessionId, String error, long durationMs) {
-        emit(build(EventType.SESSION_FAILED, EventLevel.ERROR, sessionId, durationMs, Map.of(
+        emit(build("dali", EventType.SESSION_FAILED, EventLevel.ERROR, sessionId, durationMs, Map.of(
                 "error", error != null ? error : "unknown")));
     }
 
     /** Emitted when Hound begins parsing a single SQL file. */
     public void fileParsingStarted(String sessionId, String file, String dialect) {
-        info(EventType.FILE_PARSING_STARTED, sessionId, Map.of(
+        houndInfo(EventType.FILE_PARSING_STARTED, sessionId, Map.of(
                 "file",    file,
                 "dialect", dialect));
     }
@@ -104,7 +113,7 @@ public class HeimdallEmitter {
      * HEIMDALL metrics service aggregates these to compute {@code atomsExtracted}.
      */
     public void atomExtracted(String sessionId, String file, int atomCount) {
-        info(EventType.ATOM_EXTRACTED, sessionId, Map.of(
+        houndInfo(EventType.ATOM_EXTRACTED, sessionId, Map.of(
                 "file",      file,
                 "atomCount", atomCount));
     }
@@ -114,7 +123,7 @@ public class HeimdallEmitter {
      * Level is WARN — the file is still (partially) parsed; the session continues.
      */
     public void parseError(String sessionId, String file, int line, int col, String msg) {
-        warn(EventType.PARSE_ERROR, sessionId, Map.of(
+        houndWarn(EventType.PARSE_ERROR, sessionId, Map.of(
                 "file", file,
                 "line", line,
                 "col",  col,
@@ -126,7 +135,7 @@ public class HeimdallEmitter {
      * Level is INFO — informational only; does not affect {@code isSuccess()} or the ✗ indicator.
      */
     public void parseWarning(String sessionId, String file, int line, int col, String msg) {
-        info(EventType.PARSE_WARNING, sessionId, Map.of(
+        houndInfo(EventType.PARSE_WARNING, sessionId, Map.of(
                 "file", file,
                 "line", line,
                 "col",  col,
@@ -135,19 +144,19 @@ public class HeimdallEmitter {
 
     /** Emitted when Hound encounters an error parsing a file. */
     public void fileParsingFailed(String sessionId, String file, String error) {
-        emit(build(EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, Map.of(
+        emit(build("hound", EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, Map.of(
                 "file",  file,
                 "error", error != null ? error : "unknown")));
     }
 
     // ── Internal builder ──────────────────────────────────────────────────────
 
-    private static HeimdallEvent build(EventType type, EventLevel level,
+    private static HeimdallEvent build(String sourceComponent, EventType type, EventLevel level,
                                        String sessionId, long durationMs,
                                        Map<String, Object> payload) {
         return new HeimdallEvent(
                 System.currentTimeMillis(),
-                "dali",
+                sourceComponent,
                 type.name(),
                 level,
                 sessionId,

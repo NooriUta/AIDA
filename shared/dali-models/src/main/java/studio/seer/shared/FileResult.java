@@ -15,6 +15,10 @@ public record FileResult(
         int                  droppedEdgeCount,
         List<VertexTypeStat> vertexStats,
         double               resolutionRate,
+        /** Column-reference atoms that were successfully resolved. */
+        int                  atomsResolved,
+        /** Column-reference atoms that failed resolution (constants/functions excluded). */
+        int                  atomsUnresolved,
         long                 durationMs,
         List<String>         warnings,
         List<String>         errors

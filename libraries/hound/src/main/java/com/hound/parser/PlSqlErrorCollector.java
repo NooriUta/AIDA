@@ -40,10 +40,48 @@ public class PlSqlErrorCollector extends BaseErrorListener {
      * valid Oracle SQL constructs missing from the grammar.
      * These become warnings, not errors.
      */
+    /**
+     * ANTLR4 error classification:
+     *
+     *   token recognition error at: 'X'         → lexer: char not in language       → ERROR
+     *   mismatched input '<EOF>' expecting {…}   → file truncated / missing END      → ERROR
+     *   no viable alternative at input '<EOF>'   → structural, file cut off           → ERROR
+     *   no viable alternative at input 'X'       → parser cannot recover at all       → ERROR
+     *   ─────────────────────────────────────────────────────────────────────────────────────
+     *   extraneous input 'X' expecting {…}       → parser skips extra token, recovers → WARNING
+     *   missing 'X' at 'Y'                       → parser inserts token,   recovers   → WARNING
+     *   mismatched input 'X' expecting {…}       → type-ref not in grammar            → WARNING
+     *
+     * Rule: anything that causes the parser to RECOVER and CONTINUE → WARNING.
+     *       Anything that causes the parser to FAIL at a statement  → ERROR.
+     */
+
+    // Prefixes / substrings that classify a message as a grammar limitation (→ WARNING).
     private static final List<String> GRAMMAR_LIMITATION_PATTERNS = List.of(
-            "extraneous input 'DATE'",       // DEFAULT DATE 'YYYY-MM-DD' literal
-            "extraneous input 'TIMESTAMP'",  // DEFAULT TIMESTAMP 'literal'
-            "missing 'SET' at"               // UPDATE tbl alias SET alias.col = val
+            // ── ALL extraneous-input messages ────────────────────────────────────────
+            // Parser skipped an unexpected token and continued — always recoverable.
+            "extraneous input ",
+
+            // ── ALL missing-token messages (except at EOF) ───────────────────────────
+            // Parser inserted a synthetic token and continued — always recoverable.
+            // EOF variant is structural and handled by the ERROR path below.
+            "missing '",
+
+            // ── mismatched input: variable-declaration type reference ─────────────────
+            // Signature: expects {DEFAULT, NOT, NULL, :=, ;} → parser is in var-decl
+            // context and the type name (e.g. INVOICES%ROWTYPE, pkg.MY_TYPE) was not
+            // recognised — a grammar limitation, not a bug in the source.
+            "expecting {'DEFAULT', 'NOT', 'NULL', ':=', ';'}"
+
+            // NOTE: "no viable alternative at input 'CREATE INDEX'" etc. are intentionally
+            // left as ERRORs — the parser cannot recover from them, so they signal that
+            // a statement was fully skipped. Use –grammar-skip-ddl mode to suppress them.
+    );
+
+    // Substrings that OVERRIDE grammar-limitation classification back to ERROR.
+    // Applied after GRAMMAR_LIMITATION_PATTERNS — if any matches, it's an ERROR.
+    private static final List<String> ERROR_OVERRIDE_PATTERNS = List.of(
+            "'<EOF>'"   // missing 'X' at '<EOF>' or no viable alternative … '<EOF>' → structural
     );
 
     private final String             file;
@@ -106,10 +144,16 @@ public class PlSqlErrorCollector extends BaseErrorListener {
 
     private static boolean isGrammarLimitation(String msg) {
         if (msg == null) return false;
+        boolean matched = false;
         for (String pattern : GRAMMAR_LIMITATION_PATTERNS) {
-            if (msg.contains(pattern)) return true;
+            if (msg.contains(pattern)) { matched = true; break; }
         }
-        return false;
+        if (!matched) return false;
+        // Override: if message also contains an error-override pattern → treat as ERROR
+        for (String override : ERROR_OVERRIDE_PATTERNS) {
+            if (msg.contains(override)) return false;
+        }
+        return true;
     }
 
     private static String basename(String path) {

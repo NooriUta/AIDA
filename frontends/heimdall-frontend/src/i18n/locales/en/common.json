@@ -82,6 +82,7 @@
     "filter":    "Filter",
     "component": "Component",
     "level":     "Level",
+    "eventType": "Type",
     "sessionId": "Session ID",
     "all":       "All",
     "clear":     "Clear",

@@ -26,6 +26,10 @@ export interface FileResult {
   droppedEdgeCount: number;
   vertexStats: VertexTypeStat[];
   resolutionRate: number;
+  /** Column-reference atoms successfully resolved (present from server v2). */
+  atomsResolved?: number;
+  /** Column-reference atoms that failed resolution (present from server v2). */
+  atomsUnresolved?: number;
   durationMs: number;
   warnings: string[];
   errors: string[];

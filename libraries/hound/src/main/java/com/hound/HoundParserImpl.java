@@ -255,7 +255,7 @@ public class HoundParserImpl implements HoundParser {
             vertexStats      = Map.of();
         }
 
-        double resolutionRate = calcResolutionRate(sem);
+        ResStats res = calcResStats(sem);
 
         long durationMs = timer.ms("parse") + timer.ms("walk")
                 + timer.ms("resolve") + timer.writeMs();
@@ -266,48 +266,41 @@ public class HoundParserImpl implements HoundParser {
         List<String> fileErrors   = parseErrors   != null ? parseErrors   : List.of();
         List<String> fileWarnings = parseWarnings != null ? parseWarnings : List.of();
         return new ParseResult(sem.getFilePath(), atomCount, vertexCount, edgeCount,
-                droppedEdgeCount, vertexStats, resolutionRate, fileWarnings, fileErrors, durationMs);
+                droppedEdgeCount, vertexStats, res.rate(), res.resolved(), res.unresolved(),
+                fileWarnings, fileErrors, durationMs);
     }
 
     /**
-     * Column-level semantic resolution rate.
+     * Column-level resolution stats: rate + resolved/unresolved counts.
      *
-     * <p>Formula: {@code resolved / (resolved + unresolved)}, where:
-     * <ul>
-     *   <li><b>resolved</b>   — atoms with {@code status = AtomInfo.STATUS_RESOLVED}
-     *       (successfully linked to a physical table.column)
-     *   <li><b>unresolved</b> — atoms where column resolution was attempted but failed
-     *       (status = "unresolved")
-     * </ul>
+     * <p>Only column-reference atoms are counted (constants and function-calls are excluded —
+     * they never require name resolution and would artificially dilute the denominator).
      *
-     * <p>Constants and function-call atoms are excluded from both numerator and denominator
-     * because they never require column resolution — counting them would artificially inflate
-     * the denominator and dilute the rate.
-     *
-     * <p>Returns 1.0 (100%) when there are no column-reference atoms (nothing to resolve).
+     * <p>Returns rate=1.0, counts=0 when there are no column-reference atoms.
      */
-    private static double calcResolutionRate(SemanticResult sem) {
-        List<Map<String, Object>> log = sem.getResolutionLog();
-        if (log == null || log.isEmpty()) return 1.0;
+    private record ResStats(double rate, int resolved, int unresolved) {}
 
-        // Column-level rate: only consider atoms where resolution was attempted
-        long resolved   = log.stream()
+    private static ResStats calcResStats(SemanticResult sem) {
+        List<Map<String, Object>> log = sem.getResolutionLog();
+        if (log == null || log.isEmpty()) return new ResStats(1.0, 0, 0);
+
+        int resolved   = (int) log.stream()
                 .filter(e -> AtomInfo.STATUS_RESOLVED.equals(e.get("result_kind")))
                 .count();
-        long unresolved = log.stream()
+        int unresolved = (int) log.stream()
                 .filter(e -> "unresolved".equals(e.get("result_kind")))
                 .count();
-        long denominator = resolved + unresolved;
-        if (denominator == 0) return 1.0;   // only constants/functions — nothing to resolve
-        return (double) resolved / denominator;
+        int denominator = resolved + unresolved;
+        double rate = denominator == 0 ? 1.0 : (double) resolved / denominator;
+        return new ResStats(rate, resolved, unresolved);
     }
 
     private static ParseResult emptyResult(String file) {
-        return new ParseResult(file, 0, 0, 0, 0, Map.of(), 1.0, List.of(), List.of(), 0L);
+        return new ParseResult(file, 0, 0, 0, 0, Map.of(), 1.0, 0, 0, List.of(), List.of(), 0L);
     }
 
     private static ParseResult errorResult(String file, String message) {
-        return new ParseResult(file, 0, 0, 0, 0, Map.of(), 0.0,
+        return new ParseResult(file, 0, 0, 0, 0, Map.of(), 0.0, 0, 0,
                 List.of(), List.of("ERROR: " + message), 0L);
     }
 

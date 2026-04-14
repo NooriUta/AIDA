@@ -15,11 +15,10 @@ import studio.seer.shared.HeimdallEvent;
  * {@code quarkus.rest-client.heimdall-api.url} in {@code application.properties}.
  */
 @RegisterRestClient(configKey = "heimdall-api")
-@Path("/api")
+@Path("/events")
 @Consumes(MediaType.APPLICATION_JSON)
 public interface HeimdallClient {
 
     @POST
-    @Path("/events")
     Uni<Void> ingest(HeimdallEvent event);
 }

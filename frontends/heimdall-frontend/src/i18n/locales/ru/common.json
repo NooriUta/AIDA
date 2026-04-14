@@ -82,6 +82,7 @@
     "filter":    "Фильтр",
     "component": "Компонент",
     "level":     "Уровень",
+    "eventType": "Тип",
     "sessionId": "Session ID",
     "all":       "Все",
     "clear":     "Очистить",

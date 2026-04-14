@@ -68,10 +68,11 @@ public class ParseJob {
                 sessionId, src, input.dialect(), input.preview(), input.clearBeforeWrite());
 
         long startMs = System.currentTimeMillis();
-        emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(), input.clearBeforeWrite());
 
         try {
             HoundConfig config = buildConfig(input);
+            emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(),
+                    input.clearBeforeWrite(), config.workerThreads());
 
             // Optional YGG cleanup before first write
             if (!input.preview() && input.clearBeforeWrite()) {
@@ -178,7 +179,8 @@ public class ParseJob {
                 r.atomCount(), r.vertexCount(), r.edgeCount(),
                 r.droppedEdgeCount(),
                 toVertexTypeStats(r.vertexStats()),
-                r.resolutionRate(), r.durationMs(),
+                r.resolutionRate(), r.atomsResolved(), r.atomsUnresolved(),
+                r.durationMs(),
                 r.warnings(), r.errors());
     }
 
@@ -225,6 +227,9 @@ public class ParseJob {
                 ? results.stream().mapToDouble(r -> r.resolutionRate() * r.atomCount()).sum() / atoms
                 : 0.0;
 
+        int atomsResolved   = results.stream().mapToInt(FileResult::atomsResolved).sum();
+        int atomsUnresolved = results.stream().mapToInt(FileResult::atomsUnresolved).sum();
+
         List<String> warnings = results.stream()
                 .flatMap(r -> r.warnings().stream())
                 .toList();
@@ -233,6 +238,6 @@ public class ParseJob {
                 .toList();
 
         return new ParseResult(source, atoms, vertices, edges, droppedEdges,
-                aggMap, rate, warnings, errors, duration);
+                aggMap, rate, atomsResolved, atomsUnresolved, warnings, errors, duration);
     }
 }

@@ -46,6 +46,18 @@ public record ParseResult(
         /** Fraction of column atoms semantically resolved in Hound (0.0–1.0). */
         double resolutionRate,
 
+        /**
+         * Number of column-reference atoms successfully resolved (status = "Обработано").
+         * Used for per-file resolution breakdown in the UI.
+         */
+        int atomsResolved,
+
+        /**
+         * Number of column-reference atoms that failed resolution (status = "unresolved").
+         * Does NOT include constants / function-calls (those are excluded from the rate).
+         */
+        int atomsUnresolved,
+
         /** Non-fatal warnings (e.g. unresolved refs in soft-fail mode). */
         List<String> warnings,
 

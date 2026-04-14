@@ -30,6 +30,11 @@ export const EVENT_LABELS: Record<string, string> = {
 export function formatPayload(event: HeimdallEvent): string {
   const p = event.payload ?? {};
   switch (event.eventType) {
+    case 'SESSION_STARTED': {
+      const thr = p['threads'] != null ? ` threads:${p['threads']}` : '';
+      const prev = p['preview'] ? ' preview' : '';
+      return `${p['dialect'] ?? ''} ${p['source'] ?? ''}${thr}${prev}`;
+    }
     case 'FILE_PARSING_STARTED':
       return `file:"${p['file'] ?? ''}"`;
     case 'FILE_PARSING_COMPLETED':
