@@ -35,7 +35,10 @@ const SUPPRESSED_EDGES = new Set<string>([
   'ROUTINE_USES_TABLE',
   'ATOM_REF_TABLE',
   'ATOM_REF_COLUMN',
+  'ATOM_REF_STMT',
+  'ATOM_REF_OUTPUT_COL',
   'ATOM_PRODUCES',
+  'HAS_ATOM',
   'HAS_JOIN',
   'HAS_DATABASE',
   'CONTAINS_SCHEMA',
@@ -114,7 +117,15 @@ function transformSchemaExplore(result: ExploreResult): {
     if (!columnsByParent.has(e.source)) columnsByParent.set(e.source, []);
     const cols = columnsByParent.get(e.source)!;
     if (cols.length < L2_MAX_COLS) {
-      cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      const metaMap = Object.fromEntries((colNode.meta ?? []).map((m) => [m.key, m.value]));
+      cols.push({
+        id:           colNode.id,
+        name:         colNode.label,
+        type:         metaMap['dataType']   ?? '',
+        isPrimaryKey: metaMap['isPk']       === 'true',
+        isForeignKey: metaMap['isFk']       === 'true',
+        isRequired:   metaMap['isRequired'] === 'true',
+      });
     }
   }
 
@@ -375,7 +386,15 @@ export function transformGqlExplore(
     if (!columnsByTable.has(e.source)) columnsByTable.set(e.source, []);
     const cols = columnsByTable.get(e.source)!;
     if (cols.length < L2_MAX_COLS) {
-      cols.push({ id: colNode.id, name: colNode.label, type: '', isPrimaryKey: false, isForeignKey: false });
+      const metaMap = Object.fromEntries((colNode.meta ?? []).map((m) => [m.key, m.value]));
+      cols.push({
+        id:           colNode.id,
+        name:         colNode.label,
+        type:         metaMap['dataType']   ?? '',
+        isPrimaryKey: metaMap['isPk']       === 'true',
+        isForeignKey: metaMap['isFk']       === 'true',
+        isRequired:   metaMap['isRequired'] === 'true',
+      });
     }
   }
 
@@ -395,9 +414,10 @@ export function transformGqlExplore(
 
   const nodes: LoomNode[] = result.nodes
     .filter((n) =>
-      n.type !== 'DaliOutputColumn' &&
-      n.type !== 'DaliColumn'       &&
+      n.type !== 'DaliOutputColumn'  &&
+      n.type !== 'DaliColumn'        &&
       n.type !== 'DaliAffectedColumn' &&
+      n.type !== 'DaliAtom'          &&
       !subqueryIds.has(n.id),
     )
     .map((n) => {

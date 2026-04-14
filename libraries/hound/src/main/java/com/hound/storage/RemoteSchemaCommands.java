@@ -314,6 +314,10 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliParameter (param_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliVariable (var_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliOutputColumn (name) NOTUNIQUE NULL_STRATEGY SKIP",
+                // DaliSnippet — session_id and stmt_geoid lookups (missing indices caused full-table
+                // scans on loadSnippets / knotSnippet, returning empty results for large DBs)
+                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (stmt_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 // FULLTEXT — per-statement SQL text search (kept intentionally)
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippet (snippet) FULL_TEXT" + FT_METADATA,
                 // DaliSnippetScript.script is intentionally NOT indexed — whole-file field

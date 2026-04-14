@@ -60,6 +60,7 @@ export interface ColumnInfo {
   type: string;
   isPrimaryKey: boolean;
   isForeignKey?: boolean;
+  isRequired?: boolean;
 }
 
 // ─── Schema chip entry (used inside DatabaseNode for inline schema list) ─────

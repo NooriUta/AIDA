@@ -34,6 +34,8 @@ export interface GraphNode {
   label: string;
   scope: string;
   dataSource?: string;
+  /** PK/FK/dataType flags for DaliColumn nodes — serialised by SmallRye GraphQL as [{key,value}] */
+  meta?: Array<{ key: string; value: string }>;
 }
 
 export interface GraphEdge {
@@ -79,7 +81,7 @@ const OVERVIEW = /* GraphQL */ `
 const EXPLORE = /* GraphQL */ `
   query Explore($scope: String!) {
     explore(scope: $scope) {
-      nodes { id type label scope dataSource }
+      nodes { id type label scope dataSource meta { key value } }
       edges { id source target type }
       hasMore
     }
@@ -129,7 +131,7 @@ const EXPAND_DEEP = /* GraphQL */ `
 const STMT_COLUMNS = /* GraphQL */ `
   query StmtColumns($ids: [String]!) {
     stmtColumns(ids: $ids) {
-      nodes { id type label scope dataSource }
+      nodes { id type label scope dataSource meta { key value } }
       edges { id source target type }
       hasMore
     }
@@ -534,6 +536,22 @@ export async function fetchKnotTableDetail(
     { sessionId, tableGeoid },
   );
   return data.knotTableDetail;
+}
+
+// ── Lazy snippet fetch (by stmtGeoid) ─────────────────────────────────────────
+
+const KNOT_SNIPPET = /* GraphQL */ `
+  query KnotSnippet($stmtGeoid: String!) {
+    knotSnippet(stmtGeoid: $stmtGeoid)
+  }
+`;
+
+export async function fetchKnotSnippet(stmtGeoid: string): Promise<string | null> {
+  const data = await gqlClient.request<{ knotSnippet: string | null }>(
+    KNOT_SNIPPET,
+    { stmtGeoid },
+  );
+  return data.knotSnippet ?? null;
 }
 
 // ── Error helpers ─────────────────────────────────────────────────────────────

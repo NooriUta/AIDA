@@ -38,6 +38,12 @@ export function useDisplayGraph(rawGraph: Graph | null) {
     selectedNodeId,
   } = useLoomStore();
 
+  // applyL1SchemaChipDim is L1-only: stabilise the dep to null on L2/L3 so that
+  // clicking a node (selectNode → selectedNodeId change) does NOT produce a new
+  // displayGraph reference, which would otherwise trigger a full ELK re-run and
+  // the subsequent requestFitView() zoom-out (LOOM-viewport-fix).
+  const selectedNodeIdForL1 = viewLevel === 'L1' ? selectedNodeId : null;
+
   // ── Phase 0 — L1 scope filter ─────────────────────────────────────────────
   const scopedGraph = useMemo(() => {
     if (!rawGraph) return null;
@@ -59,11 +65,12 @@ export function useDisplayGraph(rawGraph: Graph | null) {
     g = applyDirectionFilter(g, viewLevel, filter.upstream, filter.downstream);
     g = applyCfEdgeToggle(g, viewLevel, filter.showCfEdges, effectiveTLV);
     g = applyL1HierarchyFilter(g, viewLevel, l1HierarchyFilter);
-    g = applyL1SchemaChipDim(g, viewLevel, selectedNodeId, expandedDbs);
+    g = applyL1SchemaChipDim(g, viewLevel, selectedNodeIdForL1, expandedDbs);
     return g;
   // filter.fieldFilter intentionally omitted — handled in the post-layout effect (LOOM-031)
+  // selectedNodeId replaced by selectedNodeIdForL1 — null on L2/L3 so node clicks don't re-trigger ELK.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopedGraph, viewLevel, l1Filter.systemLevel, l1Filter.depth, hiddenNodeIds, filter.tableLevelView, filter.showCfEdges, filter.upstream, filter.downstream, l1HierarchyFilter, selectedNodeId, expandedDbs]);
+  }, [scopedGraph, viewLevel, l1Filter.systemLevel, l1Filter.depth, hiddenNodeIds, filter.tableLevelView, filter.showCfEdges, filter.upstream, filter.downstream, l1HierarchyFilter, selectedNodeIdForL1, expandedDbs]);
 
   return { displayGraph };
 }

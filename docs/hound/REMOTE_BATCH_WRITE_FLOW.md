@@ -560,3 +560,129 @@ SNIPPET_MAX       = 4000   // символов (DaliSnippet.snippet truncate)
 MASTER            = "master"        // таблица/колонка из CREATE TABLE/VIEW
 RECONSTRUCTED     = "reconstructed" // восстановлена из SELECT/DML
 ```
+
+---
+
+## 15. Sprint 2 — Новые vertex types
+
+Добавлены в Sprint 2 (Apr 2026, PL/SQL lineage gaps):
+
+| Vertex Type | Ключевые поля | Примечание |
+|-------------|--------------|------------|
+| `DaliRecordField` | `field_geoid`, `field_name`, `data_type`, `ordinal_position`, `record_geoid`, `source_column_geoid` (nullable) | Поле коллекции / %ROWTYPE / RETURNING |
+| `DaliUniqueConstraint` | `constraint_geoid`, `constraint_name` (nullable), `table_geoid`, `columns` | UNIQUE (TABLE_GEOID:UNIQUE:NAME_OR_HASH) |
+| `DaliCheckConstraint` | `constraint_geoid`, `constraint_name` (nullable), `table_geoid`, `check_expression` | CHECK (TABLE_GEOID:CHECK:NAME_OR_HASH) |
+| `DaliJsonSource` | `source_geoid`, `stmt_geoid`, `alias` | JSON_TABLE source |
+| `DaliXmlSource` | `source_geoid`, `stmt_geoid`, `alias` | XMLTABLE source |
+
+Новые поля на существующих типах:
+
+| Vertex Type | Новое поле | Тип | Назначение |
+|-------------|-----------|-----|------------|
+| `DaliVariable` | `source_column_geoid` | String (nullable) | %TYPE reference |
+| `DaliRoutine` | `pipelined` | Boolean | PIPE ROW routine |
+| `DaliRoutine` | `autonomous_transaction` | Boolean | PRAGMA |
+| `DaliTable` | `dblink` | String (nullable) | @dblink name |
+| `DaliStatement` | `contains_dynamic_sql` | Boolean | DBMS_SQL stub |
+| `DaliStatement` | `flashback_type` | String (nullable) | TIMESTAMP/SCN |
+| `DaliStatement` | `flashback_expr` | String (nullable) | AS OF expression |
+
+---
+
+## 16. Sprint 2 — Новые edge types
+
+| # | Edge Type | Откуда → Куда | Атрибуты |
+|---|-----------|---------------|----------|
+| 20 | `HAS_RECORD_FIELD` | `DaliRecord` → `DaliRecordField` | `session_id` |
+| 21 | `RETURNS_INTO` | `DaliStatement` → `DaliRecordField` / `DaliVariable` / `DaliParameter` / `DaliRecord` | `session_id`, `returning_exprs` |
+| 22 | `DaliDDLModifiesTable` | `DaliDDLStatement` → `DaliTable` | `session_id`, `operation` (ADD/MODIFY/DROP) |
+| 23 | `DaliDDLModifiesColumn` | `DaliDDLStatement` → `DaliColumn` | `session_id`, `operation` |
+| 24 | `HAS_UNIQUE_KEY` | `DaliTable` → `DaliUniqueConstraint` | `session_id` |
+| 25 | `IS_UNIQUE_COLUMN` | `DaliUniqueConstraint` → `DaliColumn` | `session_id` |
+| 26 | `HAS_CHECK` | `DaliTable` → `DaliCheckConstraint` | `session_id` |
+| 27 | `PIPES_FROM` | `DaliRoutine` → `DaliStatement` | `session_id` |
+| 28 | `READS_PIPELINED` | `DaliStatement` → `DaliRoutine` | `session_id` |
+| 29 | `READS_FROM_TABLE_FUNC` | `DaliStatement` → `DaliRoutine` | `session_id` |
+| 30 | `EXTRACTED_FROM_JSON` | `DaliColumn` → `DaliJsonSource` | `session_id`, `json_path` |
+| 31 | `EXTRACTED_FROM_XML` | `DaliColumn` → `DaliXmlSource` | `session_id`, `xpath_expr` |
+
+---
+
+## 17. Sprint 2 — DaliRecordField dedup алгоритм
+
+### Проблема (до Sprint 2)
+
+`DaliRecordField` записывался в `RemoteWriter` (строки 810–827) без проверки дубликатов
+и **отсутствовал** в `JsonlBatchBuilder`. Схемный тип в `RemoteSchemaCommands` — отсутствовал.
+
+### Алгоритм RemoteWriter (после Sprint 2)
+
+```java
+String recRid = ridCache.records.get(rec.getGeoid());
+for (FieldInfo fi : rec.getFieldInfos()) {
+    String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+
+    // 1. Dedup-проверка
+    if (ridCache.recordFields.containsKey(fieldGeoid)) continue;
+
+    // 2. INSERT
+    String rfRid = rcmd("""
+        INSERT INTO DaliRecordField SET
+          session_id=?, field_geoid=?, field_name=?,
+          data_type=?, ordinal_position=?, record_geoid=?,
+          source_column_geoid=?
+        """,
+        sid, fieldGeoid, fi.name(), fi.dataType(),
+        fi.ordinalPosition(), rec.getGeoid(), fi.sourceColumnGeoid());
+
+    // 3. Регистрируем в RidCache
+    ridCache.recordFields.put(fieldGeoid, rfRid);
+
+    // 4. Ребро HAS_RECORD_FIELD
+    if (recRid != null)
+        edgeByRid("HAS_RECORD_FIELD", recRid, rfRid, sid);
+}
+```
+
+### Алгоритм JsonlBatchBuilder (после Sprint 2)
+
+```java
+// После appendVertex DaliRecord:
+for (FieldInfo fi : rec.getFieldInfos()) {
+    String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+
+    // 1. In-batch dedup
+    if (vertexIds.contains(fieldGeoid)) {
+        writeStats.markDuplicate("DaliRecordField");
+        continue;
+    }
+
+    // 2. Вершина
+    b.appendVertex("DaliRecordField", fieldGeoid, mapOf(
+        "session_id",          sid,
+        "field_geoid",         fieldGeoid,
+        "field_name",          fi.name(),
+        "data_type",           fi.dataType(),
+        "ordinal_position",    fi.ordinalPosition(),
+        "record_geoid",        rec.getGeoid(),
+        "source_column_geoid", fi.sourceColumnGeoid()
+    ));
+}
+
+// Рёбра HAS_RECORD_FIELD (после всех вершин DaliRecordField):
+for (FieldInfo fi : rec.getFieldInfos()) {
+    String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+    if (!vertexIds.contains(fieldGeoid)) continue; // пропущены как дубли
+    b.appendEdge("HAS_RECORD_FIELD", rec.getGeoid(), fieldGeoid,
+                 mapOf("session_id", sid));
+}
+```
+
+### Разница RemoteWriter vs JsonlBatchBuilder
+
+| Аспект | RemoteWriter | JsonlBatchBuilder |
+|--------|-------------|-------------------|
+| Dedup | `ridCache.recordFields.containsKey(fieldGeoid)` | `vertexIds.contains(fieldGeoid)` |
+| RID | Реальный ArcadeDB RID возвращается из INSERT | Временный @id = fieldGeoid |
+| Порядок | INSERT вершины → INSERT ребра последовательно | Все вершины → все рёбра (гарантия `vertexIds`) |
+| Ошибка при DROP | `DuplicatedKeyException` → skip | В-batch dedup → skip без exception |

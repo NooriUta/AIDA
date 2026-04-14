@@ -58,6 +58,27 @@ public class KnotResource {
                                "call", "knotReport(sessionId=" + (sessionId != null ? sessionId : "") + ")")));
     }
 
+    @Query("knotSnippet")
+    @Description("KNOT — lazy SQL snippet fetch for one statement by stmt_geoid. Role: viewer+")
+    public Uni<String> knotSnippet(
+        @Name("stmtGeoid")
+        @Description("stmt_geoid of the DaliStatement")
+        String stmtGeoid
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "knotSnippet",
+                       "call", "knotSnippet(stmtGeoid=" + (stmtGeoid != null ? stmtGeoid : "") + ")"));
+        return knotService.knotSnippet(stmtGeoid)
+                .invoke(s -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotSnippet",
+                               "stmtGeoid", stmtGeoid != null ? stmtGeoid : "",
+                               "call", "knotSnippet(stmtGeoid=" + (stmtGeoid != null ? stmtGeoid : "")
+                                       + ") → " + (s != null ? s.length() + " chars" : "null"))));
+    }
+
     @Query("knotTableDetail")
     @Description("KNOT — lazy column detail for one table: PK/FK/type/default + SQL snippet. Role: viewer+")
     public Uni<KnotTableDetail> knotTableDetail(

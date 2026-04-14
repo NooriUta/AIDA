@@ -36,11 +36,15 @@ public class LineageService {
     public Uni<ExploreResult> lineage(String nodeId) {
         Map<String, Object> params = Map.of("nodeId", nodeId);
 
-        // Outgoing: nodeId is the source
+        // Outgoing: nodeId is the source.
+        // BUG-VC-002: Exclude DaliConstraint/DaliPrimaryKey/DaliForeignKey — created by
+        // constraint model (commits 3849730/ef248cd) but not renderable in LOOM frontend.
+        // DaliAtom — ANTLR4 atom nodes (50k+ vertices) not renderable in LOOM canvas.
         String outQ = """
             MATCH (n)-[r]->(m)
             WHERE id(n) = $nodeId
               AND (NOT m:DaliStatement OR coalesce(m.parent_statement, '') = '')
+              AND NOT (m:DaliConstraint OR m:DaliPrimaryKey OR m:DaliForeignKey OR m:DaliAtom)
             RETURN id(n) AS srcId, labels(n)[0] AS srcType,
                    coalesce(n.table_name, n.column_name, n.routine_name,
                             n.package_name, n.stmt_geoid, n.app_name, n.schema_name, '') AS srcLabel,
@@ -51,11 +55,15 @@ public class LineageService {
             LIMIT 200
             """;
 
-        // Incoming: nodeId is the destination — swap variables to avoid id(dst) pattern
+        // Incoming: nodeId is the destination — swap variables to avoid id(dst) pattern.
+        // BUG-VC-002: Filter m (source) to exclude constraint nodes (IS_PK_COLUMN / IS_FK_COLUMN
+        // edges from DaliPrimaryKey/DaliForeignKey would otherwise surface them as source nodes).
+        // DaliAtom incoming via ATOM_REF_COLUMN edges — excluded same as in exploreByRid.
         String inQ = """
             MATCH (m)-[r]->(n)
             WHERE id(n) = $nodeId
               AND (NOT m:DaliStatement OR coalesce(m.parent_statement, '') = '')
+              AND NOT (m:DaliConstraint OR m:DaliPrimaryKey OR m:DaliForeignKey OR m:DaliAtom)
             RETURN id(m) AS srcId, labels(m)[0] AS srcType,
                    coalesce(m.table_name, m.column_name, m.routine_name,
                             m.package_name, m.stmt_geoid, m.app_name, m.schema_name, '') AS srcLabel,
@@ -80,10 +88,13 @@ public class LineageService {
     /** Upstream only — what feeds into nodeId (incoming edges). Root statements only. */
     public Uni<ExploreResult> upstream(String nodeId) {
         // Use swapped variable so id(n) refers to the node we found, not the pattern destination
+        // BUG-VC-002: Exclude DaliConstraint/DaliPrimaryKey/DaliForeignKey constraint nodes.
+        // DaliAtom excluded — ANTLR4 atom nodes not renderable in LOOM canvas.
         String cypher = """
             MATCH (m)-[r]->(n)
             WHERE id(n) = $nodeId
               AND (NOT m:DaliStatement OR coalesce(m.parent_statement, '') = '')
+              AND NOT (m:DaliConstraint OR m:DaliPrimaryKey OR m:DaliForeignKey OR m:DaliAtom)
             RETURN id(m) AS srcId, labels(m)[0] AS srcType,
                    coalesce(m.table_name, m.column_name, m.routine_name,
                             m.package_name, m.stmt_geoid, m.app_name, m.schema_name, '') AS srcLabel,
@@ -100,10 +111,13 @@ public class LineageService {
 
     /** Downstream only — what nodeId feeds into (outgoing edges). Root statements only. */
     public Uni<ExploreResult> downstream(String nodeId) {
+        // BUG-VC-002: Exclude DaliConstraint/DaliPrimaryKey/DaliForeignKey constraint nodes.
+        // DaliAtom excluded — ANTLR4 atom nodes not renderable in LOOM canvas.
         String cypher = """
             MATCH (n)-[r]->(m)
             WHERE id(n) = $nodeId
               AND (NOT m:DaliStatement OR coalesce(m.parent_statement, '') = '')
+              AND NOT (m:DaliConstraint OR m:DaliPrimaryKey OR m:DaliForeignKey OR m:DaliAtom)
             RETURN id(n) AS srcId, labels(n)[0] AS srcType,
                    coalesce(n.table_name, n.column_name, n.routine_name,
                             n.package_name, n.stmt_geoid, n.app_name, n.schema_name, '') AS srcLabel,

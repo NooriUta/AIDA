@@ -18,7 +18,7 @@ interface EdgeRow {
 
 interface NodeRow {
   color: string;
-  shape: 'rect' | 'rect-dash' | 'circle';
+  shape: 'rect' | 'rect-dash' | 'circle' | 'circle-hollow';
   label: string;
 }
 
@@ -52,10 +52,12 @@ const NODE_ROWS: Record<'L1' | 'L2' | 'L3', NodeRow[]> = {
     { color: 'var(--inf)', shape: 'rect-dash', label: 'legend.node.schema'      },
   ],
   L2: [
-    { color: 'var(--acc)', shape: 'rect',      label: 'legend.node.table'     },
-    { color: 'var(--t3)',  shape: 'rect',      label: 'legend.node.package'   },
-    { color: 'var(--suc)', shape: 'rect',      label: 'legend.node.routine'   },
-    { color: 'var(--suc)', shape: 'rect',      label: 'legend.node.statement' },
+    { color: 'var(--acc)',  shape: 'rect',          label: 'legend.node.table'     },
+    { color: 'var(--t3)',   shape: 'rect',          label: 'legend.node.package'   },
+    { color: 'var(--suc)',  shape: 'rect',          label: 'legend.node.routine'   },
+    { color: 'var(--suc)',  shape: 'rect',          label: 'legend.node.statement' },
+    { color: 'var(--wrn)',  shape: 'circle',        label: 'legend.node.pkColumn'  },
+    { color: 'var(--inf)',  shape: 'circle-hollow', label: 'legend.node.fkColumn'  },
   ],
   L3: [
     { color: 'var(--acc)', shape: 'rect',      label: 'legend.node.table'  },
@@ -88,6 +90,13 @@ function NodeSwatch({ color, shape }: Pick<NodeRow, 'color' | 'shape'>) {
     return (
       <svg width="12" height="12" viewBox="0 0 12 12" style={{ flexShrink: 0 }}>
         <circle cx="6" cy="6" r="4.5" fill={color} opacity="0.85" />
+      </svg>
+    );
+  }
+  if (shape === 'circle-hollow') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" style={{ flexShrink: 0 }}>
+        <circle cx="6" cy="6" r="3.5" fill="none" stroke={color} strokeWidth="1.5" opacity="0.85" />
       </svg>
     );
   }

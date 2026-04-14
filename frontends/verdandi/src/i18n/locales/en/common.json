@@ -736,7 +736,9 @@
       "routine":     "Routine",
       "statement":   "Statement",
       "column":      "Column",
-      "atom":        "Atom"
+      "atom":        "Atom",
+      "pkColumn":    "Primary Key",
+      "fkColumn":    "Foreign Key"
     },
     "hint": {
       "dblclick": "drill-down",

@@ -547,7 +547,10 @@ public class JsonlBatchBuilder {
         // Phase 2: Edges (strictly after all vertices)
         // ─────────────────────────────────────────────────────
 
-        // Structural: CONTAINS_TABLE — skip pre-existing tables (already linked in DB)
+        // Structural: CONTAINS_TABLE — only for tables NOT pre-inserted via rcmd().
+        // If the table is in canonicalRids it was pre-inserted before this batch;
+        // its CONTAINS_TABLE edge is created by RemoteWriter Phase 3 (namespace) or
+        // ad-hoc Phase 3 — NOT here. This avoids duplicate edges on repeated parse runs.
         for (var e : str.getTables().entrySet()) {
             if (b.canonicalRids.containsKey(e.getKey())) continue;
             String sg = e.getValue().schemaGeoid();
@@ -583,7 +586,8 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // Structural: HAS_COLUMN — skip pre-existing columns (already linked in DB)
+        // Structural: HAS_COLUMN — only for columns NOT pre-inserted via rcmd().
+        // Pre-inserted columns (in canonicalRids) get HAS_COLUMN from RemoteWriter Phase 3.
         for (var e : str.getColumns().entrySet()) {
             if (b.canonicalRids.containsKey(e.getKey())) continue;
             b.appendEdge("HAS_COLUMN", e.getValue().getTableGeoid(), e.getKey(), sidProps);

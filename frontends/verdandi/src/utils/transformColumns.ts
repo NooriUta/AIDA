@@ -36,7 +36,17 @@ export function applyStmtColumns(
       // tableColMap keeps ALL columns for edge-matching; colsByParent controls rendering.
       const tableCols = colsByParent.get(e.source)!;
       if (tableCols.length < TRANSFORM.MAX_PARTIAL_COLS) {
-        tableCols.push({ id: col.id, name: col.label, type: '', isPrimaryKey: false, isForeignKey: false });
+        // Read PK/FK/dataType from meta — populated by stmtColumns hasColQ RETURN clause.
+        // SmallRye GraphQL serialises Map<String,String> as [{key,value}].
+        const metaMap = Object.fromEntries((col.meta ?? []).map((e) => [e.key, e.value]));
+        tableCols.push({
+          id:           col.id,
+          name:         col.label,
+          type:         metaMap['dataType'] ?? '',
+          isPrimaryKey: metaMap['isPk']       === 'true',
+          isForeignKey: metaMap['isFk']       === 'true',
+          isRequired:   metaMap['isRequired'] === 'true',
+        });
       }
     } else if (e.type === 'HAS_OUTPUT_COL' || e.type === 'HAS_AFFECTED_COL') {
       if (!stmtColMap.has(e.source)) stmtColMap.set(e.source, new Map());

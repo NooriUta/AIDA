@@ -87,6 +87,8 @@ export const FilterToolbar = memo(() => {
     toggleMappingMode,
     navigateToLevel,
     jumpTo,
+    clearFilter,
+    requestFitView,
   } = useLoomStore();
 
   const {
@@ -109,17 +111,29 @@ export const FilterToolbar = memo(() => {
   ), [availableStmts, tableFilter]);
 
   const handleTableChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setTableFilter(e.target.value || null),
-    [setTableFilter],
+    (e: ChangeEvent<HTMLSelectElement>) => {
+      const id = e.target.value || null;
+      setTableFilter(id);
+      if (!id) requestFitView();   // cleared → fit all nodes
+    },
+    [setTableFilter, requestFitView],
   );
   const handleStmtChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => setStmtFilter(e.target.value || null),
-    [setStmtFilter],
+    (e: ChangeEvent<HTMLSelectElement>) => {
+      const id = e.target.value || null;
+      setStmtFilter(id);
+      if (!id) requestFitView();   // cleared → fit all nodes
+    },
+    [setStmtFilter, requestFitView],
   );
   const handleFieldChange = useCallback(
     (e: ChangeEvent<HTMLSelectElement>) => setFieldFilter(e.target.value || null),
     [setFieldFilter],
   );
+  const handleClearFilter = useCallback(() => {
+    clearFilter();
+    requestFitView();
+  }, [clearFilter, requestFitView]);
 
   // Only show on L2 / L3
   if (viewLevel === 'L1') return null;
@@ -418,6 +432,35 @@ export const FilterToolbar = memo(() => {
         <span>· {dirLabel}</span>
         {tableLevelView && <span>· TBL</span>}
       </div>
+
+      {/* ── Clear filter button — visible when any filter is active ────────── */}
+      {hasActiveFilter && (
+        <button
+          onClick={handleClearFilter}
+          title={t('toolbar.clearFilter')}
+          style={{
+            display:      'inline-flex',
+            alignItems:   'center',
+            justifyContent: 'center',
+            width:        20,
+            height:       20,
+            borderRadius: 4,
+            border:       '1px solid var(--acc)',
+            background:   'transparent',
+            color:        'var(--acc)',
+            fontSize:     12,
+            cursor:       'pointer',
+            flexShrink:   0,
+            lineHeight:   1,
+            padding:      0,
+            transition:   'background 0.1s',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'color-mix(in srgb, var(--acc) 15%, transparent)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+        >
+          ×
+        </button>
+      )}
 
     </div>
   );

@@ -614,6 +614,152 @@ public String getCursorRecordStmt(String recordVar) {
 
 ---
 
+## 19. G9 — RETURNING INTO lineage
+
+> Добавлено в Sprint 2 (Apr 2026, KI-RETURN-1)
+
+### 19.1 Постановка задачи
+
+Oracle PL/SQL позволяет возвращать значения из DML-операторов в переменные:
+
+```sql
+-- Вариант 1: скалярная переменная
+UPDATE hr.orders SET status = 'CLOSED'
+WHERE order_id = p_id
+RETURNING status INTO v_status;
+
+-- Вариант 2: поле записи
+UPDATE hr.orders SET status = 'CLOSED'
+WHERE order_id = p_id
+RETURNING status INTO l_rec.status;
+
+-- Вариант 3: OUT-параметр
+UPDATE hr.orders SET status = 'CLOSED'
+WHERE order_id = p_id
+RETURNING status INTO p_out_status;
+
+-- Вариант 4: BULK COLLECT в коллекцию
+UPDATE hr.orders SET status = 'CLOSED'
+WHERE order_id IN (SELECT order_id FROM pending)
+RETURNING order_id, status BULK COLLECT INTO l_ids, l_statuses;
+```
+
+**Цель**: построить рёбра `RETURNS_INTO` от `DaliStatement` к целевой вершине.
+
+### 19.2 4 варианта target и соответствующие vertex types
+
+| Вариант | Синтаксис | Target Vertex | Geoid формат |
+|---------|-----------|--------------|-------------|
+| 1 | `RETURNING col INTO :v_scalar` | `DaliVariable` | `ROUTINE:VAR:V_SCALAR` |
+| 2 | `RETURNING col INTO l_rec.field` | `DaliRecordField` | `ROUTINE:RECORD:L_REC:FIELD:FIELD` |
+| 3 | `RETURNING col INTO p_out` | `DaliParameter` | `ROUTINE:PARAM:P_OUT` |
+| 4 | `RETURNING col BULK COLLECT INTO l_tab` | `DaliRecord` | `ROUTINE:RECORD:L_TAB` |
+
+### 19.3 Диаграмма
+
+```
+Вариант 1: скалярная переменная
+─────────────────────────────────────────────────────────────────
+DaliStatement(UPDATE)
+        │
+  RETURNS_INTO  [returning_exprs="STATUS"]
+        │
+        ▼
+DaliVariable(V_STATUS)
+  ├── var_geoid = "HR.PROC_CLOSE:VAR:V_STATUS"
+  └── data_type = "VARCHAR2" (если известен из declaration)
+
+
+Вариант 2: поле записи
+─────────────────────────────────────────────────────────────────
+DaliStatement(UPDATE)
+        │
+  RETURNS_INTO  [returning_exprs="STATUS"]
+        │
+        ▼
+DaliRecordField(L_REC.STATUS)
+  ├── field_geoid = "HR.PROC_CLOSE:RECORD:L_REC:FIELD:STATUS"
+  └── record_geoid = "HR.PROC_CLOSE:RECORD:L_REC"
+
+
+Вариант 3: OUT-параметр
+─────────────────────────────────────────────────────────────────
+DaliStatement(UPDATE)
+        │
+  RETURNS_INTO  [returning_exprs="STATUS"]
+        │
+        ▼
+DaliParameter(P_OUT_STATUS)
+  ├── param_geoid = "HR.PROC_CLOSE:PARAM:P_OUT_STATUS"
+  └── param_mode = "OUT"
+
+
+Вариант 4: BULK COLLECT → DaliRecord
+─────────────────────────────────────────────────────────────────
+DaliStatement(UPDATE BULK COLLECT)
+        │
+  RETURNS_INTO  [returning_exprs="ORDER_ID,STATUS"]
+        │
+        ▼
+DaliRecord(L_TAB)
+  ├── record_geoid = "HR.PROC_CLOSE:RECORD:L_TAB"
+  └── HAS_RECORD_FIELD ──► DaliRecordField(ORDER_ID)
+                      └──► DaliRecordField(STATUS)
+```
+
+### 19.4 Алгоритм классификации target
+
+```java
+// В BaseSemanticListener.classifyReturningTarget():
+ReturningTargetKind classify(String varName, String routineGeoid) {
+
+    // 1. IDENT.IDENT → поле записи
+    if (varName.contains("."))
+        return RECORD_FIELD;
+
+    // 2. Есть параметр с таким именем?
+    RoutineInfo ri = engine.getBuilder().getRoutines().get(routineGeoid);
+    if (ri != null && ri.hasParameter(varName))
+        return PARAMETER;
+
+    // 3. Есть DaliRecord с таким именем?
+    if (engine.getBuilder().getRecords()
+               .containsKey(routineGeoid + ":RECORD:" + varName))
+        return RECORD;
+
+    // 4. По умолчанию — DaliVariable
+    return VARIABLE;
+}
+```
+
+### 19.5 Атрибуты ребра RETURNS_INTO
+
+| Атрибут | Тип | Описание |
+|---------|-----|---------|
+| `session_id` | String | ID сессии парсинга |
+| `returning_exprs` | String | Запятая-разделённый список выражений из `RETURNING expr1, expr2` |
+
+### 19.6 Файлы (Sprint 2)
+
+| Файл | Изменение |
+|------|-----------|
+| `PlSqlSemanticListener.java` | `enterReturning_clause()` — парсинг targets |
+| `BaseSemanticListener.java` | `onReturningTarget()`, `classifyReturningTarget()` |
+| `StatementInfo.java` | `ReturningTarget record`, `addReturningTarget()` |
+| `RemoteWriter.java` | Loop RETURNS_INTO edges после write statements |
+| `JsonlBatchBuilder.java` | `appendEdge("RETURNS_INTO", ...)` после STMT vertices |
+| `RemoteSchemaCommands.java` | `CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS` |
+
+### 19.7 Связь с G6/G8
+
+| Feature | Механизм | Результат |
+|---------|---------|---------|
+| G6: BULK COLLECT INTO | `BULK_COLLECTS_INTO` ребро | DaliStatement(SELECT) → DaliRecord |
+| G8: FETCH BULK COLLECT | `cursorRecordAliases` | DaliRecord заполняется из cursor columns |
+| **G9: RETURNING INTO** | `RETURNS_INTO` ребро | DaliStatement(DML) → DaliVariable/RecordField/Parameter/Record |
+
+---
+
 ## 18. Связанные компоненты
 
 | Компонент | Роль |
