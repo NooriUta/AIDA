@@ -19,6 +19,9 @@ export interface ExpansionGqlNode {
 }
 export interface ExpansionGqlEdge {
   id: string; source: string; target: string; type: string;
+  /** Column-level handle ids — see services/lineage.ts::GraphEdge. */
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
 }
 
 export interface FilterState {

@@ -94,6 +94,10 @@ public class LineageService {
         // Use swapped variable so id(n) refers to the node we found, not the pattern destination
         // BUG-VC-002: Exclude DaliConstraint/DaliPrimaryKey/DaliForeignKey constraint nodes.
         // DaliAtom excluded — ANTLR4 atom nodes not renderable in LOOM canvas.
+        // IMPORTANT: Cypher UNION requires every branch to project the SAME
+        // column list. The hoisted DATA_FLOW / FILTER_FLOW branches emit
+        // sourceHandle / targetHandle for column-level routing, so every
+        // earlier branch also emits two empty strings in those positions.
         String cypher = """
             MATCH (m)-[r]->(n)
             WHERE id(n) = $nodeId
@@ -105,12 +109,12 @@ public class LineageService {
                    id(n) AS tgtId, labels(n)[0] AS tgtType,
                    coalesce(n.table_name, n.column_name, n.routine_name,
                             n.package_name, n.stmt_geoid, n.app_name, n.schema_name, '') AS tgtLabel,
-                   n.schema_geoid AS tgtScope, type(r) AS edgeType
+                   n.schema_geoid AS tgtScope, type(r) AS edgeType,
+                   '' AS sourceHandle, '' AS targetHandle
             UNION
-            // Hoisted branch — source tables read by any descendant of a
+            // Hoisted READS_FROM: source tables read by any descendant of a
             // DaliStatement root, attributed to the root so the canvas draws
-            // the edge table → root. Guarded by coalesce(…parent_statement…)
-            // so it no-ops for non-stmt targets (tables, columns, …).
+            // the edge table → root.
             MATCH (root:DaliStatement)
             WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
             MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root)
@@ -119,13 +123,13 @@ public class LineageService {
                    coalesce(t.table_name, '') AS srcLabel,
                    id(root) AS tgtId, 'DaliStatement' AS tgtType,
                    coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
-                   t.schema_geoid AS tgtScope, 'READS_FROM' AS edgeType
+                   t.schema_geoid AS tgtScope, 'READS_FROM' AS edgeType,
+                   '' AS sourceHandle, '' AS targetHandle
             UNION
-            // DATA_FLOW aggregated to srcTable → root stmt. Mirrors the
-            // corresponding segment in ExploreService.exploreSchema — column
-            // lives on the table, OutputColumn lives on a stmt, we collapse
-            // to (table → root) so the canvas renders an animated lime dash
-            // from each source table to the INSERT / MERGE root.
+            // DATA_FLOW column-level: srcTable → root with per-column handle
+            // routing. Anchors at (srcTable, root) so React Flow finds the
+            // mounted parent nodes; sourceHandle / targetHandle point at
+            // the specific column row inside each card.
             MATCH (root:DaliStatement)
             WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
             MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
@@ -135,11 +139,13 @@ public class LineageService {
                    coalesce(srcTbl.table_name, '') AS srcLabel,
                    id(root) AS tgtId, 'DaliStatement' AS tgtType,
                    coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
-                   srcTbl.schema_geoid AS tgtScope, 'DATA_FLOW' AS edgeType
+                   srcTbl.schema_geoid AS tgtScope, 'DATA_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   'tgt-' + id(oc)     AS targetHandle
             UNION
-            // FILTER_FLOW aggregated to srcTable → root. Column used in
-            // WHERE / HAVING / JOIN of the root stmt or any descendant;
-            // rendered as a mauve dotted animated edge on the canvas.
+            // FILTER_FLOW column-level: srcTable → root. Source handle
+            // points at the specific column used in the predicate; target
+            // handle is empty because filter edges land on the stmt header.
             MATCH (root:DaliStatement)
             WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
             MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
@@ -149,8 +155,10 @@ public class LineageService {
                    coalesce(srcTbl.table_name, '') AS srcLabel,
                    id(root) AS tgtId, 'DaliStatement' AS tgtType,
                    coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
-                   srcTbl.schema_geoid AS tgtScope, 'FILTER_FLOW' AS edgeType
-            LIMIT 1000
+                   srcTbl.schema_geoid AS tgtScope, 'FILTER_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   ''                  AS targetHandle
+            LIMIT 2000
             """;
         return arcade.cypher(cypher, Map.of("nodeId", nodeId))
                 .map(rows -> ExploreService.buildResult(rows, nodeId, ""))

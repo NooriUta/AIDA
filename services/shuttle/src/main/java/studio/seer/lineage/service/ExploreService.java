@@ -760,9 +760,21 @@ public class ExploreService {
             nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of(), ""));
             nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, tgtMeta, ""));
 
-            String edgeId = srcId + "__" + edgeType + "__" + tgtId;
+            // Column-level routing hints — when a Cypher segment wants the edge
+            // to land on a specific column handle inside the parent card, it
+            // returns sourceHandle / targetHandle columns and the edge id is
+            // expanded to include them so dedup doesn't collapse multiple
+            // column-to-column edges between the same parent pair.
+            String srcHandle = str(row, "sourceHandle");
+            String tgtHandle = str(row, "targetHandle");
+            String edgeId = srcId
+                + (srcHandle.isEmpty() ? "" : "/" + srcHandle)
+                + "__" + edgeType + "__" + tgtId
+                + (tgtHandle.isEmpty() ? "" : "/" + tgtHandle);
             if (edgeIdsSeen.add(edgeId)) {
-                edges.add(new GraphEdge(edgeId, srcId, tgtId, edgeType));
+                edges.add(new GraphEdge(edgeId, srcId, tgtId, edgeType,
+                    srcHandle.isEmpty() ? null : srcHandle,
+                    tgtHandle.isEmpty() ? null : tgtHandle));
             }
         }
 

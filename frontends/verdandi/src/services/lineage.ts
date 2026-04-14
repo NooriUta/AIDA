@@ -43,6 +43,13 @@ export interface GraphEdge {
   source: string;
   target: string;
   type: string;
+  /** React Flow handle ids inside the parent source / target nodes.
+   *  Backend sets these for column-level DATA_FLOW / FILTER_FLOW
+   *  (e.g. `'src-#13:41061'` / `'tgt-#31:26805'`) so the edge routes
+   *  into the specific column row instead of the node default handle.
+   *  Null / empty = route to node default handle. */
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
 }
 
 export interface ExploreResult {
@@ -82,7 +89,7 @@ const EXPLORE = /* GraphQL */ `
   query Explore($scope: String!, $includeExternal: Boolean) {
     explore(scope: $scope, includeExternal: $includeExternal) {
       nodes { id type label scope dataSource meta { key value } }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -92,7 +99,7 @@ const LINEAGE = /* GraphQL */ `
   query Lineage($nodeId: String!) {
     lineage(nodeId: $nodeId) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -102,7 +109,7 @@ const UPSTREAM = /* GraphQL */ `
   query Upstream($nodeId: String!) {
     upstream(nodeId: $nodeId) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -112,7 +119,7 @@ const DOWNSTREAM = /* GraphQL */ `
   query Downstream($nodeId: String!) {
     downstream(nodeId: $nodeId) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -122,7 +129,7 @@ const EXPAND_DEEP = /* GraphQL */ `
   query ExpandDeep($nodeId: String!, $depth: Int!) {
     expandDeep(nodeId: $nodeId, depth: $depth) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -132,7 +139,7 @@ const STMT_COLUMNS = /* GraphQL */ `
   query StmtColumns($ids: [String]!) {
     stmtColumns(ids: $ids) {
       nodes { id type label scope dataSource meta { key value } }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
