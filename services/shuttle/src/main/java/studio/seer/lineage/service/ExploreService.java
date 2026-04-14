@@ -228,35 +228,6 @@ public class ExploreService {
                    id(target) AS tgtId, target.table_name AS tgtLabel, target.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
             LIMIT 200
-            UNION ALL
-            // 2.3 DATA_FLOW aggregated to table → statement
-            //   DB shape: DaliColumn -[:DATA_FLOW]-> DaliOutputColumn
-            //   L2 has no DaliColumn / DaliOutputColumn nodes, so we aggregate:
-            //     srcTable = the column's owning table (via HAS_COLUMN)
-            //     tgtStmt  = the output column's owning statement (via HAS_OUTPUT_COL)
-            //   Only root statements emitted (same convention as READS_FROM above).
-            MATCH (s:DaliSchema)
-            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
-            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
-            MATCH (srcCol)-[:DATA_FLOW]->(oc:DaliOutputColumn)<-[:HAS_OUTPUT_COL]-(stmt:DaliStatement)
-            WHERE coalesce(stmt.parent_statement, '') = ''
-            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
-                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
-                   'DaliStatement' AS tgtType, 'DATA_FLOW' AS edgeType
-            LIMIT 2000
-            UNION ALL
-            // 2.4 FILTER_FLOW aggregated to table → statement
-            //   DB shape: DaliColumn -[:FILTER_FLOW]-> DaliStatement  (WHERE / HAVING / JOIN)
-            //   L2 aggregation: srcTable = column's owning table, tgtStmt = stmt directly.
-            MATCH (s:DaliSchema)
-            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
-            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
-            MATCH (srcCol)-[:FILTER_FLOW]->(stmt:DaliStatement)
-            WHERE coalesce(stmt.parent_statement, '') = ''
-            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
-                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
-                   'DaliStatement' AS tgtType, 'FILTER_FLOW' AS edgeType
-            LIMIT 2000
             """ + (includeExternal ? EXTERNAL_EXTENSION : "");
 
         // ArcadeDB Cypher bug: $param IS NULL does not work in WHERE clauses.
@@ -266,8 +237,52 @@ public class ExploreService {
             "dbName", dbName == null || dbName.isBlank() ? "" : dbName
         );
 
-        return arcade.cypher(cypher, params)
-            .map(rows -> buildResult(rows, schemaName, "DaliSchema"))
+        // Column-level DATA_FLOW / FILTER_FLOW is produced by a SEPARATE query
+        // that emits per-row sourceHandle / targetHandle. We keep it separate
+        // from the main UNION ALL chain because Cypher UNION ALL demands every
+        // branch project the same column list, and adding handle columns to
+        // all ~10 base branches would balloon the query text for little gain.
+        // Running it in parallel via Uni.combine() is cheaper.
+        //
+        // The old aggregated segments 2.3 / 2.4 (table → stmt without handles)
+        // have been removed — this query supersedes them by also producing
+        // the same (srcTable, tgtStmt) pair rows plus the column handles
+        // that React Flow uses to route into specific column rows.
+        String columnFlowCypher = """
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
+            MATCH (srcCol)-[:DATA_FLOW]->(oc:DaliOutputColumn)<-[:HAS_OUTPUT_COL]-(stmt:DaliStatement)
+            WHERE coalesce(stmt.parent_statement, '') = ''
+            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
+                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'DATA_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   'tgt-' + id(oc)     AS targetHandle
+            UNION
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
+            MATCH (srcCol)-[:FILTER_FLOW]->(stmt:DaliStatement)
+            WHERE coalesce(stmt.parent_statement, '') = ''
+            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
+                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'FILTER_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   ''                  AS targetHandle
+            LIMIT 4000
+            """;
+
+        var baseUni = arcade.cypher(cypher, params);
+        var colUni  = arcade.cypher(columnFlowCypher, params).onFailure().recoverWithItem(List.of());
+
+        return Uni.combine().all().unis(baseUni, colUni).asTuple()
+            .map(tuple -> {
+                var merged = new ArrayList<Map<String, Object>>(tuple.getItem1().size() + tuple.getItem2().size());
+                merged.addAll(tuple.getItem1());
+                merged.addAll(tuple.getItem2());
+                return buildResult(merged, schemaName, "DaliSchema");
+            })
             .flatMap(this::enrichDataSource);
     }
 
