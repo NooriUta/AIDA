@@ -620,6 +620,105 @@ public class KnotService {
             .map(s -> (s == null || s.isBlank()) ? null : s);
     }
 
+    // ── Statement extras (descendants + atom stats, lazy from Inspector) ──────
+    //
+    // Powers the LOOM Inspector "Дополнительно" tab. Returns:
+    //   * all recursive CHILD_OF descendants (sub-queries, CTEs, inline views)
+    //   * DaliAtom counts grouped by parent_context for the root stmt
+    //
+    // Accepts either an ArcadeDB @rid ("#25:8333") — as passed by the LOOM
+    // Inspector which uses RIDs as React Flow node ids — or a stmt_geoid
+    // string (as the standalone KNOT page would pass). Mirrors knotSnippet's
+    // dual-input pattern.
+
+    public Uni<StatementExtras> knotStatementExtras(String idOrGeoid) {
+        if (idOrGeoid == null || idOrGeoid.isBlank())
+            return Uni.createFrom().item(new StatementExtras(List.of(), List.of(), 0));
+
+        boolean isRid = idOrGeoid.startsWith("#");
+
+        // Descendants via TRAVERSE in('CHILD_OF') — matches the way Hound
+        // stores parent/child ("child -[:CHILD_OF]-> parent", so in('CHILD_OF')
+        // on the parent yields its children). MAXDEPTH 30 covers the deepest
+        // nested CTE/subquery trees observed in the corpus with margin.
+        String descendantSql = isRid
+            ? """
+                SELECT @rid as rid, stmt_geoid, type as stmtType, parent_statement as parentStmtGeoid
+                FROM (
+                    TRAVERSE in('CHILD_OF')
+                    FROM (SELECT FROM DaliStatement WHERE @rid = :rid)
+                    MAXDEPTH 30
+                )
+                WHERE @rid <> :rid
+                ORDER BY parent_statement, stmt_geoid
+                LIMIT 500
+                """
+            : """
+                SELECT @rid as rid, stmt_geoid, type as stmtType, parent_statement as parentStmtGeoid
+                FROM (
+                    TRAVERSE in('CHILD_OF')
+                    FROM (SELECT FROM DaliStatement WHERE stmt_geoid = :geoid)
+                    MAXDEPTH 30
+                )
+                WHERE stmt_geoid <> :geoid
+                ORDER BY parent_statement, stmt_geoid
+                LIMIT 500
+                """;
+
+        // Atom breakdown — scoped to the root statement's stmt_geoid.
+        // Subquery in the WHERE uses IN (SELECT …) per the scalar-vs-set
+        // lesson learned in the knotSnippet fix (commit a7b810d).
+        String atomSql = isRid
+            ? """
+                SELECT parent_context as ctx, count(*) as cnt
+                FROM DaliAtom
+                WHERE statement_geoid IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid)
+                GROUP BY parent_context
+                """
+            : """
+                SELECT parent_context as ctx, count(*) as cnt
+                FROM DaliAtom
+                WHERE statement_geoid = :geoid
+                GROUP BY parent_context
+                """;
+
+        Map<String, Object> params = isRid
+            ? Map.of("rid",   idOrGeoid)
+            : Map.of("geoid", idOrGeoid);
+
+        Uni<List<SubqueryInfo>> descendantsUni = arcade.sql(descendantSql, params)
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.stream()
+                .map(r -> new SubqueryInfo(
+                    str(r, "rid"),
+                    str(r, "stmt_geoid"),
+                    str(r, "stmtType"),
+                    str(r, "parentStmtGeoid")))
+                .toList());
+
+        Uni<List<AtomContextCount>> atomsUni = arcade.sql(atomSql, params)
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.stream()
+                .map(r -> {
+                    String ctx = str(r, "ctx");
+                    if (ctx == null || ctx.isBlank()) ctx = "UNKNOWN";
+                    Object cntObj = r.get("cnt");
+                    int cnt = cntObj instanceof Number n ? n.intValue() : 0;
+                    return new AtomContextCount(ctx, cnt);
+                })
+                .sorted((a, b) -> Integer.compare(b.count(), a.count()))  // DESC
+                .toList());
+
+        return Uni.combine().all().unis(descendantsUni, atomsUni)
+            .asTuple()
+            .map(tuple -> {
+                List<SubqueryInfo>     descendants = tuple.getItem1();
+                List<AtomContextCount> atoms       = tuple.getItem2();
+                int total = atoms.stream().mapToInt(AtomContextCount::count).sum();
+                return new StatementExtras(descendants, atoms, total);
+            });
+    }
+
     // ── Snippets ──────────────────────────────────────────────────────────────
 
     private Uni<List<KnotSnippet>> loadSnippets(Map<String, Object> params) {

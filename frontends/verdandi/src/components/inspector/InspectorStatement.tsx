@@ -1,9 +1,10 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { FileCode } from 'lucide-react';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
-import { useKnotSnippet } from '../../services/hooks';
+import type { SubqueryInfo } from '../../services/lineage';
+import { useKnotSnippet, useStatementExtras } from '../../services/hooks';
 import { InspectorSection, InspectorRow } from './InspectorSection';
 
 interface Props { data: DaliNodeData; nodeId: string }
@@ -353,40 +354,179 @@ InspectorStatement.displayName = 'InspectorStatement';
 // ── Extra panel ──────────────────────────────────────────────────────────────
 //
 // Surfaces data that requires a backend lookup beyond the L2 `explore` query:
-//   * all recursive CHILD_OF / USES_SUBQUERY descendants of this stmt
-//   * DaliAtom statistics grouped by parent_context (WHERE / HAVING / JOIN / SELECT)
-//   * counts of join / filter / subquery atoms
+//   * all recursive CHILD_OF descendants (sub-queries, CTEs, inline views)
+//   * DaliAtom counts grouped by parent_context (JOIN / SELECT / WHERE / CTE / …)
 //
-// The fetch is wired to a new `statementExtras(idOrRid)` GraphQL resolver
-// (KnotService.knotStatementExtras) that is added in the same commit as
-// this component. Until the resolver ships, this renders a placeholder.
+// Wired to the `knotStatementExtras(stmtGeoid)` GraphQL resolver in
+// KnotService.java. The hook fires only while the panel is mounted (which is
+// only while tab === 'extra'), so the query stays naturally lazy.
 
 function ExtraPanel({ stmtGeoid }: { stmtGeoid: string }) {
   const { t } = useTranslation();
-  // TODO: swap this placeholder for useStatementExtras(stmtGeoid) once the
-  // backend resolver is live (tracking in the current sprint plan, Phase 6c).
+  const { data, isFetching, isError } = useStatementExtras(stmtGeoid, !!stmtGeoid);
+
+  // Build a depth map from parent_statement chain so we can indent each
+  // descendant under its parent. The root statement is depth 0 (not shown);
+  // its direct children are depth 1; CTEs inside a child SELECT are depth 2.
+  const tree = useMemo(() => {
+    if (!data?.descendants) return { items: [] as { info: SubqueryInfo; depth: number }[] };
+    const byGeoid = new Map<string, SubqueryInfo>();
+    for (const d of data.descendants) byGeoid.set(d.stmtGeoid, d);
+    const depthOf = (info: SubqueryInfo, guard = 0): number => {
+      if (guard > 30) return 0;
+      const parentGeoid = info.parentStmtGeoid ?? '';
+      const parent = byGeoid.get(parentGeoid);
+      if (!parent) return 1;          // immediate child of the root stmt
+      return 1 + depthOf(parent, guard + 1);
+    };
+    // Preserve backend ordering (parent_stmt_geoid, stmt_geoid) but add depth.
+    const items = data.descendants.map((info) => ({ info, depth: depthOf(info) }));
+    return { items };
+  }, [data?.descendants]);
+
+  const filterCtxCount =
+    data?.atomContexts.find((c) => c.context === 'WHERE')?.count ?? 0;
+  const havingCtxCount =
+    data?.atomContexts.find((c) => c.context === 'HAVING')?.count ?? 0;
+  const joinCtxCount =
+    data?.atomContexts.find((c) => c.context === 'JOIN')?.count ?? 0;
+  const subqueryCtxCount =
+    (data?.atomContexts.find((c) => c.context === 'SUBQUERY')?.count ?? 0)
+    + (data?.atomContexts.find((c) => c.context === 'USUBQUERY')?.count ?? 0)
+    + (data?.atomContexts.find((c) => c.context === 'CTE')?.count ?? 0);
+
+  if (isFetching) {
+    return (
+      <div style={{ padding: '12px 12px', fontSize: '11px', color: 'var(--t3)' }}>
+        {t('inspector.extraLoading')}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div style={{ padding: '12px 12px', fontSize: '11px', color: 'var(--err)' }}>
+        {t('inspector.extraError')}
+      </div>
+    );
+  }
+
   return (
     <>
-      <InspectorSection title={t('inspector.subqueries')}>
-        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)', fontStyle: 'italic' }}>
-          {t('inspector.extraPending')}
-        </div>
-        <div style={{ padding: '2px 10px 6px', fontSize: '10px', color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
-          @rid = {stmtGeoid}
-        </div>
+      {/* ── Subqueries (all descendants, recursive) ─────────────────────────── */}
+      <InspectorSection title={`${t('inspector.subqueries')} (${tree.items.length})`}>
+        {tree.items.length === 0 ? (
+          <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+            {t('inspector.noSubqueries')}
+          </div>
+        ) : (
+          <div style={{ marginTop: 2 }}>
+            {tree.items.map(({ info, depth }) => (
+              <div
+                key={info.rid}
+                title={info.stmtGeoid}
+                style={{
+                  display:     'flex',
+                  alignItems:  'center',
+                  gap:         6,
+                  padding:     '3px 10px',
+                  paddingLeft: 10 + (depth - 1) * 12,
+                  borderTop:   '1px solid var(--bd)',
+                  fontSize:    '11px',
+                }}
+              >
+                <SubqueryTypeBadge type={info.stmtType} />
+                <span
+                  className="mono"
+                  style={{
+                    flex:         1,
+                    color:        'var(--t1)',
+                    overflow:     'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace:   'nowrap',
+                    fontFamily:   'var(--mono)',
+                    fontSize:     '10px',
+                  }}
+                >
+                  {shortenSubLabel(info.stmtGeoid, info.parentStmtGeoid)}
+                </span>
+                <span
+                  style={{
+                    color:      'var(--t3)',
+                    fontSize:   '9px',
+                    fontFamily: 'var(--mono)',
+                    flexShrink: 0,
+                  }}
+                >
+                  {info.rid}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </InspectorSection>
+
+      {/* ── Filter / JOIN / SubQuery atom summary ───────────────────────────── */}
       <InspectorSection title={t('inspector.filters')}>
-        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)', fontStyle: 'italic' }}>
-          {t('inspector.extraPending')}
-        </div>
+        <InspectorRow label={t('inspector.filterWhere')}    value={String(filterCtxCount)} />
+        <InspectorRow label={t('inspector.filterHaving')}   value={String(havingCtxCount)} />
+        <InspectorRow label={t('inspector.filterJoin')}     value={String(joinCtxCount)} />
+        <InspectorRow label={t('inspector.filterSubquery')} value={String(subqueryCtxCount)} />
       </InspectorSection>
-      <InspectorSection title={t('inspector.atomStats')}>
-        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)', fontStyle: 'italic' }}>
-          {t('inspector.extraPending')}
-        </div>
+
+      {/* ── Raw atom breakdown (all parent_context buckets) ────────────────── */}
+      <InspectorSection
+        title={`${t('inspector.atomStats')} (${data?.totalAtomCount ?? 0})`}
+      >
+        {(data?.atomContexts ?? []).length === 0 ? (
+          <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+            {t('inspector.noAtoms')}
+          </div>
+        ) : (
+          data!.atomContexts.map((c) => (
+            <InspectorRow key={c.context} label={c.context} value={String(c.count)} />
+          ))
+        )}
       </InspectorSection>
     </>
   );
+}
+
+// ── Subquery helpers ────────────────────────────────────────────────────────
+
+function SubqueryTypeBadge({ type }: { type: string }) {
+  const color = OP_COLORS[type] ?? 'var(--t3)';
+  return (
+    <span
+      style={{
+        fontSize:      '8px',
+        padding:       '1px 5px',
+        borderRadius:  2,
+        fontFamily:    'var(--mono)',
+        border:        `0.5px solid ${color}`,
+        color,
+        opacity:       0.85,
+        flexShrink:    0,
+        letterSpacing: '0.03em',
+        fontWeight:    600,
+      }}
+    >
+      {type}
+    </span>
+  );
+}
+
+/**
+ * Trim a descendant stmt_geoid for display by removing the parent prefix,
+ * leaving just the trailing path segment(s). Falls back to the last two
+ * colon-separated parts if the parent isn't found.
+ */
+function shortenSubLabel(geoid: string, parentGeoid: string | null): string {
+  if (parentGeoid && geoid.startsWith(parentGeoid + ':')) {
+    return geoid.slice(parentGeoid.length + 1);
+  }
+  const parts = geoid.split(':');
+  return parts.slice(-2).join(':') || geoid;
 }
 
 // ── Stats panel ──────────────────────────────────────────────────────────────

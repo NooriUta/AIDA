@@ -554,6 +554,47 @@ export async function fetchKnotSnippet(stmtGeoid: string): Promise<string | null
   return data.knotSnippet ?? null;
 }
 
+// ── Lazy statement extras (descendants + atom stats) ─────────────────────────
+// Feeds the LOOM Inspector "Дополнительно" tab. Accepts either an ArcadeDB @rid
+// ("#25:8333") or a stmt_geoid string — the backend resolver in KnotService.java
+// routes on the '#' prefix.
+
+export interface SubqueryInfo {
+  rid:             string;
+  stmtGeoid:       string;
+  stmtType:        string;
+  parentStmtGeoid: string | null;
+}
+
+export interface AtomContextCount {
+  context: string;
+  count:   number;
+}
+
+export interface StatementExtras {
+  descendants:    SubqueryInfo[];
+  atomContexts:   AtomContextCount[];
+  totalAtomCount: number;
+}
+
+const KNOT_STATEMENT_EXTRAS = /* GraphQL */ `
+  query KnotStatementExtras($stmtGeoid: String!) {
+    knotStatementExtras(stmtGeoid: $stmtGeoid) {
+      descendants { rid stmtGeoid stmtType parentStmtGeoid }
+      atomContexts { context count }
+      totalAtomCount
+    }
+  }
+`;
+
+export async function fetchStatementExtras(stmtGeoid: string): Promise<StatementExtras | null> {
+  const data = await gqlClient.request<{ knotStatementExtras: StatementExtras | null }>(
+    KNOT_STATEMENT_EXTRAS,
+    { stmtGeoid },
+  );
+  return data.knotStatementExtras ?? null;
+}
+
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
 /** Returns true if the error is a 401 (session expired) */

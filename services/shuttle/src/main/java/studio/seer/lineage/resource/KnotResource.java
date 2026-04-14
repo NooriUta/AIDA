@@ -79,6 +79,30 @@ public class KnotResource {
                                        + ") → " + (s != null ? s.length() + " chars" : "null"))));
     }
 
+    @Query("knotStatementExtras")
+    @Description("KNOT — recursive subquery tree + atom stats for one statement by @rid or stmt_geoid. Role: viewer+")
+    public Uni<StatementExtras> knotStatementExtras(
+        @Name("stmtGeoid")
+        @Description("stmt_geoid or @rid of the DaliStatement")
+        String stmtGeoid
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "knotStatementExtras",
+                       "call", "knotStatementExtras(stmtGeoid=" + (stmtGeoid != null ? stmtGeoid : "") + ")"));
+        return knotService.knotStatementExtras(stmtGeoid)
+                .invoke(extras -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotStatementExtras",
+                               "stmtGeoid", stmtGeoid != null ? stmtGeoid : "",
+                               "call", "knotStatementExtras(stmtGeoid=" + (stmtGeoid != null ? stmtGeoid : "")
+                                       + ") → " + (extras != null
+                                                    ? extras.descendants().size() + " desc, "
+                                                      + extras.totalAtomCount() + " atoms"
+                                                    : "null"))));
+    }
+
     @Query("knotTableDetail")
     @Description("KNOT — lazy column detail for one table: PK/FK/type/default + SQL snippet. Role: viewer+")
     public Uni<KnotTableDetail> knotTableDetail(
