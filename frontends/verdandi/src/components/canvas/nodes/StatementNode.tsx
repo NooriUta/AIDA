@@ -81,7 +81,7 @@ function OutputColRow({ col, onClick, dimmed }: { col: ColumnInfo; onClick?: () 
 
 export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNodeType>) => {
   const { t } = useTranslation();
-  const { selectNode, setFieldFilter, setStmtFilter, filter, highlightedColumns } = useLoomStore();
+  const { selectNode, setFieldFilter, setStmtFilter, filter, highlightedColumns, jumpTo } = useLoomStore();
   const zoomLevel = useZoomLevel();
   const isLodCompact = zoomLevel < LOD_COMPACT_ZOOM;
   const columns  = data.columns ?? [];
@@ -164,23 +164,42 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       >
         <FileCode size={13} color={typeColor} strokeWidth={1.5} />
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          {/* Hierarchy path (Schema / Package / Routine) — vertical */}
+          {/* Hierarchy path (Schema / Package / Routine) — vertical.
+              Phase S2.6: package segment (second-to-last) is clickable →
+              navigates to L2 aggregate view for that package. */}
           {!isCompact && Array.isArray(data.metadata?.groupPath) && (data.metadata.groupPath as string[]).length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: '2px' }}>
-              {(data.metadata.groupPath as string[]).map((seg, i) => (
-                <div key={i} style={{
-                  fontSize:     '9px',
-                  color:        'var(--t3)',
-                  opacity:      0.6 + i * 0.15,
-                  overflow:     'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace:   'nowrap',
-                  lineHeight:   '12px',
-                  letterSpacing: '0.02em',
-                }}>
-                  {seg}
-                </div>
-              ))}
+              {(data.metadata.groupPath as string[]).map((seg, i) => {
+                const gp = data.metadata.groupPath as string[];
+                // Only the package segment (second-to-last) gets a click handler.
+                // Clicking it navigates to L2 aggregate view scoped to that package.
+                const isPackage = gp.length >= 2 && i === gp.length - 2;
+                const clickable = isPackage;
+                return (
+                  <div
+                    key={i}
+                    onClick={clickable ? (e) => {
+                      e.stopPropagation();
+                      // pkg-NAME scope with routineAggregate=true (default) → aggregate view
+                      jumpTo('L2', `pkg-${seg}`, seg, 'DaliPackage');
+                    } : undefined}
+                    style={{
+                      fontSize:       '9px',
+                      color:          clickable ? 'var(--acc)' : 'var(--t3)',
+                      opacity:        clickable ? 1 : (0.6 + i * 0.15),
+                      overflow:       'hidden',
+                      textOverflow:   'ellipsis',
+                      whiteSpace:     'nowrap',
+                      lineHeight:     '12px',
+                      letterSpacing:  '0.02em',
+                      cursor:         clickable ? 'pointer' : 'default',
+                      textDecoration: clickable ? 'underline' : 'none',
+                    }}
+                  >
+                    {seg}
+                  </div>
+                );
+              })}
             </div>
           )}
           <div

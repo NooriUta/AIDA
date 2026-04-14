@@ -44,6 +44,10 @@ const SUPPRESSED_EDGES = new Set<string>([
   'CONTAINS_SCHEMA',
   'HAS_SERVICE',
   'USES_DATABASE',
+  // Phase S2.4 — PL/SQL record containment (virtual edge emitted by backend)
+  'CONTAINS_RECORD',
+  // NODE_ONLY self-edges (emitted for routine aggregate standalone nodes)
+  'NODE_ONLY',
 ]);
 
 // ─── L2 edge whitelist: only data-flow arrows on the canvas ─────────────────
@@ -230,10 +234,26 @@ function transformSchemaExplore(result: ExploreResult): {
     renderedIds.add(extId);
   }
 
+  // Phase S2.6 — build stmt → owner lookup so StatementNode header segments
+  // can be made clickable (navigates back to L2 scoped to that routine/package).
+  const stmtToRoutine = new Map<string, string>();
+  const routineToParent = new Map<string, string>();
+  for (const e of result.edges) {
+    if (e.type === 'CONTAINS_STMT') stmtToRoutine.set(e.target, e.source);
+    if (e.type === 'CONTAINS_ROUTINE') {
+      const src = nodeById.get(e.source);
+      if (src?.type === 'DaliPackage' || src?.type === 'DaliSchema') {
+        routineToParent.set(e.target, e.source);
+      }
+    }
+  }
+
   for (const stmtId of allStmtIds) {
     const nd = nodeById.get(stmtId);
     if (!nd) continue;
     const { shortLabel, groupPath } = parseStmtLabel(nd.label);
+    const ownerRoutineId  = stmtToRoutine.get(stmtId);
+    const ownerPackageId  = ownerRoutineId ? routineToParent.get(ownerRoutineId) : undefined;
     rfNodes.push({
       id:       stmtId,
       type:     'statementNode',
@@ -242,7 +262,13 @@ function transformSchemaExplore(result: ExploreResult): {
         label:             shortLabel,
         nodeType:          'DaliStatement' as DaliNodeType,
         childrenAvailable: true,
-        metadata:          { scope: nd.scope, groupPath, fullLabel: nd.label },
+        metadata:          {
+          scope:          nd.scope,
+          groupPath,
+          fullLabel:      nd.label,
+          ownerRoutineId: ownerRoutineId  ?? undefined,
+          ownerPackageId: ownerPackageId  ?? undefined,
+        },
         operation:         extractStatementType(nd.label),
         columns:           columnsByParent.get(stmtId),
       },
@@ -421,6 +447,26 @@ export function transformGqlExplore(
     }
   }
 
+  // Phase S2.4 — collect DaliRecordField rows into RecordNode's data.columns
+  // (analogous to DaliColumn→TableNode and DaliOutputColumn→StatementNode)
+  const fieldsByRecord = new Map<string, Array<{ id: string; name: string; type: string; isPrimaryKey: boolean; isForeignKey: boolean }>>();
+  for (const e of result.edges) {
+    if (e.type !== 'HAS_RECORD_FIELD') continue;
+    const fieldNode = nodeById.get(e.target);
+    if (!fieldNode || fieldNode.type !== 'DaliRecordField') continue;
+    if (!fieldsByRecord.has(e.source)) fieldsByRecord.set(e.source, []);
+    const fields = fieldsByRecord.get(e.source)!;
+    const metaMap = Object.fromEntries((fieldNode.meta ?? []).map((m) => [m.key, m.value]));
+    fields.push({
+      id:           fieldNode.id,
+      name:         fieldNode.label,
+      type:         metaMap['dataType'] ?? metaMap['data_type'] ?? '',
+      isPrimaryKey: false,
+      // Use isForeignKey as a proxy for "has source_column_geoid" (%ROWTYPE origin badge)
+      isForeignKey: !!(metaMap['source_column_geoid']),
+    });
+  }
+
   const { subqueryIds, syntheticEdges } = hoistSubqueryReads(result);
 
   const nodes: LoomNode[] = result.nodes
@@ -429,6 +475,7 @@ export function transformGqlExplore(
       n.type !== 'DaliColumn'        &&
       n.type !== 'DaliAffectedColumn' &&
       n.type !== 'DaliAtom'          &&
+      n.type !== 'DaliRecordField'   &&  // Phase S2.4: fields render inside RecordNode
       !subqueryIds.has(n.id),
     )
     .map((n) => {
@@ -453,7 +500,9 @@ export function transformGqlExplore(
             routineKind: isFlatRoutine ? extractRoutineKind(n.label, nodeType) : undefined,
           },
           schema:    n.scope || undefined,
-          columns:   outputColsByStmt.get(n.id) ?? columnsByTable.get(n.id),
+          columns:   outputColsByStmt.get(n.id)
+                  ?? columnsByTable.get(n.id)
+                  ?? fieldsByRecord.get(n.id),  // Phase S2.4 — DaliRecord fields
           operation: nodeType === 'DaliStatement' ? extractStatementType(n.label) : undefined,
         },
       };

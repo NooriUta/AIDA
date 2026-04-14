@@ -105,6 +105,32 @@ public class LineageResource {
                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
+    // ── L4: Statement subquery tree ──────────────────────────────────────────
+
+    @Query("exploreStatementTree")
+    @Description("L4 — subquery tree + tables + DATA_FLOW for one DaliStatement. Role: viewer+")
+    public Uni<ExploreResult> exploreStatementTree(
+        @Name("stmtId")
+        @Description("@rid of the root DaliStatement to drill into")
+        String stmtId
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "exploreStatementTree", "stmtId", stmtId != null ? stmtId : "",
+                       "call", call("exploreStatementTree", "stmtId", stmtId != null ? stmtId : "")));
+        return exploreService.exploreStatementTree(stmtId)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",     "exploreStatementTree",
+                               "stmtId", stmtId != null ? stmtId : "",
+                               "nodes",  result != null ? result.nodes().size() : 0,
+                               "edges",  result != null ? result.edges().size() : 0,
+                               "call",   call("exploreStatementTree", "stmtId", stmtId != null ? stmtId : "")
+                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                         + (result != null ? result.edges().size() : 0) + " edges")));
+    }
+
     // ── L2+: Statement column enrichment ─────────────────────────────────────
 
     @Query("stmtColumns")

@@ -15,7 +15,10 @@ export type DaliNodeType =
   | 'DaliOutputColumn'
   | 'DaliParameter'
   | 'DaliVariable'
-  | 'DaliAffectedColumn';
+  | 'DaliAffectedColumn'
+  // Phase S2.4 — PL/SQL record containers (BULK COLLECT / RETURNING INTO / %ROWTYPE targets)
+  | 'DaliRecord'
+  | 'DaliRecordField';
 
 // ─── Dali Edge Types ─────────────────────────────────────────────────────────
 export type DaliEdgeType =
@@ -48,7 +51,10 @@ export type DaliEdgeType =
   | 'JOIN_FLOW'
   | 'UNION_FLOW'
   | 'ATOM_PRODUCES'
-  | 'ROUTINE_USES_TABLE';
+  | 'ROUTINE_USES_TABLE'
+  // Phase S2.4 — PL/SQL record edges
+  | 'HAS_RECORD_FIELD'  // DaliRecord → DaliRecordField (structural containment)
+  | 'RETURNS_INTO';     // DaliStatement → DaliRecordField/Variable/Parameter/Record (data flow)
 
 // ─── Visualisation levels ────────────────────────────────────────────────────
 //

@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import {
   fetchOverview,
   fetchExplore,
+  fetchRoutineAggregate,
+  fetchStatementTree,
   fetchLineage,
   fetchUpstream,
   fetchDownstream,
@@ -66,6 +68,45 @@ export function useExplore(scope: string | null, includeExternal = false) {
     queryKey: [...qk.explore(scope ?? ''), includeExternal] as const,
     queryFn:  () => fetchExplore(scope!, includeExternal),
     enabled:  !!scope,
+    staleTime: 30_000,
+    retry: 2,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/**
+ * Phase S2.3 — new L2 view. Fetches the routines+tables aggregated result
+ * from exploreRoutineAggregate. Activated when viewLevel === 'L2' and
+ * filter.routineAggregate is true (the default).
+ */
+export function useRoutineAggregate(scope: string | null) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: ['routineAggregate', scope ?? ''] as const,
+    queryFn:  () => fetchRoutineAggregate(scope!),
+    enabled:  !!scope,
+    staleTime: 30_000,
+    retry: 2,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+// ── L4: Statement-tree drill ──────────────────────────────────────────────────
+
+/**
+ * Phase S2.5 — fetches the subquery tree for a single DaliStatement.
+ * Activated when viewLevel === 'L4' and currentScope is a statement @rid.
+ * Returns root stmt + all child sub-statements + their READS_FROM tables
+ * + HAS_OUTPUT_COL + DATA_FLOW edges.
+ */
+export function useStatementTree(stmtId: string | null) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: ['statementTree', stmtId ?? ''] as const,
+    queryFn:  () => fetchStatementTree(stmtId!),
+    enabled:  !!stmtId,
     staleTime: 30_000,
     retry: 2,
     throwOnError: false,

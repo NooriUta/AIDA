@@ -22,50 +22,61 @@ interface NodeRow {
   label: string;
 }
 
-const EDGE_ROWS: Record<'L1' | 'L2' | 'L3', EdgeRow[]> = {
+const EDGE_ROWS: Record<'L1' | 'L2' | 'L3' | 'L4', EdgeRow[]> = {
   L1: [
     { color: 'var(--acc)',              label: 'legend.edge.hasDatabase'    },
     { color: 'var(--inf)',              label: 'legend.edge.containsSchema' },
     { color: 'var(--t3)', dash: '6 3', label: 'legend.edge.usesDatabase'   },
   ],
+  // L2 shows the same edges for both routineAggregate and explore modes
+  // (READS_FROM/WRITES_TO are the dominant flow edges in both views).
   L2: [
-    // Four-way distinct data-flow row. Colour + dash + animation must match
-    // transformHelpers.getEdgeStyle so the canvas and the legend agree.
-    { color: 'var(--inf)',                     label: 'legend.edge.readsFrom'    },
-    { color: 'var(--wrn)', dash: '8 3',        label: 'legend.edge.writesTo'     },
+    { color: 'var(--inf)',                            label: 'legend.edge.readsFrom'    },
+    { color: 'var(--wrn)', dash: '8 3',               label: 'legend.edge.writesTo'     },
     { color: 'var(--acc)', dash: '5 3', animated: true, label: 'legend.edge.dataFlow'   },
     { color: '#B87AA8',    dash: '1 4', animated: true, label: 'legend.edge.filterFlow' },
-    { color: 'var(--inf)',                     label: 'legend.edge.joinFlow'     },
-    { color: 'var(--t3)',  dash: '4 2',        label: 'legend.edge.containsStmt' },
+    { color: 'var(--t3)',  dash: '4 2',               label: 'legend.edge.containsStmt' },
   ],
   L3: [
-    { color: 'var(--inf)',                     label: 'legend.edge.readsFrom'    },
-    { color: 'var(--wrn)', dash: '8 3',        label: 'legend.edge.writesTo'     },
-    { color: 'var(--acc)', dash: '5 3', animated: true, label: 'legend.edge.dataFlow'     },
-    { color: '#B87AA8',    dash: '1 4', animated: true, label: 'legend.edge.filterFlow'   },
-    { color: 'var(--acc)',              animated: true, label: 'legend.edge.atomProduces' },
-    { color: 'var(--inf)', dash: '4 3',        label: 'legend.edge.atomRefCol'   },
+    { color: 'var(--inf)',                                 label: 'legend.edge.readsFrom'    },
+    { color: 'var(--wrn)', dash: '8 3',                    label: 'legend.edge.writesTo'     },
+    { color: 'var(--acc)', dash: '5 3', animated: true,    label: 'legend.edge.dataFlow'     },
+    { color: '#B87AA8',    dash: '1 4', animated: true,    label: 'legend.edge.filterFlow'   },
+    { color: 'var(--acc)',              animated: true,    label: 'legend.edge.atomProduces' },
+    { color: 'var(--inf)', dash: '4 3',                    label: 'legend.edge.atomRefCol'   },
+    { color: '#665c48',    dash: '4 3',                    label: 'legend.edge.hasRecordField' },
+    { color: '#B87AA8',    dash: '4 2',                    label: 'legend.edge.returnsInto'   },
+  ],
+  // L4: statement-drill shows sub-query hierarchy + table reads + DATA_FLOW
+  L4: [
+    { color: 'var(--inf)',                            label: 'legend.edge.readsFrom'   },
+    { color: 'var(--acc)', dash: '5 3', animated: true, label: 'legend.edge.dataFlow' },
+    { color: '#665c48',    dash: '4 2',               label: 'legend.edge.containsStmt' },
   ],
 };
 
-const NODE_ROWS: Record<'L1' | 'L2' | 'L3', NodeRow[]> = {
+const NODE_ROWS: Record<'L1' | 'L2' | 'L3' | 'L4', NodeRow[]> = {
   L1: [
     { color: 'var(--acc)', shape: 'rect',      label: 'legend.node.application' },
     { color: 'var(--t2)',  shape: 'rect',      label: 'legend.node.database'    },
     { color: 'var(--inf)', shape: 'rect-dash', label: 'legend.node.schema'      },
   ],
   L2: [
-    { color: 'var(--acc)',  shape: 'rect',          label: 'legend.node.table'     },
-    { color: 'var(--t3)',   shape: 'rect',          label: 'legend.node.package'   },
-    { color: 'var(--suc)',  shape: 'rect',          label: 'legend.node.routine'   },
-    { color: 'var(--suc)',  shape: 'rect',          label: 'legend.node.statement' },
-    { color: 'var(--wrn)',  shape: 'circle',        label: 'legend.node.pkColumn'  },
-    { color: 'var(--inf)',  shape: 'circle-hollow', label: 'legend.node.fkColumn'  },
+    { color: 'var(--acc)', shape: 'rect', label: 'legend.node.table'     },
+    { color: 'var(--suc)', shape: 'rect', label: 'legend.node.routine'   },
+    { color: 'var(--suc)', shape: 'rect', label: 'legend.node.statement' },
+    { color: 'var(--t3)',  shape: 'rect', label: 'legend.node.package'   },
   ],
   L3: [
-    { color: 'var(--acc)', shape: 'rect',      label: 'legend.node.table'  },
-    { color: 'var(--inf)', shape: 'circle',    label: 'legend.node.column' },
-    { color: 'var(--wrn)', shape: 'circle',    label: 'legend.node.atom'   },
+    { color: 'var(--acc)', shape: 'rect',   label: 'legend.node.table'   },
+    { color: 'var(--inf)', shape: 'circle', label: 'legend.node.column'  },
+    { color: 'var(--wrn)', shape: 'circle', label: 'legend.node.atom'    },
+    { color: '#B87AA8',    shape: 'rect',   label: 'legend.node.record'  },
+  ],
+  // L4: statement-drill view nodes
+  L4: [
+    { color: 'var(--suc)', shape: 'rect', label: 'legend.node.statement' },
+    { color: 'var(--acc)', shape: 'rect', label: 'legend.node.table'     },
   ],
 };
 
@@ -125,7 +136,9 @@ export const LegendButton = memo(() => {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const level = viewLevel as 'L1' | 'L2' | 'L3';
+  const level = (viewLevel as 'L1' | 'L2' | 'L3' | 'L4') in EDGE_ROWS
+    ? viewLevel as 'L1' | 'L2' | 'L3' | 'L4'
+    : 'L2';
   const edges = EDGE_ROWS[level] ?? EDGE_ROWS.L2;
   const nodes = NODE_ROWS[level] ?? NODE_ROWS.L2;
 

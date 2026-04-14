@@ -19,6 +19,9 @@ export const NODE_TYPE_MAP: Record<DaliNodeType, string> = {
   DaliJoin:           'routineNode',
   DaliParameter:      'columnNode',
   DaliVariable:       'columnNode',
+  // Phase S2.4 — PL/SQL records
+  DaliRecord:         'recordNode',
+  DaliRecordField:    'columnNode',  // reuse column row visually
 };
 
 // ─── Node types that support drilling down ───────────────────────────────────
@@ -67,7 +70,10 @@ export function getEdgeStyle(type: DaliEdgeType): CSSProperties {
     case 'CONTAINS_ROUTINE':   return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '6 3' };
     case 'CONTAINS_STMT':      return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 2' };
     case 'BELONGS_TO_SESSION': return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '6 3' };
-    default:                   return { stroke: '#42382a', strokeWidth: 1, strokeDasharray: '4 3' };
+    // Phase S2.4 — PL/SQL record edges
+    case 'HAS_RECORD_FIELD':  return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 3' };  // structural, same family as HAS_COLUMN
+    case 'RETURNS_INTO':      return { stroke: '#B87AA8', strokeWidth: 1.5, strokeDasharray: '4 2' }; // data flow, mauve
+    default:                  return { stroke: '#42382a', strokeWidth: 1, strokeDasharray: '4 3' };
   }
 }
 

@@ -427,6 +427,180 @@ public class ExploreService {
         return row;
     }
 
+    // ── L4: Statement subquery tree ───────────────────────────────────────────
+
+    /**
+     * Phase S2.5 — single-statement drill view.
+     *
+     * Returns the root DaliStatement + all descendant sub-statements reachable
+     * via {@code CHILD_OF} (up to 30 levels), plus:
+     * <ul>
+     *   <li>READS_FROM edges for every stmt in the tree → DaliTable nodes</li>
+     *   <li>HAS_OUTPUT_COL edges for every stmt → DaliOutputColumn nodes</li>
+     *   <li>DATA_FLOW edges from DaliOutputColumn to downstream OutputColumn /
+     *       AffectedColumn (column-to-column flow within the subquery tree)</li>
+     * </ul>
+     *
+     * All queries are independent Uni chains merged in Java so one missing edge
+     * type in the DB never aborts the entire response.
+     *
+     * @param stmtId @rid of the root DaliStatement to drill into
+     */
+    @SuppressWarnings("unchecked")
+    public Uni<ExploreResult> exploreStatementTree(String stmtId) {
+        if (stmtId == null || stmtId.isBlank()) {
+            return Uni.createFrom().item(new ExploreResult(List.of(), List.of(), false));
+        }
+        Map<String, Object> params = Map.of("stmtId", stmtId);
+
+        // 1. Root statement self-node (ensures it renders even with no children)
+        String rootQ = """
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $stmtId
+            RETURN id(root) AS srcId,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(root) AS tgtId,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'NODE_ONLY' AS edgeType
+            """;
+
+        // 2. All descendant sub-statements; returned as parent→child (root srcId, sub tgtId)
+        //    so the frontend renders them as children of the root.
+        String childQ = """
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $stmtId
+            MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root)
+            RETURN id(root) AS srcId,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(sub) AS tgtId,
+                   coalesce(sub.stmt_geoid, sub.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'CHILD_OF' AS edgeType
+            LIMIT 100
+            """;
+
+        // 3. READS_FROM for root + all descendants
+        String readsQ = """
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $stmtId
+            MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
+            MATCH (sub)-[:READS_FROM]->(t:DaliTable)
+            RETURN DISTINCT id(sub) AS srcId,
+                   coalesce(sub.stmt_geoid, sub.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
+                   'DaliTable' AS tgtType, 'READS_FROM' AS edgeType
+            LIMIT 200
+            """;
+
+        // 4. HAS_OUTPUT_COL for root + all descendants
+        String outColQ = """
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $stmtId
+            MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
+            MATCH (sub)-[:HAS_OUTPUT_COL]->(oc:DaliOutputColumn)
+            RETURN id(sub) AS srcId,
+                   coalesce(sub.stmt_geoid, sub.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(oc) AS tgtId, coalesce(oc.name, oc.col_key, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliOutputColumn' AS tgtType, 'HAS_OUTPUT_COL' AS edgeType
+            LIMIT 500
+            """;
+
+        // 5. DATA_FLOW: DaliOutputColumn → downstream OutputColumn/AffectedColumn
+        //    Shows column-level flow within the subquery tree.
+        String dataFlowQ = """
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $stmtId
+            MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
+            MATCH (sub)-[:HAS_OUTPUT_COL]->(oc:DaliOutputColumn)-[df:DATA_FLOW]->(target)
+            RETURN id(oc) AS srcId,
+                   coalesce(oc.name, oc.col_key, '') AS srcLabel, 'DaliOutputColumn' AS srcType,
+                   id(target) AS tgtId,
+                   coalesce(target.name, target.col_key, target.column_name, '') AS tgtLabel, '' AS tgtScope,
+                   labels(target)[0] AS tgtType, 'DATA_FLOW' AS edgeType
+            LIMIT 500
+            """;
+
+        return Uni.combine().all()
+            .unis(List.of(
+                arcade.cypher(rootQ,      params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(childQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(readsQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(outColQ,    params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(dataFlowQ,  params).onFailure().recoverWithItem(List.of())
+            ))
+            .combinedWith(results -> {
+                var all = new ArrayList<Map<String, Object>>();
+                for (Object raw : results)
+                    all.addAll((List<Map<String, Object>>) raw);
+                return buildResult(all, stmtId, "DaliStatement");
+            })
+            .flatMap(this::enrichDataSource);
+    }
+
+    // ── L2: DaliRecord support — package scope ────────────────────────────────
+
+    /**
+     * Returns DaliRecord nodes owned by routines inside {@code packageName} plus
+     * their DaliRecordField children (via HAS_RECORD_FIELD edges) and
+     * RETURNS_INTO edges from statements to record fields.
+     *
+     * Called after {@link #explorePackage} so the results are merged server-side.
+     * Returns an empty ExploreResult if no records exist (safe to combine).
+     */
+    @SuppressWarnings("unchecked")
+    Uni<ExploreResult> explorePackageRecords(String packageName) {
+        Map<String, Object> params = Map.of("pkg", packageName);
+
+        // DaliRecord nodes owned by routines in this package
+        String recNodeQ = """
+            MATCH (p:DaliPackage {package_name: $pkg})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
+            MATCH (rec:DaliRecord)
+            WHERE rec.routine_geoid = r.routine_geoid
+            RETURN id(r) AS srcId, r.routine_name AS srcLabel, 'DaliRoutine' AS srcType,
+                   id(rec) AS tgtId, coalesce(rec.record_name, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliRecord' AS tgtType, 'CONTAINS_RECORD' AS edgeType
+            LIMIT 300
+            """;
+
+        // DaliRecordField children (HAS_RECORD_FIELD edges)
+        String recFieldQ = """
+            MATCH (p:DaliPackage {package_name: $pkg})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
+            MATCH (rec:DaliRecord)
+            WHERE rec.routine_geoid = r.routine_geoid
+            MATCH (rec)-[:HAS_RECORD_FIELD]->(f:DaliRecordField)
+            RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
+                   id(f) AS tgtId, coalesce(f.field_name, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliRecordField' AS tgtType, 'HAS_RECORD_FIELD' AS edgeType
+            LIMIT 2000
+            """;
+
+        // RETURNS_INTO edges: statement → record-field / record / variable / parameter
+        String returnsIntoQ = """
+            MATCH (p:DaliPackage {package_name: $pkg})-[:CONTAINS_ROUTINE]->(:DaliRoutine)
+                  -[:CONTAINS_STMT]->(stmt:DaliStatement)-[:RETURNS_INTO]->(target)
+            WHERE coalesce(stmt.parent_statement, '') = ''
+            RETURN DISTINCT id(stmt) AS srcId,
+                   coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(target) AS tgtId,
+                   coalesce(target.field_name, target.record_name, target.variable_name,
+                            target.parameter_name, '') AS tgtLabel, '' AS tgtScope,
+                   labels(target)[0] AS tgtType, 'RETURNS_INTO' AS edgeType
+            LIMIT 500
+            """;
+
+        return Uni.combine().all()
+            .unis(List.of(
+                arcade.cypher(recNodeQ,      params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(recFieldQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(returnsIntoQ,  params).onFailure().recoverWithItem(List.of())
+            ))
+            .combinedWith(results -> {
+                var all = new ArrayList<Map<String, Object>>();
+                for (Object raw : results)
+                    all.addAll((List<Map<String, Object>>) raw);
+                return buildResult(all, packageName, "DaliPackage");
+            });
+    }
+
     // ── Database scope (all schemas in a DB) ─────────────────────────────────
 
     /**
@@ -711,8 +885,25 @@ public class ExploreService {
             LIMIT 500
             """;
 
-        return arcade.cypher(cypher, Map.of("pkg", packageName))
-            .map(rows -> buildResult(rows, packageName, "DaliPackage"))
+        // Phase S2.4: merge DaliRecord / DaliRecordField / RETURNS_INTO in parallel
+        var baseUni    = arcade.cypher(cypher, Map.of("pkg", packageName));
+        var recordsUni = explorePackageRecords(packageName).onFailure().recoverWithItem(
+            new ExploreResult(List.of(), List.of(), false));
+
+        return Uni.combine().all().unis(baseUni, recordsUni).asTuple()
+            .map(tuple -> {
+                var baseRows = tuple.getItem1();
+                ExploreResult base    = buildResult(baseRows, packageName, "DaliPackage");
+                ExploreResult records = tuple.getItem2();
+                // Merge: combine nodes (by id) and edges (by id)
+                var nodeMap = new LinkedHashMap<String, GraphNode>();
+                base.nodes().forEach(n -> nodeMap.put(n.id(), n));
+                records.nodes().forEach(n -> nodeMap.putIfAbsent(n.id(), n));
+                var edgeSet = new LinkedHashSet<>(base.edges());
+                edgeSet.addAll(records.edges());
+                return new ExploreResult(new ArrayList<>(nodeMap.values()),
+                    new ArrayList<>(edgeSet), base.hasMore() || records.hasMore());
+            })
             .flatMap(this::enrichDataSource);
     }
 

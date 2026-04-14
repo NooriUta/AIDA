@@ -177,6 +177,54 @@ export async function fetchExplore(scope: string, includeExternal = false): Prom
   return data.explore;
 }
 
+const EXPLORE_ROUTINE_AGGREGATE = /* GraphQL */ `
+  query ExploreRoutineAggregate($scope: String!) {
+    exploreRoutineAggregate(scope: $scope) {
+      nodes { id type label scope dataSource meta { key value } }
+      edges { id source target type sourceHandle targetHandle }
+      hasMore
+    }
+  }
+`;
+
+export async function fetchRoutineAggregate(scope: string): Promise<ExploreResult> {
+  const t0 = performance.now();
+  const data = await gqlClient.request<{ exploreRoutineAggregate: ExploreResult }>(
+    EXPLORE_ROUTINE_AGGREGATE,
+    { scope },
+  );
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.exploreRoutineAggregate.nodes?.length ?? 0;
+  const e = data.exploreRoutineAggregate.edges?.length ?? 0;
+  console.info(`[LOOM] routineAggregate(${scope}) — ${ms} ms  (${n} nodes, ${e} edges)`);
+  return data.exploreRoutineAggregate;
+}
+
+// ── L4: Statement-tree drill ──────────────────────────────────────────────────
+
+const EXPLORE_STATEMENT_TREE = /* GraphQL */ `
+  query ExploreStatementTree($stmtId: String!) {
+    exploreStatementTree(stmtId: $stmtId) {
+      nodes { id type label scope dataSource meta { key value } }
+      edges { id source target type sourceHandle targetHandle }
+      hasMore
+    }
+  }
+`;
+
+export async function fetchStatementTree(stmtId: string): Promise<ExploreResult> {
+  const t0 = performance.now();
+  const data = await gqlClient.request<{ exploreStatementTree: ExploreResult }>(
+    EXPLORE_STATEMENT_TREE,
+    { stmtId },
+  );
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.exploreStatementTree.nodes?.length ?? 0;
+  const e = data.exploreStatementTree.edges?.length ?? 0;
+  console.info(`[LOOM] statementTree(${stmtId}) — ${ms} ms  (${n} nodes, ${e} edges)`);
+  return data.exploreStatementTree;
+}
+
 export async function fetchLineage(nodeId: string): Promise<ExploreResult> {
   const t0 = performance.now();
   const data = await gqlClient.request<{ lineage: ExploreResult }>(LINEAGE, { nodeId });

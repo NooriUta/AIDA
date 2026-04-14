@@ -21,6 +21,7 @@ import { SchemaGroupNode }  from './nodes/SchemaGroupNode';
 import { PackageNode }      from './nodes/PackageNode';
 import { TableNode }        from './nodes/TableNode';
 import { RoutineNode }      from './nodes/RoutineNode';
+import { RecordNode }       from './nodes/RecordNode';
 import { ColumnNode }       from './nodes/ColumnNode';
 import { StatementNode }    from './nodes/StatementNode';
 import { RoutineGroupNode } from './nodes/RoutineGroupNode';
@@ -53,6 +54,7 @@ const NODE_TYPES: NodeTypes = {
   packageNode:      PackageNode      as NodeTypes[string],
   tableNode:        TableNode        as NodeTypes[string],
   routineNode:      RoutineNode      as NodeTypes[string],
+  recordNode:       RecordNode       as NodeTypes[string],  // Phase S2.4 — PL/SQL records
   routineGroupNode: RoutineGroupNode as NodeTypes[string],
   statementNode:    StatementNode    as NodeTypes[string],
   columnNode:       ColumnNode       as NodeTypes[string],

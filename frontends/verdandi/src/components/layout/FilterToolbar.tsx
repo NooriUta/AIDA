@@ -89,6 +89,7 @@ export const FilterToolbar = memo(() => {
     setDirection,
     toggleMappingMode,
     toggleIncludeExternal,
+    toggleRoutineAggregate,
     navigateToLevel,
     jumpTo,
     clearFilter,
@@ -106,6 +107,7 @@ export const FilterToolbar = memo(() => {
     downstream,
     tableLevelView,
     includeExternal,
+    routineAggregate,
   } = filter;
 
   // ── Hooks must be called unconditionally (Rules of Hooks) ─────────────────
@@ -414,6 +416,19 @@ export const FilterToolbar = memo(() => {
       >
         &#x21F1; {t('inspector.includeExternal')}
       </ToolbarToggleButton>
+
+      {/* ── Routine-aggregate toggle: AGG (new) ↔ EXP (explore) — L2 only ── */}
+      {viewLevel === 'L2' && (
+        <ToolbarToggleButton
+          active={routineAggregate}
+          onClick={toggleRoutineAggregate}
+          title={routineAggregate
+            ? t('toolbar.routineAggregateHint', 'Switch to detailed exploration mode')
+            : t('toolbar.routineExploreHint', 'Switch to routine-aggregate overview')}
+        >
+          {routineAggregate ? '⊞ AGG' : '⊕ EXP'}
+        </ToolbarToggleButton>
+      )}
 
       {/* ── Spacer ─────────────────────────────────────────────────────────── */}
       <div style={{ flex: '1 1 auto' }} />
