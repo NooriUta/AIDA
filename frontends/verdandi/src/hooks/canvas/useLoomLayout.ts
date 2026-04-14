@@ -7,6 +7,7 @@ import { applyELKLayout, cancelPendingLayouts } from '../../utils/layoutGraph';
 import { LAYOUT } from '../../utils/constants';
 import { applyL1Layout }             from '../../utils/layoutL1';
 import { edgeTypeClass }             from '../../utils/displayPipeline';
+import { LOD_COMPACT_ZOOM }          from '../../components/canvas/ZoomLevelContext';
 import type { LoomNode, LoomEdge }   from '../../types/graph';
 import type { ColumnInfo }           from '../../types/domain';
 
@@ -56,7 +57,7 @@ export function useLoomLayout(
   setEdges: SetEdges,
   stmtColsReady: boolean,
 ) {
-  const { fitView, getEdges, getNodes } = useReactFlow();
+  const { getEdges, getNodes, setCenter, getZoom } = useReactFlow();
 
   const [layouting,     setLayouting]     = useState(false);
   const [layoutError,   setLayoutError]   = useState(false);
@@ -65,7 +66,9 @@ export function useLoomLayout(
   const [forceELKCount, setForceELKCount] = useState(0);
 
   // Track whether post-layout dimming is active to skip no-op cleanup cycles
-  const isDimmedRef = useRef(false);
+  const isDimmedRef     = useRef(false);
+  // Track previous activeId to detect filter switches (id1 → id2) and skip viewport movement
+  const prevActiveIdRef = useRef<string | null>(null);
 
   const {
     viewLevel,
@@ -323,29 +326,35 @@ export function useLoomLayout(
       return { ...e, className: buildEdgeCls(e, inField ? 'loom-edge-dim-table' : 'loom-edge-dim-field') };
     }));
 
-    // Fly to the focal node after style update settles.
+    // ── Fly to focal node without disturbing zoom level ───────────────────────
+    // Pan to the newly selected node for BOTH null→id and id1→id2 transitions.
+    // setCenter never zooms out — it only pans (and bumps zoom when below the LOD
+    // threshold so column rows become visible).
+    // id→null (clear): no movement — let user stay where they are.
+    prevActiveIdRef.current = activeId ?? null;
+
     if (activeId) {
       let raf2: number;
       const raf1 = requestAnimationFrame(() => {
         raf2 = requestAnimationFrame(() => {
-          // Guard: if the node isn't in the current ReactFlow graph (e.g. filtered out
-          // by applyHiddenNodes / applyDirectionFilter), fitView falls back to fitting
-          // ALL nodes → full zoom-out. Skip the call instead.
-          if (!getNodes().some((n) => n.id === activeId)) return;
-          fitView({
-            nodes:   [{ id: activeId }],
-            duration: 600,
-            padding:  0.08,
-            maxZoom:  1.8,
-            minZoom:  0.5,   // prevent excessive zoom-out on large / expanded tables
-          });
+          const node = getNodes().find((n) => n.id === activeId);
+          if (!node) return;
+          const currentZoom = getZoom();
+          const targetZoom  = Math.max(currentZoom, LOD_COMPACT_ZOOM + 0.05);
+          // Use measured dimensions when available (RF v12), fall back to sensible defaults.
+          const w  = (node as { measured?: { width?: number } }).measured?.width  ?? 260;
+          const h  = (node as { measured?: { height?: number } }).measured?.height ?? 120;
+          const cx = node.position.x + w / 2;
+          const cy = node.position.y + h / 2;
+          setCenter(cx, cy, { zoom: targetZoom, duration: 500 });
         });
       });
       return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
     }
+    // activeId is null (cleared): no viewport movement.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter.tableFilter, filter.stmtFilter, filter.fieldFilter, filter.depth,
-      filter.upstream, filter.downstream, viewLevel, layouting, getEdges, getNodes, fitView]);
+      filter.upstream, filter.downstream, viewLevel, layouting, getEdges, getNodes, setCenter, getZoom]);
 
   // M-3: callback for "Вычислить полный layout" button
   const triggerFullLayout = useCallback(() => {

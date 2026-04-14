@@ -736,7 +736,9 @@
       "routine":     "Процедура",
       "statement":   "Стейтмент",
       "column":      "Колонка",
-      "atom":        "Атом"
+      "atom":        "Атом",
+      "pkColumn":    "Primary Key",
+      "fkColumn":    "Foreign Key"
     },
     "hint": {
       "dblclick": "drill-down",

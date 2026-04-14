@@ -1536,9 +1536,34 @@ class RemoteWriter {
             // → DuplicatedKeyException on the unique (db_name, geoid) index.
             // For master objects (DDL session), pre-insertion also upgrades data_source.
             AdHocInsertResult adHoc = preInsertAdHocSchemas(sid, str);
-            // All canonical objects are now pre-inserted → their RIDs go into canonicalRids.
-            // The batch factory skips DaliSchema/DaliTable/DaliColumn vertices but still
-            // creates CONTAINS_TABLE and HAS_COLUMN edges using the actual DB RIDs.
+
+            // Ad-hoc Phase 3: Create canonical hierarchy edges via individual rcmd() for
+            // newly-inserted objects. The batch factory skips canonical vertices AND their
+            // hierarchy edges (all geoids are in canonicalRids → `continue` at line 552/588),
+            // so CONTAINS_TABLE and HAS_COLUMN must be created here, outside the batch.
+            // Mirrors namespace-mode Phase 3 (lines ~1473–1503) but uses adHoc.rids()
+            // instead of buildRidCache(), since ad-hoc objects have db_name IS NULL
+            // and cannot be fetched by db_name filter.
+            if (!adHoc.newTableGeoids().isEmpty() || !adHoc.newColumnGeoids().isEmpty()) {
+                Map<String, String> adHocRids = adHoc.rids();
+                for (String tblGeoid : adHoc.newTableGeoids()) {
+                    TableInfo t = str.getTables().get(tblGeoid);
+                    if (t == null || t.schemaGeoid() == null) continue;
+                    String schRid = adHocRids.get(t.schemaGeoid());
+                    String tblRid = adHocRids.get(tblGeoid);
+                    if (schRid != null && tblRid != null)
+                        edgeByRid("CONTAINS_TABLE", schRid, tblRid, sid);
+                }
+                for (String colGeoid : adHoc.newColumnGeoids()) {
+                    ColumnInfo c = str.getColumns().get(colGeoid);
+                    if (c == null) continue;
+                    String tblRid = adHocRids.get(c.getTableGeoid());
+                    String colRid = adHocRids.get(colGeoid);
+                    if (tblRid != null && colRid != null)
+                        edgeByRid("HAS_COLUMN", tblRid, colRid, sid);
+                }
+            }
+
             builder = JsonlBatchBuilder.buildFromResult(sid, result,
                     adHoc.rids().isEmpty() ? null : adHoc.rids());
 
@@ -1643,6 +1668,110 @@ class RemoteWriter {
         for (String t : edgeTypes) deleteTypeRemote(t);
         for (String t : vtxTypes)  deleteTypeRemote(t);
         for (String t : docTypes)  deleteTypeRemote(t);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // repairHierarchyEdges — одноразовая починка отсутствующих рёбер
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Создаёт недостающие рёбра CONTAINS_TABLE и HAS_COLUMN для вершин,
+     * у которых они отсутствуют (исторический баг ad-hoc режима).
+     *
+     * <p>Безопасно вызывать повторно — рёбра создаются только когда их нет.
+     * Возвращает количество созданных рёбер.
+     *
+     * @param dryRun true — только считает, false — создаёт рёбра
+     */
+    public int repairHierarchyEdges(boolean dryRun) {
+        int created = 0;
+
+        // ── 1. CONTAINS_TABLE: DaliSchema → DaliTable ────────────────────────
+        // Находим все DaliTable у которых нет входящего ребра CONTAINS_TABLE
+        try {
+            var tablesRs = db.query("sql",
+                "SELECT @rid AS trid, schema_geoid, table_geoid " +
+                "FROM DaliTable WHERE IN('CONTAINS_TABLE').size() = 0",
+                Map.of());
+            while (tablesRs.hasNext()) {
+                var row = tablesRs.next().toMap();
+                String tRid       = (String) row.get("trid");
+                String schGeoid   = (String) row.get("schema_geoid");
+                if (tRid == null || schGeoid == null) continue;
+
+                // Найти DaliSchema с matching schema_geoid
+                try {
+                    var schRs = db.query("sql",
+                        "SELECT @rid AS srid FROM DaliSchema WHERE schema_geoid = :sg",
+                        Map.of("sg", schGeoid));
+                    if (schRs.hasNext()) {
+                        String sRid = (String) schRs.next().toMap().get("srid");
+                        if (sRid != null) {
+                            if (!dryRun) {
+                                try {
+                                    db.command("sql",
+                                        "CREATE EDGE CONTAINS_TABLE FROM " + sRid + " TO " + tRid +
+                                        " SET session_id = 'repair'",
+                                        Map.of());
+                                } catch (Exception ex) {
+                                    logger.debug("repair CONTAINS_TABLE {} → {}: {}", sRid, tRid, ex.getMessage());
+                                }
+                            }
+                            created++;
+                        }
+                    }
+                } catch (Exception ex) {
+                    logger.warn("repair: schema lookup failed for {}: {}", schGeoid, ex.getMessage());
+                }
+            }
+        } catch (Exception ex) {
+            logger.warn("repair: DaliTable scan failed: {}", ex.getMessage());
+        }
+
+        // ── 2. HAS_COLUMN: DaliTable → DaliColumn ───────────────────────────
+        // Находим все DaliColumn у которых нет входящего ребра HAS_COLUMN
+        try {
+            var colsRs = db.query("sql",
+                "SELECT @rid AS crid, table_geoid " +
+                "FROM DaliColumn WHERE IN('HAS_COLUMN').size() = 0",
+                Map.of());
+            while (colsRs.hasNext()) {
+                var row = colsRs.next().toMap();
+                String cRid     = (String) row.get("crid");
+                String tblGeoid = (String) row.get("table_geoid");
+                if (cRid == null || tblGeoid == null) continue;
+
+                try {
+                    var tblRs = db.query("sql",
+                        "SELECT @rid AS trid FROM DaliTable WHERE table_geoid = :tg",
+                        Map.of("tg", tblGeoid));
+                    if (tblRs.hasNext()) {
+                        String tRid = (String) tblRs.next().toMap().get("trid");
+                        if (tRid != null) {
+                            if (!dryRun) {
+                                try {
+                                    db.command("sql",
+                                        "CREATE EDGE HAS_COLUMN FROM " + tRid + " TO " + cRid +
+                                        " SET session_id = 'repair'",
+                                        Map.of());
+                                } catch (Exception ex) {
+                                    logger.debug("repair HAS_COLUMN {} → {}: {}", tRid, cRid, ex.getMessage());
+                                }
+                            }
+                            created++;
+                        }
+                    }
+                } catch (Exception ex) {
+                    logger.warn("repair: table lookup failed for {}: {}", tblGeoid, ex.getMessage());
+                }
+            }
+        } catch (Exception ex) {
+            logger.warn("repair: DaliColumn scan failed: {}", ex.getMessage());
+        }
+
+        logger.info("repairHierarchyEdges(dryRun={}): {} edges {}", dryRun, created,
+                    dryRun ? "would be created" : "created");
+        return created;
     }
 
     private void deleteTypeRemote(String typeName) {

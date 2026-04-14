@@ -3,6 +3,7 @@ package studio.seer.lineage.service;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.ExploreResult;
 import studio.seer.lineage.model.GraphEdge;
@@ -26,6 +27,8 @@ import java.util.*;
  */
 @ApplicationScoped
 public class ExploreService {
+
+    private static final Logger log = Logger.getLogger(ExploreService.class);
 
     /** Node count threshold above which the result is considered truncated. */
     static final int NODE_LIMIT = 500;
@@ -289,42 +292,114 @@ public class ExploreService {
      * Bulk-fetch all column edges for a mixed list of rendered node @rids.
      *
      * Accepts both DaliTable and DaliStatement @rids in a single call:
-     *   - DaliTable  → HAS_COLUMN      → DaliColumn
-     *   - DaliStatement → HAS_OUTPUT_COL  → DaliOutputColumn
+     *   - DaliTable     → DaliColumn        (via table_geoid property — no HAS_COLUMN edges in DB)
+     *   - DaliStatement → HAS_OUTPUT_COL   → DaliOutputColumn
      *   - DaliStatement → HAS_AFFECTED_COL → DaliAffectedColumn
      *
-     * ArcadeDB matches only the rows where the type label matches — table IDs are
-     * silently skipped by the statement branches and vice versa.
+     * BUG-VC-003: The original UNION ALL used id(t) IN $ids (ArcadeDB LINK vs String
+     * type-mismatch) and also relied on HAS_COLUMN edges which do not exist in the DB.
+     * DaliColumn rows are keyed by table_geoid property — same path as KnotService.
      *
-     * ArcadeDB Cypher supports id(n) IN $list where $list is a Java List<String>.
+     * BUG-VC-004: Added enrichDataSource so DaliTable nodes get dataSource populated.
+     *
+     * ArcadeDB Cypher note: chained MATCH clauses (MATCH…WHERE…MATCH) do not work —
+     * the second MATCH returns empty. Use UNWIND + WHERE id(t)=rid + WITH + second MATCH.
+     *
+     * Three parallel Uni queries replace the UNION ALL. Each branch recovers on failure
+     * so a missing edge type in the DB never aborts the other two branches.
      */
+    @SuppressWarnings("unchecked")
     public Uni<ExploreResult> exploreStmtColumns(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return Uni.createFrom().item(new ExploreResult(List.of(), List.of(), false));
         }
-        String cypher = """
-            MATCH (t:DaliTable)-[:HAS_COLUMN]->(col:DaliColumn)
-            WHERE id(t) IN $ids
+        Map<String, Object> params = Map.of("ids", ids);
+
+        // DaliTable → DaliColumn via HAS_COLUMN edges (created by Hound parser).
+        // UNWIND + WITH separates the two MATCH clauses — required by ArcadeDB Cypher.
+        // Edge traversal is index-based (O(degree)) vs property scan (O(|DaliColumn|)).
+        // No LIMIT — result is naturally bounded by ids.size() × columns_per_table.
+        // COUNT query runs in parallel and warns if the expected result set is large.
+        String countColQ = """
+            UNWIND $ids AS rid
+            MATCH (t:DaliTable)
+            WHERE id(t) = rid
+            WITH t
+            MATCH (t)-[:HAS_COLUMN]->(col:DaliColumn)
+            RETURN count(col) AS total
+            """;
+
+        String hasColQ = """
+            UNWIND $ids AS rid
+            MATCH (t:DaliTable)
+            WHERE id(t) = rid
+            WITH t
+            MATCH (t)-[:HAS_COLUMN]->(col:DaliColumn)
             RETURN id(t) AS srcId, t.table_name AS srcLabel, 'DaliTable' AS srcType,
                    id(col) AS tgtId, coalesce(col.column_name, '') AS tgtLabel, '' AS tgtScope,
-                   'DaliColumn' AS tgtType, 'HAS_COLUMN' AS edgeType
-            UNION ALL
-            MATCH (stmt:DaliStatement)-[:HAS_OUTPUT_COL]->(col:DaliOutputColumn)
-            WHERE id(stmt) IN $ids
+                   'DaliColumn' AS tgtType, 'HAS_COLUMN' AS edgeType,
+                   toString(coalesce(col.is_pk,       false)) AS tgtPk,
+                   toString(coalesce(col.is_fk,       false)) AS tgtFk,
+                   toString(coalesce(col.is_required, false)) AS tgtReq,
+                   coalesce(col.data_type, '')                AS tgtDataType
+            """;
+
+        String hasOutColQ = """
+            UNWIND $ids AS rid
+            MATCH (stmt:DaliStatement)
+            WHERE id(stmt) = rid
+            WITH stmt
+            MATCH (stmt)-[:HAS_OUTPUT_COL]->(col:DaliOutputColumn)
             RETURN id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel,
                    'DaliStatement' AS srcType,
                    id(col) AS tgtId, coalesce(col.name, col.col_key, '') AS tgtLabel, '' AS tgtScope,
                    'DaliOutputColumn' AS tgtType, 'HAS_OUTPUT_COL' AS edgeType
-            UNION ALL
-            MATCH (stmt:DaliStatement)-[:HAS_AFFECTED_COL]->(col:DaliAffectedColumn)
-            WHERE id(stmt) IN $ids
+            """;
+
+        String hasAffColQ = """
+            UNWIND $ids AS rid
+            MATCH (stmt:DaliStatement)
+            WHERE id(stmt) = rid
+            WITH stmt
+            MATCH (stmt)-[:HAS_AFFECTED_COL]->(col:DaliAffectedColumn)
             RETURN id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel,
                    'DaliStatement' AS srcType,
                    id(col) AS tgtId, coalesce(col.column_name, '') AS tgtLabel, '' AS tgtScope,
                    'DaliAffectedColumn' AS tgtType, 'HAS_AFFECTED_COL' AS edgeType
             """;
-        return arcade.cypher(cypher, Map.of("ids", ids))
-            .map(rows -> buildResult(rows, "", "DaliTable"));
+
+        // Run COUNT and data queries in parallel. COUNT result is used only for
+        // a warning log — it does not gate the data fetch.
+        @SuppressWarnings("unchecked")
+        Uni<List<Map<String, Object>>> countUni = arcade.cypher(countColQ, params)
+            .invoke(rows -> {
+                if (rows != null && !rows.isEmpty()) {
+                    Object total = rows.get(0).get("total");
+                    long cnt = total instanceof Number ? ((Number) total).longValue() : 0L;
+                    log.debugf("stmtColumns: %d ids → %d DaliColumn rows expected", ids.size(), cnt);
+                    if (cnt > 10_000) {
+                        log.warnf("stmtColumns: HIGH column count %d for %d ids " +
+                                  "— consider pagination or scope narrowing", cnt, ids.size());
+                    }
+                }
+            })
+            .onFailure().recoverWithItem(List.of());
+
+        return Uni.combine().all()
+            .unis(List.of(
+                countUni,
+                arcade.cypher(hasColQ,    params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(hasOutColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(hasAffColQ, params).onFailure().recoverWithItem(List.of())
+            ))
+            .combinedWith(results -> {
+                // results[0] = countUni (ignored in data merge, used only for log)
+                var all = new java.util.ArrayList<Map<String, Object>>();
+                for (int i = 1; i < results.size(); i++)
+                    all.addAll((List<Map<String, Object>>) results.get(i));
+                return buildResult(all, "", "DaliTable");
+            })
+            .flatMap(this::enrichDataSource);
     }
 
     // ── Package scope ─────────────────────────────────────────────────────────
@@ -410,10 +485,13 @@ public class ExploreService {
     private Uni<ExploreResult> exploreByRid(String rid) {
         Map<String, Object> params = Map.of("rid", rid);
 
+        // BUG-VC-001: Exclude DaliConstraint/DaliPrimaryKey/DaliForeignKey — not renderable.
+        // Also exclude DaliAtom (50k+ nodes, canvas-irrelevant; linked via HAS_ATOM from stmts).
         String outQ = """
             MATCH (n)-[r]->(m)
             WHERE id(n) = $rid
               AND (NOT m:DaliStatement OR coalesce(m.parent_statement, '') = '')
+              AND NOT (m:DaliConstraint OR m:DaliPrimaryKey OR m:DaliForeignKey OR m:DaliAtom)
             RETURN id(n) AS srcId,
                    coalesce(n.schema_name, n.table_name, n.package_name, n.routine_name, n.stmt_geoid, n.column_name, n.name, n.col_key, '') AS srcLabel,
                    labels(n)[0] AS srcType,
@@ -423,10 +501,12 @@ public class ExploreService {
             LIMIT 300
             """;
 
+        // BUG-VC-001: Filter incoming constraint edges + DaliAtom sources (ATOM_REF_COLUMN etc).
         String inQ = """
             MATCH (m)-[r]->(n)
             WHERE id(n) = $rid
               AND (NOT m:DaliStatement OR coalesce(m.parent_statement, '') = '')
+              AND NOT (m:DaliConstraint OR m:DaliPrimaryKey OR m:DaliForeignKey OR m:DaliAtom)
             RETURN id(m) AS srcId,
                    coalesce(m.schema_name, m.table_name, m.package_name, m.routine_name, m.stmt_geoid, m.column_name, m.name, m.col_key, '') AS srcLabel,
                    labels(m)[0] AS srcType,
@@ -457,6 +537,7 @@ public class ExploreService {
             """;
 
         // If $rid is a DaliColumn: resolve parent table + ALL its sibling columns (inline display)
+        // Returns tgtPk/tgtFk/tgtReq/tgtDataType so buildResult can populate meta for ColumnRows.
         String sibColQ = """
             MATCH (parent)-[:HAS_COLUMN]->(n)
             WHERE id(n) = $rid
@@ -465,7 +546,11 @@ public class ExploreService {
             RETURN id(parent) AS srcId, coalesce(parent.table_name, '') AS srcLabel,
                    labels(parent)[0] AS srcType,
                    id(sibling) AS tgtId, coalesce(sibling.column_name, '') AS tgtLabel,
-                   '' AS tgtScope, labels(sibling)[0] AS tgtType, 'HAS_COLUMN' AS edgeType
+                   '' AS tgtScope, labels(sibling)[0] AS tgtType, 'HAS_COLUMN' AS edgeType,
+                   toString(coalesce(sibling.is_pk,       false)) AS tgtPk,
+                   toString(coalesce(sibling.is_fk,       false)) AS tgtFk,
+                   toString(coalesce(sibling.is_required, false)) AS tgtReq,
+                   coalesce(sibling.data_type, '')                AS tgtDataType
             LIMIT 100
             """;
 
@@ -564,10 +649,26 @@ public class ExploreService {
             String tgtType  = str(row, "tgtType");
             String edgeType = str(row, "edgeType");
 
+            // Optional PK/FK/dataType columns — only present in hasColQ (stmtColumns).
+            // Populate meta for DaliColumn nodes so frontend can render PK/FK badges.
+            String tgtPk       = str(row, "tgtPk");
+            String tgtFk       = str(row, "tgtFk");
+            String tgtReq      = str(row, "tgtReq");
+            String tgtDataType = str(row, "tgtDataType");
+            Map<String, String> tgtMeta = Map.of();
+            if (!tgtPk.isEmpty() || !tgtFk.isEmpty() || !tgtReq.isEmpty() || !tgtDataType.isEmpty()) {
+                var m = new java.util.HashMap<String, String>();
+                if (!tgtPk.isEmpty())       m.put("isPk",       tgtPk);
+                if (!tgtFk.isEmpty())       m.put("isFk",       tgtFk);
+                if (!tgtReq.isEmpty())      m.put("isRequired", tgtReq);
+                if (!tgtDataType.isEmpty()) m.put("dataType",   tgtDataType);
+                tgtMeta = java.util.Collections.unmodifiableMap(m);
+            }
+
             if (rootId == null) rootId = srcId;
 
             nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of(), ""));
-            nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, Map.of(), ""));
+            nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, tgtMeta, ""));
 
             String edgeId = srcId + "__" + edgeType + "__" + tgtId;
             if (edgeIdsSeen.add(edgeId)) {

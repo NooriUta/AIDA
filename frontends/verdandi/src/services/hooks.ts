@@ -9,6 +9,7 @@ import {
   fetchSearch,
   fetchKnotSessions,
   fetchKnotReport,
+  fetchKnotSnippet,
   fetchExpandDeep,
   isUnauthorized,
 } from './lineage';
@@ -26,6 +27,7 @@ export const qk = {
   search:       (q: string)      => ['search', q]              as const,
   knotSessions: ()               => ['knotSessions']           as const,
   knotReport:   (sid: string)    => ['knotReport', sid]        as const,
+  knotSnippet:  (geoid: string)  => ['knotSnippet', geoid]     as const,
 };
 
 // ── 401 handler — auto-logout when session expires ────────────────────────────
@@ -171,6 +173,19 @@ export function useKnotReport(sessionId: string | null) {
     queryFn:  () => fetchKnotReport(sessionId!),
     enabled:  !!sessionId,
     staleTime: 60_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/** Lazy snippet fetch — enabled only when the SQL section is open and snippet is missing from the map. */
+export function useKnotSnippet(stmtGeoid: string | null | undefined, enabled: boolean) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.knotSnippet(stmtGeoid ?? ''),
+    queryFn:  () => fetchKnotSnippet(stmtGeoid!),
+    enabled:  enabled && !!stmtGeoid,
+    staleTime: 300_000,  // snippets don't change during a session — cache 5 min
     throwOnError: false,
     meta: { onError },
   });

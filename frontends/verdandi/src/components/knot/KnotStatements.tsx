@@ -2,6 +2,7 @@ import { memo, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { KnotStatement, KnotSnippet, KnotAtom, KnotOutputColumn, KnotAffectedColumn } from '../../services/lineage';
 import { ToolbarSelect } from '../ui/ToolbarPrimitives';
+import { useKnotSnippet } from '../../services/hooks';
 
 /** All lookup maps passed through the component tree */
 type LookupMaps = {
@@ -548,11 +549,16 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
   const [sqlOpen,      setSqlOpen]      = useState(false);
   const [mainInfoOpen, setMainInfoOpen] = useState(false);
 
-  const sql         = stmt.geoid ? maps.snippetMap.get(stmt.geoid) : undefined;
+  const sqlFromMap  = stmt.geoid ? maps.snippetMap.get(stmt.geoid) : undefined;
   const stmtAtoms   = stmt.geoid ? maps.atomMap.get(stmt.geoid)    : undefined;
   const stmtOutCols = stmt.geoid ? maps.outColMap.get(stmt.geoid)  : undefined;
 
-
+  // Lazy fetch: only fires when SQL section is open AND snippet wasn't in the pre-loaded map.
+  const { data: snippetFromDb, isFetching: snippetLoading } = useKnotSnippet(
+    stmt.geoid,
+    sqlOpen && !sqlFromMap,
+  );
+  const sql = sqlFromMap ?? snippetFromDb ?? undefined;
 
   return (
     <div style={{
@@ -569,7 +575,9 @@ function StmtDetailPanel({ stmt, t, maps, flatChildren, expanded, onToggle }: {
         {t('knot.stmt.sqlTitle')}
       </CollapsibleSectionHeader>
       {sqlOpen && (
-        sql ? (
+        snippetLoading ? (
+          <div style={{ padding: '6px 0', fontSize: 11, color: 'var(--t3)' }}>…</div>
+        ) : sql ? (
           <SqlBlock sql={sql} />
         ) : (
           <div style={{ padding: '6px 0', fontSize: 11, color: 'var(--t3)' }}>

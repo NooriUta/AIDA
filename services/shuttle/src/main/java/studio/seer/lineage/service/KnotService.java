@@ -582,6 +582,22 @@ public class KnotService {
             .toList();
     }
 
+    // ── Snippet by geoid (lazy, called from KNOT inspector on demand) ─────────
+
+    public Uni<String> knotSnippet(String stmtGeoid) {
+        if (stmtGeoid == null || stmtGeoid.isBlank()) return Uni.createFrom().nullItem();
+        String sql = """
+            SELECT snippet
+            FROM DaliSnippet
+            WHERE stmt_geoid = :geoid
+            LIMIT 1
+            """;
+        return arcade.sql(sql, Map.of("geoid", stmtGeoid))
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.isEmpty() ? null : str(rows.get(0), "snippet"))
+            .map(s -> (s == null || s.isBlank()) ? null : s);
+    }
+
     // ── Snippets ──────────────────────────────────────────────────────────────
 
     private Uni<List<KnotSnippet>> loadSnippets(Map<String, Object> params) {

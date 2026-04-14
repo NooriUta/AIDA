@@ -102,6 +102,16 @@
 
 ---
 
+## ✅ Hound Sprint 2 решения (14.04.2026)
+
+| # | Решение | Reference |
+|---|---------|-----------|
+| **Q28** | **DaliRecordField как отдельная вершина.** Решение: Да. Причина: нужен target для ребра `RETURNS_INTO` на уровне поля, а не записи. Альтернатива (свойство `DaliRecord.fields: List<String>`) отклонена — нет возможности построить ребро к конкретному полю. `RecordInfo.FieldInfo record(name, dataType, ordinalPosition, sourceColumnGeoid)` — новая модель. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §2`, `HOUND_GEOID_SPEC.md §3.7` |
+| **Q29** | **RETURNING INTO target классификация — 4 типа.** Решение: classifyReturningTarget() по приоритету: (1) содержит `.` → RECORD_FIELD, (2) параметр routine → PARAMETER, (3) DaliRecord с таким именем → RECORD, (4) иначе → VARIABLE. Все 4 варианта создают ребро `RETURNS_INTO` от DaliStatement к разным target vertex types. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §2.5`, `g6-cursor-insert-values-lineage.md §19` |
+| **Q30** | **Pending column resolution depth для parent chain — depth=1.** Решение: Pass 3 (`resolveViaParent`) ищет только в прямом родителе (`parentStatementGeoid`), не рекурсирует. Мотивация: SQL correlated subquery standard — только прямой родитель видим в correlated scope. LATERAL и CTE — аналогично depth=1. Pass 4 (single-table fuzzy, quality=LOW) — дополнительный проход при единственном source table. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §6` |
+
+---
+
 ## 🚫 Сознательно отложено
 
 | # | Что | Когда |
