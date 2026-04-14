@@ -578,6 +578,27 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         }
     }
 
+    // ═══════ FORALL loop ═══════
+
+    /**
+     * Bug A fix: FORALL index variable (e.g. `i` in `FORALL i IN 1..N INSERT ...`)
+     * was not registered as a variable, so every use of `i` inside the DML body
+     * fired as an `atom` with 1 token and was incorrectly resolved as a column
+     * reference against the target table (creating spurious DWH.STG_FX_RATES.I).
+     *
+     * Registering the index as a PLS_INTEGER variable puts it in the routine's
+     * variable map, so AtomProcessor.classifyAtom() short-circuits before
+     * reaching resolveImplicitTable().
+     */
+    @Override
+    public void enterForall_statement(PlSqlParser.Forall_statementContext ctx) {
+        if (ctx == null || ctx.index_name() == null) return;
+        String indexVar = BaseSemanticListener.cleanIdentifier(ctx.index_name().getText());
+        if (!indexVar.isEmpty()) {
+            base.onRoutineVariable(indexVar, "PLS_INTEGER");
+        }
+    }
+
     // =========================================================================
     // CTE / WITH clause
     // =========================================================================
