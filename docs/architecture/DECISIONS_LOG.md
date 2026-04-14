@@ -1,8 +1,8 @@
 # AIDA — Decisions Log (quick reference)
 
 **Документ:** `DECISIONS_LOG`
-**Версия:** 2.3
-**Дата:** 14.04.2026
+**Версия:** 2.4
+**Дата:** 15.04.2026
 **Статус:** Working document — quick reference для навигации
 
 Это **краткий** snapshot того что зафиксировано, что открыто, и что отложено. Для деталей смотри соответствующие документы.
@@ -185,3 +185,4 @@
 | 12.04.2026 | 1.2 | **Frontend architecture зафиксирована.** ADR-DA-012: single domain + path routing (`seer.studio/verdandi`, `/urd`, `/skuld`, `/heimdall`). ADR-DA-013: URL-based context passing (ArcadeDB geoid как canonical ID, `navigateTo` + `useAppContext` в `aida-shared`). `aida-shared` scope L2. Решения #13 и #14 добавлены. B1 для demo, B2 post-HighLoad. |
 | 14.04.2026 | 2.2 | **Lineage Gaps Sprint 2 DONE.** Q31–Q35 добавлены. 14 KI items реализованы, 3 (JSON, XML, NESTREC) → Sprint 3 backlog. Bugfix Dali YGG stats atomsResolved/atomsUnresolved. |
 | 14.04.2026 | 2.3 | **LOOM 5-level sprint OPEN.** Решение #20 добавлено. PR #10 Sprint 2 merged. Новая ветка `feature/loom-5level-apr2026`. Новый документ `LOOM_5LEVEL_ARCHITECTURE.md`. План в `PLAN_LOOM_5LEVEL_APR2026.md`. 8 фаз: docs → KNOT snippet → backend L2 agg → renumber → L2 view → L3 records → L4 stmt-drill → StatementNode click-back. L5 (expression breakdown) отложен. |
+| 15.04.2026 | 2.4 | **LOOM 5-level sprint CLOSING (partial).** 15 коммитов на `feature/loom-5level-apr2026`. Shipped: Phase 1 docs (LOOM_5LEVEL_ARCHITECTURE + L2_EDGE_SEMANTICS refs), Phase 6 (KNOT snippet в LOOM InspectorStatement), Phase 6c-1 (knotStatementExtras backend + real Extra tab с descendants / atom stats), Phase 6c-2 (source tables Direct/Subquery + External sources toggle), 4-way edge styling (READS_FROM teal / WRITES_TO amber dash / DATA_FLOW lime animated / FILTER_FLOW mauve dots), rich Inspector header card с 4 вкладками (Основное / Дополнительно / Статистика / SQL), upstream hoist через CHILD_OF*, column-level handle routing для FILTER_FLOW. **Deferred**: Phase 2 / 3 / 4 / 4b / 4c / 5 (backend `exploreRoutineAggregate`, frontend level renumbering, new L2 view, L4 statement-drill, L3 DaliRecord rendering, StatementNode click-back). **Known issues**: column-level `DATA_FLOW` target handle не мапится на output col (только source side работает, FILTER_FLOW ok); `cfEdges` palette не синхронизирована с легендой. Обе занесены в `LOOM_5LEVEL_ARCHITECTURE.md §Known issues` для следующего спринта. |

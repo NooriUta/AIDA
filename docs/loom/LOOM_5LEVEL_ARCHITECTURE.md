@@ -190,8 +190,43 @@ phase can be reverted without unwinding the others.
 
 ---
 
+## Known issues, sprint close 15.04.2026
+
+Carried over to the next sprint:
+
+1. **Column-level `DATA_FLOW` only wires the source side.**
+   The `upstream()` hoist emits `DATA_FLOW` edges with
+   `sourceHandle = 'src-' + id(srcCol)` and `targetHandle = 'tgt-' + id(oc)`.
+   On the canvas the lime-dashed line visually leaves the specific source
+   column row inside the BMRT table card, but lands on the consumer
+   statement's **header**, not on the matching `DaliOutputColumn` row inside
+   the card. Most likely cause: `applyStmtColumns` enriches the statement's
+   output-column array with `col.id` values that don't match the
+   `DaliOutputColumn` `@rid` the backend returns in `id(oc)` — either the
+   id field is stripped somewhere in the stmtColumns enrichment pipeline or
+   a different col.id identity is used for the handle mount. Next session:
+   dump one known statement's `data.columns[*].id` from React Flow and
+   compare with the `id(oc)` emitted by the upstream hoist.
+
+   `FILTER_FLOW` works end-to-end (verified 15.04.2026) because it only
+   routes the source handle — the target is always the stmt header by
+   design — so it isn't affected by this gap.
+
+2. **Edge colour palette doesn't match the legend.**
+   `LegendButton` and `transformHelpers.getEdgeStyle` agreed in commit
+   `618d7f6`, but during the column-level work the column-flow `cfEdges`
+   produced by `applyStmtColumns` still use their own hard-coded colours
+   (`#D4922A` dashed for WRITES_TO column flow, `#88B8A8` for READS_FROM
+   column flow) that predate the 4-way scheme. On a drilled-in canvas
+   this produces two visually competing palettes: the table-level edges
+   follow the new legend while the column-flow edges follow the old.
+   Fix: route `cfEdges` through `getEdgeStyle()` with the same
+   DATA_FLOW / FILTER_FLOW mapping as the aggregated edges, then align
+   the legend entries.
+
 ## История изменений
 
 | Дата | Версия | Что |
 |---|---|---|
 | 14.04.2026 | 1.0 | Initial document. Specifies 5-level scheme with new L2 (routine aggregate) and L4 (statement drill), records rendering on L3, KNOT snippet in LOOM inspector, StatementNode click-back. L5 deferred. |
+| 15.04.2026 | 1.1 | Sprint close — known-issues section added (column-level `DATA_FLOW` target handle + legend/palette mismatch for cfEdges). Phase 1 / 6 / 6c-1 / 6c-2 shipped; Phases 2 / 3 / 4 / 4b / 4c / 5 deferred to next sprint. |
