@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { type DaliSession, getDaliHealth, getSessions, getSessionsArchive } from '../api/dali';
+import { type DaliSession, type YggStats, getDaliHealth, getSessions, getSessionsArchive, getYggStats } from '../api/dali';
 import { ParseForm } from '../components/dali/ParseForm';
 import { SessionList } from '../components/dali/SessionList';
 import css from '../components/dali/dali.module.css';
@@ -17,6 +17,19 @@ interface Toast {
 
 let _toastId = 0;
 
+// ── YGG inline helpers ────────────────────────────────────────────────────────
+function YggMetric({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <span>
+      <span style={{ color }}>{value.toLocaleString()}</span>
+      <span style={{ color: 'var(--t4)', marginLeft: 3 }}>{label}</span>
+    </span>
+  );
+}
+function Sep() {
+  return <span style={{ color: 'var(--bd)', margin: '0 2px' }}>·</span>;
+}
+
 // ── DaliPage ─────────────────────────────────────────────────────────────────
 export default function DaliPage() {
   const [sessions,      setSessions]      = useState<DaliSession[]>([]);
@@ -27,9 +40,11 @@ export default function DaliPage() {
   const [toasts,        setToasts]        = useState<Toast[]>([]);
   const [daliState,     setDaliState]     = useState<DaliState>('connecting');
   const [friggHealthy,  setFriggHealthy]  = useState<boolean | null>(null);
+  const [yggStats,      setYggStats]      = useState<YggStats | null>(null);
   const clockRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const friggPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const yggPollRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const [clock, setClock] = useState('');
 
   // Load sessions + check Dali availability; auto-retry until online
@@ -72,6 +87,16 @@ export default function DaliPage() {
     checkFrigg();
     friggPollRef.current = setInterval(checkFrigg, 15_000);
     return () => { if (friggPollRef.current) clearInterval(friggPollRef.current); };
+  }, []);
+
+  // YGG stats polling — every 30s
+  useEffect(() => {
+    function fetchYgg() {
+      getYggStats().then(setYggStats).catch(() => {});
+    }
+    fetchYgg();
+    yggPollRef.current = setInterval(fetchYgg, 30_000);
+    return () => { if (yggPollRef.current) clearInterval(yggPollRef.current); };
   }, []);
 
   // Footer clock
@@ -158,7 +183,7 @@ export default function DaliPage() {
           </button>
         </div>
 
-        {/* Stats strip */}
+        {/* Stats strip — in-memory session counters */}
         <div className={css.statsStrip}>
           <div className={css.statCard}>
             <div className={css.statLabel}>Total sessions</div>
@@ -187,6 +212,60 @@ export default function DaliPage() {
             </div>
             <div className={css.statSub}>column-level</div>
           </div>
+        </div>
+
+        {/* YGG stats strip — live counts from ArcadeDB hound schema */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          marginBottom: 14, padding: '7px 12px',
+          background: 'var(--bg2)', border: '1px solid var(--bd)',
+          borderRadius: 6, fontSize: 11, color: 'var(--t3)',
+          fontFamily: 'var(--mono)',
+        }}>
+          <span style={{ color: 'var(--t4)', marginRight: 4, fontSize: 10, letterSpacing: '0.04em' }}>YGG</span>
+          {yggStats == null ? (
+            <span style={{ color: 'var(--t4)' }}>загрузка…</span>
+          ) : (
+            <>
+              <YggMetric label="tables"  value={yggStats.tables}     color="var(--t2)" />
+              <Sep />
+              <YggMetric label="columns" value={yggStats.columns}    color="var(--t2)" />
+              <Sep />
+              <YggMetric label="stmts"   value={yggStats.statements} color="var(--t2)" />
+              <Sep />
+              <YggMetric label="routines" value={yggStats.routines}  color="var(--t2)" />
+              <Sep />
+              <YggMetric label="atoms"   value={yggStats.atomsTotal} color="var(--acc)" />
+              <span style={{ margin: '0 4px', color: 'var(--bd)' }}>·</span>
+              <span style={{ color: 'var(--suc)' }}>
+                {yggStats.atomsTotal > 0
+                  ? `${((yggStats.atomsResolved / yggStats.atomsTotal) * 100).toFixed(1)}% resolved`
+                  : '—'}
+              </span>
+              {yggStats.atomsUnresolved > 0 && (
+                <>
+                  <span style={{ margin: '0 4px', color: 'var(--bd)' }}>·</span>
+                  <span style={{ color: 'var(--wrn)' }}>{yggStats.atomsUnresolved} unresolved</span>
+                </>
+              )}
+              {yggStats.atomsPending > 0 && (
+                <>
+                  <span style={{ margin: '0 4px', color: 'var(--bd)' }}>·</span>
+                  <span style={{ color: 'var(--inf)' }}>{yggStats.atomsPending} pending</span>
+                </>
+              )}
+            </>
+          )}
+          <button
+            onClick={() => getYggStats().then(setYggStats).catch(() => {})}
+            style={{
+              marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--t4)', padding: '2px 4px', borderRadius: 3,
+            }}
+            title="Refresh YGG stats"
+          >
+            ↻
+          </button>
         </div>
 
         {/* Dali availability banner */}

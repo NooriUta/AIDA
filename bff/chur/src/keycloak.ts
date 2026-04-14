@@ -134,8 +134,13 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
   const roles = seerRoles ?? realmRoles ?? [];
   const role  = pickHighestRole(roles);
 
-  // Extract scopes from the JWT `scope` claim (space-separated string)
-  const scopes = (payload as { scope?: string }).scope?.split(' ').filter(Boolean) ?? [];
+  // Extract scopes from the JWT `scope` claim (space-separated string).
+  // If the token has no AIDA/Seer scopes (KC scope mappers not configured),
+  // fall back to deriving them from realm roles so that requireScope() works
+  // without KC reconfiguration.
+  const jwtScopes = (payload as { scope?: string }).scope?.split(' ').filter(Boolean) ?? [];
+  const hasAidaScopes = jwtScopes.some((s) => s.startsWith('aida:') || s.startsWith('seer:'));
+  const scopes = hasAidaScopes ? jwtScopes : [...jwtScopes, ...deriveAidaScopes(roles)];
 
   return { sub, username, role, scopes };
 }
@@ -165,4 +170,31 @@ function pickHighestRole(roles: string[]): UserRole {
     if (roles.includes(r)) return r;
   }
   return 'viewer';
+}
+
+/**
+ * Fallback scope derivation: used when the KC token `scope` claim doesn't
+ * include AIDA scopes (i.e. the KC realm hasn't been configured with
+ * role-to-scope protocol mappers yet).
+ *
+ * Mirrors the optionalClientScopes in seer-realm.json so that the BFF
+ * enforces the same access model with or without KC scope mappers.
+ */
+const ROLE_AIDA_SCOPES: Record<string, string[]> = {
+  'super-admin':  ['aida:admin', 'aida:superadmin', 'aida:admin:destructive', 'seer:read', 'seer:write', 'aida:harvest', 'aida:audit'],
+  'admin':        ['aida:admin', 'seer:read', 'seer:write', 'aida:harvest', 'aida:audit'],
+  'local-admin':  ['aida:admin', 'aida:tenant:admin', 'seer:read', 'seer:write'],
+  'tenant-owner': ['aida:tenant:owner', 'aida:tenant:admin', 'seer:read', 'seer:write'],
+  'operator':     ['seer:read', 'seer:write', 'aida:harvest'],
+  'auditor':      ['seer:read', 'aida:audit'],
+  'editor':       ['seer:read', 'seer:write'],
+  'viewer':       ['seer:read'],
+};
+
+function deriveAidaScopes(roles: string[]): string[] {
+  const out = new Set<string>();
+  for (const role of roles) {
+    for (const scope of ROLE_AIDA_SCOPES[role] ?? []) out.add(scope);
+  }
+  return [...out];
 }

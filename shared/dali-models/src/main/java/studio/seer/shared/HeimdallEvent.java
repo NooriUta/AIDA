@@ -1,5 +1,7 @@
 package studio.seer.shared;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.Map;
 
 /**
@@ -20,15 +22,15 @@ import java.util.Map;
  * @param payload         event-specific data (тип определяется по eventType)
  */
 public record HeimdallEvent(
-        long                timestamp,
-        String              sourceComponent,
-        String              eventType,
-        EventLevel          level,
-        String              sessionId,
-        String              userId,
-        String              correlationId,
-        long                durationMs,
-        Map<String, Object> payload
+        long                          timestamp,
+        @NotNull @NotBlank String     sourceComponent,
+        @NotNull @NotBlank String     eventType,
+        @NotNull EventLevel           level,
+        String                        sessionId,
+        String                        userId,
+        String                        correlationId,
+        long                          durationMs,
+        @NotNull Map<String, Object>  payload
 ) {
     /** Фабрика для внутренних событий HEIMDALL (DEMO_RESET, SNAPSHOT_SAVED, ...) */
     public static HeimdallEvent internal(EventType type, String message) {

@@ -34,12 +34,17 @@ public class FriggGateway {
 
     /**
      * Executes a SQL query and returns the result rows.
+     *
+     * <p>BUG-SS-041: automatically retries once on {@link java.io.IOException}
+     * ("Connection was closed") which occurs when ArcadeDB drops an idle connection
+     * from the pool before the client-side TTL expires.
      */
     public List<Map<String, Object>> sql(String query) {
         log.debug("[FRIGG] {}", query);
         try {
             var result = client.command(db, basicAuth(), new FriggCommand("sql", query, null))
                     .map(FriggResponse::result)
+                    .onFailure(java.io.IOException.class).retry().atMost(1)
                     .await().atMost(TIMEOUT);
             return result != null ? result : List.of();
         } catch (Exception ex) {
@@ -50,12 +55,15 @@ public class FriggGateway {
 
     /**
      * Executes a SQL query with named parameters.
+     *
+     * <p>BUG-SS-041: automatically retries once on {@link java.io.IOException}.
      */
     public List<Map<String, Object>> sql(String query, Map<String, Object> params) {
         log.debug("[FRIGG] {}", query);
         try {
             var result = client.command(db, basicAuth(), new FriggCommand("sql", query, params))
                     .map(FriggResponse::result)
+                    .onFailure(java.io.IOException.class).retry().atMost(1)
                     .await().atMost(TIMEOUT);
             return result != null ? result : List.of();
         } catch (Exception ex) {

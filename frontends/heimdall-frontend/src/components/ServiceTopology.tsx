@@ -1,8 +1,9 @@
 import {
   ReactFlow, Background, Controls,
   type Node, type Edge, MarkerType,
-  Handle, Position,
+  Handle, Position, useNodesState,
 } from '@xyflow/react';
+import { useEffect, useMemo } from 'react';
 import '@xyflow/react/dist/style.css';
 
 // ── Docker SVG icon ────────────────────────────────────────────────────────────
@@ -14,13 +15,22 @@ function DockerIcon({ size = 10 }: { size?: number }) {
   );
 }
 
-// ── Node data ─────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+/** Minimal health snapshot used by the topology to colour nodes. */
+export interface ServiceHealth {
+  name:   string;
+  mode:   'dev' | 'docker';
+  status: 'up' | 'degraded' | 'down' | 'self';
+}
+
 interface ServiceNodeData {
-  label:    string;
-  port:     string;   // internal container port (or dev port for IDE nodes)
-  extPort?: string;   // host-mapped port shown as "→ :XXXXX" (Docker nodes only)
-  mode?:    'dev' | 'docker';
-  color?:   string;
+  label:        string;
+  port:         string;   // internal / dev port
+  extPort?:     string;   // host-mapped port (Docker only)
+  mode?:        'dev' | 'docker';
+  color?:       string;   // static type colour — shown when health is unknown
+  statusColor?: string;   // live health colour — overrides `color` when present
   [key: string]: unknown;
 }
 
@@ -32,14 +42,17 @@ interface LaneNodeData {
 
 // ── Service node ───────────────────────────────────────────────────────────────
 function ServiceNode({ data }: { data: ServiceNodeData }) {
-  const isDocker    = data.mode === 'docker';
-  const borderColor = isDocker
-    ? 'color-mix(in srgb, #2496ED 50%, var(--bd))'
-    : (data.color ?? 'var(--bd)');
+  const isDocker = data.mode === 'docker';
 
-  // Double-click → open service in new tab
-  // Docker: use host-mapped extPort; dev/no-mode: use port directly
+  // Health colour takes priority; fall back to static type colour
+  const borderColor = data.statusColor
+    ? data.statusColor
+    : isDocker
+      ? 'color-mix(in srgb, #2496ED 50%, var(--bd))'
+      : (data.color ?? 'var(--bd)');
+
   const hostPort = isDocker ? (data.extPort ?? data.port) : data.port;
+
   const handleDoubleClick = () => {
     window.open(`http://localhost:${hostPort}`, '_blank', 'noopener,noreferrer');
   };
@@ -56,22 +69,43 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
         minWidth:     118,
         textAlign:    'center',
         cursor:       'pointer',
+        // Glow when health status is known
+        boxShadow: data.statusColor
+          ? `0 0 6px color-mix(in srgb, ${data.statusColor} 40%, transparent)`
+          : undefined,
+        transition: 'border-color 0.4s, box-shadow 0.4s',
       }}>
       <Handle id="t" type="target" position={Position.Top}    style={{ background: 'var(--bd)' }} />
       <Handle id="l" type="target" position={Position.Left}   style={{ background: 'var(--bd)' }} />
 
-      {/* Label */}
-      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--t1)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+      {/* Label row */}
+      <div style={{
+        fontSize: '11px', fontWeight: 600, color: 'var(--t1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+      }}>
         {isDocker && <DockerIcon size={10} />}
         {data.label}
       </div>
 
-      {/* Port: internal */}
-      <div style={{ fontSize: '10px', fontFamily: 'var(--mono)', color: isDocker ? '#2496ED' : 'var(--t3)', marginTop: 2 }}>
+      {/* Health indicator dot (only when health is known) */}
+      {data.statusColor && (
+        <div style={{
+          width: 5, height: 5, borderRadius: '50%',
+          background: data.statusColor,
+          margin: '2px auto 0',
+        }} />
+      )}
+
+      {/* Internal port */}
+      <div style={{
+        fontSize: '10px', fontFamily: 'var(--mono)',
+        color: isDocker ? '#2496ED' : 'var(--t3)',
+        marginTop: data.statusColor ? 1 : 2,
+      }}>
         :{data.port}
       </div>
 
-      {/* External / host-mapped port (Docker only) */}
+      {/* Host-mapped port (Docker only) */}
       {data.extPort && (
         <div style={{ fontSize: '9px', fontFamily: 'var(--mono)', color: 'var(--t3)', marginTop: 1 }}>
           ext :{data.extPort}
@@ -116,22 +150,21 @@ function LaneNode({ data }: { data: LaneNodeData }) {
 
 const NODE_TYPES = { service: ServiceNode, lane: LaneNode };
 
-// ── Nodes ─────────────────────────────────────────────────────────────────────
+// ── Base nodes (static — health colours are applied dynamically) ───────────────
 //
-//  IDE lane (left)          Docker lane (right)
-//  ───────────────          ───────────────────
-//  port = dev port          port = INTERNAL container port (inter-service comms)
-//                           extPort = host-mapped port (external access)
+//  IDE lane (left)          Docker lane (right)        Shared (centre)
+//  ───────────────          ───────────────────        ───────────────
+//  port = dev port          port = internal container  port = external access
+//                           extPort = host-mapped
 //
-//  Ygg — shared ArcadeDB (HoundArcade external container):
-//    IDE: shuttle dev → localhost:2480
-//    Docker: shuttle docker → HoundArcade:2480 (internal docker net, no host offset)
+//  Keycloak — ONE shared instance (accessed by both IDE and Docker clients):
+//    IDE clients:    localhost:8180
+//    Docker clients: keycloak:8180  (internal docker net)  ext :18180
+//    → single node centred between the two lanes at (350, 430)
 //
-//  Frigg — HEIMDALL's ArcadeDB:
-//    IDE: heimdall-backend dev → localhost:2481 (host-mapped)
-//    Docker: heimdall-backend docker → frigg:2480 (internal container port)
-
-const NODES: Node[] = [
+//  Ygg — shared ArcadeDB (HoundArcade external container): single node
+//  Frigg — separate IDE (localhost:2481) vs Docker (frigg:2480) paths
+const BASE_NODES: Node[] = [
   // ── Lane headers ─────────────────────────────────────────────────────────────
   { id: 'lane-dev',    type: 'lane', selectable: false, draggable: false,
     position: { x: 110, y: -55 }, data: { label: 'IDE / Dev', isDocker: false } },
@@ -140,7 +173,7 @@ const NODES: Node[] = [
 
   // ── Row 0: Shell ─────────────────────────────────────────────────────────────
   { id: 'shell-dev',    type: 'service', position: { x: 130, y: 0 },
-    data: { label: 'Shell',  port: '5175', mode: 'dev', color: 'var(--acc)' } },
+    data: { label: 'Shell',  port: '5175', mode: 'dev',    color: 'var(--acc)' } },
   { id: 'shell-docker', type: 'service', position: { x: 590, y: 0 },
     data: { label: 'Shell',  port: '5175', extPort: '25175', mode: 'docker', color: 'var(--acc)' } },
 
@@ -150,50 +183,79 @@ const NODES: Node[] = [
   { id: 'verdandi-docker', type: 'service', position: { x: 470, y: 140 },
     data: { label: 'Seiðr Studio', port: '5173', extPort: '15173', mode: 'docker', color: 'var(--inf)' } },
   { id: 'hf-dev',          type: 'service', position: { x: 270, y: 140 },
-    data: { label: 'Heimdall UI',  port: '5174', mode: 'dev',    color: 'var(--inf)' } },
+    data: { label: 'Heimðallr UI',  port: '5174', mode: 'dev',    color: 'var(--inf)' } },
   { id: 'hf-docker',       type: 'service', position: { x: 740, y: 140 },
-    data: { label: 'Heimdall UI',  port: '5174', extPort: '25174', mode: 'docker', color: 'var(--inf)' } },
+    data: { label: 'Heimðallr UI',  port: '5174', extPort: '25174', mode: 'docker', color: 'var(--inf)' } },
 
   // ── Row 2: BFF + backend ─────────────────────────────────────────────────────
   { id: 'chur-dev',    type: 'service', position: { x: 0,   y: 290 },
-    data: { label: 'Chur (BFF)',     port: '3000', mode: 'dev',    color: 'var(--suc)' } },
+    data: { label: 'Chur (BFF)',  port: '3000', mode: 'dev',    color: 'var(--suc)' } },
   { id: 'chur-docker', type: 'service', position: { x: 470, y: 290 },
-    data: { label: 'Chur (BFF)',     port: '3000', extPort: '13000', mode: 'docker', color: 'var(--suc)' } },
+    data: { label: 'Chur (BFF)',  port: '3000', extPort: '13000', mode: 'docker', color: 'var(--suc)' } },
   { id: 'hb-dev',      type: 'service', position: { x: 270, y: 290 },
-    data: { label: 'Heimdall Bk',    port: '9093', mode: 'dev',    color: 'var(--suc)' } },
+    data: { label: 'Heimdall Bk', port: '9093', mode: 'dev',    color: 'var(--suc)' } },
   { id: 'hb-docker',   type: 'service', position: { x: 740, y: 290 },
-    data: { label: 'Heimdall Bk',    port: '9093', extPort: '19093', mode: 'docker', color: 'var(--suc)' } },
+    data: { label: 'Heimdall Bk', port: '9093', extPort: '19093', mode: 'docker', color: 'var(--suc)' } },
 
   // ── Row 3: Auth + GraphQL ────────────────────────────────────────────────────
-  { id: 'keycloak-dev',    type: 'service', position: { x: -80,  y: 430 },
-    data: { label: 'Keycloak', port: '8180', mode: 'dev',    color: 'var(--wrn)' } },
-  { id: 'keycloak-docker', type: 'service', position: { x: 385,  y: 430 },
-    data: { label: 'Keycloak', port: '8180', extPort: '18180', mode: 'docker', color: 'var(--wrn)' } },
-  { id: 'shuttle-dev',     type: 'service', position: { x: 130,  y: 430 },
+  // Keycloak: ONE shared instance — centred between the two lanes
+  { id: 'keycloak',        type: 'service', position: { x: 350, y: 430 },
+    data: { label: 'Keycloak', port: '8180', extPort: '18180', color: 'var(--wrn)' } },
+  { id: 'shuttle-dev',     type: 'service', position: { x: 80,  y: 430 },
     data: { label: 'Shuttle',  port: '8080', mode: 'dev',    color: 'var(--suc)' } },
-  { id: 'shuttle-docker',  type: 'service', position: { x: 600,  y: 430 },
+  { id: 'shuttle-docker',  type: 'service', position: { x: 640, y: 430 },
     data: { label: 'Shuttle',  port: '8080', extPort: '18080', mode: 'docker', color: 'var(--suc)' } },
 
-  // ── Row 4: Dali (async PL/SQL parser, port 9090) ─────────────────────────────
-  { id: 'dali-dev',    type: 'service', position: { x: 130, y: 550 },
-    data: { label: 'Dali (Parser)', port: '9090', mode: 'dev',    color: 'var(--acc)' } },
-  { id: 'dali-docker', type: 'service', position: { x: 600, y: 550 },
-    data: { label: 'Dali (Parser)', port: '9090', extPort: '19090', mode: 'docker', color: 'var(--acc)' } },
+  // ── Row 4: Ðali (async PL/SQL parser, port 9090) ─────────────────────────────
+  { id: 'dali-dev',    type: 'service', position: { x: 80,  y: 570 },
+    data: { label: 'Ðali (Parser)', port: '9090', mode: 'dev',    color: 'var(--acc)' } },
+  { id: 'dali-docker', type: 'service', position: { x: 640, y: 570 },
+    data: { label: 'Ðali (Parser)', port: '9090', extPort: '19090', mode: 'docker', color: 'var(--acc)' } },
 
   // ── Row 5: Storage ────────────────────────────────────────────────────────────
-  // Ygg = HoundArcade external container, same instance for both lanes
-  // IDE: localhost:2480 | Docker: HoundArcade:2480 (internal docker net)
-  { id: 'ygg', type: 'service', position: { x: 350, y: 700 },
+  // Ygg = HoundArcade — shared external container
+  { id: 'ygg',         type: 'service', position: { x: 350, y: 710 },
     data: { label: 'Ygg (HoundArcade)', port: '2480', color: 'var(--t3)' } },
-
-  // Frigg — separate access paths
-  // IDE: localhost:2481 (host-mapped from Frigg container)
-  // Docker: frigg:2480 (internal container port, no offset inside network)
-  { id: 'frigg-dev',    type: 'service', position: { x: 130, y: 700 },
-    data: { label: 'Frigg',  port: '2481', mode: 'dev',    color: 'var(--t3)' } },
-  { id: 'frigg-docker', type: 'service', position: { x: 600, y: 700 },
-    data: { label: 'Frigg',  port: '2480', extPort: '2481', mode: 'docker', color: 'var(--t3)' } },
+  // Frigg — ONE shared ArcadeDB instance (Heimðallr + Ðali persistence)
+  //   IDE access:    localhost:2481  (host-mapped)
+  //   Docker access: frigg:2480      (internal docker net)  ext :2481
+  { id: 'frigg', type: 'service', position: { x: 640, y: 710 },
+    data: { label: 'Frigg', port: '2481', extPort: '2481', color: 'var(--t3)' } },
 ];
+
+// ── Health colour helper ───────────────────────────────────────────────────────
+function healthColor(status: ServiceHealth['status'] | undefined): string | undefined {
+  switch (status) {
+    case 'up':
+    case 'self':     return 'var(--suc)';
+    case 'degraded': return 'var(--wrn)';
+    case 'down':     return 'var(--danger)';
+    default:         return undefined;
+  }
+}
+
+// ── Node → service mapping ─────────────────────────────────────────────────────
+// Maps each topology node ID to the service name + mode used for health lookup.
+// mode='any' = pick whichever instance is available (for shared/single nodes).
+const NODE_SERVICE_MAP: Record<string, { name: string; mode: 'dev' | 'docker' | 'any' }> = {
+  'shell-dev':       { name: 'shell',             mode: 'dev'    },
+  'shell-docker':    { name: 'shell',             mode: 'docker' },
+  'verdandi-dev':    { name: 'verdandi',          mode: 'dev'    },
+  'verdandi-docker': { name: 'verdandi',          mode: 'docker' },
+  'hf-dev':          { name: 'heimdall-frontend', mode: 'dev'    },
+  'hf-docker':       { name: 'heimdall-frontend', mode: 'docker' },
+  'chur-dev':        { name: 'chur',              mode: 'dev'    },
+  'chur-docker':     { name: 'chur',              mode: 'docker' },
+  'hb-dev':          { name: 'heimdall-backend',  mode: 'dev'    },
+  'hb-docker':       { name: 'heimdall-backend',  mode: 'docker' },
+  'keycloak':        { name: 'keycloak',          mode: 'any'    },  // single shared instance
+  'shuttle-dev':     { name: 'shuttle',           mode: 'dev'    },
+  'shuttle-docker':  { name: 'shuttle',           mode: 'docker' },
+  'dali-dev':        { name: 'dali',              mode: 'dev'    },
+  'dali-docker':     { name: 'dali',              mode: 'docker' },
+  'ygg':             { name: 'ygg',               mode: 'any'    },
+  'frigg':           { name: 'frigg',             mode: 'any'    },
+};
 
 // ── Edge factory ──────────────────────────────────────────────────────────────
 function e(
@@ -215,30 +277,61 @@ const EDGES: Edge[] = [
   e('sd-hfd',   'shell-dev',    'hf-dev',          'MF',         'var(--inf)'),
   e('vd-cd',    'verdandi-dev', 'chur-dev',        'auth/proxy', 'var(--suc)'),
   e('hfd-hbd',  'hf-dev',       'hb-dev',          'REST/WS',    'var(--suc)', true),
-  e('cd-kd',    'chur-dev',     'keycloak-dev',    'OAuth2',     'var(--wrn)'),
+  e('cd-kc',    'chur-dev',     'keycloak',        'OAuth2',     'var(--wrn)'),   // → shared KC
   e('cd-std',   'chur-dev',     'shuttle-dev',     'GraphQL',    'var(--acc)'),
   e('cd-hbd',   'chur-dev',     'hb-dev',          'events',     'var(--t3)'),
   e('std-ygg',   'shuttle-dev',  'ygg',             'ArcadeDB',   'var(--t3)'),
-  e('hbd-fri',   'hb-dev',       'frigg-dev',       'ArcadeDB',   'var(--t3)'),
+  e('hbd-fri',   'hb-dev',       'frigg',           'ArcadeDB',   'var(--t3)'),
   e('cd-dali',   'chur-dev',     'dali-dev',        'REST',       'var(--acc)'),
-  e('dali-fri',  'dali-dev',     'frigg-dev',       'JobRunr',    'var(--t3)'),
+  e('dali-fri',  'dali-dev',     'frigg',           'JobRunr',    'var(--t3)'),
 
   // ── Docker lane (internal ports, docker network) ──────────────────────────
   e('sk-vk',     'shell-docker',    'verdandi-docker',    'MF',         'var(--inf)'),
   e('sk-hfk',    'shell-docker',    'hf-docker',          'MF',         'var(--inf)'),
   e('vk-ck',     'verdandi-docker', 'chur-docker',        'auth/proxy', 'var(--suc)'),
   e('hfk-hbk',   'hf-docker',      'hb-docker',          'REST/WS',    'var(--suc)', true),
-  e('ck-kk',     'chur-docker',     'keycloak-docker',    'OAuth2',     'var(--wrn)'),
+  e('ck-kc',     'chur-docker',     'keycloak',           'OAuth2',     'var(--wrn)'),  // → shared KC
   e('ck-stk',    'chur-docker',     'shuttle-docker',     'GraphQL',    'var(--acc)'),
   e('ck-hbk',    'chur-docker',     'hb-docker',          'events',     'var(--t3)'),
   e('stk-ygg',   'shuttle-docker',  'ygg',                'ArcadeDB',   'var(--t3)'),
-  e('hbk-frik',  'hb-docker',       'frigg-docker',       'ArcadeDB',   'var(--t3)'),
+  e('hbk-frik',  'hb-docker',       'frigg',              'ArcadeDB',   'var(--t3)'),  // → shared Frigg
   e('ck-dalik',  'chur-docker',     'dali-docker',        'REST',       'var(--acc)'),
-  e('dalik-frik','dali-docker',     'frigg-docker',       'JobRunr',    'var(--t3)'),
+  e('dalik-frik','dali-docker',     'frigg',              'JobRunr',    'var(--t3)'),
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function ServiceTopology() {
+export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: ServiceHealth[] }) {
+  // Build fast lookup: "name:mode" → status
+  const statusLookup = useMemo(() => {
+    const m = new Map<string, ServiceHealth['status']>();
+    for (const s of serviceStatuses) m.set(`${s.name}:${s.mode}`, s.status);
+    return m;
+  }, [serviceStatuses]);
+
+  // Controlled nodes — ReactFlow manages drag positions; we only update `data`
+  const [nodes, setNodes, onNodesChange] = useNodesState(BASE_NODES);
+
+  // Re-apply health colours whenever statuses are refreshed (every 10s)
+  useEffect(() => {
+    setNodes(prev => prev.map(n => {
+      const mapping = NODE_SERVICE_MAP[n.id];
+      if (!mapping) return n;
+
+      let status: ServiceHealth['status'] | undefined;
+      if (mapping.mode === 'any') {
+        status = statusLookup.get(`${mapping.name}:dev`)
+              ?? statusLookup.get(`${mapping.name}:docker`);
+      } else {
+        status = statusLookup.get(`${mapping.name}:${mapping.mode}`);
+      }
+
+      const hc = healthColor(status);
+      const prev_hc = (n.data as ServiceNodeData).statusColor;
+      if (hc === prev_hc) return n; // no change — avoid re-render
+      return { ...n, data: { ...n.data, statusColor: hc } };
+    }));
+  }, [statusLookup, setNodes]);
+
   return (
     <div style={{
       background:   'var(--bg1)',
@@ -254,13 +347,33 @@ export function ServiceTopology() {
         color:        'var(--t3)',
         textTransform:'uppercase',
         letterSpacing:'0.06em',
+        display:      'flex',
+        alignItems:   'center',
+        gap:          'var(--seer-space-3)',
       }}>
         Service Topology
+        {serviceStatuses.length > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--suc)', display: 'inline-block' }} />
+              <span>up</span>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--wrn)', display: 'inline-block' }} />
+              <span>degraded</span>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }} />
+              <span>down</span>
+            </span>
+          </span>
+        )}
       </div>
-      <div style={{ height: 860 }}>
+      <div style={{ height: 880 }}>
         <ReactFlow
-          defaultNodes={NODES}
-          defaultEdges={EDGES}
+          nodes={nodes}
+          edges={EDGES}
+          onNodesChange={onNodesChange}
           nodeTypes={NODE_TYPES}
           fitView
           fitViewOptions={{ padding: 0.12 }}

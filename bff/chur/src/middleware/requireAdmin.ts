@@ -17,10 +17,18 @@ export function requireScope(...scopes: string[]) {
     const sessionScopes: string[] = request.user?.scopes ?? [];
     const hasAll = scopes.every((s) => sessionScopes.includes(s));
     if (!hasAll) {
+      const missing = scopes.filter((s) => !sessionScopes.includes(s));
+      console.warn(
+        `[RBAC] 403 — user=${request.user?.username ?? '?'} ` +
+        `role=${request.user?.role ?? '?'} ` +
+        `missing=${missing.join(',')} ` +
+        `session_scopes=${sessionScopes.join(',') || '(empty)'}`,
+      );
       return reply.status(403).send({
         error:    'Forbidden',
         required: scopes,
-        message:  `Missing required scope(s): ${scopes.join(', ')}`,
+        missing,
+        message:  `Missing required scope(s): ${missing.join(', ')}`,
       });
     }
   };

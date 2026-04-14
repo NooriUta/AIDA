@@ -227,7 +227,7 @@ export const ProfileModal = memo(({ onClose }: Props) => {
             {/* Logout button at bottom */}
             <div style={{ flex: 1, minHeight: '16px' }} />
             <button
-              onClick={() => { logout(); handleClose(); }}
+              onClick={async () => { await logout(); handleClose(); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: '9px',
                 padding: '6px 10px', borderRadius: 'var(--seer-radius-md)',

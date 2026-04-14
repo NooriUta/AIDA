@@ -106,6 +106,22 @@
   gap: 10px;
   align-items: end;
 }
+/* Row 1: Dialect (fixed) + Source path (flex) */
+.formRowTop {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.formRowTop .fieldGroup:first-child {
+  flex: 0 0 148px;
+}
+/* Row 2: Options (checkboxes left) + Parse button (right) */
+.formRowBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
 .fieldGroup {
   display: flex;
   flex-direction: column;

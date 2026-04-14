@@ -56,6 +56,11 @@ public class UniversalSemanticEngine {
     public AtomProcessor getAtomProcessor() { return atomProcessor; }
     public JoinProcessor getJoinProcessor() { return joinProcessor; }
 
+    /** Returns the current statement geoid as known to the engine's scope manager.
+     *  Use this (not BaseSemanticListener.currentStatement()) when looking up
+     *  StatementInfo objects in the engine's StructureAndLineageBuilder. */
+    public String currentStatementGeoid() { return scopeManager.currentStatement(); }
+
     // ═══════════════════════════════════════════════════════════════
     // Statement lifecycle
     // ═══════════════════════════════════════════════════════════════

@@ -56,7 +56,7 @@ export function ServiceHealthStrip() {
 
   return (
     <div
-      onClick={() => navigate('../services')}
+      onClick={() => navigate('/services')}
       title="Click to open Services"
       style={{
         display:      'flex',

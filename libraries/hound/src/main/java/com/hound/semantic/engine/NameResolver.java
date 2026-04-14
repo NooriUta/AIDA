@@ -154,6 +154,14 @@ public class NameResolver {
         ResolvedRef parentRec = resolveParentRecursive(upperName, contextType, currentStatementGeoid, 0);
         if (parentRec.isResolved()) return tag(parentRec, "7_parent_recursive");
 
+        // Стратегия 8: Глобальный DDL-fallback — ищем по schema.table во всех зарегистрированных
+        // таблицах без привязки к statement scope. Покрывает COMMENT ON, GRANT и другие DDL-операторы
+        // без FROM-клаузы, если Strategy 1 не сработала из-за отличий формата geoid.
+        if ("any".equals(contextType) || "table".equals(contextType)) {
+            ResolvedRef globalDdl = resolveGlobalDdlFallback(upperName);
+            if (globalDdl.isResolved()) return tag(globalDdl, "8_global_ddl_fallback");
+        }
+
         return ResolvedRef.unresolved(upperName);
     }
 
@@ -241,6 +249,39 @@ public class NameResolver {
         }
 
         return ResolvedRef.unresolved(name);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Стратегия 8: Глобальный DDL-fallback
+    // Дополнительная попытка для DDL-операторов без FROM-клаузы (COMMENT ON, GRANT, CREATE INDEX,
+    // out-of-line constraints). Повторяет поиск Strategy 1 с более широкой нормализацией имён:
+    // 1. Для schema.table — ищет по совпадению tableName (нечувствительно к регистру схемы).
+    // 2. Для bare name — возвращает единственное совпадение по tableName (Strategy 2b уже это делает,
+    //    но добавляем fallback с другим тегом для диагностики).
+    // ═══════════════════════════════════════════════════════════════
+
+    private ResolvedRef resolveGlobalDdlFallback(String upperName) {
+        if (builder == null) return ResolvedRef.unresolved(upperName);
+        var tables = builder.getTables();
+        if (tables.isEmpty()) return ResolvedRef.unresolved(upperName);
+
+        if (upperName.contains(".")) {
+            // schema.table — try matching by table name only when schema part is ambiguous
+            String tablePart = upperName.substring(upperName.lastIndexOf('.') + 1);
+            List<Map.Entry<String, com.hound.semantic.model.TableInfo>> matches = new ArrayList<>();
+            for (var entry : tables.entrySet()) {
+                var t = entry.getValue();
+                if (t.tableName() != null && t.tableName().toUpperCase().equals(tablePart)) {
+                    matches.add(entry);
+                }
+            }
+            if (matches.size() == 1) {
+                var m = matches.get(0);
+                return new ResolvedRef(m.getValue().tableName(), "TABLE", m.getKey());
+            }
+        }
+        // bare name: already covered by Strategy 2b — nothing additional to try
+        return ResolvedRef.unresolved(upperName);
     }
 
     // ═══════════════════════════════════════════════════════════════

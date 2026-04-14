@@ -16,7 +16,7 @@ const STUB_SERVICES: ServiceHealth[] = [
   { name: 'verdandi', displayName: 'Seiðr Studio',      status: 'UNKNOWN' },
   { name: 'shuttle',  displayName: 'Shuttle (GraphQL)',  status: 'UNKNOWN' },
   { name: 'hound',    displayName: 'Hound (Parser)',     status: 'UNKNOWN' },
-  { name: 'dali',     displayName: 'Dali (ArcadeDB)',    status: 'UNKNOWN' },
+  { name: 'dali',     displayName: 'Ðali (ArcadeDB)',    status: 'UNKNOWN' },
   { name: 'mimir',    displayName: 'Mímir (Memory)',     status: 'UNKNOWN' },
   { name: 'keycloak', displayName: 'Keycloak (Auth)',    status: 'UNKNOWN' },
   { name: 'elk',      displayName: 'ELK Stack',          status: 'UNKNOWN' },
@@ -24,7 +24,7 @@ const STUB_SERVICES: ServiceHealth[] = [
 
 export function useServices(): ServiceHealth[] {
   const [services, setServices] = useState<ServiceHealth[]>([
-    { name: 'heimdall', displayName: 'Heimdall (Monitor)', status: 'LOADING' },
+    { name: 'heimdall', displayName: 'Heimðallr (Monitor)', status: 'LOADING' },
     ...STUB_SERVICES,
   ]);
 

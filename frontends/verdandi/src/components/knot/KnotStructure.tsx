@@ -1,8 +1,10 @@
-import { memo, useState, useMemo } from 'react';
+import { memo, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { KnotTable, KnotStatement } from '../../services/lineage';
+import type { KnotTable, KnotStatement, KnotTableDetail, KnotColumn } from '../../services/lineage';
+import { fetchKnotTableDetail } from '../../services/lineage';
 
 interface Props {
+  sessionId: string;
   tables: KnotTable[];
   statements: KnotStatement[];
 }
@@ -19,10 +21,12 @@ function stmtShortLabel(st: KnotStatement): string {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export const KnotStructure = memo(({ tables, statements }: Props) => {
+export const KnotStructure = memo(({ sessionId, tables, statements }: Props) => {
   const { t } = useTranslation();
   const [filter, setFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Lazy detail: geoid → KnotTableDetail | 'loading' | 'error'
+  const [details, setDetails] = useState<Map<string, KnotTableDetail | 'loading' | 'error'>>(new Map());
 
   const schemas = useMemo(() => {
     const s = new Set<string>();
@@ -37,13 +41,15 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
     const walk = (stmts: KnotStatement[]) => {
       for (const st of stmts) {
         const label = stmtShortLabel(st);
-        st.sourceTables?.forEach(geoid => {
-          if (!srcMap.has(geoid)) srcMap.set(geoid, []);
-          srcMap.get(geoid)!.push(label);
+        st.sourceTables?.forEach(ref => {
+          const key = ref.geoid;
+          if (!srcMap.has(key)) srcMap.set(key, []);
+          srcMap.get(key)!.push(label);
         });
-        st.targetTables?.forEach(geoid => {
-          if (!tgtMap.has(geoid)) tgtMap.set(geoid, []);
-          tgtMap.get(geoid)!.push(label);
+        st.targetTables?.forEach(ref => {
+          const key = ref.geoid;
+          if (!tgtMap.has(key)) tgtMap.set(key, []);
+          tgtMap.get(key)!.push(label);
         });
         if (st.children?.length) walk(st.children);
       }
@@ -62,13 +68,42 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
     );
   }, [tables, filter]);
 
-  const toggle = (id: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+  const loadDetail = useCallback((geoid: string) => {
+    setDetails(prev => {
+      if (prev.has(geoid)) return prev;
+      const next = new Map(prev);
+      next.set(geoid, 'loading');
       return next;
     });
-  };
+    fetchKnotTableDetail(sessionId, geoid)
+      .then(detail => {
+        setDetails(prev => {
+          const next = new Map(prev);
+          next.set(geoid, detail);
+          return next;
+        });
+      })
+      .catch(() => {
+        setDetails(prev => {
+          const next = new Map(prev);
+          next.set(geoid, 'error');
+          return next;
+        });
+      });
+  }, [sessionId]);
+
+  const toggle = useCallback((tb: KnotTable) => {
+    const isOpen = expanded.has(tb.id);
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(tb.id) ? next.delete(tb.id) : next.add(tb.id);
+      return next;
+    });
+    // Trigger lazy load on first open (outside the updater — no side-effects in updater)
+    if (!isOpen && !details.has(tb.geoid)) {
+      loadDetail(tb.geoid);
+    }
+  }, [expanded, details, loadDetail]);
 
   return (
     <div style={{ padding: 24, overflowY: 'auto', height: '100%', boxSizing: 'border-box' }}>
@@ -140,12 +175,14 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
           <tbody>
             {filtered.map(tb => {
               const isOpen = expanded.has(tb.id);
-              const srcStmts = tableUsage.srcMap.get(tb.name) || [];
-              const tgtStmts = tableUsage.tgtMap.get(tb.name) || [];
+              const srcStmts = tableUsage.srcMap.get(tb.geoid) || [];
+              const tgtStmts = tableUsage.tgtMap.get(tb.geoid) || [];
+              const isMaster = tb.dataSource === 'master';
+              const detail   = details.get(tb.geoid);
               return [
                 <tr
                   key={tb.id}
-                  onClick={() => toggle(tb.id)}
+                  onClick={() => toggle(tb)}
                   style={{
                     cursor: 'pointer', transition: 'background 0.1s',
                     background: isOpen ? 'var(--bg3)' : '',
@@ -159,7 +196,25 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t2)' }}>{tb.geoid}</span>
                   </td>
-                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)', fontWeight: 500 }}>{tb.name}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)', fontWeight: 500 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 5 }}>
+                      <span>{tb.name}</span>
+                      {/* master / reconstructed badge — right-aligned */}
+                      {tb.dataSource && (
+                        <span style={{
+                          fontSize: 7, padding: '2px 5px', borderRadius: 2, flexShrink: 0,
+                          fontWeight: 600, fontFamily: 'var(--mono)',
+                          background: isMaster
+                            ? 'color-mix(in srgb, var(--suc) 15%, transparent)'
+                            : 'color-mix(in srgb, var(--wrn) 15%, transparent)',
+                          border: `0.5px solid ${isMaster ? 'var(--suc)' : 'var(--wrn)'}`,
+                          color: isMaster ? 'var(--suc)' : 'var(--wrn)',
+                        }}>
+                          {tb.dataSource}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
                     {tb.schema && <Tag>{tb.schema}</Tag>}
                   </td>
@@ -208,64 +263,26 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
 
                         {/* Left: Columns table */}
                         <div>
-                          <SectionLabel>{t('knot.tabs.structure')} — {t('knot.session.columns')} ({tb.columns.length})</SectionLabel>
-                          {/* Table-level aliases */}
-                          {tb.aliases?.length > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 9, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                                {t('knot.table.aliases')}:
-                              </span>
-                              {tb.aliases.map(a => (
-                                <span key={a} style={{
-                                  display: 'inline-block', padding: '1px 6px', borderRadius: 3,
-                                  fontSize: 10, fontFamily: 'var(--mono)',
-                                  background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
-                                  border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
-                                  color: 'var(--acc)',
-                                }}>{a}</span>
-                              ))}
+                          {detail === 'loading' && (
+                            <div style={{ fontSize: 11, color: 'var(--t3)', padding: '8px 0' }}>
+                              Loading columns…
                             </div>
                           )}
-                          {tb.columns.length > 0 ? (
-                            <div style={{ overflowX: 'auto' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                                <thead>
-                                  <tr>
-                                    <MiniTh center>#</MiniTh>
-                                    <MiniTh>{t('knot.column.name')}</MiniTh>
-                                    <MiniTh>{t('knot.column.alias')}</MiniTh>
-                                    <MiniTh>{t('knot.column.dataType')}</MiniTh>
-                                    <MiniTh center>{t('knot.column.refs')}</MiniTh>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {tb.columns.slice(0, 30).map(col => (
-                                    <tr key={col.id}>
-                                      <MiniTd center muted>{col.position}</MiniTd>
-                                      <MiniTd mono bold>{col.name}</MiniTd>
-                                      <MiniTd mono muted>{col.alias || '—'}</MiniTd>
-                                      <MiniTd mono muted>{col.dataType || '—'}</MiniTd>
-                                      <MiniTd center>
-                                        {col.atomRefCount > 0
-                                          ? <span style={{ color: 'var(--inf)' }}>{col.atomRefCount}</span>
-                                          : <span style={{ color: 'var(--t3)' }}>—</span>}
-                                      </MiniTd>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                              {tb.columns.length > 30 && (
-                                <div style={{ padding: '4px 6px', fontSize: 10, color: 'var(--t3)' }}>
-                                  +{tb.columns.length - 30} {t('knot.nodes.moreColumns', { count: '' }).replace('+ more', '').trim()}
-                                </div>
-                              )}
+                          {detail === 'error' && (
+                            <div style={{ fontSize: 11, color: 'var(--err)', padding: '8px 0' }}>
+                              Failed to load columns.
                             </div>
-                          ) : (
-                            <div style={{ fontSize: 11, color: 'var(--t3)' }}>—</div>
+                          )}
+                          {detail && detail !== 'loading' && detail !== 'error' && (
+                            <ColumnDetail
+                              detail={detail as KnotTableDetail}
+                              t={t}
+                              aliases={tb.aliases}
+                            />
                           )}
                         </div>
 
-                        {/* Right: Usage (source/target in which statements) */}
+                        {/* Right: Usage + snippet */}
                         <div>
                           <SectionLabel>Usage</SectionLabel>
 
@@ -292,7 +309,7 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                               <UsageLabel color="var(--suc)">
                                 {t('knot.structure.usedAsTarget')} ({tgtStmts.length})
                               </UsageLabel>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10 }}>
                                 {tgtStmts.slice(0, 8).map((name, i) => (
                                   <StmtChip key={i} color="var(--suc)">{name}</StmtChip>
                                 ))}
@@ -306,7 +323,26 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
                           )}
 
                           {srcStmts.length === 0 && tgtStmts.length === 0 && (
-                            <div style={{ fontSize: 11, color: 'var(--t3)' }}>No direct statement references</div>
+                            <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 10 }}>
+                              No direct statement references
+                            </div>
+                          )}
+
+                          {/* SQL snippet */}
+                          {detail && detail !== 'loading' && detail !== 'error' && (detail as KnotTableDetail).snippet && (
+                            <>
+                              <SectionLabel>SQL</SectionLabel>
+                              <pre style={{
+                                margin: 0, fontSize: 10, fontFamily: 'var(--mono)',
+                                color: 'var(--t2)', background: 'var(--bg2)',
+                                border: '1px solid var(--bd)', borderRadius: 4,
+                                padding: '8px 10px', overflowX: 'auto',
+                                whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                                maxHeight: 200, overflowY: 'auto',
+                              }}>
+                                {(detail as KnotTableDetail).snippet}
+                              </pre>
+                            </>
                           )}
                         </div>
                       </div>
@@ -323,6 +359,121 @@ export const KnotStructure = memo(({ tables, statements }: Props) => {
 });
 
 KnotStructure.displayName = 'KnotStructure';
+
+// ── ColumnDetail sub-component ────────────────────────────────────────────────
+
+function ColumnDetail({
+  detail,
+  t,
+  aliases,
+}: {
+  detail: KnotTableDetail;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+  aliases: string[];
+}) {
+  const cols = detail.columns;
+  return (
+    <>
+      <SectionLabel>
+        {t('knot.tabs.structure')} — {t('knot.session.columns')} ({cols.length})
+      </SectionLabel>
+
+      {/* Table-level aliases */}
+      {aliases?.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 9, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {t('knot.table.aliases')}:
+          </span>
+          {aliases.map(a => (
+            <span key={a} style={{
+              display: 'inline-block', padding: '1px 6px', borderRadius: 3,
+              fontSize: 10, fontFamily: 'var(--mono)',
+              background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
+              color: 'var(--acc)',
+            }}>{a}</span>
+          ))}
+        </div>
+      )}
+
+      {cols.length > 0 ? (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr>
+                <MiniTh center>#</MiniTh>
+                <MiniTh center>PK</MiniTh>
+                <MiniTh center>FK</MiniTh>
+                <MiniTh>{t('knot.column.name')}</MiniTh>
+                <MiniTh>{t('knot.column.dataType')}</MiniTh>
+                <MiniTh center>N</MiniTh>
+                <MiniTh>Default</MiniTh>
+                <MiniTh>{t('knot.column.alias')}</MiniTh>
+              </tr>
+            </thead>
+            <tbody>
+              {cols.slice(0, 50).map(col => (
+                <ColumnRow key={col.id} col={col} />
+              ))}
+            </tbody>
+          </table>
+          {cols.length > 50 && (
+            <div style={{ padding: '4px 6px', fontSize: 10, color: 'var(--t3)' }}>
+              +{cols.length - 50} more
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--t3)' }}>—</div>
+      )}
+    </>
+  );
+}
+
+function ColumnRow({ col }: { col: KnotColumn }) {
+  return (
+    <tr>
+      <MiniTd center muted>{col.position || '—'}</MiniTd>
+      <MiniTd center>
+        {col.isPk && (
+          <span style={{
+            fontSize: 8, padding: '1px 4px', borderRadius: 2, fontWeight: 700,
+            fontFamily: 'var(--mono)', letterSpacing: '0.03em',
+            background: 'color-mix(in srgb, var(--wrn) 15%, transparent)',
+            border: '0.5px solid var(--wrn)', color: 'var(--wrn)',
+          }}>PK</span>
+        )}
+      </MiniTd>
+      <MiniTd center>
+        {col.isFk && (
+          <span
+            title={col.fkRefTable ? `→ ${col.fkRefTable}` : undefined}
+            style={{
+              fontSize: 8, padding: '1px 4px', borderRadius: 2, fontWeight: 700,
+              fontFamily: 'var(--mono)', letterSpacing: '0.03em',
+              background: 'color-mix(in srgb, var(--inf) 15%, transparent)',
+              border: '0.5px solid var(--inf)', color: 'var(--inf)',
+              cursor: col.fkRefTable ? 'help' : 'default',
+            }}>FK</span>
+        )}
+      </MiniTd>
+      <MiniTd mono bold>{col.name}</MiniTd>
+      <MiniTd mono muted>{col.dataType || '—'}</MiniTd>
+      <MiniTd center>
+        {col.isRequired && (
+          <span style={{
+            fontSize: 8, padding: '1px 4px', borderRadius: 2, fontWeight: 700,
+            fontFamily: 'var(--mono)',
+            background: 'color-mix(in srgb, var(--err) 12%, transparent)',
+            border: '0.5px solid var(--err)', color: 'var(--err)',
+          }}>N</span>
+        )}
+      </MiniTd>
+      <MiniTd mono muted>{col.defaultValue || '—'}</MiniTd>
+      <MiniTd mono muted>{col.alias || '—'}</MiniTd>
+    </tr>
+  );
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 

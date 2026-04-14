@@ -212,8 +212,21 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
           >
             {data.label}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px', display: 'flex', alignItems: 'center', gap: '5px' }}>
             {columns.length} {t('nodes.columns')}
+            {data.metadata?.dataSource && (
+              <span style={{
+                fontSize: 8, padding: '1px 4px', borderRadius: 2, flexShrink: 0,
+                fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.03em',
+                background: data.metadata.dataSource === 'master'
+                  ? 'color-mix(in srgb, var(--suc) 15%, transparent)'
+                  : 'color-mix(in srgb, var(--wrn) 15%, transparent)',
+                border: `0.5px solid ${(data.metadata.dataSource as string) === 'master' ? 'var(--suc)' : 'var(--wrn)'}`,
+                color: (data.metadata.dataSource as string) === 'master' ? 'var(--suc)' : 'var(--wrn)',
+              }}>
+                {data.metadata.dataSource as string}
+              </span>
+            )}
           </div>
         </div>
 

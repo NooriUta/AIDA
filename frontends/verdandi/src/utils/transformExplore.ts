@@ -109,8 +109,8 @@ function transformSchemaExplore(result: ExploreResult): {
   const columnsByParent = new Map<string, ColumnInfo[]>();
   for (const e of result.edges) {
     if (e.type !== 'HAS_COLUMN') continue;
-    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliColumn');
-    if (!colNode) continue;
+    const colNode = nodeById.get(e.target);
+    if (!colNode || colNode.type !== 'DaliColumn') continue;
     if (!columnsByParent.has(e.source)) columnsByParent.set(e.source, []);
     const cols = columnsByParent.get(e.source)!;
     if (cols.length < L2_MAX_COLS) {
@@ -190,7 +190,7 @@ function transformSchemaExplore(result: ExploreResult): {
         label:             table.label,
         nodeType:          'DaliTable' as DaliNodeType,
         childrenAvailable: true,
-        metadata:          { scope: table.scope },
+        metadata:          { scope: table.scope, dataSource: table.dataSource || undefined },
         schema:            tableSchemaName.get(table.id) ?? '',
         columns:           columnsByParent.get(table.id),
       },
@@ -209,7 +209,7 @@ function transformSchemaExplore(result: ExploreResult): {
         label:             nd.label,
         nodeType:          'DaliTable' as DaliNodeType,
         childrenAvailable: true,
-        metadata:          { scope: nd.scope },
+        metadata:          { scope: nd.scope, dataSource: nd.dataSource || undefined },
         schema:            tableSchemaName.get(extId) ?? nd.scope ?? '',
         columns:           columnsByParent.get(extId),
       },
@@ -365,11 +365,13 @@ export function transformGqlExplore(
     return transformSchemaExplore(result);
   }
 
+  const nodeById = new Map(result.nodes.map((n) => [n.id, n]));
+
   const columnsByTable = new Map<string, ColumnInfo[]>();
   for (const e of result.edges) {
     if (e.type !== 'HAS_COLUMN') continue;
-    const colNode = result.nodes.find((nd) => nd.id === e.target && nd.type === 'DaliColumn');
-    if (!colNode) continue;
+    const colNode = nodeById.get(e.target);
+    if (!colNode || colNode.type !== 'DaliColumn') continue;
     if (!columnsByTable.has(e.source)) columnsByTable.set(e.source, []);
     const cols = columnsByTable.get(e.source)!;
     if (cols.length < L2_MAX_COLS) {
@@ -380,8 +382,8 @@ export function transformGqlExplore(
   const outputColsByStmt = new Map<string, ColumnInfo[]>();
   for (const e of result.edges) {
     if (e.type !== 'HAS_OUTPUT_COL' && e.type !== 'HAS_AFFECTED_COL') continue;
-    const colNode = result.nodes.find((nd) => nd.id === e.target && (nd.type === 'DaliOutputColumn' || nd.type === 'DaliColumn' || nd.type === 'DaliAffectedColumn'));
-    if (!colNode) continue;
+    const colNode = nodeById.get(e.target);
+    if (!colNode || !['DaliOutputColumn', 'DaliColumn', 'DaliAffectedColumn'].includes(colNode.type)) continue;
     if (!outputColsByStmt.has(e.source)) outputColsByStmt.set(e.source, []);
     const cols = outputColsByStmt.get(e.source)!;
     if (cols.length < L2_MAX_COLS) {
@@ -414,6 +416,7 @@ export function transformGqlExplore(
           childrenAvailable: DRILLABLE_TYPES.has(nodeType),
           metadata: {
             scope:       n.scope,
+            dataSource:  n.dataSource || undefined,
             groupPath:   groupPath.length > 0 ? groupPath : undefined,
             fullLabel:   nodeType === 'DaliStatement' ? n.label : undefined,
             routineKind: isFlatRoutine ? extractRoutineKind(n.label, nodeType) : undefined,

@@ -222,13 +222,19 @@ public class JsonlBatchBuilder {
         for (var e : str.getTables().entrySet()) {
             if (b.canonicalRids.containsKey(e.getKey())) { b.recordDuplicate("DaliTable"); continue; }
             TableInfo t = e.getValue();
+            // data_source: 'master' if defined by DDL in this session, else 'reconstructed'
+            String tblDs = WriteHelpers.isMasterTable(e.getKey(), str)
+                    ? WriteHelpers.MASTER : WriteHelpers.RECONSTRUCTED;
+            // CREATE VIEW overrides any default 'TABLE' type assigned during reconstruction
+            String effectiveType = WriteHelpers.isViewTable(e.getKey(), str) ? "VIEW" : t.tableType();
             b.appendVertex("DaliTable", e.getKey(), mapOf(
                     "session_id", sid,
                     "table_geoid", e.getKey(),
                     "table_name", t.tableName(),
                     "schema_geoid", t.schemaGeoid(),
-                    "table_type", t.tableType(),
-                    "column_count", t.columnCount()
+                    "table_type", effectiveType,
+                    "column_count", t.columnCount(),
+                    "data_source", tblDs
             ));
         }
 
@@ -236,6 +242,9 @@ public class JsonlBatchBuilder {
         for (var e : str.getColumns().entrySet()) {
             if (b.canonicalRids.containsKey(e.getKey())) { b.recordDuplicate("DaliColumn"); continue; }
             ColumnInfo c = e.getValue();
+            // data_source: inherit from the table — master if the table is DDL-defined
+            String colDs = WriteHelpers.isMasterTable(c.getTableGeoid(), str)
+                    ? WriteHelpers.MASTER : WriteHelpers.RECONSTRUCTED;
             b.appendVertex("DaliColumn", e.getKey(), mapOf(
                     "session_id", sid,
                     "column_geoid", e.getKey(),
@@ -245,7 +254,15 @@ public class JsonlBatchBuilder {
                     "alias", c.getAlias(),
                     "is_output", c.isOutput(),
                     "col_order", c.getOrder(),
-                    "ordinal_position", c.getOrdinalPosition()
+                    "ordinal_position", c.getOrdinalPosition(),
+                    "data_source", colDs,
+                    "data_type", c.getDataType(),
+                    "is_required", c.isRequired(),
+                    "default_value", c.getDefaultValue(),
+                    "is_pk", c.isPk(),
+                    "is_fk", c.isFk(),
+                    "fk_ref_table", c.getFkRefTable(),
+                    "fk_ref_column", c.getFkRefColumn()
             ));
         }
 
@@ -291,9 +308,10 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // 8. DaliStatement
+        // 8. DaliStatement — DDL (CREATE/ALTER/DROP) are excluded: they go to DaliDDLStatement only
         for (var e : str.getStatements().entrySet()) {
             StatementInfo s = e.getValue();
+            if (isDdl(s.getType())) continue;  // DDL → DaliDDLStatement, not DaliStatement
             b.appendVertex("DaliStatement", e.getKey(), mapOf(
                     "session_id", sid,
                     "stmt_geoid", e.getKey(),
@@ -307,7 +325,7 @@ public class JsonlBatchBuilder {
                     "short_name", s.getShortName(),
                     "is_union", s.isUnion(),
                     "is_dml", isDml(s.getType()),
-                    "is_ddl", isDdl(s.getType()),
+                    "is_ddl", false,
                     "has_aggregation", s.isHasAggregation(),
                     "has_window", s.isHasWindow(),
                     "has_cte", hasCte(s, str.getStatements()),
@@ -317,6 +335,52 @@ public class JsonlBatchBuilder {
                     "depth", computeDepth(s.getParentStatementGeoid(), str.getStatements()),
                     "quality", computeStatementQuality(s)
             ));
+        }
+
+        // 8b. DaliDDLStatement (v27) — separate vertex for schema-mutating DDL
+        // KNOWN ISSUE: DaliDDLStatement → DaliTable / DaliColumn edges deferred.
+        for (var e : str.getStatements().entrySet()) {
+            StatementInfo s = e.getValue();
+            if (!isDdl(s.getType())) continue;
+            b.appendVertex("DaliDDLStatement", "DDL_" + e.getKey(), mapOf(
+                    "session_id", sid,
+                    "stmt_geoid", e.getKey(),
+                    "type", s.getType(),
+                    "line_start", s.getLineStart(),
+                    "line_end", s.getLineEnd(),
+                    "target_table_geoids", WriteHelpers.toJson(new ArrayList<>(s.getTargetTables().keySet())),
+                    "short_name", s.getShortName()
+            ));
+        }
+
+        // 8c. DaliPrimaryKey / DaliForeignKey (extends DaliConstraint)
+        // Note: edges (HAS_PRIMARY_KEY, IS_PK_COLUMN, HAS_FOREIGN_KEY, IS_FK_COLUMN,
+        //       REFERENCES_TABLE, REFERENCES_COLUMN) are written by RemoteWriter post-batch.
+        for (var e : str.getConstraints().entrySet()) {
+            ConstraintInfo c = e.getValue();
+            String colNamesJson = WriteHelpers.toJson(c.getColumnNames());
+            if (c.isPrimaryKey()) {
+                b.appendVertex("DaliPrimaryKey", e.getKey(), mapOf(
+                        "session_id", sid,
+                        "constraint_geoid", e.getKey(),
+                        "constraint_type", c.getConstraintType(),
+                        "constraint_name", c.getConstraintName(),
+                        "table_geoid", c.getHostTableGeoid(),
+                        "column_names", colNamesJson
+                ));
+            } else if (c.isForeignKey()) {
+                b.appendVertex("DaliForeignKey", e.getKey(), mapOf(
+                        "session_id", sid,
+                        "constraint_geoid", e.getKey(),
+                        "constraint_type", c.getConstraintType(),
+                        "constraint_name", c.getConstraintName(),
+                        "table_geoid", c.getHostTableGeoid(),
+                        "column_names", colNamesJson,
+                        "ref_table_geoid", c.getRefTableGeoid(),
+                        "ref_column_names", WriteHelpers.toJson(c.getRefColumnNames()),
+                        "on_delete", c.getOnDelete()
+                ));
+            }
         }
 
         // 9. DaliOutputColumn
@@ -483,8 +547,9 @@ public class JsonlBatchBuilder {
         // Phase 2: Edges (strictly after all vertices)
         // ─────────────────────────────────────────────────────
 
-        // Structural: CONTAINS_TABLE
+        // Structural: CONTAINS_TABLE — skip pre-existing tables (already linked in DB)
         for (var e : str.getTables().entrySet()) {
+            if (b.canonicalRids.containsKey(e.getKey())) continue;
             String sg = e.getValue().schemaGeoid();
             if (sg != null)
                 b.appendEdge("CONTAINS_TABLE", sg, e.getKey(), sidProps);
@@ -518,8 +583,9 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // Structural: HAS_COLUMN
+        // Structural: HAS_COLUMN — skip pre-existing columns (already linked in DB)
         for (var e : str.getColumns().entrySet()) {
+            if (b.canonicalRids.containsKey(e.getKey())) continue;
             b.appendEdge("HAS_COLUMN", e.getValue().getTableGeoid(), e.getKey(), sidProps);
         }
 
@@ -940,9 +1006,10 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // 6. DaliStatement
+        // 6. DaliStatement — DDL excluded (go to DaliDDLStatement only)
         for (var e : str.getStatements().entrySet()) {
             StatementInfo s = e.getValue();
+            if (isDdl(s.getType())) continue;  // DDL → DaliDDLStatement, not DaliStatement
             b.appendVertex("DaliStatement", e.getKey(), mapOf(
                     "session_id", sid,
                     "stmt_geoid", e.getKey(),
@@ -956,7 +1023,7 @@ public class JsonlBatchBuilder {
                     "short_name", s.getShortName(),
                     "is_union", s.isUnion(),
                     "is_dml", isDml(s.getType()),
-                    "is_ddl", isDdl(s.getType()),
+                    "is_ddl", false,
                     "has_aggregation", s.isHasAggregation(),
                     "has_window", s.isHasWindow(),
                     "has_cte", hasCte(s, str.getStatements()),

@@ -1,6 +1,8 @@
 package studio.seer.heimdall.resource;
 
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -38,10 +40,7 @@ public class EventResource {
     MetricsCollector metricsCollector;
 
     @POST
-    public Response ingest(HeimdallEvent event) {
-        if (event == null || event.sourceComponent() == null || event.eventType() == null) {
-            return Response.status(400).entity("{\"error\":\"sourceComponent and eventType are required\"}").build();
-        }
+    public Response ingest(@Valid @NotNull HeimdallEvent event) {
 
         // Обогащаем timestamp если эмиттер не передал (или передал 0)
         HeimdallEvent enriched = event.timestamp() > 0 ? event

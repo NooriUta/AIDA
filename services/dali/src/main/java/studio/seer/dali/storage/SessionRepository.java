@@ -99,6 +99,19 @@ public class SessionRepository {
         }
     }
 
+    /**
+     * Deletes all session records from FRIGG.
+     * Intended for use in tests ({@code @AfterEach}) to prevent cross-run accumulation.
+     */
+    public void deleteAll() {
+        try {
+            frigg.sql("DELETE FROM `dali_sessions`");
+            log.debug("[SessionRepository] deleteAll: cleared all session records");
+        } catch (Exception e) {
+            log.warn("[SessionRepository] deleteAll failed: {}", e.getMessage());
+        }
+    }
+
     private Optional<Session> deserialise(String json) {
         try {
             return Optional.of(MAPPER.readValue(json, Session.class));

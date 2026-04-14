@@ -20,6 +20,8 @@ interface KcUserView {
   tz: string; dateFmt: string; startPage: string;
   notifyEmail: boolean; notifyBrowser: boolean;
   notifyHarvest: boolean; notifyErrors: boolean; notifyDigest: boolean;
+  quotas: { mimir: number; sessions: number; atoms: number; workers: number; anvil: number };
+  sources: string[];
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -205,10 +207,8 @@ export default function UsersPage() {
           title: u.title,
           dept:  u.dept,
           phone: u.phone,
-          sources: [],           // TODO R4.3: fetch from FRIGG
-          quotas: {              // TODO R4.3: fetch from FRIGG
-            mimir: 20, sessions: 2, atoms: 50000, workers: 4, anvil: 50,
-          },
+          sources: u.sources,
+          quotas:  u.quotas,
           lastActive: '—',
           sessions:   { used: 0, total: 0 },
           mimir:      { used: 0, total: 0 },

@@ -33,6 +33,7 @@ export interface GraphNode {
   type: string;
   label: string;
   scope: string;
+  dataSource?: string;
 }
 
 export interface GraphEdge {
@@ -78,7 +79,7 @@ const OVERVIEW = /* GraphQL */ `
 const EXPLORE = /* GraphQL */ `
   query Explore($scope: String!) {
     explore(scope: $scope) {
-      nodes { id type label scope }
+      nodes { id type label scope dataSource }
       edges { id source target type }
       hasMore
     }
@@ -88,7 +89,7 @@ const EXPLORE = /* GraphQL */ `
 const LINEAGE = /* GraphQL */ `
   query Lineage($nodeId: String!) {
     lineage(nodeId: $nodeId) {
-      nodes { id type label scope }
+      nodes { id type label scope dataSource }
       edges { id source target type }
       hasMore
     }
@@ -98,7 +99,7 @@ const LINEAGE = /* GraphQL */ `
 const UPSTREAM = /* GraphQL */ `
   query Upstream($nodeId: String!) {
     upstream(nodeId: $nodeId) {
-      nodes { id type label scope }
+      nodes { id type label scope dataSource }
       edges { id source target type }
       hasMore
     }
@@ -108,7 +109,7 @@ const UPSTREAM = /* GraphQL */ `
 const DOWNSTREAM = /* GraphQL */ `
   query Downstream($nodeId: String!) {
     downstream(nodeId: $nodeId) {
-      nodes { id type label scope }
+      nodes { id type label scope dataSource }
       edges { id source target type }
       hasMore
     }
@@ -118,7 +119,7 @@ const DOWNSTREAM = /* GraphQL */ `
 const EXPAND_DEEP = /* GraphQL */ `
   query ExpandDeep($nodeId: String!, $depth: Int!) {
     expandDeep(nodeId: $nodeId, depth: $depth) {
-      nodes { id type label scope }
+      nodes { id type label scope dataSource }
       edges { id source target type }
       hasMore
     }
@@ -128,7 +129,7 @@ const EXPAND_DEEP = /* GraphQL */ `
 const STMT_COLUMNS = /* GraphQL */ `
   query StmtColumns($ids: [String]!) {
     stmtColumns(ids: $ids) {
-      nodes { id type label scope }
+      nodes { id type label scope dataSource }
       edges { id source target type }
       hasMore
     }
@@ -255,6 +256,12 @@ export interface KnotColumn {
   position: number;
   atomRefCount: number;
   alias: string;
+  isRequired: boolean;
+  isPk: boolean;
+  isFk: boolean;
+  fkRefTable: string;
+  defaultValue: string;
+  dataSource: string;
 }
 
 export interface KnotTable {
@@ -266,8 +273,15 @@ export interface KnotTable {
   columnCount: number;
   sourceCount: number;
   targetCount: number;
-  columns: KnotColumn[];
+  dataSource: string;    // 'master' | 'reconstructed' | ''
   aliases: string[];
+}
+
+export interface KnotTableDetail {
+  tableGeoid: string;
+  dataSource: string;
+  columns: KnotColumn[];
+  snippet: string;
 }
 
 export interface KnotSourceRef {
@@ -420,8 +434,7 @@ const KNOT_REPORT = /* GraphQL */ `
         edgeReadsFrom edgeWritesTo edgeAtomRefColumn edgeDataFlow
       }
       tables {
-        id geoid name schema tableType columnCount sourceCount targetCount aliases
-        columns { id name dataType position atomRefCount alias }
+        id geoid name schema tableType columnCount sourceCount targetCount dataSource aliases
       }
       routines {
         routineName routineType packageGeoid
@@ -496,6 +509,31 @@ export async function fetchKnotSessions(): Promise<KnotSession[]> {
 export async function fetchKnotReport(sessionId: string): Promise<KnotReport> {
   const data = await gqlClient.request<{ knotReport: KnotReport }>(KNOT_REPORT, { sessionId });
   return data.knotReport;
+}
+
+const KNOT_TABLE_DETAIL = /* GraphQL */ `
+  query KnotTableDetail($sessionId: String!, $tableGeoid: String!) {
+    knotTableDetail(sessionId: $sessionId, tableGeoid: $tableGeoid) {
+      tableGeoid
+      dataSource
+      columns {
+        id name dataType position atomRefCount alias
+        isRequired isPk isFk fkRefTable defaultValue dataSource
+      }
+      snippet
+    }
+  }
+`;
+
+export async function fetchKnotTableDetail(
+  sessionId: string,
+  tableGeoid: string,
+): Promise<KnotTableDetail> {
+  const data = await gqlClient.request<{ knotTableDetail: KnotTableDetail }>(
+    KNOT_TABLE_DETAIL,
+    { sessionId, tableGeoid },
+  );
+  return data.knotTableDetail;
 }
 
 // ── Error helpers ─────────────────────────────────────────────────────────────

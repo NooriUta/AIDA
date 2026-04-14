@@ -29,6 +29,20 @@ public class StructureAndLineageBuilder {
     private final Map<String, RecordInfo> records = new LinkedHashMap<>();
     private final List<LineageEdge> lineageEdges = new ArrayList<>();
 
+    /**
+     * Geoids of tables/views explicitly *defined* in this session via DDL
+     * (CREATE TABLE, ALTER TABLE, CREATE VIEW, etc.).
+     * Used by WriteHelpers.isMasterTable() to assign data_source='master'.
+     * Populated by markDdlTable() — does NOT depend on StatementInfo.targetTables.
+     */
+    private final Set<String> ddlTableGeoids = new LinkedHashSet<>();
+
+    /**
+     * FOREIGN KEY constraints parsed from DDL in this session.
+     * Key = constraint geoid (e.g. "CRM.CUSTOMER_ADDRESSES#FK#FK_CRM_CADDR_CUST_ID").
+     */
+    private final Map<String, ConstraintInfo> constraints = new LinkedHashMap<>();
+
     // STAB-2: диагностический логгер (null = prod-режим, no-op)
     private ResolutionLogger resolutionLogger;
 
@@ -111,11 +125,15 @@ public class StructureAndLineageBuilder {
     public String ensureTableWithType(String tableName, String schemaGeoid, String tableType) {
         String upperName = tableName.toUpperCase();
         String resolvedSchema = schemaGeoid;
-        if (upperName.contains(".") && (resolvedSchema == null || resolvedSchema.isBlank())) {
+        if (upperName.contains(".")) {
             String[] parts = upperName.split("\\.");
             upperName = parts[parts.length - 1];
-            resolvedSchema = String.join(".", Arrays.copyOf(parts, parts.length - 1));
-            ensureSchema(resolvedSchema, null);
+            String embeddedSchema = String.join(".", Arrays.copyOf(parts, parts.length - 1));
+            if (resolvedSchema == null || resolvedSchema.isBlank()) {
+                resolvedSchema = embeddedSchema;
+                ensureSchema(resolvedSchema, null);
+            }
+            // else: resolvedSchema supplied by caller — keep it, just use clean table name
         }
         String geoid = (resolvedSchema != null && !resolvedSchema.isBlank())
                 ? resolvedSchema.toUpperCase() + "." + upperName
@@ -144,6 +162,16 @@ public class StructureAndLineageBuilder {
     // ═══════ Columns ═══════
 
     public void addColumn(String tableGeoid, String columnName, String expression, String alias) {
+        addColumn(tableGeoid, columnName, expression, alias, null);
+    }
+
+    public void addColumn(String tableGeoid, String columnName, String expression, String alias,
+                          String dataType) {
+        addColumn(tableGeoid, columnName, expression, alias, dataType, false, null);
+    }
+
+    public void addColumn(String tableGeoid, String columnName, String expression, String alias,
+                          String dataType, boolean isRequired, String defaultValue) {
         String upperCol = columnName.toUpperCase();
         String geoid = tableGeoid + "." + upperCol;
         columns.computeIfAbsent(geoid, k -> {
@@ -153,7 +181,8 @@ public class StructureAndLineageBuilder {
                 t.incrementColumnCount();
                 ordinal = t.columnCount(); // 1-based: count after increment
             }
-            return new ColumnInfo(geoid, tableGeoid, upperCol, expression, alias, false, 0, ordinal);
+            return new ColumnInfo(geoid, tableGeoid, upperCol, expression, alias, false, 0,
+                    ordinal, dataType, isRequired, defaultValue);
         });
     }
 
@@ -163,16 +192,88 @@ public class StructureAndLineageBuilder {
      */
     public void addColumnWithOrdinal(String tableGeoid, String columnName,
                                      String expression, String alias, int ordinalPosition) {
+        addColumnWithOrdinal(tableGeoid, columnName, expression, alias, ordinalPosition, null, false, null);
+    }
+
+    public void addColumnWithOrdinal(String tableGeoid, String columnName,
+                                     String expression, String alias, int ordinalPosition,
+                                     String dataType) {
+        addColumnWithOrdinal(tableGeoid, columnName, expression, alias, ordinalPosition, dataType, false, null);
+    }
+
+    public void addColumnWithOrdinal(String tableGeoid, String columnName,
+                                     String expression, String alias, int ordinalPosition,
+                                     String dataType, boolean isRequired, String defaultValue) {
         String upperCol = columnName.toUpperCase();
         String geoid = tableGeoid + "." + upperCol;
         columns.computeIfAbsent(geoid, k -> {
             TableInfo t = tables.get(tableGeoid);
             if (t != null) t.incrementColumnCount();
-            return new ColumnInfo(geoid, tableGeoid, upperCol, expression, alias, false, 0, ordinalPosition);
+            return new ColumnInfo(geoid, tableGeoid, upperCol, expression, alias, false, 0,
+                    ordinalPosition, dataType, isRequired, defaultValue);
         });
     }
 
     public Map<String, ColumnInfo> getColumns() { return columns; }
+
+    // ═══════ DDL table registry ═══════
+
+    /**
+     * Marks a table geoid as DDL-defined (CREATE TABLE, ALTER TABLE, CREATE VIEW…).
+     * Called by initDdlTable() in BaseSemanticListener — the single registration point
+     * for all DDL table targets. WriteHelpers.isMasterTable() reads this set.
+     */
+    public void markDdlTable(String geoid) {
+        if (geoid != null) ddlTableGeoids.add(geoid);
+    }
+
+    public Set<String> getDdlTableGeoids() {
+        return Collections.unmodifiableSet(ddlTableGeoids);
+    }
+
+    // ═══════ Constraints (PK, FK, UQ, CH) ═══════
+
+    /**
+     * Registers a table constraint parsed from DDL.
+     * Called by BaseSemanticListener.onConstraint().
+     *
+     * @param geoid           constraint geoid (use {@link ConstraintInfo#buildGeoid})
+     * @param constraintType  "PK" | "FK" | "UQ" | "CH"
+     * @param constraintName  declared name, or null for unnamed
+     * @param hostTableGeoid  geoid of the table owning this constraint
+     * @param columnNames     ordered FK/PK/UQ column names in the host table
+     * @param refTableGeoid   referenced table geoid (FK only; null for PK/UQ/CH)
+     * @param refColumnNames  referenced column names (FK only; empty for others)
+     * @param onDelete        "CASCADE" | "SET NULL" | null (FK only)
+     */
+    public void addConstraint(String geoid, String constraintType, String constraintName,
+                              String hostTableGeoid, List<String> columnNames,
+                              String refTableGeoid, List<String> refColumnNames, String onDelete) {
+        if (geoid == null) return;
+        constraints.putIfAbsent(geoid, new ConstraintInfo(geoid, constraintType, constraintName,
+                hostTableGeoid, columnNames, refTableGeoid, refColumnNames, onDelete));
+
+        // Propagate PK/FK flags directly onto ColumnInfo for fast inspector access
+        // (avoids graph traversal through DaliConstraint vertices at query time).
+        if (ConstraintInfo.TYPE_PK.equals(constraintType) && columnNames != null) {
+            for (String colName : columnNames) {
+                ColumnInfo col = columns.get(hostTableGeoid + "." + colName.toUpperCase());
+                if (col != null) col.markAsPk();
+            }
+        } else if (ConstraintInfo.TYPE_FK.equals(constraintType) && columnNames != null) {
+            for (int i = 0; i < columnNames.size(); i++) {
+                String colName = columnNames.get(i);
+                String refCol  = (refColumnNames != null && i < refColumnNames.size())
+                        ? refColumnNames.get(i) : null;
+                ColumnInfo col = columns.get(hostTableGeoid + "." + colName.toUpperCase());
+                if (col != null) col.markAsFk(refTableGeoid, refCol);
+            }
+        }
+    }
+
+    public Map<String, ConstraintInfo> getConstraints() {
+        return Collections.unmodifiableMap(constraints);
+    }
 
     // ═══════ Statements ═══════
 
@@ -313,7 +414,9 @@ public class StructureAndLineageBuilder {
     // ═══════ Structure ═══════
 
     public Structure getStructure() {
-        return new Structure(databases, schemas, packages, tables, columns, routines, statements, records);
+        return new Structure(databases, schemas, packages, tables, columns, routines, statements, records,
+                Collections.unmodifiableSet(ddlTableGeoids),
+                Collections.unmodifiableMap(constraints));
     }
 
     // ═══════ Schemas / Databases ═══════
@@ -535,6 +638,9 @@ public class StructureAndLineageBuilder {
             depth++;
             current = parent.getParentStatementGeoid();
         }
+        if (depth >= 50 && current != null) {
+            logger.warn("STAB: computeDepth hit limit of 50 starting from '{}' — possible cycle or deep nesting", parentGeoid);
+        }
         return depth;
     }
 
@@ -612,7 +718,9 @@ public class StructureAndLineageBuilder {
         for (var entry : statements.entrySet()) {
             String stmtGeoid = entry.getKey();
             for (var atomEntry : entry.getValue().getAtoms().entrySet()) {
-                Map<String, Object> a = new LinkedHashMap<>(atomEntry.getValue());
+                Map<String, Object> source = atomEntry.getValue();
+                Map<String, Object> a = new LinkedHashMap<>(source.size() + 2);
+                a.putAll(source);
                 a.put("atom_text",       atomEntry.getKey());
                 a.put("statement_geoid", stmtGeoid);
                 result.add(a);

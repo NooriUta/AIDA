@@ -10,5 +10,10 @@ java {
 
 repositories { mavenCentral() }
 
-// Нет внешних зависимостей — чистые Java records и enums.
+dependencies {
+    // Validation annotations (compileOnly — consumers bring their own runtime)
+    compileOnly 'jakarta.validation:jakarta.validation-api:3.0.2'
+}
+
+// Нет runtime-зависимостей — чистые Java records и enums.
 // Этот модуль — единственный источник истины для HeimdallEvent schema (Q6).

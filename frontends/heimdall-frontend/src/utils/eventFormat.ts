@@ -4,6 +4,8 @@ export const EVENT_LABELS: Record<string, string> = {
   FILE_PARSING_STARTED:   'Parsing started',
   FILE_PARSING_COMPLETED: 'Parsing completed',
   FILE_PARSING_FAILED:    'Parsing failed',
+  PARSE_ERROR:            'Parse error',
+  PARSE_WARNING:          'Grammar notice',
   ATOM_EXTRACTED:         'Atoms extracted',
   RESOLUTION_COMPLETED:   'Names resolved',
   SESSION_STARTED:        'Session started',
@@ -28,12 +30,20 @@ export const EVENT_LABELS: Record<string, string> = {
 export function formatPayload(event: HeimdallEvent): string {
   const p = event.payload ?? {};
   switch (event.eventType) {
+    case 'SESSION_STARTED': {
+      const thr = p['threads'] != null ? ` threads:${p['threads']}` : '';
+      const prev = p['preview'] ? ' preview' : '';
+      return `${p['dialect'] ?? ''} ${p['source'] ?? ''}${thr}${prev}`;
+    }
     case 'FILE_PARSING_STARTED':
       return `file:"${p['file'] ?? ''}"`;
     case 'FILE_PARSING_COMPLETED':
       return `file:"${p['file'] ?? ''}" atoms:${p['atomCount'] ?? 0} ${event.durationMs}ms`;
     case 'FILE_PARSING_FAILED':
       return `file:"${p['file'] ?? ''}" error:${p['error'] ?? 'unknown'}`;
+    case 'PARSE_ERROR':
+    case 'PARSE_WARNING':
+      return `${p['file'] ?? ''} line ${p['line'] ?? '?'}:${p['col'] ?? '?'} — ${p['msg'] ?? ''}`;
     case 'ATOM_EXTRACTED':
       return `${p['atomCount'] ?? 0} atoms · ${p['file'] ?? ''}`;
     case 'RESOLUTION_COMPLETED': {

@@ -45,6 +45,8 @@ final class RemoteSchemaCommands {
                 "CREATE VERTEX TYPE DaliVariable IF NOT EXISTS",
                 "CREATE VERTEX TYPE DaliAffectedColumn IF NOT EXISTS",
                 "CREATE VERTEX TYPE DaliRecord IF NOT EXISTS",
+                // v27: dedicated vertex for DDL (ALTER/CREATE/DROP) — schema-mutating statements
+                "CREATE VERTEX TYPE DaliDDLStatement IF NOT EXISTS",
 
                 // Edge types — namespace hierarchy
                 "CREATE EDGE TYPE BELONGS_TO_APP IF NOT EXISTS",
@@ -125,6 +127,13 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliColumn.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliColumn.ordinal_position IF NOT EXISTS INTEGER", // T13
+                "CREATE PROPERTY DaliColumn.data_type IF NOT EXISTS STRING",    // T14: DDL-declared type
+                "CREATE PROPERTY DaliColumn.is_required IF NOT EXISTS BOOLEAN",  // T14: NOT NULL constraint
+                "CREATE PROPERTY DaliColumn.default_value IF NOT EXISTS STRING",  // T14: DEFAULT expression
+                "CREATE PROPERTY DaliColumn.is_pk IF NOT EXISTS BOOLEAN",         // T14: participates in PRIMARY KEY
+                "CREATE PROPERTY DaliColumn.is_fk IF NOT EXISTS BOOLEAN",         // T14: FOREIGN KEY column
+                "CREATE PROPERTY DaliColumn.fk_ref_table IF NOT EXISTS STRING",   // T14: FK referenced table geoid
+                "CREATE PROPERTY DaliColumn.fk_ref_column IF NOT EXISTS STRING",  // T14: FK referenced column name
                 // DaliRoutine (v23: +return_type, +line_start; v24: +data_source)
                 "CREATE PROPERTY DaliRoutine.routine_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRoutine.routine_name IF NOT EXISTS STRING",
@@ -189,6 +198,15 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRecord.routine_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.source_stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.fields IF NOT EXISTS STRING",
+                // DaliDDLStatement (v27: ALTER / CREATE / DROP)
+                "CREATE PROPERTY DaliDDLStatement.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliDDLStatement.db_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliDDLStatement.stmt_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliDDLStatement.type IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliDDLStatement.line_start IF NOT EXISTS INTEGER",
+                "CREATE PROPERTY DaliDDLStatement.line_end IF NOT EXISTS INTEGER",
+                "CREATE PROPERTY DaliDDLStatement.target_table_geoids IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliDDLStatement.short_name IF NOT EXISTS STRING",
                 // DaliSnippet (v22: +line_start, +line_end)
                 "CREATE PROPERTY DaliSnippet.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.session_id IF NOT EXISTS STRING",
@@ -202,6 +220,38 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliSnippetScript.script_hash IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippetScript.line_count IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliSnippetScript.char_count IF NOT EXISTS INTEGER",
+                // ── DaliConstraint / DaliPrimaryKey / DaliForeignKey ────────────────────
+                // Base constraint vertex type (PK, FK, UQ, CH share these properties)
+                "CREATE VERTEX TYPE DaliConstraint IF NOT EXISTS",
+                "CREATE PROPERTY DaliConstraint.constraint_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliConstraint.constraint_type IF NOT EXISTS STRING",   // PK | FK | UQ | CH
+                "CREATE PROPERTY DaliConstraint.constraint_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliConstraint.table_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliConstraint.column_names IF NOT EXISTS STRING",      // JSON array
+                "CREATE PROPERTY DaliConstraint.session_id IF NOT EXISTS STRING",
+                // DaliPrimaryKey extends DaliConstraint
+                "CREATE VERTEX TYPE DaliPrimaryKey IF NOT EXISTS EXTENDS DaliConstraint",
+                // DaliForeignKey extends DaliConstraint — FK-specific fields
+                "CREATE VERTEX TYPE DaliForeignKey IF NOT EXISTS EXTENDS DaliConstraint",
+                "CREATE PROPERTY DaliForeignKey.ref_table_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliForeignKey.ref_column_names IF NOT EXISTS STRING",  // JSON array
+                "CREATE PROPERTY DaliForeignKey.on_delete IF NOT EXISTS STRING",         // CASCADE | SET NULL | null
+                // ── Constraint edge types ───────────────────────────────────────────────
+                // DaliTable ──HAS_PRIMARY_KEY──► DaliPrimaryKey
+                "CREATE EDGE TYPE HAS_PRIMARY_KEY IF NOT EXISTS",
+                // DaliTable ──HAS_FOREIGN_KEY──► DaliForeignKey
+                "CREATE EDGE TYPE HAS_FOREIGN_KEY IF NOT EXISTS",
+                // DaliPrimaryKey / DaliForeignKey ──IS_PK_COLUMN──► DaliColumn  (with order_id)
+                "CREATE EDGE TYPE IS_PK_COLUMN IF NOT EXISTS",
+                "CREATE PROPERTY IS_PK_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // DaliForeignKey ──IS_FK_COLUMN──► DaliColumn  (with order_id)
+                "CREATE EDGE TYPE IS_FK_COLUMN IF NOT EXISTS",
+                "CREATE PROPERTY IS_FK_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // DaliForeignKey ──REFERENCES_TABLE──► DaliTable
+                "CREATE EDGE TYPE REFERENCES_TABLE IF NOT EXISTS",
+                // DaliForeignKey ──REFERENCES_COLUMN──► DaliColumn  (with order_id)
+                "CREATE EDGE TYPE REFERENCES_COLUMN IF NOT EXISTS",
+                "CREATE PROPERTY REFERENCES_COLUMN.order_id IF NOT EXISTS INTEGER",
         };
     }
 
@@ -231,6 +281,9 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliRecord (record_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliStatement (short_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippetScript (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (stmt_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (type) NOTUNIQUE NULL_STRATEGY SKIP",
 
                 // v26 migration: drop old FULL_TEXT indexes so IF NOT EXISTS creates the new LSM_TREE ones.
                 // Safe to remove in v27 once all remote DBs have been upgraded.
@@ -269,13 +322,37 @@ final class RemoteSchemaCommands {
         };
     }
 
-    // ── Combined — ordered: types → properties → indexes ────────────────────
+    // ── Migration — run ONCE on existing DBs to fix old indexes ─────────────
+    //
+    // Problem: the canonical UNIQUE indexes on (db_name, …) were created in
+    // early deployments WITHOUT "NULL_STRATEGY SKIP".  ArcadeDB with the old
+    // definition indexes NULL db_name values, so ad-hoc sessions that share the
+    // same column / table geoid across runs hit DuplicatedKeyException:
+    //
+    //   Duplicated key [null, CRM.CS_ASSET_SERVICES.ASSET_SERIAL] on
+    //   index 'DaliColumn[db_name,column_geoid]'
+    //
+    // Fix: drop the old indexes (IF EXISTS is safe on a fresh DB) so that
+    // indexCommands() re-creates them with NULL_STRATEGY SKIP.
+    // This method is included in all() and is idempotent: on a fresh DB the
+    // DROP IF EXISTS is a no-op, on an old DB it removes the broken indexes
+    // before they are recreated correctly.
+    static String[] migrationCommands() {
+        return new String[]{
+                "DROP INDEX IF EXISTS `DaliSchema[db_name,schema_geoid]`",
+                "DROP INDEX IF EXISTS `DaliTable[db_name,table_geoid]`",
+                "DROP INDEX IF EXISTS `DaliColumn[db_name,column_geoid]`",
+        };
+    }
+
+    // ── Combined — ordered: types → properties → migrations → indexes ───────
 
     static String[] all() {
         List<String> result = new ArrayList<>();
-        for (String s : typeCommands())     result.add(s);
-        for (String s : propertyCommands()) result.add(s);
-        for (String s : indexCommands())    result.add(s);
+        for (String s : typeCommands())      result.add(s);
+        for (String s : propertyCommands())  result.add(s);
+        for (String s : migrationCommands()) result.add(s);  // drop old indexes before recreating
+        for (String s : indexCommands())     result.add(s);
         return result.toArray(new String[0]);
     }
 }

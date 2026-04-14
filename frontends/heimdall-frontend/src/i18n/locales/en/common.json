@@ -1,19 +1,19 @@
 {
   "app": {
-    "title": "HEIMDALL",
+    "title": "Heimðallr",
     "tagline": "All-seeing. Always on.",
     "slogans": [
       "Watching every heartbeat of the pipeline.",
       "All-seeing. Always on.",
       "Named for the guardian of Bifröst.",
-      "The watchtower of AIDA.",
-      "Events never sleep. Neither does HEIMDALL."
+      "The watchtower of AIÐA.",
+      "Events never sleep. Neither does Heimðallr."
     ]
   },
   "nav": {
     "services":  "Services",
     "dashboard": "Dashboard",
-    "dali":      "Dali",
+    "dali":      "Ðali",
     "events":    "Event Stream",
     "demodebug": "DEMODEBUG",
     "users":     "Users"
@@ -82,6 +82,7 @@
     "filter":    "Filter",
     "component": "Component",
     "level":     "Level",
+    "eventType": "Type",
     "sessionId": "Session ID",
     "all":       "All",
     "clear":     "Clear",
@@ -157,14 +158,25 @@
       "prefs":       "Settings"
     }
   },
+  "daliWidget": {
+    "title":         "Dali Parse Engine",
+    "running":       "Running",
+    "completed":     "Completed",
+    "failed":        "Failed",
+    "totalAtoms":    "Atoms Total",
+    "avgResolution": "Avg Resolution",
+    "online":        "online",
+    "offline":       "offline",
+    "connecting":    "connecting"
+  },
   "profile": {
     "title":        "Profile",
     "appearance":   "Appearance",
-    "platform":     "AIDA — HEIMDALL Control Panel",
+    "platform":     "AIÐA — Heimðallr Control Panel",
     "fieldUsername": "Username",
     "fieldEmail":    "Email",
     "fieldRole":     "Role",
     "fieldPlatform": "Platform",
-    "themeHint":     "Theme preferences are saved locally and shared across all AIDA apps."
+    "themeHint":     "Theme preferences are saved locally and shared across all AIÐA apps."
   }
 }

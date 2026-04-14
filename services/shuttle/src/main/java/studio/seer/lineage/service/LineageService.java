@@ -22,6 +22,9 @@ public class LineageService {
     @Inject
     ArcadeGateway arcade;
 
+    @Inject
+    ExploreService exploreService;
+
     /**
      * Bidirectional 1-hop lineage — all edges incident to nodeId.
      *
@@ -70,7 +73,8 @@ public class LineageService {
                 for (Object raw : results)
                     all.addAll((List<Map<String, Object>>) raw);
                 return ExploreService.buildResult(all, nodeId, "");
-            });
+            })
+            .flatMap(exploreService::enrichDataSource);
     }
 
     /** Upstream only — what feeds into nodeId (incoming edges). Root statements only. */
@@ -90,7 +94,8 @@ public class LineageService {
             LIMIT 200
             """;
         return arcade.cypher(cypher, Map.of("nodeId", nodeId))
-                .map(rows -> ExploreService.buildResult(rows, nodeId, ""));
+                .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
+                .flatMap(exploreService::enrichDataSource);
     }
 
     /** Downstream only — what nodeId feeds into (outgoing edges). Root statements only. */
@@ -109,7 +114,8 @@ public class LineageService {
             LIMIT 200
             """;
         return arcade.cypher(cypher, Map.of("nodeId", nodeId))
-                .map(rows -> ExploreService.buildResult(rows, nodeId, ""));
+                .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
+                .flatMap(exploreService::enrichDataSource);
     }
 
     /**
@@ -141,6 +147,7 @@ public class LineageService {
             "       et AS edgeType\n" +
             "LIMIT 500";
         return arcade.cypher(cypher, Map.of("nodeId", nodeId))
-                .map(rows -> ExploreService.buildResult(rows, nodeId, ""));
+                .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
+                .flatMap(exploreService::enrichDataSource);
     }
 }

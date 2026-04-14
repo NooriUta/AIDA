@@ -40,10 +40,13 @@ public class LineageResource {
     public Uni<List<SchemaNode>> overview() {
         long start = System.currentTimeMillis();
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
-                null, null, 0, Map.of("op", "overview"));
+                null, null, 0, Map.of("op", "overview", "call", "overview()"));
         return overviewService.overview()
-                .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
-                        null, null, System.currentTimeMillis() - start, Map.of("op", "overview")));
+                .invoke(results -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "overview",
+                               "schemaCount", results != null ? results.size() : 0,
+                               "call", "overview() → " + (results != null ? results.size() : 0) + " schemas")));
     }
 
     // ── L2: Explore ───────────────────────────────────────────────────────────
@@ -57,10 +60,19 @@ public class LineageResource {
     ) {
         long start = System.currentTimeMillis();
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
-                null, null, 0, Map.of("op", "explore", "scope", scope != null ? scope : ""));
+                null, null, 0,
+                Map.of("op", "explore", "scope", scope != null ? scope : "",
+                       "call", call("explore", "scope", scope != null ? scope : "")));
         return exploreService.explore(scope)
-                .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
-                        null, null, System.currentTimeMillis() - start, Map.of("op", "explore")));
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",    "explore",
+                               "scope", scope != null ? scope : "",
+                               "nodes", result != null ? result.nodes().size() : 0,
+                               "edges", result != null ? result.edges().size() : 0,
+                               "call",  call("explore", "scope", scope != null ? scope : "")
+                                        + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                        + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
     // ── L2+: Statement column enrichment ─────────────────────────────────────
@@ -72,9 +84,20 @@ public class LineageResource {
         @Description("List of statement @rids returned by explore")
         List<String> ids
     ) {
+        long start = System.currentTimeMillis();
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
-                null, null, 0, Map.of("op", "stmtColumns", "count", ids != null ? ids.size() : 0));
-        return exploreService.exploreStmtColumns(ids);
+                null, null, 0,
+                Map.of("op", "stmtColumns", "count", ids != null ? ids.size() : 0,
+                       "call", call("stmtColumns", "in", ids != null ? ids.size() : 0)));
+        return exploreService.exploreStmtColumns(ids)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",    "stmtColumns",
+                               "in",    ids != null ? ids.size() : 0,
+                               "nodes", result != null ? result.nodes().size() : 0,
+                               "edges", result != null ? result.edges().size() : 0,
+                               "call",  call("stmtColumns", "in", ids != null ? ids.size() : 0)
+                                        + " → " + (result != null ? result.nodes().size() : 0) + " nodes")));
     }
 
     // ── L3: Column lineage ────────────────────────────────────────────────────
@@ -88,23 +111,59 @@ public class LineageResource {
     ) {
         long start = System.currentTimeMillis();
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
-                null, null, 0, Map.of("query", "lineage", "nodeId", nodeId != null ? nodeId : ""));
+                null, null, 0,
+                Map.of("op", "lineage", "nodeId", nodeId != null ? nodeId : "",
+                       "call", call("lineage", "nodeId", nodeId != null ? nodeId : "")));
         return lineageService.lineage(nodeId)
-                .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
                         null, null, System.currentTimeMillis() - start,
-                        Map.of("query", "lineage")));
+                        Map.of("op",     "lineage",
+                               "nodeId", nodeId != null ? nodeId : "",
+                               "nodes",  result != null ? result.nodes().size() : 0,
+                               "edges",  result != null ? result.edges().size() : 0,
+                               "call",   call("lineage", "nodeId", nodeId != null ? nodeId : "")
+                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
     @Query("upstream")
     @Description("L3 — upstream lineage only (what feeds into this node). Role: viewer+")
     public Uni<ExploreResult> upstream(@Name("nodeId") String nodeId) {
-        return lineageService.upstream(nodeId);
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "upstream", "nodeId", nodeId != null ? nodeId : "",
+                       "call", call("upstream", "nodeId", nodeId != null ? nodeId : "")));
+        return lineageService.upstream(nodeId)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",     "upstream",
+                               "nodeId", nodeId != null ? nodeId : "",
+                               "nodes",  result != null ? result.nodes().size() : 0,
+                               "edges",  result != null ? result.edges().size() : 0,
+                               "call",   call("upstream", "nodeId", nodeId != null ? nodeId : "")
+                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
     @Query("downstream")
     @Description("L3 — downstream impact (what this node affects). Role: viewer+")
     public Uni<ExploreResult> downstream(@Name("nodeId") String nodeId) {
-        return lineageService.downstream(nodeId);
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "downstream", "nodeId", nodeId != null ? nodeId : "",
+                       "call", call("downstream", "nodeId", nodeId != null ? nodeId : "")));
+        return lineageService.downstream(nodeId)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",     "downstream",
+                               "nodeId", nodeId != null ? nodeId : "",
+                               "nodes",  result != null ? result.nodes().size() : 0,
+                               "edges",  result != null ? result.edges().size() : 0,
+                               "call",   call("downstream", "nodeId", nodeId != null ? nodeId : "")
+                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
     @Query("expandDeep")
@@ -113,7 +172,21 @@ public class LineageResource {
         @Name("nodeId") String nodeId,
         @Name("depth")  @DefaultValue("5") int depth
     ) {
-        return lineageService.expandDeep(nodeId, depth);
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "expandDeep", "nodeId", nodeId != null ? nodeId : "", "depth", depth,
+                       "call", call("expandDeep", "nodeId", nodeId != null ? nodeId : "", "depth", depth)));
+        return lineageService.expandDeep(nodeId, depth)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",     "expandDeep",
+                               "nodeId", nodeId != null ? nodeId : "",
+                               "nodes",  result != null ? result.nodes().size() : 0,
+                               "edges",  result != null ? result.edges().size() : 0,
+                               "call",   call("expandDeep", "nodeId", nodeId != null ? nodeId : "", "depth", depth)
+                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
     // ── Search ────────────────────────────────────────────────────────────────
@@ -126,11 +199,17 @@ public class LineageResource {
     ) {
         long start = System.currentTimeMillis();
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
-                null, null, 0, Map.of("op", "search", "q", query != null ? query : ""));
+                null, null, 0,
+                Map.of("op", "search", "q", query != null ? query : "",
+                       "call", call("search", "q", query != null ? query : "", "limit", Math.min(limit, 100))));
         return searchService.search(query, Math.min(limit, 100))
                 .invoke(results -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
                         null, null, System.currentTimeMillis() - start,
-                        Map.of("op", "search", "hits", results != null ? results.size() : 0)));
+                        Map.of("op",   "search",
+                               "q",    query != null ? query : "",
+                               "hits", results != null ? results.size() : 0,
+                               "call", call("search", "q", query != null ? query : "")
+                                       + " → " + (results != null ? results.size() : 0) + " hits")));
     }
 
     // ── Meta ──────────────────────────────────────────────────────────────────
@@ -139,5 +218,17 @@ public class LineageResource {
     @Description("Current identity as seen by lineage-api")
     public String me() {
         return identity.username() + " (" + identity.role() + ")";
+    }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    /** Builds a readable call signature like {@code explore(scope=schema-PROD)}. */
+    private static String call(String op, Object... kv) {
+        var sb = new StringBuilder(op).append('(');
+        for (int i = 0; i < kv.length - 1; i += 2) {
+            if (i > 0) sb.append(", ");
+            sb.append(kv[i]).append('=').append(kv[i + 1]);
+        }
+        return sb.append(')').toString();
     }
 }

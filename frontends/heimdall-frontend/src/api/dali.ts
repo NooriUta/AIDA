@@ -26,6 +26,10 @@ export interface FileResult {
   droppedEdgeCount: number;
   vertexStats: VertexTypeStat[];
   resolutionRate: number;
+  /** Column-reference atoms successfully resolved (present from server v2). */
+  atomsResolved?: number;
+  /** Column-reference atoms that failed resolution (present from server v2). */
+  atomsUnresolved?: number;
   durationMs: number;
   warnings: string[];
   errors: string[];
@@ -94,6 +98,25 @@ export async function getDaliHealth(): Promise<DaliHealth> {
 /** Returns sessions stored in FRIGG (the authoritative archive), bypassing in-memory cache. */
 export async function getSessionsArchive(limit = 200): Promise<DaliSession[]> {
   const res = await fetch(`${BASE}/api/sessions/archive?limit=${limit}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export interface YggStats {
+  tables:          number;
+  columns:         number;
+  sessions:        number;
+  statements:      number;
+  routines:        number;
+  atomsTotal:      number;
+  atomsResolved:   number;
+  atomsConstant:   number;
+  atomsUnresolved: number;
+  atomsPending:    number;
+}
+
+export async function getYggStats(): Promise<YggStats> {
+  const res = await fetch(`${BASE}/api/stats`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

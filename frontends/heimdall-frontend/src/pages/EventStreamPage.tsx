@@ -4,8 +4,8 @@ import { EventLog }          from '../components/EventLog';
 import { useEventStream }    from '../hooks/useEventStream';
 import type { EventFilter, EventLevel } from 'aida-shared';
 
-// Active: chur, shuttle, heimdall. Deferred: hound (H3.8). Planned: verdandi.
-const COMPONENTS = ['', 'chur', 'shuttle', 'heimdall', 'hound', 'verdandi'];
+// Active: chur, shuttle, heimdall, dali. Deferred: hound (H3.8). Planned: verdandi.
+const COMPONENTS = ['', 'chur', 'shuttle', 'heimdall', 'dali', 'hound', 'verdandi'];
 const LEVELS: Array<'' | EventLevel> = ['', 'INFO', 'WARN', 'ERROR'];
 
 const selectStyle: React.CSSProperties = {
@@ -33,23 +33,25 @@ const inputStyle: React.CSSProperties = {
 export default function EventStreamPage() {
   const { t } = useTranslation();
 
-  const [component, setComponent] = useState('');
-  const [level, setLevel]         = useState<'' | EventLevel>('');
-  const [sessionId, setSessionId] = useState('');
-  const [paused, setPaused]       = useState(false);
+  const [component,  setComponent]  = useState('');
+  const [level,      setLevel]      = useState<'' | EventLevel>('');
+  const [sessionId,  setSessionId]  = useState('');
+  const [eventType,  setEventType]  = useState('');
+  const [paused, setPaused]         = useState(false);
 
   // Buffer of events to display when paused
   const pausedEventsRef = useRef<ReturnType<typeof useEventStream>['events']>([]);
 
   const filter = useMemo<EventFilter | undefined>(
-    () => (component || level || sessionId
+    () => (component || level || sessionId || eventType
       ? {
-          component: component || undefined,
+          component: component  || undefined,
           level:     (level as EventFilter['level']) || undefined,
-          sessionId: sessionId || undefined,
+          sessionId: sessionId  || undefined,
+          type:      eventType  || undefined,
         }
       : undefined),
-    [component, level, sessionId],
+    [component, level, sessionId, eventType],
   );
 
   const { events, status, clearEvents } = useEventStream(filter);
@@ -80,6 +82,17 @@ export default function EventStreamPage() {
     acc[c] = (acc[c] ?? 0) + 1;
     return acc;
   }, {});
+  // Sorted list of event types seen in the current buffer (for the type filter dropdown)
+  const seenTypes = useMemo(() =>
+    Object.entries(
+      events.reduce<Record<string, number>>((acc, e) => {
+        const t = e.eventType ?? '';
+        if (t) acc[t] = (acc[t] ?? 0) + 1;
+        return acc;
+      }, {})
+    ).sort((a, b) => a[0].localeCompare(b[0])),
+    [events],
+  );
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--seer-space-4) var(--seer-space-6)', gap: 'var(--seer-space-3)' }}>
@@ -100,6 +113,16 @@ export default function EventStreamPage() {
           {t('eventStream.level')}
           <select style={selectStyle} value={level} onChange={e => setLevel(e.target.value as '' | EventLevel)}>
             {LEVELS.map(l => <option key={l} value={l}>{l || t('eventStream.all')}</option>)}
+          </select>
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-2)', fontSize: '13px', color: 'var(--t2)' }}>
+          {t('eventStream.eventType')}
+          <select style={selectStyle} value={eventType} onChange={e => setEventType(e.target.value)}>
+            <option value="">{t('eventStream.all')}</option>
+            {seenTypes.map(([type, count]) => (
+              <option key={type} value={type}>{type} ({count})</option>
+            ))}
           </select>
         </label>
 

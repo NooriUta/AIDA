@@ -1,19 +1,19 @@
 {
   "app": {
-    "title": "HEIMDALL",
+    "title": "Heimðallr",
     "tagline": "Всевидящий. Всегда на посту.",
     "slogans": [
       "Каждое биение пульса конвейера — под наблюдением.",
       "Всевидящий. Всегда на посту.",
       "Назван в честь стража Биврёста.",
-      "Наблюдательная башня AIDA.",
-      "События не спят. HEIMDALL тоже."
+      "Наблюдательная башня AIÐA.",
+      "События не спят. Heimðallr тоже."
     ]
   },
   "nav": {
     "services":  "Сервисы",
     "dashboard": "Дашборд",
-    "dali":      "Dali",
+    "dali":      "Ðali",
     "events":    "Поток событий",
     "demodebug": "DEMODEBUG",
     "users":     "Пользователи"
@@ -82,6 +82,7 @@
     "filter":    "Фильтр",
     "component": "Компонент",
     "level":     "Уровень",
+    "eventType": "Тип",
     "sessionId": "Session ID",
     "all":       "Все",
     "clear":     "Очистить",
@@ -157,14 +158,25 @@
       "prefs":       "Настройки"
     }
   },
+  "daliWidget": {
+    "title":         "Dali — движок парсинга",
+    "running":       "Активных",
+    "completed":     "Завершено",
+    "failed":        "Ошибок",
+    "totalAtoms":    "Атомов всего",
+    "avgResolution": "Ср. разрешение",
+    "online":        "онлайн",
+    "offline":       "недоступен",
+    "connecting":    "подключение"
+  },
   "profile": {
     "title":         "Профиль",
     "appearance":    "Внешний вид",
-    "platform":      "AIDA — Панель управления HEIMDALL",
+    "platform":      "AIÐA — Панель управления Heimðallr",
     "fieldUsername": "Логин",
     "fieldEmail":    "Email",
     "fieldRole":     "Роль",
     "fieldPlatform": "Платформа",
-    "themeHint":     "Настройки темы сохраняются локально и используются во всех приложениях AIDA."
+    "themeHint":     "Настройки темы сохраняются локально и используются во всех приложениях AIÐA."
   }
 }

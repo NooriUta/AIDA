@@ -9,5 +9,6 @@ public record GraphNode(
     String type,
     String label,
     String scope,
-    Map<String, String> meta
+    Map<String, String> meta,
+    String dataSource
 ) {}

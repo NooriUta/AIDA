@@ -85,7 +85,7 @@ export function LoginPage() {
               fontWeight:    800,
               color:         'var(--t1)',
               letterSpacing: '0.04em',
-            }}>HEIMDALL</span>
+            }}>HEIMÐALLR</span>
             <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--t2)', letterSpacing: '0.06em' }}>
               Control
             </span>

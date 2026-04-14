@@ -3,7 +3,7 @@ import { useTranslation }    from 'react-i18next';
 import { useNavigate }       from 'react-router-dom';
 import { HEIMDALL_API }      from '../api';
 import { useAuthStore }      from '../stores/authStore';
-import { ServiceTopology }   from '../components/ServiceTopology';
+import { ServiceTopology } from '../components/ServiceTopology';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ServiceStatus {
@@ -22,15 +22,15 @@ type ServiceGroup = {
 // ── Config ────────────────────────────────────────────────────────────────────
 const DISPLAY_NAMES: Record<string, string> = {
   shuttle:           'Shuttle (GraphQL)',
-  'heimdall-backend':'Heimdall (Monitor)',
-  'heimdall-frontend':'Heimdall UI',
+  'heimdall-backend':'Heimðallr (Monitor)',
+  'heimdall-frontend':'Heimðallr UI',
   chur:              'Chur (BFF)',
   verdandi:          'Seiðr Studio',
   shell:             'Shell (Platform)',
   keycloak:          'Keycloak (Auth)',
   frigg:             'Frigg (Store)',
-  ygg:               'Yggdrasil (DB)',
-  dali:              'Dali (Parser)',
+  ygg:               'Yggðrasil (DB)',
+  dali:              'Ðali (Parser)',
   mimir:             'Mímir (Memory)',
   anvil:             'Anvil (Indexer)',
 };
@@ -57,6 +57,7 @@ function dotColor(status: ServiceStatus['status']): string {
     case 'self':     return 'var(--suc)';
     case 'degraded': return 'var(--wrn)';
     case 'down':     return 'var(--danger)';
+    default:         return 'var(--t3)';
   }
 }
 
@@ -66,6 +67,7 @@ function statusBadgeClass(status: ServiceStatus['status']): string {
     case 'self':     return 'badge badge-suc';
     case 'degraded': return 'badge badge-warn';
     case 'down':     return 'badge badge-err';
+    default:         return 'badge';
   }
 }
 
@@ -366,8 +368,8 @@ export default function ServicesPage() {
         ))}
       </div>
 
-      {/* Topology diagram */}
-      <ServiceTopology />
+      {/* Topology diagram — passes live health data so nodes are coloured by state */}
+      <ServiceTopology serviceStatuses={services ?? []} />
     </div>
   );
 }

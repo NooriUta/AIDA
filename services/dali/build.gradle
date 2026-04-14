@@ -39,6 +39,9 @@ dependencies {
     // Shared models — ParseSessionInput, Session, SessionStatus, HeimdallEvent
     implementation project(':shared:dali-models')
 
+    // Validation annotations — required by HeimdallEvent (dali-models uses compileOnly)
+    compileOnly 'jakarta.validation:jakarta.validation-api:3.0.2'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
 }

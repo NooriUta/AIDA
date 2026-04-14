@@ -60,8 +60,8 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
         </span>
       </div>
       <div className={css.panelBody}>
-        <div className={css.formRow}>
-          {/* Dialect */}
+        {/* Row 1: Dialect + Source path */}
+        <div className={css.formRowTop}>
           <div className={css.fieldGroup}>
             <label className={css.fieldLabel}>Dialect</label>
             <select
@@ -76,8 +76,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
             </select>
           </div>
 
-          {/* Source path */}
-          <div className={css.fieldGroup}>
+          <div className={css.fieldGroup} style={{ flex: 1 }}>
             <label className={css.fieldLabel}>Source path</label>
             <input
               className="field-input"
@@ -90,52 +89,47 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
             />
             <div className={css.fieldError}>{error}</div>
           </div>
+        </div>
 
-          {/* Options: Preview + Clear before write */}
-          <div className={css.fieldGroup}>
-            <span className={css.fieldLabel}>Options</span>
-            <div className={css.checkboxStack}>
-              <div className={css.previewRow}>
-                <input
-                  type="checkbox"
-                  id="dali-preview"
-                  checked={preview}
-                  onChange={e => setPreview(e.target.checked)}
-                />
-                <label htmlFor="dali-preview">Preview (dry-run)</label>
-              </div>
-              <div className={css.previewRow} style={{ opacity: preview ? 0.4 : 1 }}>
-                <input
-                  type="checkbox"
-                  id="dali-clear"
-                  checked={clearBeforeWrite}
-                  disabled={preview}
-                  onChange={e => setClearBeforeWrite(e.target.checked)}
-                />
-                <label htmlFor="dali-clear">Clear YGG before write</label>
-              </div>
+        {/* Row 2: Options + Parse button */}
+        <div className={css.formRowBottom}>
+          <div className={css.checkboxStack}>
+            <div className={css.previewRow}>
+              <input
+                type="checkbox"
+                id="dali-preview"
+                checked={preview}
+                onChange={e => setPreview(e.target.checked)}
+              />
+              <label htmlFor="dali-preview">Preview (dry-run)</label>
+            </div>
+            <div className={css.previewRow} style={{ opacity: preview ? 0.4 : 1 }}>
+              <input
+                type="checkbox"
+                id="dali-clear"
+                checked={clearBeforeWrite}
+                disabled={preview}
+                onChange={e => setClearBeforeWrite(e.target.checked)}
+              />
+              <label htmlFor="dali-clear">Clear YGG before write</label>
             </div>
           </div>
 
-          {/* Parse button */}
-          <div className={css.fieldGroup}>
-            <span className={css.fieldLabel} style={{ opacity: 0 }}>x</span>
-            <button
-              className="btn btn-primary"
-              style={{ fontSize: '12px', padding: '7px 14px' }}
-              onClick={handleSubmit}
-              disabled={loading}
-            >
-              {loading ? '...' : (
-                <>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                  </svg>
-                  Parse
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            className="btn btn-primary"
+            style={{ fontSize: '12px', padding: '7px 14px', alignSelf: 'center' }}
+            onClick={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? '...' : (
+              <>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                Parse
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

@@ -42,8 +42,8 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
     setPaletteState(p);
   }, []);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     onClose();
   };
 
