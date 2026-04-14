@@ -278,7 +278,9 @@ public class JsonlBatchBuilder {
                     "routine_name", r.getName(),
                     "routine_type", r.getRoutineType(),
                     "package_geoid", r.getPackageGeoid(),
-                    "schema_geoid", r.getSchemaGeoid()
+                    "schema_geoid", r.getSchemaGeoid(),
+                    "is_pipelined", r.isPipelined() ? true : null,  // KI-PIPE-1
+                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null  // KI-PRAGMA-1
             ));
         }
 
@@ -353,9 +355,10 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 8c. DaliPrimaryKey / DaliForeignKey (extends DaliConstraint)
+        // 8c. DaliPrimaryKey / DaliForeignKey / DaliUniqueConstraint / DaliCheckConstraint
         // Note: edges (HAS_PRIMARY_KEY, IS_PK_COLUMN, HAS_FOREIGN_KEY, IS_FK_COLUMN,
-        //       REFERENCES_TABLE, REFERENCES_COLUMN) are written by RemoteWriter post-batch.
+        //       REFERENCES_TABLE, REFERENCES_COLUMN, HAS_UNIQUE_KEY, IS_UNIQUE_COLUMN,
+        //       HAS_CHECK) are written by RemoteWriter post-batch.
         for (var e : str.getConstraints().entrySet()) {
             ConstraintInfo c = e.getValue();
             String colNamesJson = WriteHelpers.toJson(c.getColumnNames());
@@ -379,6 +382,26 @@ public class JsonlBatchBuilder {
                         "ref_table_geoid", c.getRefTableGeoid(),
                         "ref_column_names", WriteHelpers.toJson(c.getRefColumnNames()),
                         "on_delete", c.getOnDelete()
+                ));
+            } else if (c.isUniqueConstraint()) {
+                // KI-005: DaliUniqueConstraint
+                b.appendVertex("DaliUniqueConstraint", e.getKey(), mapOf(
+                        "session_id", sid,
+                        "constraint_geoid", e.getKey(),
+                        "constraint_type", c.getConstraintType(),
+                        "constraint_name", c.getConstraintName(),
+                        "table_geoid", c.getHostTableGeoid(),
+                        "column_names", colNamesJson
+                ));
+            } else if (c.isCheckConstraint()) {
+                // KI-005: DaliCheckConstraint
+                b.appendVertex("DaliCheckConstraint", e.getKey(), mapOf(
+                        "session_id", sid,
+                        "constraint_geoid", e.getKey(),
+                        "constraint_type", c.getConstraintType(),
+                        "constraint_name", c.getConstraintName(),
+                        "table_geoid", c.getHostTableGeoid(),
+                        "check_expression", c.getCheckExpression()
                 ));
             }
         }
@@ -980,7 +1003,9 @@ public class JsonlBatchBuilder {
                     "routine_name", r.getName(),
                     "routine_type", r.getRoutineType(),
                     "package_geoid", r.getPackageGeoid(),
-                    "schema_geoid", r.getSchemaGeoid()
+                    "schema_geoid", r.getSchemaGeoid(),
+                    "is_pipelined", r.isPipelined() ? true : null,  // KI-PIPE-1
+                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null  // KI-PRAGMA-1
             ));
         }
 

@@ -4,6 +4,7 @@ package com.hound.semantic.model;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * PL/SQL коллекция/запись, наполняемая через BULK COLLECT INTO.
@@ -12,17 +13,29 @@ import java.util.List;
  *
  * Связи (создаются RemoteWriter):
  *   DaliStatement(cursor SELECT) ─── BULK_COLLECTS_INTO ──► DaliRecord
- *   DaliRecord                   ─── RECORD_USED_IN      ──► DaliStatement(INSERT)
+ *   DaliRecord                   ─── HAS_RECORD_FIELD   ──► DaliRecordField
+ *   DaliRecord                   ─── RECORD_USED_IN     ──► DaliStatement(INSERT)
  */
 public class RecordInfo {
+
+    /**
+     * KI-RETURN-1: Rich field metadata.
+     * Replaces bare String fields list; backward-compat getFields() is derived.
+     */
+    public record FieldInfo(
+        String name,               // always UPPER_CASE
+        String dataType,           // nullable — DDL-declared or %TYPE-resolved type
+        int ordinalPosition,       // 1-based
+        String sourceColumnGeoid   // nullable — populated for %TYPE / %ROWTYPE fields
+    ) {}
 
     private final String geoid;
     /** Имя переменной коллекции, например L_TAB */
     private final String varName;
     /** Geoid routine-владельца */
     private final String routineGeoid;
-    /** Ordered field names из курсорного SELECT (positional) */
-    private final List<String> fields = new ArrayList<>();
+    /** Ordered field info (replaces old List<String> fields) */
+    private final List<FieldInfo> fieldInfos = new ArrayList<>();
     /** Geoid cursor-SELECT стейтмента, из которого BULK COLLECT заполняет эту запись */
     private String sourceStatementGeoid;
 
@@ -34,8 +47,18 @@ public class RecordInfo {
 
     // ── Builders ────────────────────────────────────────────────────────────
 
+    /** Backward-compat: adds a field with name only (no type/geoid). */
     public void addField(String fieldName) {
-        if (fieldName != null) fields.add(fieldName.toUpperCase());
+        if (fieldName != null) {
+            int ordinal = fieldInfos.size() + 1;
+            fieldInfos.add(new FieldInfo(fieldName.toUpperCase(), null, ordinal, null));
+        }
+    }
+
+    /** KI-RETURN-1 / KI-ROWTYPE-1: adds a field with full metadata. */
+    public void addField(String name, String dataType, int ordinal, String sourceColumnGeoid) {
+        if (name != null)
+            fieldInfos.add(new FieldInfo(name.toUpperCase(), dataType, ordinal, sourceColumnGeoid));
     }
 
     public void setSourceStatementGeoid(String stmtGeoid) {
@@ -48,5 +71,12 @@ public class RecordInfo {
     public String getVarName()             { return varName; }
     public String getRoutineGeoid()        { return routineGeoid; }
     public String getSourceStatementGeoid(){ return sourceStatementGeoid; }
-    public List<String> getFields()        { return Collections.unmodifiableList(fields); }
+
+    /** Returns ordered field names (backward compat). */
+    public List<String> getFields() {
+        return fieldInfos.stream().map(FieldInfo::name).collect(Collectors.toList());
+    }
+
+    /** KI-RETURN-1: Returns ordered FieldInfo list with full metadata. */
+    public List<FieldInfo> getFieldInfos() { return Collections.unmodifiableList(fieldInfos); }
 }

@@ -560,7 +560,11 @@ public abstract class BaseSemanticListener {
 
     public static String cleanIdentifier(String name) {
         if (name == null) return null;
-        return name.replaceAll("[\"'`\\[\\]]", "").trim().toUpperCase();
+        String clean = name.replaceAll("[\"'`\\[\\]]", "").trim().toUpperCase();
+        // KI-DBLINK-1: strip @DBLINK suffix so "ORDERS@PROD_DB" → "ORDERS" for geoid computation
+        int atIdx = clean.indexOf('@');
+        if (atIdx > 0) clean = clean.substring(0, atIdx);
+        return clean;
     }
 
     /**
@@ -614,6 +618,17 @@ public abstract class BaseSemanticListener {
 
     public void onRoutineVariable(String name, String type) {
         engine.onRoutineVariable(name, type);
+    }
+
+    /**
+     * KI-ROWTYPE-1: Called for variables declared with %ROWTYPE.
+     * Creates a DaliRecord and schedules field population from the referenced table's columns.
+     *
+     * @param varName  variable name
+     * @param tableRef raw table reference (e.g. "ORDERS" or "HR.ORDERS") without the %ROWTYPE suffix
+     */
+    public void onRowtypeVariable(String varName, String tableRef) {
+        engine.onRowtypeVariable(varName, tableRef);
     }
 
     public void onRoutineReturnType(String returnType) {
@@ -1035,6 +1050,62 @@ public abstract class BaseSemanticListener {
     }
 
     /**
+     * KI-RETURN-1: Called from enterStatic_returning_clause for each INTO target.
+     * Classifies the target (VARIABLE / PARAMETER / RECORD_FIELD / RECORD),
+     * computes its geoid, and registers a ReturningTarget on the current statement.
+     *
+     * @param varName   raw target name (uppercased), e.g. "V_ID", "L_REC.STATUS", "P_OUT"
+     * @param retExprs  list of returned column expressions, e.g. ["ID", "STATUS"]
+     * @param stmtGeoid engine geoid of the enclosing DML statement
+     * @param isBulk    true when BULK COLLECT INTO — target is treated as RECORD
+     */
+    public void onReturningTarget(String varName, List<String> retExprs,
+                                  String stmtGeoid, boolean isBulk) {
+        String routineGeoid = currentRoutine();
+        if (routineGeoid == null) return;
+        String kind = classifyReturningTarget(varName, routineGeoid, isBulk);
+        String targetGeoid = switch (kind) {
+            case "RECORD_FIELD" -> {
+                String[] parts = varName.split("\\.", 2);
+                yield routineGeoid + ":RECORD:" + parts[0] + ":FIELD:" + parts[1];
+            }
+            case "PARAMETER" -> routineGeoid + ":PARAM:" + varName;
+            case "RECORD"    -> routineGeoid + ":RECORD:" + varName;
+            default          -> routineGeoid + ":VAR:" + varName; // VARIABLE
+        };
+        var si = engine.getBuilder().getStatements().get(stmtGeoid);
+        if (si != null) si.addReturningTarget(kind, targetGeoid, retExprs);
+    }
+
+    private String classifyReturningTarget(String varName, String routineGeoid, boolean isBulk) {
+        if (varName.contains(".")) return "RECORD_FIELD";
+        if (isBulk) return "RECORD";
+        var ri = engine.getBuilder().getRoutines().get(routineGeoid);
+        if (ri != null && ri.hasParameter(varName)) return "PARAMETER";
+        if (engine.getBuilder().getRecords()
+                  .containsKey(routineGeoid + ":RECORD:" + varName)) return "RECORD";
+        return "VARIABLE";
+    }
+
+    /**
+     * KI-DDL-1: Records a column affected by ALTER TABLE ADD / MODIFY / DROP.
+     * Computes the column geoid from the current ddl_table_geoid and registers it
+     * on the current statement so RemoteWriter can emit DaliDDLModifiesColumn edges.
+     *
+     * @param colName   bare column name (will be uppercased)
+     * @param operation "ADD" | "MODIFY" | "DROP"
+     */
+    public void onDdlColumnChange(String colName, String operation) {
+        String tableGeoid = (String) current.get("ddl_table_geoid");
+        if (tableGeoid == null || colName == null || colName.isBlank()) return;
+        String colGeoid = tableGeoid + "." + colName.toUpperCase();
+        String stmtGeoid = engine.currentStatementGeoid();
+        if (stmtGeoid == null) return;
+        var si = engine.getBuilder().getStatements().get(stmtGeoid);
+        if (si != null) si.addAffectedColumnGeoid(colGeoid, operation);
+    }
+
+    /**
      * T14: Sets or clears the fine-grained DDL atom suppression context.
      * "SUPPRESS" prevents addAtom() from registering atoms in the current sub-tree.
      * null restores normal (DDL-aware) atom creation.
@@ -1155,6 +1226,31 @@ public abstract class BaseSemanticListener {
      * @param refColumns     ordered referenced column names (uppercase); may be empty
      * @param onDelete       "CASCADE", "SET NULL", or null
      */
+    /**
+     * KI-005: Records a UNIQUE constraint found inside CREATE TABLE or ALTER TABLE.
+     */
+    public void onUniqueConstraint(String constraintName, List<String> cols) {
+        String tableGeoid = (String) current.get("ddl_table_geoid");
+        if (tableGeoid == null) return;
+        String geoid = ConstraintInfo.buildGeoid(tableGeoid, ConstraintInfo.TYPE_UQ, constraintName, cols);
+        engine.getBuilder().addConstraint(geoid, ConstraintInfo.TYPE_UQ, constraintName,
+                tableGeoid, cols, null, null, null);
+    }
+
+    /**
+     * KI-005: Records a CHECK constraint found inside CREATE TABLE or ALTER TABLE.
+     */
+    public void onCheckConstraint(String constraintName, String expr) {
+        String tableGeoid = (String) current.get("ddl_table_geoid");
+        if (tableGeoid == null) return;
+        List<String> disc = expr != null ? List.of(expr) : List.of();
+        String geoid = ConstraintInfo.buildGeoid(tableGeoid, ConstraintInfo.TYPE_CH, constraintName, disc);
+        engine.getBuilder().addConstraint(geoid, ConstraintInfo.TYPE_CH, constraintName,
+                tableGeoid, List.of(), null, null, null);
+        ConstraintInfo ci = engine.getBuilder().getConstraints().get(geoid);
+        if (ci != null) ci.setCheckExpression(expr);
+    }
+
     public void onForeignKeyConstraint(String constraintName, List<String> fkColumns,
                                        String refTableRaw, List<String> refColumns,
                                        String onDelete) {

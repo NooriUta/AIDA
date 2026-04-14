@@ -3,10 +3,16 @@ package studio.seer.dali.rest;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.SessionStatus;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
@@ -23,6 +29,25 @@ class SessionResourceTest {
 
     private static final String SESSIONS_URL = "/api/sessions";
 
+    /** Cross-platform temp SQL file used instead of /dev/null (which is Unix-only). */
+    private static Path tempSqlFile;
+
+    @BeforeAll
+    static void createTempSqlFile() throws IOException {
+        tempSqlFile = Files.createTempFile("dali-test-session-", ".sql");
+        Files.writeString(tempSqlFile, "-- empty test SQL file\n");
+    }
+
+    @AfterAll
+    static void deleteTempSqlFile() throws IOException {
+        if (tempSqlFile != null) Files.deleteIfExists(tempSqlFile);
+    }
+
+    /** Returns the temp file path with forward slashes (safe for JSON on all platforms). */
+    private static String tempSrc() {
+        return tempSqlFile.toAbsolutePath().toString().replace('\\', '/');
+    }
+
     @Inject
     SessionRepository repository;
 
@@ -37,8 +62,8 @@ class SessionResourceTest {
         given()
             .contentType(ContentType.JSON)
             .body("""
-                  { "dialect": "plsql", "source": "/dev/null", "preview": true }
-                  """)
+                  { "dialect": "plsql", "source": "%s", "preview": true }
+                  """.formatted(tempSrc()))
         .when()
             .post(SESSIONS_URL)
         .then()
@@ -68,8 +93,8 @@ class SessionResourceTest {
         String id = given()
             .contentType(ContentType.JSON)
             .body("""
-                  { "dialect": "plsql", "source": "/dev/null", "preview": true }
-                  """)
+                  { "dialect": "plsql", "source": "%s", "preview": true }
+                  """.formatted(tempSrc()))
         .when()
             .post(SESSIONS_URL)
         .then()

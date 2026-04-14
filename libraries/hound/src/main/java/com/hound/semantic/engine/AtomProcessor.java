@@ -234,8 +234,29 @@ public class AtomProcessor {
         if (tokens.size() >= 3
                 && getCanonical(tokenDetails.get(0)).isIdentifier()
                 && getCanonical(tokenDetails.get(1)) == CanonicalTokenType.LEFT_PAREN) {
+            String funcName = tokens.get(0).toUpperCase();
             atomData.put("is_function_call", true);
-            atomData.put("function_name", tokens.get(0));
+            atomData.put("function_name", funcName);
+            // KI-DBMSSQL-1: mark DBMS_SQL dynamic SQL calls as a stub marker
+            if (funcName.startsWith("DBMS_SQL")) {
+                atomData.put("is_dbms_sql_call", true);
+            }
+            // KI-VARRAY-1: IDENT(expr) without .field might be indexed collection access (l_tab(i)).
+            // Cannot distinguish from function call at token level — tag as candidate for
+            // downstream resolution once variable registry is available.
+            atomData.put("is_varray_access_candidate", true);
+            atomData.put("collection_name_candidate", funcName);
+            return;
+        }
+
+        // --- KI-DBMSSQL-1: qualified DBMS_SQL.method call (ID.PERIOD.ID.PAREN...) ---
+        if (tokens.size() >= 5
+                && "DBMS_SQL".equalsIgnoreCase(tokens.get(0))
+                && getCanonical(tokenDetails.get(1)) == CanonicalTokenType.PERIOD
+                && getCanonical(tokenDetails.get(2)).isIdentifier()) {
+            atomData.put("is_function_call", true);
+            atomData.put("is_dbms_sql_call", true);
+            atomData.put("function_name", "DBMS_SQL." + tokens.get(2).toUpperCase());
             return;
         }
 

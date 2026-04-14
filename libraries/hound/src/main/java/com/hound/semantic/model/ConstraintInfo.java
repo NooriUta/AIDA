@@ -79,6 +79,9 @@ public class ConstraintInfo {
     /** ON DELETE action: "CASCADE", "SET NULL", or null (FK only). */
     private final String onDelete;
 
+    /** CHECK expression text (CH constraints only). Mutable — set after construction. */
+    private String checkExpression;
+
     // ─── Constructor ─────────────────────────────────────────────────────────
 
     public ConstraintInfo(String geoid, String constraintType, String constraintName,
@@ -104,9 +107,13 @@ public class ConstraintInfo {
     public String getRefTableGeoid()         { return refTableGeoid; }
     public List<String> getRefColumnNames()  { return refColumnNames; }
     public String getOnDelete()              { return onDelete; }
+    public String getCheckExpression()       { return checkExpression; }
+    public void   setCheckExpression(String expr) { this.checkExpression = expr; }
 
-    public boolean isForeignKey()  { return TYPE_FK.equals(constraintType); }
-    public boolean isPrimaryKey()  { return TYPE_PK.equals(constraintType); }
+    public boolean isForeignKey()       { return TYPE_FK.equals(constraintType); }
+    public boolean isPrimaryKey()       { return TYPE_PK.equals(constraintType); }
+    public boolean isUniqueConstraint() { return TYPE_UQ.equals(constraintType); }
+    public boolean isCheckConstraint()  { return TYPE_CH.equals(constraintType); }
 
     // ─── Static GEOID builder ─────────────────────────────────────────────────
 

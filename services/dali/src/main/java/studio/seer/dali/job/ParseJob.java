@@ -82,6 +82,9 @@ public class ParseJob {
             }
 
             Path sourcePath = Path.of(src);
+            if (!Files.exists(sourcePath)) {
+                throw new IllegalArgumentException("Source path does not exist: " + src);
+            }
             if (Files.isDirectory(sourcePath)) {
                 runBatch(sessionId, sourcePath, config, input);
             } else {

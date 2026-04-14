@@ -12,6 +12,7 @@ import com.hound.semantic.dialect.plsql.PlSqlSemanticListener;
 import com.hound.semantic.engine.UniversalSemanticEngine;
 import com.hound.semantic.model.SemanticResult;
 import com.hound.semantic.model.Structure;
+import com.hound.parser.ConditionalCompilationPreprocessor;
 import com.hound.storage.ArcadeDBSemanticWriter;
 import com.hound.storage.CanonicalPool;
 
@@ -344,8 +345,11 @@ public class HoundParserImpl implements HoundParser {
                 PlSqlErrorCollector errorCollector =
                         new PlSqlErrorCollector(filePath, eventListener);
 
+                // KI-CONDCOMP-1: strip $IF/$ELSIF/$ELSE/$END directives before lexing
+                String preprocessed = new ConditionalCompilationPreprocessor().expand(sql);
+
                 timer.start("parse");
-                PlSqlLexer lexer = new PlSqlLexer(CharStreams.fromString(sql));
+                PlSqlLexer lexer = new PlSqlLexer(CharStreams.fromString(preprocessed));
                 lexer.removeErrorListeners();
                 lexer.addErrorListener(errorCollector);
 

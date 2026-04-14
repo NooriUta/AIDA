@@ -96,13 +96,17 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         base.onRoutineExit();
     }
 
-    // ═══════ Function body (в package) ═══════
+    // ═══════ Function body (в package / WITH FUNCTION) ═══════
     @Override
     public void enterFunction_body(PlSqlParser.Function_bodyContext ctx) {
         String name = ctx.identifier() != null
                 ? BaseSemanticListener.cleanIdentifier(ctx.identifier().getText())
                 : "UNKNOWN";
-        base.onRoutineEnter(name, "FUNCTION", base.currentSchema(), base.currentPackage(), getStartLine(ctx));
+        // KI-WITHFUNC-1: detect WITH FUNCTION (inline SQL function in WITH clause).
+        // Parent is With_clauseContext when this is an inline function, not a package body function.
+        boolean isInlineFunc = ctx.parent instanceof PlSqlParser.With_clauseContext;
+        String routineKind = isInlineFunc ? "INLINE_FUNCTION" : "FUNCTION";
+        base.onRoutineEnter(name, routineKind, base.currentSchema(), base.currentPackage(), getStartLine(ctx));
         extractParameters(ctx.parameter());
         if (ctx.type_spec() != null) {
             base.onRoutineReturnType(ctx.type_spec().getText());
@@ -120,7 +124,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (ctx == null || ctx.identifier() == null) return;
         String varName = BaseSemanticListener.cleanIdentifier(ctx.identifier().getText());
         String varType = ctx.type_spec() != null ? ctx.type_spec().getText() : "UNKNOWN";
-        base.onRoutineVariable(varName, varType);
+        // KI-ROWTYPE-1: detect %ROWTYPE to create a DaliRecord with column-typed fields
+        String upper = varType.toUpperCase();
+        if (upper.endsWith("%ROWTYPE")) {
+            String tableRef = varType.substring(0, varType.length() - "%ROWTYPE".length());
+            base.onRowtypeVariable(varName, tableRef);
+        } else {
+            base.onRoutineVariable(varName, varType);
+        }
     }
 
     // =========================================================================
@@ -324,7 +335,9 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     @Override
     public void enterInsert_statement(PlSqlParser.Insert_statementContext ctx) {
         base.onDmlTargetEnter();
-        base.onStatementEnter("INSERT", extract(ctx), getStartLine(ctx), getEndLine(ctx));
+        // KI-INSALL-1: INSERT ALL / INSERT FIRST detected via multi_table_insert child
+        String stmtType = ctx.multi_table_insert() != null ? "INSERT_MULTI" : "INSERT";
+        base.onStatementEnter(stmtType, extract(ctx), getStartLine(ctx), getEndLine(ctx));
     }
 
     @Override
@@ -578,6 +591,69 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         }
     }
 
+    // ═══════ FORALL loop ═══════
+
+    /**
+     * Bug A fix: FORALL index variable (e.g. `i` in `FORALL i IN 1..N INSERT ...`)
+     * was not registered as a variable, so every use of `i` inside the DML body
+     * fired as an `atom` with 1 token and was incorrectly resolved as a column
+     * reference against the target table (creating spurious DWH.STG_FX_RATES.I).
+     *
+     * Registering the index as a PLS_INTEGER variable puts it in the routine's
+     * variable map, so AtomProcessor.classifyAtom() short-circuits before
+     * reaching resolveImplicitTable().
+     */
+    @Override
+    public void enterForall_statement(PlSqlParser.Forall_statementContext ctx) {
+        if (ctx == null || ctx.index_name() == null) return;
+        String indexVar = BaseSemanticListener.cleanIdentifier(ctx.index_name().getText());
+        if (!indexVar.isEmpty()) {
+            base.onRoutineVariable(indexVar, "PLS_INTEGER");
+        }
+    }
+
+    /**
+     * KI-PIPE-1: Marks the enclosing function as pipelined when a PIPE ROW statement is found.
+     * PIPE ROW(expr) — expr is the collection element being piped out.
+     */
+    @Override
+    public void enterPipe_row_statement(PlSqlParser.Pipe_row_statementContext ctx) {
+        if (ctx == null) return;
+        String routineGeoid = base.currentRoutine();
+        if (routineGeoid == null) return;
+        var ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+        if (ri != null) ri.setPipelined(true);
+    }
+
+    /**
+     * KI-PRAGMA-1: Marks the enclosing routine as autonomous when
+     * PRAGMA AUTONOMOUS_TRANSACTION is declared.
+     */
+    @Override
+    public void enterPragma_declaration(PlSqlParser.Pragma_declarationContext ctx) {
+        if (ctx == null || ctx.AUTONOMOUS_TRANSACTION() == null) return;
+        String routineGeoid = base.currentRoutine();
+        if (routineGeoid == null) return;
+        var ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+        if (ri != null) ri.setAutonomousTransaction(true);
+    }
+
+    /**
+     * KI-FLASHBACK-1: Captures AS OF TIMESTAMP / AS OF SCN meta-fields on the current statement.
+     */
+    @Override
+    public void enterFlashback_query_clause(PlSqlParser.Flashback_query_clauseContext ctx) {
+        if (ctx == null) return;
+        String stmtGeoid = base.engine.getScopeManager().currentStatement();
+        if (stmtGeoid == null) return;
+        var si = base.engine.getBuilder().getStatements().get(stmtGeoid);
+        if (si == null) return;
+        String type = ctx.TIMESTAMP() != null ? "TIMESTAMP" : (ctx.SCN() != null ? "SCN" : null);
+        String expr = !ctx.expression().isEmpty() ? ctx.expression(0).getText() : null;
+        si.setFlashbackType(type);
+        si.setFlashbackExpr(expr);
+    }
+
     // =========================================================================
     // CTE / WITH clause
     // =========================================================================
@@ -763,6 +839,22 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (!stack.isEmpty()) stack.remove(stack.size() - 1);
     }
 
+    /**
+     * KI-LATERAL-1: detect LATERAL (subquery) in FROM clause.
+     * table_ref_aux_internal_one wraps dml_table_expression_clause which has LATERAL() terminal.
+     * Marks the enclosing statement so NameResolver can consult outer scope for unresolved refs.
+     */
+    @Override
+    public void enterTable_ref_aux_internal_one(PlSqlParser.Table_ref_aux_internal_oneContext ctx) {
+        if (ctx == null) return;
+        PlSqlParser.Dml_table_expression_clauseContext dml = ctx.dml_table_expression_clause();
+        if (dml != null && dml.LATERAL() != null) {
+            String stmtGeoid = base.engine.getScopeManager().currentStatement();
+            if (stmtGeoid != null)
+                base.engine.getScopeManager().markHasLateral(stmtGeoid);
+        }
+    }
+
     // =========================================================================
     // General table ref (DML target)
     // =========================================================================
@@ -838,6 +930,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
         // 4. Complete join registration
         base.onJoinComplete(joinType, conditions, sourceAlias, getStartLine(ctx));
+
+        // KI-APPLY-1: CROSS APPLY / OUTER APPLY — lateral-like correlated join.
+        // Mark enclosing statement so NameResolver can consult outer scope for refs.
+        if (joinType.contains("APPLY")) {
+            String stmtGeoid = base.engine.getScopeManager().currentStatement();
+            if (stmtGeoid != null) base.engine.getScopeManager().markHasLateral(stmtGeoid);
+        }
+
         base.onJoinExit();
     }
 
@@ -1436,6 +1536,93 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         base.onStatementExit();
     }
 
+    // ── KI-RETURN-1: RETURNING INTO clause ───────────────────────────────────
+
+    /**
+     * Fired for: UPDATE ... RETURNING col INTO :v / l_rec.f / p_out
+     *            DELETE ... RETURNING col INTO ...
+     *            INSERT ... RETURNING col INTO ...  (all via static_returning_clause grammar rule)
+     *
+     * For each INTO target (general_element or bind_variable), classifies the target kind
+     * (VARIABLE / PARAMETER / RECORD_FIELD / RECORD) and registers a ReturningTarget on
+     * the current statement so RemoteWriter can emit RETURNS_INTO edges.
+     */
+    @Override
+    public void enterStatic_returning_clause(PlSqlParser.Static_returning_clauseContext ctx) {
+        if (ctx == null || ctx.into_clause() == null) return;
+        String stmtGeoid = base.engine.getScopeManager().currentStatement();
+        if (stmtGeoid == null) return;
+
+        // Extract returned column expressions
+        List<String> retExprs = new ArrayList<>();
+        if (ctx.expressions_() != null)
+            for (var e : ctx.expressions_().expression())
+                retExprs.add(BaseSemanticListener.cleanColumnName(e.getText()));
+
+        PlSqlParser.Into_clauseContext into = ctx.into_clause();
+        boolean isBulk = into.BULK() != null;
+
+        // general_element targets: plain PL/SQL vars, record fields, parameters
+        for (var ge : into.general_element()) {
+            String varName = BaseSemanticListener.cleanIdentifier(ge.getText()).toUpperCase();
+            if (!varName.isBlank())
+                base.onReturningTarget(varName, retExprs, stmtGeoid, isBulk);
+        }
+        // bind_variable targets: :v_name
+        for (var bv : into.bind_variable()) {
+            String varName = BaseSemanticListener.cleanIdentifier(
+                    bv.getText().replace(":", "")).toUpperCase();
+            if (!varName.isBlank())
+                base.onReturningTarget(varName, retExprs, stmtGeoid, false);
+        }
+    }
+
+    // ── KI-DDL-1: ALTER TABLE column change tracking ─────────────────────────
+
+    /**
+     * ALTER TABLE ... ADD (col1 type1, col2 type2)
+     * Extracts column names from the add_column_clause and registers each as ADD.
+     */
+    @Override
+    public void enterAdd_column_clause(PlSqlParser.Add_column_clauseContext ctx) {
+        if (ctx == null || !base.isInDdlContext()) return;
+        for (PlSqlParser.Column_definitionContext cd : ctx.column_definition()) {
+            if (cd.column_name() == null) continue;
+            String colName = BaseSemanticListener.cleanColumnName(cd.column_name().getText());
+            if (colName != null && !colName.isBlank())
+                base.onDdlColumnChange(colName, "ADD");
+        }
+    }
+
+    /**
+     * ALTER TABLE ... MODIFY (col1 new_type, col2 ...)
+     * Extracts column names from each modify_col_properties and registers as MODIFY.
+     */
+    @Override
+    public void enterModify_column_clauses(PlSqlParser.Modify_column_clausesContext ctx) {
+        if (ctx == null || !base.isInDdlContext()) return;
+        for (PlSqlParser.Modify_col_propertiesContext mcp : ctx.modify_col_properties()) {
+            if (mcp.column_name() == null) continue;
+            String colName = BaseSemanticListener.cleanColumnName(mcp.column_name().getText());
+            if (colName != null && !colName.isBlank())
+                base.onDdlColumnChange(colName, "MODIFY");
+        }
+    }
+
+    /**
+     * ALTER TABLE ... DROP COLUMN col1 / DROP (col1, col2)
+     * Extracts column names from drop_column_clause and registers each as DROP.
+     */
+    @Override
+    public void enterDrop_column_clause(PlSqlParser.Drop_column_clauseContext ctx) {
+        if (ctx == null || !base.isInDdlContext()) return;
+        for (PlSqlParser.Column_nameContext cn : ctx.column_name()) {
+            String colName = BaseSemanticListener.cleanColumnName(cn.getText());
+            if (colName != null && !colName.isBlank())
+                base.onDdlColumnChange(colName, "DROP");
+        }
+    }
+
     /**
      * T14 (Step 1): Creates a statement scope for CREATE INDEX so that column-name atoms
      * in the index column list are attached to a statement and can be resolved via the
@@ -1601,7 +1788,24 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
             base.onForeignKeyConstraint(constraintName, fkColumns, refTableRaw, refColumns, onDelete);
         }
-        // UNIQUE and CHECK: deferred (KI-005)
+        // KI-005: UNIQUE constraint
+        if (ctx.UNIQUE() != null) {
+            String constraintName = ctx.constraint_name() != null
+                    ? BaseSemanticListener.cleanIdentifier(ctx.constraint_name().getText()) : null;
+            List<String> cols = new ArrayList<>();
+            for (PlSqlParser.Column_nameContext cn : ctx.column_name()) {
+                String name = BaseSemanticListener.cleanColumnName(cn.getText());
+                if (name != null && !name.isBlank()) cols.add(name.toUpperCase());
+            }
+            base.onUniqueConstraint(constraintName, cols);
+            return;
+        }
+        // KI-005: CHECK constraint
+        if (ctx.CHECK() != null && ctx.condition() != null) {
+            String constraintName = ctx.constraint_name() != null
+                    ? BaseSemanticListener.cleanIdentifier(ctx.constraint_name().getText()) : null;
+            base.onCheckConstraint(constraintName, ctx.condition().getText());
+        }
     }
 
     /** Extracts ordered column names from a paren_column_list context. */

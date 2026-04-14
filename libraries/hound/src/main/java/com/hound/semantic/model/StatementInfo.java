@@ -48,14 +48,27 @@ public class StatementInfo {
     // Used by RemoteWriter/EmbeddedWriter to build RECORD_USED_IN edge for FORALL INSERT patterns
     private final Set<String> bulkCollectSources = new LinkedHashSet<>();
 
+    // KI-DDL-1: columns affected by ALTER TABLE ADD/MODIFY/DROP — used to build DaliDDLModifiesColumn edges
+    public record AffectedColumnGeoid(String geoid, String operation) {}
+    private final List<AffectedColumnGeoid> affectedColumnGeoids = new ArrayList<>();
+
+    // KI-RETURN-1: RETURNING INTO targets
+    public record ReturningTarget(String kind, String targetGeoid, List<String> expressions) {}
+    private final List<ReturningTarget> returningTargets = new ArrayList<>();
+
     // G3-MERGE: ordered column refs from WHEN NOT MATCHED INSERT (col1, col2, ...) — for VALUES positional binding
     private final List<String> mergeInsertColumnOrder = new ArrayList<>();
 
     // H1.4 — statement-level semantic flags
-    private boolean hasAggregation = false;   // GROUP BY present
-    private boolean hasWindow      = false;   // OVER() / analytic function present
-    private boolean isUnion        = false;   // UNION / INTERSECT / MINUS
-    private String  subtype        = null;    // INSERT_SELECT, SELECT_INTO, …
+    private boolean hasAggregation    = false;  // GROUP BY present
+    private boolean hasWindow         = false;  // OVER() / analytic function present
+    private boolean isUnion           = false;  // UNION / INTERSECT / MINUS
+    private String  subtype           = null;   // INSERT_SELECT, SELECT_INTO, …
+    // KI-FLASHBACK-1: AS OF TIMESTAMP/SCN meta-fields
+    private String  flashbackType     = null;   // "TIMESTAMP" | "SCN" | null
+    private String  flashbackExpr     = null;   // raw expression text
+    // KI-DBMSSQL-1: DBMS_SQL dynamic SQL marker
+    private boolean containsDynamicSql = false;
 
     // Aliases and naming
     private final Set<String> aliases = new LinkedHashSet<>();
@@ -173,10 +186,18 @@ public class StatementInfo {
 
     // ═══════ Aliases ═══════
 
-    public void setHasAggregation(boolean v) { this.hasAggregation = v; }
-    public void setHasWindow(boolean v)      { this.hasWindow = v; }
-    public void setIsUnion(boolean v)        { this.isUnion = v; }
-    public void setSubtype(String v)         { this.subtype = v; }
+    public void setHasAggregation(boolean v)    { this.hasAggregation = v; }
+    public void setHasWindow(boolean v)         { this.hasWindow = v; }
+    public void setIsUnion(boolean v)           { this.isUnion = v; }
+    public void setSubtype(String v)            { this.subtype = v; }
+    // KI-FLASHBACK-1
+    public String  getFlashbackType()           { return flashbackType; }
+    public String  getFlashbackExpr()           { return flashbackExpr; }
+    public void    setFlashbackType(String v)   { this.flashbackType = v; }
+    public void    setFlashbackExpr(String v)   { this.flashbackExpr = v; }
+    // KI-DBMSSQL-1
+    public boolean isContainsDynamicSql()       { return containsDynamicSql; }
+    public void    setContainsDynamicSql(boolean v) { this.containsDynamicSql = v; }
 
     public void setShortName(String shortName) { this.shortName = shortName; }
     public void setAlias(String alias) {
@@ -321,5 +342,28 @@ public class StatementInfo {
 
     /** Collection variable names whose fields appear in this INSERT's VALUES clause. */
     public Set<String> getBulkCollectSources() { return Collections.unmodifiableSet(bulkCollectSources); }
+
+    // ═══════ KI-DDL-1: DDL column change tracking ═══════
+
+    /** Records a column geoid affected by ALTER TABLE ADD/MODIFY/DROP. */
+    public void addAffectedColumnGeoid(String colGeoid, String operation) {
+        if (colGeoid != null && operation != null)
+            affectedColumnGeoids.add(new AffectedColumnGeoid(colGeoid, operation));
+    }
+
+    public List<AffectedColumnGeoid> getAffectedColumnGeoids() {
+        return Collections.unmodifiableList(affectedColumnGeoids);
+    }
+
+    // ═══════ KI-RETURN-1: RETURNING INTO targets ═══════
+
+    public void addReturningTarget(String kind, String targetGeoid, List<String> expressions) {
+        returningTargets.add(new ReturningTarget(kind, targetGeoid,
+                expressions != null ? List.copyOf(expressions) : List.of()));
+    }
+
+    public List<ReturningTarget> getReturningTargets() {
+        return Collections.unmodifiableList(returningTargets);
+    }
 }
  

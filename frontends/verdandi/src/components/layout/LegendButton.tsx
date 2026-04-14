@@ -32,7 +32,7 @@ const EDGE_ROWS: Record<'L1' | 'L2' | 'L3', EdgeRow[]> = {
     { color: 'var(--inf)',                   label: 'legend.edge.readsFrom'    },
     { color: 'var(--wrn)', dash: '5 3',      label: 'legend.edge.writesTo'     },
     { color: 'var(--acc)', animated: true,   label: 'legend.edge.dataFlow'     },
-    { color: 'var(--wrn)',                   label: 'legend.edge.filterFlow'   },
+    { color: 'var(--wrn)', animated: true,   label: 'legend.edge.filterFlow'   },
     { color: 'var(--inf)',                   label: 'legend.edge.joinFlow'     },
     { color: 'var(--t3)', dash: '4 2',       label: 'legend.edge.containsStmt' },
   ],

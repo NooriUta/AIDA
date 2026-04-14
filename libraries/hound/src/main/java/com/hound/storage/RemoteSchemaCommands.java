@@ -47,6 +47,8 @@ final class RemoteSchemaCommands {
                 "CREATE VERTEX TYPE DaliRecord IF NOT EXISTS",
                 // v27: dedicated vertex for DDL (ALTER/CREATE/DROP) — schema-mutating statements
                 "CREATE VERTEX TYPE DaliDDLStatement IF NOT EXISTS",
+                // KI-RETURN-1: named field of a DaliRecord (BULK COLLECT / RETURNING INTO targets)
+                "CREATE VERTEX TYPE DaliRecordField IF NOT EXISTS",
 
                 // Edge types — namespace hierarchy
                 "CREATE EDGE TYPE BELONGS_TO_APP IF NOT EXISTS",
@@ -83,11 +85,26 @@ final class RemoteSchemaCommands {
                 // Edge types — record (BULK COLLECT)
                 "CREATE EDGE TYPE BULK_COLLECTS_INTO IF NOT EXISTS",
                 "CREATE EDGE TYPE RECORD_USED_IN IF NOT EXISTS",
+                // KI-RETURN-1: record field membership + RETURNING INTO
+                "CREATE EDGE TYPE HAS_RECORD_FIELD IF NOT EXISTS EXTENDS E",
+                "CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS EXTENDS E",
                 // Edge types — affected columns + join sources
                 "CREATE EDGE TYPE HAS_AFFECTED_COL IF NOT EXISTS",
                 "CREATE EDGE TYPE AFFECTED_COL_REF_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_SOURCE_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_TARGET_TABLE IF NOT EXISTS",
+                // KI-DDL-1: DDL modifier edges (ALTER TABLE ADD/MODIFY/DROP)
+                "CREATE EDGE TYPE DaliDDLModifiesTable IF NOT EXISTS EXTENDS E",
+                "CREATE EDGE TYPE DaliDDLModifiesColumn IF NOT EXISTS EXTENDS E",
+                // KI-PIPE-1: pipelined function edges
+                "CREATE EDGE TYPE PIPES_FROM IF NOT EXISTS",
+                "CREATE EDGE TYPE READS_PIPELINED IF NOT EXISTS",
+                // KI-005: UNIQUE and CHECK constraint vertex + edge types
+                "CREATE VERTEX TYPE DaliUniqueConstraint IF NOT EXISTS EXTENDS DaliConstraint",
+                "CREATE VERTEX TYPE DaliCheckConstraint IF NOT EXISTS EXTENDS DaliConstraint",
+                "CREATE EDGE TYPE HAS_UNIQUE_KEY IF NOT EXISTS",
+                "CREATE EDGE TYPE IS_UNIQUE_COLUMN IF NOT EXISTS",
+                "CREATE EDGE TYPE HAS_CHECK IF NOT EXISTS",
 
                 // Document types
                 "CREATE DOCUMENT TYPE DaliSnippet IF NOT EXISTS",
@@ -118,6 +135,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliTable.table_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.data_source IF NOT EXISTS STRING",  // v24
+                "CREATE PROPERTY DaliTable.dblink IF NOT EXISTS STRING",        // KI-DBLINK-1
                 // DaliColumn
                 "CREATE PROPERTY DaliColumn.db_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.column_geoid IF NOT EXISTS STRING",
@@ -198,6 +216,17 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRecord.routine_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.source_stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.fields IF NOT EXISTS STRING",
+                // DaliRecordField (KI-RETURN-1)
+                "CREATE PROPERTY DaliRecordField.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecordField.field_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecordField.field_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecordField.field_order IF NOT EXISTS INTEGER",
+                "CREATE PROPERTY DaliRecordField.record_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecordField.data_type IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecordField.ordinal_position IF NOT EXISTS INTEGER",
+                "CREATE PROPERTY DaliRecordField.source_column_geoid IF NOT EXISTS STRING",
+                // RETURNS_INTO edge — returning_exprs carries the returned column list
+                "CREATE PROPERTY RETURNS_INTO.returning_exprs IF NOT EXISTS STRING",
                 // DaliDDLStatement (v27: ALTER / CREATE / DROP)
                 "CREATE PROPERTY DaliDDLStatement.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliDDLStatement.db_name IF NOT EXISTS STRING",
@@ -236,6 +265,8 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliForeignKey.ref_table_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliForeignKey.ref_column_names IF NOT EXISTS STRING",  // JSON array
                 "CREATE PROPERTY DaliForeignKey.on_delete IF NOT EXISTS STRING",         // CASCADE | SET NULL | null
+                // KI-DDL-1: operation property on DDL modifier edges (ADD | MODIFY | DROP)
+                "CREATE PROPERTY DaliDDLModifiesColumn.operation IF NOT EXISTS STRING",
                 // ── Constraint edge types ───────────────────────────────────────────────
                 // DaliTable ──HAS_PRIMARY_KEY──► DaliPrimaryKey
                 "CREATE EDGE TYPE HAS_PRIMARY_KEY IF NOT EXISTS",
@@ -252,6 +283,18 @@ final class RemoteSchemaCommands {
                 // DaliForeignKey ──REFERENCES_COLUMN──► DaliColumn  (with order_id)
                 "CREATE EDGE TYPE REFERENCES_COLUMN IF NOT EXISTS",
                 "CREATE PROPERTY REFERENCES_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // KI-PIPE-1: pipelined function flag
+                "CREATE PROPERTY DaliRoutine.is_pipelined IF NOT EXISTS BOOLEAN",
+                // KI-PRAGMA-1: autonomous transaction flag
+                "CREATE PROPERTY DaliRoutine.autonomous_transaction IF NOT EXISTS BOOLEAN",
+                // KI-FLASHBACK-1: AS OF TIMESTAMP/SCN on DaliStatement
+                "CREATE PROPERTY DaliStatement.flashback_type IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliStatement.flashback_expr IF NOT EXISTS STRING",
+                // KI-DBMSSQL-1: DBMS_SQL dynamic SQL marker on DaliStatement
+                "CREATE PROPERTY DaliStatement.contains_dynamic_sql IF NOT EXISTS BOOLEAN",
+                // KI-005: UNIQUE / CHECK constraint properties
+                "CREATE PROPERTY IS_UNIQUE_COLUMN.order_id IF NOT EXISTS INTEGER",
+                "CREATE PROPERTY DaliCheckConstraint.check_expression IF NOT EXISTS STRING",
         };
     }
 
@@ -279,6 +322,8 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliAffectedColumn (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliRecord (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliRecord (record_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliRecordField (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliRecordField (field_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliStatement (short_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippetScript (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (session_id) NOTUNIQUE NULL_STRATEGY SKIP",

@@ -1,8 +1,8 @@
 # AIDA — Decisions Log (quick reference)
 
 **Документ:** `DECISIONS_LOG`
-**Версия:** 2.1
-**Дата:** 11.04.2026
+**Версия:** 2.2
+**Дата:** 14.04.2026
 **Статус:** Working document — quick reference для навигации
 
 Это **краткий** snapshot того что зафиксировано, что открыто, и что отложено. Для деталей смотри соответствующие документы.
@@ -109,6 +109,11 @@
 | **Q28** | **DaliRecordField как отдельная вершина.** Решение: Да. Причина: нужен target для ребра `RETURNS_INTO` на уровне поля, а не записи. Альтернатива (свойство `DaliRecord.fields: List<String>`) отклонена — нет возможности построить ребро к конкретному полю. `RecordInfo.FieldInfo record(name, dataType, ordinalPosition, sourceColumnGeoid)` — новая модель. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §2`, `HOUND_GEOID_SPEC.md §3.7` |
 | **Q29** | **RETURNING INTO target классификация — 4 типа.** Решение: classifyReturningTarget() по приоритету: (1) содержит `.` → RECORD_FIELD, (2) параметр routine → PARAMETER, (3) DaliRecord с таким именем → RECORD, (4) иначе → VARIABLE. Все 4 варианта создают ребро `RETURNS_INTO` от DaliStatement к разным target vertex types. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §2.5`, `g6-cursor-insert-values-lineage.md §19` |
 | **Q30** | **Pending column resolution depth для parent chain — depth=1.** Решение: Pass 3 (`resolveViaParent`) ищет только в прямом родителе (`parentStatementGeoid`), не рекурсирует. Мотивация: SQL correlated subquery standard — только прямой родитель видим в correlated scope. LATERAL и CTE — аналогично depth=1. Pass 4 (single-table fuzzy, quality=LOW) — дополнительный проход при единственном source table. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §6` |
+| **Q31** | **INSERT ALL implementation — enterInsert_statement check.** Решение: проверка `ctx.multi_table_insert() != null` в `enterInsert_statement` вместо отдельного `enterMulti_table_insert` с `onMultiTableInsertEnter()`. Причина: механизм `enterGeneral_table_ref` + `in_dml_target=true` уже регистрирует все target таблицы INSERT ALL на текущий statement. Child INSERT statements не нужны для lineage — все WRITES_TO рёбра создаются от одного `DaliStatement(INSERT_MULTI)`. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §7` |
+| **Q32** | **LATERAL scope — markHasLateral vs. registerLateralScope.** Решение: `ScopeManager.markHasLateral(stmtGeoid)` (Set<String>) вместо запланированного `registerLateralScope(inner, outer)` (Map<String,String>). Причина: inner subquery geoid создаётся ПОСЛЕ обнаружения LATERAL токена (при enterTable_ref_aux_internal_one outer scope ещё активен, inner ещё не создан). NameResolver стратегия S9 — deferred Sprint 3. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §12` |
+| **Q33** | **WITH FUNCTION detection via parent context.** Решение: `ctx.parent instanceof PlSqlParser.With_clauseContext` в существующем `enterFunction_body` вместо несуществующего `enterWith_function_definition`. Причина: грамматика не имеет отдельного With_function_definition правила — WITH FUNCTION body парсится через стандартный `function_body`. `routine_type="INLINE_FUNCTION"` сохраняется в DaliRoutine. Geoid `OUTER_STMT:INLINE_FUNC:NAME` — deferred Sprint 3. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §14` |
+| **Q34** | **@dblink stripping — cleanIdentifier vs. ParsedTableRef.** Решение: атрибут `@DBLINK` обрезается прозрачно в `BaseSemanticListener.cleanIdentifier()`. Альтернатива (`ParsedTableRef record`, `TableInfo.dblink`, `ensureRemoteTable()`) отклонена в Sprint 2 — geoid таблицы с dblink корректен без хранения dblink. Полная поддержка (хранение dblink как атрибута DaliTable) — Sprint 3. | `HOUND_PLSQL_LINEAGE_GAPS_S2.md §9` |
+| **Q35** | **Dali YGG stats — explicit SQL queries vs. grouped status map.** Решение: `countAtoms(where)` с явным WHERE вместо `atomsByStatus.getOrDefault(...)`. Причина: `statement_geoid='unattached'` не является статусом — нельзя обработать через GROUP BY status. `atomsResolved` теперь = `status IN ('Обработано','constant')`, `atomsUnresolved` = `status IS NULL OR status NOT IN [...] OR statement_geoid='unattached'`. | `YggStatsResource.java`, `DaliPage.tsx` |
 
 ---
 
@@ -177,3 +182,4 @@
 | 12.04.2026 | 1.4 | **HEIMDALL Sprint 2 DONE.** Решение #15 добавлено. R1/R2 закрыты. EventFilter 4 типа, FriggGateway, Chur proxy, HeimdallEmitter в SHUTTLE. |
 | 12.04.2026 | 1.3 | **Q12 и Q13 закрыты.** Q12: Recharts via shadcn/charts (shadcn/ui уже в стеке → zero-config). Q13: Native WebSocket для HEIMDALL frontend (I34), graphql-ws остаётся в VERDANDI (I33). INTEGRATIONS_MATRIX I34 обновлён. |
 | 12.04.2026 | 1.2 | **Frontend architecture зафиксирована.** ADR-DA-012: single domain + path routing (`seer.studio/verdandi`, `/urd`, `/skuld`, `/heimdall`). ADR-DA-013: URL-based context passing (ArcadeDB geoid как canonical ID, `navigateTo` + `useAppContext` в `aida-shared`). `aida-shared` scope L2. Решения #13 и #14 добавлены. B1 для demo, B2 post-HighLoad. |
+| 14.04.2026 | 2.2 | **Lineage Gaps Sprint 2 DONE.** Q31–Q35 добавлены. 14 KI items реализованы, 3 (JSON, XML, NESTREC) → Sprint 3 backlog. Bugfix Dali YGG stats atomsResolved/atomsUnresolved. |
