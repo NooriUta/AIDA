@@ -514,6 +514,7 @@
     "operation":     "Операция",
     "table":         "Таблица",
     "sql":           "SQL",
+    "tabMain":       "Основное",
     "copySql":       "Скопировать SQL",
     "copied":        "Скопировано!",
     "sqlLoading":    "Загружаю SQL…",

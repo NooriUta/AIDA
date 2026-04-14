@@ -514,6 +514,7 @@
     "operation":     "Operation",
     "table":         "Table",
     "sql":           "SQL",
+    "tabMain":       "General",
     "copySql":       "Copy SQL",
     "copied":        "Copied!",
     "sqlLoading":    "Loading SQL…",
