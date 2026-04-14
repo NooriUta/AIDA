@@ -242,6 +242,22 @@ class RemoteWriter {
      * in multiple concurrent sessions.
      */
     @SuppressWarnings("unchecked")
+    /**
+     * Builds a SQL IN-list literal from a set of string geoids, with single-quote escaping.
+     * Returns an empty string for an empty/null input — callers must check before composing
+     * the SQL to avoid emitting an invalid {@code IN []} clause.
+     */
+    private static String sqlInList(Set<String> values) {
+        if (values == null || values.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder(values.size() * 32);
+        for (String v : values) {
+            if (v == null) continue;
+            if (sb.length() > 0) sb.append(',');
+            sb.append('\'').append(v.replace("'", "''")).append('\'');
+        }
+        return sb.toString();
+    }
+
     private AdHocInsertResult preInsertAdHocSchemas(String sid, Structure str) {
         if (str == null) return new AdHocInsertResult(Map.of(), Set.of(), Set.of(), Set.of());
         Map<String, String> result = new HashMap<>();
@@ -267,16 +283,24 @@ class RemoteWriter {
                 }
             }
             try {
+                // BOUNDED lookup: filter by IN [list] + explicit LIMIT to bypass ArcadeDB's
+                // default page cap on unbounded SELECTs (which otherwise truncates the
+                // result set and leaves geoids out of `result`, causing JsonlBatchBuilder
+                // to re-INSERT them and hit DuplicatedKeyException on (db_name,*_geoid)).
                 Set<String> wanted = str.getSchemas().keySet();
-                var rs = db.query("sql",
-                        "SELECT @rid AS rid, schema_geoid FROM DaliSchema WHERE db_name IS NULL",
-                        Map.of());
-                while (rs.hasNext()) {
-                    var doc = rs.next().toMap();
-                    String geoid = (String) doc.get("schema_geoid");
-                    String rid   = (String) doc.get("rid");
-                    if (geoid != null && rid != null && wanted.contains(geoid)) {
-                        result.put(geoid, rid);
+                if (!wanted.isEmpty()) {
+                    var rs = db.query("sql",
+                            "SELECT @rid AS rid, schema_geoid FROM DaliSchema " +
+                            "WHERE db_name IS NULL AND schema_geoid IN [" + sqlInList(wanted) + "] " +
+                            "LIMIT " + (wanted.size() * 2 + 100),
+                            Map.of());
+                    while (rs.hasNext()) {
+                        var doc = rs.next().toMap();
+                        String geoid = (String) doc.get("schema_geoid");
+                        String rid   = (String) doc.get("rid");
+                        if (geoid != null && rid != null && wanted.contains(geoid)) {
+                            result.put(geoid, rid);
+                        }
                     }
                 }
             } catch (Exception ex) {
@@ -318,16 +342,21 @@ class RemoteWriter {
                 }
             }
             try {
+                // BOUNDED lookup (see DaliSchema block above for rationale).
                 Set<String> wanted = str.getTables().keySet();
-                var rs = db.query("sql",
-                        "SELECT @rid AS rid, table_geoid FROM DaliTable WHERE db_name IS NULL",
-                        Map.of());
-                while (rs.hasNext()) {
-                    var doc = rs.next().toMap();
-                    String geoid = (String) doc.get("table_geoid");
-                    String rid   = (String) doc.get("rid");
-                    if (geoid != null && rid != null && wanted.contains(geoid)) {
-                        result.put(geoid, rid);
+                if (!wanted.isEmpty()) {
+                    var rs = db.query("sql",
+                            "SELECT @rid AS rid, table_geoid FROM DaliTable " +
+                            "WHERE db_name IS NULL AND table_geoid IN [" + sqlInList(wanted) + "] " +
+                            "LIMIT " + (wanted.size() * 2 + 100),
+                            Map.of());
+                    while (rs.hasNext()) {
+                        var doc = rs.next().toMap();
+                        String geoid = (String) doc.get("table_geoid");
+                        String rid   = (String) doc.get("rid");
+                        if (geoid != null && rid != null && wanted.contains(geoid)) {
+                            result.put(geoid, rid);
+                        }
                     }
                 }
             } catch (Exception ex) {
@@ -373,16 +402,24 @@ class RemoteWriter {
                 }
             }
             try {
+                // BOUNDED lookup (see DaliSchema block above for rationale). This is the
+                // critical fix for "Duplicated key [null, X.Y] on DaliColumn[db_name,column_geoid]"
+                // — without the IN-list filter, the SELECT hit ArcadeDB's default page cap
+                // and dropped most existing column RIDs from `result`.
                 Set<String> wanted = str.getColumns().keySet();
-                var rs = db.query("sql",
-                        "SELECT @rid AS rid, column_geoid FROM DaliColumn WHERE db_name IS NULL",
-                        Map.of());
-                while (rs.hasNext()) {
-                    var doc = rs.next().toMap();
-                    String geoid = (String) doc.get("column_geoid");
-                    String rid   = (String) doc.get("rid");
-                    if (geoid != null && rid != null && wanted.contains(geoid)) {
-                        result.put(geoid, rid);
+                if (!wanted.isEmpty()) {
+                    var rs = db.query("sql",
+                            "SELECT @rid AS rid, column_geoid FROM DaliColumn " +
+                            "WHERE db_name IS NULL AND column_geoid IN [" + sqlInList(wanted) + "] " +
+                            "LIMIT " + (wanted.size() * 2 + 100),
+                            Map.of());
+                    while (rs.hasNext()) {
+                        var doc = rs.next().toMap();
+                        String geoid = (String) doc.get("column_geoid");
+                        String rid   = (String) doc.get("rid");
+                        if (geoid != null && rid != null && wanted.contains(geoid)) {
+                            result.put(geoid, rid);
+                        }
                     }
                 }
             } catch (Exception ex) {
