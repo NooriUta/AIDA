@@ -159,9 +159,30 @@
 
 | Гэп | Описание | Статус |
 |-----|----------|--------|
-| GAP-1 | `atomsExtracted=0` в `/metrics/snapshot` — Dali не эмитит события `ATOM_EXTRACTED` в HEIMDALL напрямую. Данные есть в Session API (`atomCount=60422`). Требует интеграции `HoundEventListener` (C.1.3) | Беклог M1 |
+| GAP-1 | `atomsExtracted=0` в `/metrics/snapshot` — Dali не эмитит события `ATOM_EXTRACTED` в HEIMDALL напрямую. Данные есть в Session API (`atomCount=60422`). Требует интеграции `HoundEventListener` (C.1.3) | ✅ FIXED 14.04 — HeimdallEmitter.atomExtracted() теперь тегирует sourceComponent="hound" |
 | GAP-2 | `metadataStore` — in-memory, теряется при рестарте. Для single-node достаточно, для кластерного режима нужна персистенция в FRIGG | Беклог M2+ |
 | GAP-3 | `getDistinctJobSignatures()` / `recurringJobExists()` — стабы. Деdup задач и recurring jobs не реализованы | Беклог M2 |
+
+---
+
+## Дополнительные исправления — 14.04.2026
+
+| ID | Severity | Компонент | Описание | Статус |
+|----|----------|-----------|----------|--------|
+| BUG-SS-029 | HIGH | Hound | `PlSqlErrorCollector`: "no viable alternative at input" ошибочно классифицировался как GRAMMAR (→ WARNING). Парсер не может восстановиться — это ERROR | ✅ FIXED (ef248cd) |
+| BUG-SS-030 | MEDIUM | Dali | `HeimdallEmitter`: все события Hound-происхождения (FILE_PARSING_*, ATOM_EXTRACTED, PARSE_*) отправлялись с `sourceComponent="dali"` вместо `"hound"` | ✅ FIXED (ef248cd) |
+| BUG-SS-031 | LOW | Dali | `HeimdallClient`: `@Path` разбит на `/api` (интерфейс) + `/events` (метод); при изменении base URL в application.properties возможно дублирование пути | ✅ FIXED (ef248cd) |
+
+### Улучшения 14.04
+
+| Компонент | Изменение |
+|-----------|-----------|
+| Hound/Dali | `ParseResult` + `FileResult` + `ParseJob`: добавлены `atomsResolved` и `atomsUnresolved` — передаются от `HoundParserImpl` через весь стек до API-ответа |
+| Heimdall UI | `SessionList.tsx`: колонка RESOLUTION (была RATE) показывает ✓ resolved / ✗ unresolved / … pending с процентами и количеством |
+| Heimdall UI | `SessionList.tsx`: секция "Vertex breakdown" свёрнута по умолчанию (▶/▼ тоггл с total count) |
+| Heimdall UI | `EventStreamPage.tsx`: фильтр по типу события (динамический dropdown), кнопка Pause/Resume, stats bar (INFO/WARN/ERR + по компонентам) |
+| Heimdall UI | `eventFormat.ts`: formatPayload для PARSE_ERROR / PARSE_WARNING → "file line col — msg" |
+| Dali | `HeimdallEmitter.sessionStarted()`: добавлен `threads` в payload SESSION_STARTED |
 
 ---
 
@@ -171,15 +192,16 @@
 
 | Метрика | Значение |
 |---------|---------|
-| Всего найдено | **25** |
+| Всего найдено | **28** (25 базовых + 3 от 14.04) |
 | CRITICAL | **1** |
-| HIGH | **10** |
-| MEDIUM | **8** |
-| LOW | **3** |
-| Архитектурных гэпов | **3** |
-| **Исправлено в спринте** | **10** (BUG-SS-001..010) |
-| **Открыто → исправить** | **8** (BUG-SS-011..014, 017, 020, 023, 025) |
-| **Отложено в беклог** | **4** (BUG-SS-015, 016, 018, 019, 021, 022, 024) |
+| HIGH | **11** |
+| MEDIUM | **9** |
+| LOW | **4** |
+| Архитектурных гэпов | **3** (1 закрыт 14.04) |
+| **Исправлено в спринте (13.04)** | **10** (BUG-SS-001..010) |
+| **Исправлено 14.04** | **3** (BUG-SS-029..031) |
+| **Открыто → исправить** | **5** (BUG-SS-011..014, 017) |
+| **Отложено в беклог** | **7** (BUG-SS-015, 016, 018, 019, 021, 022, 024) |
 
 ---
 
