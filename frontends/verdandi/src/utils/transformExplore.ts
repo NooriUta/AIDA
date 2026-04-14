@@ -47,7 +47,9 @@ const SUPPRESSED_EDGES = new Set<string>([
 ]);
 
 // ─── L2 edge whitelist: only data-flow arrows on the canvas ─────────────────
-const L2_FLOW_EDGES = new Set<string>(['READS_FROM', 'WRITES_TO', 'DATA_FLOW']);
+// FILTER_FLOW is a column-level lineage edge (analogous to DATA_FLOW) emitted
+// by the backend for WHERE / HAVING / JOIN-condition column references.
+const L2_FLOW_EDGES = new Set<string>(['READS_FROM', 'WRITES_TO', 'DATA_FLOW', 'FILTER_FLOW']);
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
