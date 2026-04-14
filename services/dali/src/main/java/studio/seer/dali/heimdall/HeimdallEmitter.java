@@ -1,0 +1,135 @@
+package studio.seer.dali.heimdall;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import studio.seer.shared.EventLevel;
+import studio.seer.shared.EventType;
+import studio.seer.shared.HeimdallEvent;
+
+import java.util.Map;
+
+/**
+ * Fire-and-forget HEIMDALL event emitter for Dali.
+ *
+ * <p>Three API layers — use the most specific one available:
+ * <ol>
+ *   <li>{@link #emit(HeimdallEvent)} — raw, full control</li>
+ *   <li>{@link #info}/{@link #warn}/{@link #error} — level + type + payload</li>
+ *   <li>Typed methods ({@link #sessionStarted}, {@link #atomExtracted}, ...) — no Map.of() boilerplate</li>
+ * </ol>
+ *
+ * <p>All methods are non-blocking. Failures are logged at DEBUG and silently swallowed —
+ * HEIMDALL observability must never affect Dali parse correctness.
+ */
+@ApplicationScoped
+public class HeimdallEmitter {
+
+    private static final Logger log = LoggerFactory.getLogger(HeimdallEmitter.class);
+
+    @Inject
+    @RestClient
+    HeimdallClient client;
+
+    // ── Layer 1: raw ──────────────────────────────────────────────────────────
+
+    /** Send a pre-built event. Fire-and-forget — returns immediately. */
+    public void emit(HeimdallEvent event) {
+        client.ingest(event)
+              .onFailure().invoke(e ->
+                      log.debug("HeimdallEmitter: failed to send {} — {}", event.eventType(), e.getMessage()))
+              .onFailure().recoverWithNull()
+              .subscribe().with(__ -> {});
+    }
+
+    // ── Layer 2: generic ──────────────────────────────────────────────────────
+
+    public void info(EventType type, String sessionId, Map<String, Object> payload) {
+        emit(build(type, EventLevel.INFO, sessionId, 0, payload));
+    }
+
+    public void warn(EventType type, String sessionId, Map<String, Object> payload) {
+        emit(build(type, EventLevel.WARN, sessionId, 0, payload));
+    }
+
+    public void error(EventType type, String sessionId, Map<String, Object> payload) {
+        emit(build(type, EventLevel.ERROR, sessionId, 0, payload));
+    }
+
+    // ── Layer 3: typed Dali events ────────────────────────────────────────────
+
+    /** Emitted by SessionService when a new session is accepted into the queue. */
+    public void jobEnqueued(String sessionId, String source, String dialect) {
+        info(EventType.JOB_ENQUEUED, sessionId, Map.of(
+                "source",  source,
+                "dialect", dialect));
+    }
+
+    /** Emitted by ParseJob when the job worker picks up the session. */
+    public void sessionStarted(String sessionId, String source, String dialect,
+                               boolean preview, boolean clearBeforeWrite) {
+        info(EventType.SESSION_STARTED, sessionId, Map.of(
+                "source",           source,
+                "dialect",          dialect,
+                "preview",          preview,
+                "clearBeforeWrite", clearBeforeWrite));
+    }
+
+    /** Emitted by ParseJob on successful completion. */
+    public void sessionCompleted(String sessionId, int atomCount,
+                                 double resolutionRate, long durationMs, int files) {
+        emit(build(EventType.SESSION_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
+                "atomCount",      atomCount,
+                "resolutionRate", resolutionRate,
+                "files",          files)));
+    }
+
+    /** Emitted by ParseJob when an unrecoverable error aborts the session. */
+    public void sessionFailed(String sessionId, String error, long durationMs) {
+        emit(build(EventType.SESSION_FAILED, EventLevel.ERROR, sessionId, durationMs, Map.of(
+                "error", error != null ? error : "unknown")));
+    }
+
+    /** Emitted when Hound begins parsing a single SQL file. */
+    public void fileParsingStarted(String sessionId, String file, String dialect) {
+        info(EventType.FILE_PARSING_STARTED, sessionId, Map.of(
+                "file",    file,
+                "dialect", dialect));
+    }
+
+    /**
+     * Emitted after a file parse completes — carries the atom count for that file.
+     * HEIMDALL metrics service aggregates these to compute {@code atomsExtracted}.
+     */
+    public void atomExtracted(String sessionId, String file, int atomCount) {
+        info(EventType.ATOM_EXTRACTED, sessionId, Map.of(
+                "file",      file,
+                "atomCount", atomCount));
+    }
+
+    /** Emitted when Hound encounters an error parsing a file. */
+    public void fileParsingFailed(String sessionId, String file, String error) {
+        emit(build(EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, Map.of(
+                "file",  file,
+                "error", error != null ? error : "unknown")));
+    }
+
+    // ── Internal builder ──────────────────────────────────────────────────────
+
+    private static HeimdallEvent build(EventType type, EventLevel level,
+                                       String sessionId, long durationMs,
+                                       Map<String, Object> payload) {
+        return new HeimdallEvent(
+                System.currentTimeMillis(),
+                "dali",
+                type.name(),
+                level,
+                sessionId,
+                null,          // userId — not available in background job context
+                null,          // correlationId
+                durationMs,
+                payload);
+    }
+}

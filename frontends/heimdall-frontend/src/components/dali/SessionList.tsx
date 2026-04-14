@@ -30,6 +30,12 @@ function rateColor(rate: number | null): string {
   return 'var(--danger)';
 }
 
+function fmtK(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
+  return n.toLocaleString();
+}
+
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: DaliSession['status'] }) {
   const badgeCls = {
@@ -142,6 +148,92 @@ function SourceCell({ session }: { session: DaliSession }) {
   );
 }
 
+// ── Row mini-metrics (shown inline in the session row) ───────────────────────
+function RowMetrics({ session: s }: { session: DaliSession }) {
+  const partialAtoms = s.fileResults?.reduce((a, f) => a + f.atomCount, 0) ?? 0;
+  const partialVtxs  = s.fileResults?.reduce((a, f) => a + f.vertexCount, 0) ?? 0;
+  const atoms = s.atomCount    ?? (partialAtoms > 0 ? partialAtoms : null);
+  const vtxs  = s.vertexCount  ?? (partialVtxs  > 0 ? partialVtxs  : null);
+  const rate  = s.resolutionRate;
+  if (atoms == null && vtxs == null) return null;
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'nowrap' }}>
+      {atoms != null && (
+        <span title={`${atoms.toLocaleString()} atoms`} style={{
+          fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--acc)', whiteSpace: 'nowrap',
+        }}>A {fmtK(atoms)}</span>
+      )}
+      {vtxs != null && (
+        <span title={`${vtxs.toLocaleString()} vertices`} style={{
+          fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t2)', whiteSpace: 'nowrap',
+        }}>V {fmtK(vtxs)}</span>
+      )}
+      <span title="Column-level resolution rate" style={{
+        fontFamily: 'var(--mono)', fontSize: 9,
+        color: rate != null ? rateColor(rate) : 'var(--t3)',
+        whiteSpace: 'nowrap',
+      }}>
+        {rate != null ? `${(rate * 100).toFixed(0)}%` : '—%'}
+      </span>
+    </div>
+  );
+}
+
+// ── Duration bar chart for batch detail ──────────────────────────────────────
+function DurationChart({ files }: { files: FileResult[] }) {
+  const withDur = files.filter(f => f.durationMs > 0);
+  if (withDur.length < 2) return null;
+  const sorted  = [...withDur].sort((a, b) => b.durationMs - a.durationMs).slice(0, 25);
+  const maxDur  = sorted[0].durationMs;
+  const totalMs = withDur.reduce((s, f) => s + f.durationMs, 0);
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{
+        fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--t3)',
+        textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span>Duration by file{withDur.length > 25 ? ' (top 25)' : ''}</span>
+        <span style={{ color: 'var(--t3)' }}>total {fmtDuration(totalMs)}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {sorted.map(f => {
+          const pct      = maxDur > 0 ? (f.durationMs / maxDur) * 100 : 0;
+          const filename = f.path.replace(/\\/g, '/').split('/').pop() ?? f.path;
+          const barColor = !f.success ? 'var(--danger)' : f.durationMs > totalMs / withDur.length * 2 ? 'var(--wrn)' : 'var(--inf)';
+          return (
+            <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                title={f.path}
+                style={{
+                  width: 180, fontSize: 9, fontFamily: 'var(--mono)',
+                  color: f.success ? 'var(--t2)' : 'var(--danger)',
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                }}
+              >{filename}</div>
+              <div style={{
+                flex: 1, background: 'var(--bg3)', borderRadius: 2,
+                height: 8, overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${pct}%`, height: '100%',
+                  background: barColor, borderRadius: 2,
+                  transition: 'width 0.2s',
+                }} />
+              </div>
+              <div style={{
+                width: 38, fontSize: 9, fontFamily: 'var(--mono)',
+                color: 'var(--t3)', textAlign: 'right', flexShrink: 0,
+              }}>{fmtDuration(f.durationMs)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Per-file row in detail ────────────────────────────────────────────────────
 function FileRow({ fr, index }: { fr: FileResult; index: number }) {
   const filename = fr.path.replace(/\\/g, '/').split('/').pop() ?? fr.path;
@@ -167,8 +259,8 @@ function FileRow({ fr, index }: { fr: FileResult; index: number }) {
         <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)', padding: '5px 8px', textAlign: 'right' }}>
           {fr.vertexCount.toLocaleString()}
         </td>
-        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, padding: '5px 8px', textAlign: 'right', color: rateColor(fr.resolutionRate) }}>
-          {(fr.resolutionRate * 100).toFixed(1)}%
+        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, padding: '5px 8px', textAlign: 'right', color: fr.atomCount === 0 ? 'var(--t3)' : rateColor(fr.resolutionRate) }}>
+          {fr.atomCount === 0 ? '—' : `${(fr.resolutionRate * 100).toFixed(1)}%`}
         </td>
         <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t3)', padding: '5px 8px', textAlign: 'right' }}>
           {fmtDuration(fr.durationMs)}
@@ -322,7 +414,7 @@ function DetailRow({ session }: { session: DaliSession }) {
                           {s.duplicate > 0 ? s.duplicate.toLocaleString() : '—'}
                         </td>
                         <td style={{ padding: '3px 8px', textAlign: 'right', color: 'var(--t2)', borderBottom: '1px solid var(--bd)' }}>
-                          {(s.inserted + s.duplicate).toLocaleString()}
+                          {((s.inserted ?? 0) + (s.duplicate ?? 0)).toLocaleString()}
                         </td>
                       </tr>
                     );
@@ -384,7 +476,7 @@ function DetailRow({ session }: { session: DaliSession }) {
                     <th style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)', padding: '4px 8px', textAlign: 'right', fontWeight: 500 }}>#</th>
                     <th style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)', padding: '4px 8px', textAlign: 'left', fontWeight: 500 }}>FILE</th>
                     <th style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)', padding: '4px 8px', textAlign: 'right', fontWeight: 500 }}>ATOMS</th>
-                    <th style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)', padding: '4px 8px', textAlign: 'right', fontWeight: 500 }}>VERT</th>
+                    <th style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)', padding: '4px 8px', textAlign: 'right', fontWeight: 500 }}>VTXS</th>
                     <th style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)', padding: '4px 8px', textAlign: 'right', fontWeight: 500 }}>RATE</th>
                     <th style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--t3)', padding: '4px 8px', textAlign: 'right', fontWeight: 500 }}>DUR</th>
                     <th style={{ width: 28 }}></th>
@@ -396,6 +488,7 @@ function DetailRow({ session }: { session: DaliSession }) {
                   ))}
                 </tbody>
               </table>
+              <DurationChart files={session.fileResults} />
             </div>
           )}
         </div>
@@ -418,13 +511,17 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
   // Track last updatedAt we propagated so we don't depend on the session prop
   // (which would cause: onUpdate→setSessions→session.updatedAt changes→effect re-runs→loop)
   const reportedAtRef = useRef('');
+  // Stable ref for onUpdate so the effect doesn't re-run when the parent re-renders
+  // without useCallback (which would create a new function identity on every render).
+  const onUpdateRef = useRef(onUpdate);
+  useEffect(() => { onUpdateRef.current = onUpdate; });
 
   useEffect(() => {
     if (!live) return;
     if (live.updatedAt === reportedAtRef.current) return;
     reportedAtRef.current = live.updatedAt;
-    onUpdate(live);
-  }, [live, onUpdate]);
+    onUpdateRef.current(live);
+  }, [live]);
 
   const s = live ?? session;
 
@@ -472,7 +569,10 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
           </span>
         </td>
         <td><SourceCell session={s} /></td>
-        <td><ProgressBar session={s} /></td>
+        <td>
+          <ProgressBar session={s} />
+          <RowMetrics session={s} />
+        </td>
         <td>
           <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 11 }}>
             {s.status === 'COMPLETED' ? fmtDuration(s.durationMs) : '—'}

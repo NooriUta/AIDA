@@ -240,23 +240,21 @@ public class KnotService {
     private Uni<List<KnotTable>> loadTables(Map<String, Object> params) {
         // Both queries start from DaliStatement(session_id) NOTUNIQUE index.
         // Avoids 3-hop traversal Session→Routine→Statement used in the original code.
+        // Column details are lazy-loaded via knotTableDetail — only count here.
         String cypherMain = """
             MATCH (stmt:DaliStatement {session_id: $sid})-[:READS_FROM|WRITES_TO]->(t:DaliTable)
             OPTIONAL MATCH (t)-[:HAS_COLUMN]->(c:DaliColumn)
-            WITH t, c
+            WITH t, count(DISTINCT c) AS colCount
             RETURN DISTINCT
-                   id(t)                        AS tid,
-                   t.table_geoid               AS geoid,
-                   t.table_name                AS name,
-                   coalesce(t.schema_geoid,'') AS schema,
-                   'TABLE'                     AS tableType,
-                   t.aliases                   AS tableAliases,
-                   id(c)                        AS cid,
-                   c.column_name               AS cname,
-                   coalesce(c.data_type,'')    AS dtype,
-                   coalesce(c.position, 0)     AS pos,
-                   coalesce(c.alias,'')        AS calias
-            ORDER BY t.table_name, c.column_name
+                   id(t)                                        AS tid,
+                   t.table_geoid                               AS geoid,
+                   t.table_name                                AS name,
+                   coalesce(t.schema_geoid,'')                 AS schema,
+                   'TABLE'                                     AS tableType,
+                   t.aliases                                   AS tableAliases,
+                   coalesce(t.data_source,'reconstructed')     AS dataSource,
+                   colCount
+            ORDER BY name
             LIMIT 300
             """;
 
@@ -289,50 +287,123 @@ public class KnotService {
             else                                          tgtMap.put(name, num(r, "cnt"));
         }
 
-        LinkedHashMap<String, List<Map<String, Object>>> byTable = new LinkedHashMap<>();
+        // Each row is one table (columns aggregated to count by Cypher WITH clause)
+        List<KnotTable> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         for (var r : rows) {
             String tid = str(r, "tid");
-            byTable.computeIfAbsent(tid, k -> new ArrayList<>()).add(r);
-        }
-
-        List<KnotTable> result = new ArrayList<>();
-        for (var entry : byTable.entrySet()) {
-            var tRows = entry.getValue();
-            Map<String, Object> first = tRows.get(0);
-            String tableName = str(first, "name");
-
-            List<KnotColumn> cols = new ArrayList<>();
-            Set<String> seenCols = new HashSet<>();
-            for (var r : tRows) {
-                String cid = str(r, "cid");
-                if (!cid.isEmpty() && seenCols.add(cid)) {
-                    cols.add(new KnotColumn(
-                        cid,
-                        str(r, "cname"),
-                        str(r, "dtype"),
-                        num(r, "pos"),
-                        0,
-                        str(r, "calias")
-                    ));
-                }
-            }
-
-            List<String> aliases = toStringList(first.get("tableAliases"));
-
+            if (!seen.add(tid)) continue; // safety dedup
+            String tableName = str(r, "name");
+            List<String> aliases = toStringList(r.get("tableAliases"));
             result.add(new KnotTable(
-                entry.getKey(),
-                str(first, "geoid"),
+                tid,
+                str(r, "geoid"),
                 tableName,
-                str(first, "schema"),
-                str(first, "tableType"),
-                cols.size(),
+                str(r, "schema"),
+                str(r, "tableType"),
+                num(r, "colCount"),
                 srcMap.getOrDefault(tableName, 0),
                 tgtMap.getOrDefault(tableName, 0),
-                cols,
+                str(r, "dataSource"),
                 aliases
             ));
         }
         return result;
+    }
+
+    // ── Table detail (lazy) ───────────────────────────────────────────────────
+
+    public Uni<KnotTableDetail> knotTableDetail(String sessionId, String tableGeoid) {
+        Map<String, Object> params    = Map.of("sid", sessionId, "tg", tableGeoid);
+        Map<String, Object> tgParams  = Map.of("tg", tableGeoid);
+
+        // Query 1: columns (canonical — no session scope needed)
+        String sqlCols = """
+            SELECT @rid AS id, column_name,
+                   coalesce(data_type,'') AS data_type,
+                   coalesce(ordinal_position,0) AS ord_pos,
+                   coalesce(alias,'') AS alias,
+                   coalesce(is_required, false) AS is_required,
+                   coalesce(is_pk, false) AS is_pk,
+                   coalesce(is_fk, false) AS is_fk,
+                   coalesce(fk_ref_table,'') AS fk_ref_table,
+                   coalesce(default_value,'') AS default_value,
+                   coalesce(data_source,'reconstructed') AS col_ds
+            FROM DaliColumn
+            WHERE table_geoid = :tg
+            ORDER BY ord_pos, column_name
+            LIMIT 500
+            """;
+
+        // Query 2: table data_source
+        String sqlTable = """
+            SELECT coalesce(data_source,'reconstructed') AS data_source
+            FROM DaliTable
+            WHERE table_geoid = :tg
+            LIMIT 1
+            """;
+
+        // Query 3: find one stmt_geoid that references this table in the session (for snippet)
+        String cypherStmt = """
+            MATCH (stmt:DaliStatement {session_id: $sid})-[:READS_FROM|WRITES_TO]->(t:DaliTable {table_geoid: $tg})
+            RETURN stmt.stmt_geoid AS stmtGeoid
+            LIMIT 1
+            """;
+
+        return Uni.combine().all()
+            .unis(
+                arcade.sql(sqlCols,    tgParams).onFailure().recoverWithItem(List.of()),
+                arcade.sql(sqlTable,   tgParams).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(cypherStmt, params).onFailure().recoverWithItem(List.of())
+            )
+            .asTuple()
+            .chain(t -> {
+                List<Map<String, Object>> colRows  = t.getItem1();
+                List<Map<String, Object>> tblRows  = t.getItem2();
+                List<Map<String, Object>> stmtRows = t.getItem3();
+
+                String dataSource = tblRows.isEmpty()
+                    ? "reconstructed"
+                    : str(tblRows.get(0), "data_source");
+
+                List<KnotColumn> cols = colRows.stream()
+                    .map(r -> new KnotColumn(
+                        str(r, "id"),
+                        str(r, "column_name"),
+                        str(r, "data_type"),
+                        num(r, "ord_pos"),
+                        0,                          // atomRefCount — not loaded in detail
+                        str(r, "alias"),
+                        bool(r, "is_required"),
+                        bool(r, "is_pk"),
+                        bool(r, "is_fk"),
+                        str(r, "fk_ref_table"),
+                        str(r, "default_value"),
+                        str(r, "col_ds")
+                    ))
+                    .toList();
+
+                if (stmtRows.isEmpty()) {
+                    return Uni.createFrom().item(
+                        new KnotTableDetail(tableGeoid, dataSource, cols, ""));
+                }
+
+                String stmtGeoid = str(stmtRows.get(0), "stmtGeoid");
+                String sqlSnip = """
+                    SELECT snippet
+                    FROM DaliSnippet
+                    WHERE session_id = :sid AND stmt_geoid = :sg
+                    LIMIT 1
+                    """;
+                return arcade.sql(sqlSnip, Map.of("sid", sessionId, "sg", stmtGeoid))
+                    .onFailure().recoverWithItem(List.of())
+                    .map(snipRows -> {
+                        String snippet = snipRows.isEmpty()
+                            ? ""
+                            : str(snipRows.get(0), "snippet");
+                        return new KnotTableDetail(tableGeoid, dataSource, cols, snippet);
+                    });
+            });
     }
 
     // ── Statements ────────────────────────────────────────────────────────────
@@ -515,18 +586,23 @@ public class KnotService {
 
     private Uni<List<KnotSnippet>> loadSnippets(Map<String, Object> params) {
         // DaliSnippet has no graph edges — standalone records joined by session_id + stmt_geoid
+        // BUG-SS-042: LIMIT 2000 was too low for large packages (e.g. >100 routines × 20+ stmts).
+        // Snippets are small text records; 50 000 rows load in <100ms on typical hardware.
+        // Alphabetical ORDER BY stmt_geoid means CURSORs (sorted after SELECT/INSERT) were cut off.
         String sql = """
             SELECT stmt_geoid, snippet
             FROM DaliSnippet
             WHERE session_id = :sid
             ORDER BY stmt_geoid
-            LIMIT 2000
+            LIMIT 50000
             """;
 
         return arcade.sql(sql, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> new KnotSnippet(str(r, "stmt_geoid"), str(r, "snippet")))
+                .filter(s -> s.stmtGeoid() != null && !s.stmtGeoid().isBlank()
+                          && s.snippet()   != null && !s.snippet().isBlank())
                 .toList()
             );
     }

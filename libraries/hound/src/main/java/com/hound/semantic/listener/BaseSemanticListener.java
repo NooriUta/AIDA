@@ -2,6 +2,7 @@
 package com.hound.semantic.listener;
 
 import com.hound.semantic.engine.UniversalSemanticEngine;
+import com.hound.semantic.model.ConstraintInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -485,6 +486,12 @@ public abstract class BaseSemanticListener {
     @SuppressWarnings("unchecked")
     public void addAtom(String text, int line, int col, int endLine, int endCol, boolean isComplex,
                         List<String> tokens, List<Map<String, String>> tokenDetails, int nestedAtomCount) {
+        // T14: suppress atom processing in specific DDL sub-contexts.
+        // "SUPPRESS" is set by enterColumn_definition (DEFAULT, NOT NULL, inline constraints)
+        // and by enterReferences_clause (FK target columns — already captured via ConstraintInfo).
+        // Out-of-line FK host columns, CHECK constraint columns, and CREATE INDEX columns are allowed.
+        if ("SUPPRESS".equals(current.get("ddl_atom_ctx"))) return;
+
         String parentCtx = getCurrentParentContext();
         Map<String, Object> atomContext = new LinkedHashMap<>();
         atomContext.put("text", text);
@@ -962,16 +969,47 @@ public abstract class BaseSemanticListener {
     // ═══ T14: CREATE TABLE / ALTER TABLE — DDL column registration ═══
 
     /**
+     * Single registration point for DDL-defined tables.
+     * Analogous to processTableReference() → builder.ensureTable() for DML (reconstructed),
+     * but for DDL (master):
+     *   initTable()             → BaseSemanticListener.tables  (local alias/name tracking)
+     *   ensureTableWithType()   → StructureAndLineageBuilder.tables → str.getTables()
+     *   markDdlTable()          → StructureAndLineageBuilder.ddlTableGeoids → str.getDdlTableGeoids()
+     *                             → WriteHelpers.isMasterTable() = true → data_source='master'
+     */
+    private String initDdlTable(String tableName, String schema) {
+        String geoid = initTable(tableName, null, schema, "TABLE");
+        engine.getBuilder().ensureTableWithType(geoid, null, "TABLE");
+        engine.getBuilder().markDdlTable(geoid);
+        return geoid;
+    }
+
+    /**
+     * Like initDdlTable() but does NOT call markDdlTable() — used for ALTER TABLE.
+     * ALTER TABLE does not *define* the table (CREATE TABLE does), so the table/columns
+     * keep data_source='reconstructed' unless a CREATE TABLE for the same geoid appears
+     * in the same session (which would have already called markDdlTable via initDdlTable).
+     * Still sets ddl_table_geoid to enable atom suppression and constraint registration.
+     */
+    private String initDdlTableNoMark(String tableName, String schema) {
+        String geoid = initTable(tableName, null, schema, "TABLE");
+        engine.getBuilder().ensureTableWithType(geoid, null, "TABLE");
+        // markDdlTable NOT called — ALTER TABLE doesn't own the table definition
+        return geoid;
+    }
+
+    /**
      * T14: Called at enterCreate_table — registers the table, sets DDL column context.
      * Subsequent enterColumn_definition events will assign ordinal positions in DDL order.
      */
     public void onCreateTableEnter(String schemaName, String tableName, String snippet,
                                    int lineStart, int lineEnd) {
         String schema = (schemaName != null && !schemaName.isBlank()) ? schemaName : currentSchema();
-        String geoid = initTable(tableName, null, schema, "TABLE");
+        String geoid  = initDdlTable(tableName, schema);
         current.put("ddl_table_geoid", geoid);
         current.put("ddl_col_ordinal", 0);  // explicit ordinal tracking for CREATE TABLE
         onStatementEnter("CREATE_TABLE", snippet, lineStart, lineEnd);
+        registerDdlTableAsSource();  // allow bare column atoms in out-of-line constraints to resolve
     }
 
     /** T14: Called at exitCreate_table — clears DDL column context. */
@@ -986,7 +1024,7 @@ public abstract class BaseSemanticListener {
      * Does not track explicit ordinals (uses auto-increment to append after existing columns).
      */
     public void onAlterTableEnter(String tableRef) {
-        String geoid = initTable(tableRef, null, currentSchema(), "TABLE");
+        String geoid = initDdlTableNoMark(tableRef, currentSchema());
         current.put("ddl_table_geoid", geoid);
         // No ddl_col_ordinal — ALTER TABLE uses addColumn auto-increment
     }
@@ -997,11 +1035,86 @@ public abstract class BaseSemanticListener {
     }
 
     /**
+     * T14: Sets or clears the fine-grained DDL atom suppression context.
+     * "SUPPRESS" prevents addAtom() from registering atoms in the current sub-tree.
+     * null restores normal (DDL-aware) atom creation.
+     * Called by PlSqlSemanticListener at enterColumn_definition / exitColumn_definition
+     * and enterReferences_clause / exitReferences_clause.
+     */
+    public void setDdlAtomCtx(String ctx) {
+        if (ctx == null) current.remove("ddl_atom_ctx");
+        else current.put("ddl_atom_ctx", ctx);
+    }
+
+    /** Returns true when the listener is currently inside a CREATE/ALTER TABLE context. */
+    public boolean isInDdlContext() {
+        return current.get("ddl_table_geoid") != null;
+    }
+
+    /**
+     * T14: Registers the current DDL table (ddl_table_geoid) as a source table of the current
+     * statement so that bare column-name atoms in out-of-line constraints and CREATE INDEX can
+     * resolve via NameResolver's implicit-table strategy.
+     * Called immediately after onStatementEnter in CREATE TABLE / ALTER TABLE / CREATE INDEX flows.
+     */
+    public void registerDdlTableAsSource() {
+        // IMPORTANT: use engine.currentStatementGeoid() not currentStatement().
+        // BaseSemanticListener.currentStatement() returns a BSL-internal geoid
+        // (format: "TYPE:lineStart:lineEnd:nanoTime"), while engine.getBuilder().getStatements()
+        // is keyed by the engine's ScopeContext geoid (format: "TYPE:lineStart").
+        // Using the BSL geoid always returns null — the table source is never registered.
+        String stmtGeoid  = engine.currentStatementGeoid();
+        String tableGeoid = (String) current.get("ddl_table_geoid");
+        if (stmtGeoid == null || tableGeoid == null) return;
+        var stmtInfo = engine.getBuilder().getStatements().get(stmtGeoid);
+        if (stmtInfo == null) return;
+        var tableInfo = engine.getBuilder().getTables().get(tableGeoid);
+        String tableName = tableInfo != null ? tableInfo.tableName() : tableGeoid;
+        stmtInfo.addSourceTable(tableGeoid, tableName, tableName, "TABLE");
+    }
+
+    /**
+     * T14 (Step 1): Enters a CREATE INDEX statement scope and registers the indexed table
+     * as source, so column-name atoms from the index column list can resolve via implicit table.
+     *
+     * @param tableRef  raw table reference (may include schema prefix, e.g. "FIN.INVOICES")
+     * @param snippet   SQL text for the statement
+     * @param lineStart start line in source file
+     * @param lineEnd   end line in source file
+     */
+    public void onCreateIndexEnter(String tableRef, String snippet, int lineStart, int lineEnd) {
+        onStatementEnter("CREATE_INDEX", snippet, lineStart, lineEnd);
+        if (tableRef == null || tableRef.isBlank()) return;
+        String schemaName = null;
+        String tableName  = tableRef;
+        int dot = tableRef.lastIndexOf('.');
+        if (dot >= 0) {
+            schemaName = tableRef.substring(0, dot);
+            tableName  = tableRef.substring(dot + 1);
+        }
+        String schema = (schemaName != null && !schemaName.isBlank()) ? schemaName : currentSchema();
+        String tableGeoid = initTable(tableName, null, schema, "TABLE");
+        if (tableGeoid == null) return;
+        // Ensure the indexed table exists in the engine's builder (may be absent if index
+        // is in a separate file and the CREATE TABLE hasn't been seen in this session yet).
+        engine.getBuilder().ensureTableWithType(tableGeoid, null, "TABLE");
+        current.put("ddl_table_geoid", tableGeoid);  // track for registerDdlTableAsSource
+        registerDdlTableAsSource();
+        current.remove("ddl_table_geoid");            // CREATE INDEX does not set long-lived DDL context
+    }
+
+    /**
      * T14: Called at enterColumn_definition when inside CREATE TABLE or ALTER TABLE ADD context.
      * For CREATE TABLE: registers column with explicit ordinal_position from DDL declaration order.
      * For ALTER TABLE ADD: registers column with auto-increment ordinal_position.
+     *
+     * @param columnName    column identifier (already cleaned)
+     * @param dataType      DDL type string, e.g. "VARCHAR2(100)", "NUMBER(10,2)", "DATE"; null if absent
+     * @param isRequired    true if the column has NOT NULL constraint in DDL
+     * @param defaultValue  text of the DEFAULT expression (e.g. "'N'", "SYSTIMESTAMP"); null if absent
      */
-    public void onDdlColumnDefinition(String columnName) {
+    public void onDdlColumnDefinition(String columnName, String dataType,
+                                      boolean isRequired, String defaultValue) {
         String tableGeoid = (String) current.get("ddl_table_geoid");
         if (tableGeoid == null || columnName == null || columnName.isBlank()) return;
         Object ordinalObj = current.get("ddl_col_ordinal");
@@ -1009,11 +1122,60 @@ public abstract class BaseSemanticListener {
             // CREATE TABLE: explicit ordinal from DDL declaration order
             int ordinal = (Integer) ordinalObj + 1;
             current.put("ddl_col_ordinal", ordinal);
-            engine.getBuilder().addColumnWithOrdinal(tableGeoid, columnName, null, null, ordinal);
+            engine.getBuilder().addColumnWithOrdinal(tableGeoid, columnName, null, null, ordinal,
+                    dataType, isRequired, defaultValue);
         } else {
             // ALTER TABLE ADD: auto-increment ordinal (appended after existing columns)
-            engine.getBuilder().addColumn(tableGeoid, columnName, null, null);
+            engine.getBuilder().addColumn(tableGeoid, columnName, null, null, dataType, isRequired, defaultValue);
         }
+    }
+
+    // ─── Constraint registration ──────────────────────────────────────────────
+
+    /**
+     * Called from PlSqlSemanticListener when a PRIMARY KEY out_of_line_constraint is encountered.
+     *
+     * @param constraintName declared name, or null
+     * @param pkColumns      ordered column names in the host table
+     */
+    public void onPrimaryKeyConstraint(String constraintName, List<String> pkColumns) {
+        String tableGeoid = (String) current.get("ddl_table_geoid");
+        if (tableGeoid == null) return;
+        String geoid = ConstraintInfo.buildGeoid(tableGeoid, ConstraintInfo.TYPE_PK, constraintName, pkColumns);
+        engine.getBuilder().addConstraint(geoid, ConstraintInfo.TYPE_PK, constraintName,
+                tableGeoid, pkColumns, null, null, null);
+    }
+
+    /**
+     * Called from PlSqlSemanticListener when a FOREIGN KEY out_of_line_constraint is encountered.
+     *
+     * @param constraintName declared name, or null
+     * @param fkColumns      ordered FK column names in the host table (uppercase)
+     * @param refTableRaw    raw referenced table text (e.g. "CRM.CUSTOMERS")
+     * @param refColumns     ordered referenced column names (uppercase); may be empty
+     * @param onDelete       "CASCADE", "SET NULL", or null
+     */
+    public void onForeignKeyConstraint(String constraintName, List<String> fkColumns,
+                                       String refTableRaw, List<String> refColumns,
+                                       String onDelete) {
+        String tableGeoid = (String) current.get("ddl_table_geoid");
+        if (tableGeoid == null) return;
+
+        // Resolve referenced table geoid using the same logic as initTable
+        String refTableGeoid = null;
+        if (refTableRaw != null && !refTableRaw.isBlank()) {
+            String clean = cleanIdentifier(refTableRaw);
+            if (clean != null) {
+                if (!clean.contains(".") && currentSchema() != null) {
+                    clean = currentSchema() + "." + clean;
+                }
+                refTableGeoid = clean;
+            }
+        }
+
+        String geoid = ConstraintInfo.buildGeoid(tableGeoid, ConstraintInfo.TYPE_FK, constraintName, fkColumns);
+        engine.getBuilder().addConstraint(geoid, ConstraintInfo.TYPE_FK, constraintName,
+                tableGeoid, fkColumns, refTableGeoid, refColumns, onDelete);
     }
 
     public void onColumnAlias(String alias) {

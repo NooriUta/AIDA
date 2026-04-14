@@ -3,6 +3,7 @@ package com.hound;
 
 import com.hound.api.*;
 import com.hound.metrics.PipelineTimer;
+import com.hound.parser.PlSqlErrorCollector;
 import com.hound.semantic.model.AtomInfo;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
@@ -53,7 +54,7 @@ public class HoundParserImpl implements HoundParser {
 
     @Override
     public ParseResult parse(Path file, HoundConfig config) {
-        return parse(file, config, NoOpHoundEventListener.INSTANCE);
+        return parse(file, config, HoundHeimdallListener.fromSystemProperty());
     }
 
     @Override
@@ -71,7 +72,7 @@ public class HoundParserImpl implements HoundParser {
 
     @Override
     public List<ParseResult> parseBatch(List<Path> files, HoundConfig config) {
-        return parseBatch(files, config, NoOpHoundEventListener.INSTANCE);
+        return parseBatch(files, config, HoundHeimdallListener.fromSystemProperty());
     }
 
     @Override
@@ -111,7 +112,7 @@ public class HoundParserImpl implements HoundParser {
                         if (writer != null) {
                             ws = writer.saveResult(ar.semantic(), ar.timer(), pool, schema);
                         }
-                        pr = toParseResult(ar.semantic(), ar.timer(), ws);
+                        pr = toParseResult(ar.semantic(), ar.timer(), ws, ar.parseErrors());
                     } else {
                         pr = emptyResult(file.toString());
                     }
@@ -148,18 +149,22 @@ public class HoundParserImpl implements HoundParser {
     // ─── Core parse logic ─────────────────────────────────────────
 
     /**
-     * Single-file parse: read → ANTLR → semantic walk → resolve.
+     * Single-file parse: read → SQL*Plus strip → ANTLR → semantic walk → resolve.
      * Does NOT write to DB — caller decides when/how to write.
      */
     private AnalysisResult analyzeFile(Path file, HoundConfig config,
                                         AtomicLong sessionSeq, String defaultSchema,
                                         HoundEventListener listener)
             throws IOException {
-        String sql = readFileWithFallback(file);
-        if (sql.isBlank()) {
+        String rawSql = readFileWithFallback(file);
+        if (rawSql.isBlank()) {
             logger.warn("Empty file: {}", file);
-            return new AnalysisResult(file, null, new PipelineTimer());
+            return new AnalysisResult(file, null, new PipelineTimer(), List.of());
         }
+
+        // Strip SQL*Plus directives before handing to ANTLR4.
+        // Lines are replaced with blanks to preserve original line numbers in error messages.
+        String sql = stripSqlPlusDirectives(rawSql, file.toString());
 
         long lineCount = sql.lines().count();
         PipelineTimer timer = new PipelineTimer();
@@ -168,7 +173,8 @@ public class HoundParserImpl implements HoundParser {
         // Pass listener so AtomProcessor/StructureAndLineageBuilder fire events (C.1.3)
         UniversalSemanticEngine engine = new UniversalSemanticEngine(listener, file.toString());
         Object dialectListener = createDialectListener(config.dialect(), engine, defaultSchema);
-        parseAndWalk(sql, config.dialect(), dialectListener, timer);
+        List<String> parseErrors = parseAndWalk(sql, config.dialect(), dialectListener,
+                                                file.toString(), listener, timer);
 
         timer.start("resolve");
         engine.resolvePendingColumns();
@@ -180,9 +186,9 @@ public class HoundParserImpl implements HoundParser {
                 file.toString(),
                 config.dialect(),
                 parseWalkResolveMs
-        ).withRawScript(sql);
+        ).withRawScript(rawSql);
 
-        return new AnalysisResult(file, result, timer);
+        return new AnalysisResult(file, result, timer, parseErrors);
     }
 
     /**
@@ -200,12 +206,13 @@ public class HoundParserImpl implements HoundParser {
         if (writer != null) {
             ws = writer.saveResult(ar.semantic(), ar.timer(), pool, dbName);
         }
-        return toParseResult(ar.semantic(), ar.timer(), ws);
+        return toParseResult(ar.semantic(), ar.timer(), ws, ar.parseErrors());
     }
 
     // ─── SemanticResult → ParseResult ────────────────────────────
 
-    private static ParseResult toParseResult(SemanticResult sem, PipelineTimer timer, WriteStats ws) {
+    private static ParseResult toParseResult(SemanticResult sem, PipelineTimer timer, WriteStats ws,
+                                              List<String> parseErrors) {
         Structure s = sem.getStructure();
 
         int atomCount;
@@ -253,8 +260,13 @@ public class HoundParserImpl implements HoundParser {
         long durationMs = timer.ms("parse") + timer.ms("walk")
                 + timer.ms("resolve") + timer.writeMs();
 
+        // ANTLR4 syntax errors are errors for this file (parser recovered, result is partial).
+        // At process level they are handled as WARN — the batch continues with remaining files.
+        List<String> fileErrors = parseErrors != null && !parseErrors.isEmpty()
+                ? parseErrors
+                : List.of();
         return new ParseResult(sem.getFilePath(), atomCount, vertexCount, edgeCount,
-                droppedEdgeCount, vertexStats, resolutionRate, List.of(), List.of(), durationMs);
+                droppedEdgeCount, vertexStats, resolutionRate, List.of(), fileErrors, durationMs);
     }
 
     /**
@@ -331,24 +343,41 @@ public class HoundParserImpl implements HoundParser {
         };
     }
 
-    private static void parseAndWalk(String sql, String dialect, Object listener,
-                                      PipelineTimer timer) {
-        switch (dialect.toLowerCase()) {
+    private static List<String> parseAndWalk(String sql, String dialect, Object listener,
+                                              String filePath, HoundEventListener eventListener,
+                                              PipelineTimer timer) {
+        return switch (dialect.toLowerCase()) {
             case "plsql" -> {
+                PlSqlErrorCollector errorCollector =
+                        new PlSqlErrorCollector(filePath, eventListener);
+
                 timer.start("parse");
-                PlSqlLexer lexer             = new PlSqlLexer(CharStreams.fromString(sql));
-                CommonTokenStream tokens     = new CommonTokenStream(lexer);
-                PlSqlParser parser           = new PlSqlParser(tokens);
+                PlSqlLexer lexer = new PlSqlLexer(CharStreams.fromString(sql));
+                lexer.removeErrorListeners();
+                lexer.addErrorListener(errorCollector);
+
+                CommonTokenStream tokens = new CommonTokenStream(lexer);
+                PlSqlParser parser = new PlSqlParser(tokens);
+                parser.removeErrorListeners();
+                parser.addErrorListener(errorCollector);
+
                 PlSqlParser.Sql_scriptContext tree = parser.sql_script();
                 timer.stop("parse");
                 timer.count("tokens", tokens.getNumberOfOnChannelTokens());
 
+                if (errorCollector.hasErrors()) {
+                    logger.warn("[ANTLR4] {} syntax error(s) in: {}",
+                            errorCollector.getErrors().size(), basename(filePath));
+                }
+
                 timer.start("walk");
                 ParseTreeWalker.DEFAULT.walk((PlSqlSemanticListener) listener, tree);
                 timer.stop("walk");
+
+                yield errorCollector.getErrors();
             }
             default -> throw new IllegalArgumentException("Parser not implemented: " + dialect);
-        }
+        };
     }
 
     // ─── File reading ─────────────────────────────────────────────
@@ -374,6 +403,80 @@ public class HoundParserImpl implements HoundParser {
 
     private static int mapSize(Map<?, ?> m) { return m != null ? m.size() : 0; }
 
+    /**
+     * Strips SQL*Plus client directives from Oracle scripts before ANTLR4 parsing.
+     *
+     * <p>Directives are <em>replaced with blank lines</em> (not removed) so that
+     * ANTLR4 error messages report the correct original line numbers.
+     *
+     * <p>Recognised prefixes (case-insensitive):
+     * {@code SET}, {@code PROMPT}, {@code WHENEVER}, {@code SPOOL}, {@code SHOW},
+     * {@code COLUMN}, {@code TTITLE}, {@code BTITLE}, {@code REM[ARK]},
+     * {@code DEFINE}, {@code UNDEFINE}, {@code EXECUTE}, {@code HOST},
+     * {@code @@}, {@code @} (file include).
+     */
+    public static String stripSqlPlusDirectives(String sql, String filePath) {
+        // split("\n") (without -1) drops trailing empty tokens, preserving line count parity.
+        // We re-append the original trailing newline if present so the caller sees the same EOF.
+        boolean trailingNewline = sql.endsWith("\n");
+        String[] lines = sql.split("\n");
+        StringBuilder sb = new StringBuilder(sql.length());
+        int stripped = 0;
+        for (String line : lines) {
+            String trimmed = line.stripLeading();
+            if (isSqlPlusDirective(trimmed)) {
+                stripped++;
+                sb.append('\n');
+            } else {
+                sb.append(line).append('\n');
+            }
+        }
+        if (stripped > 0) {
+            logger.debug("[SQLPlus-strip] {} — removed {} directive line(s)",
+                    basename(filePath), stripped);
+        }
+        // Remove the trailing '\n' we added for the last line, unless the original had one
+        if (!trailingNewline && sb.length() > 0 && sb.charAt(sb.length() - 1) == '\n') {
+            sb.deleteCharAt(sb.length() - 1);
+        }
+        return sb.toString();
+    }
+
+    private static boolean isSqlPlusDirective(String trimmedLine) {
+        if (trimmedLine.isEmpty()) return false;
+        String upper = trimmedLine.toUpperCase();
+        // @@ and @ file includes
+        if (upper.startsWith("@@") || upper.startsWith("@ ") || upper.equals("@")) return true;
+        // keyword check: word must match exactly or be followed by space/tab
+        for (String kw : SQLPLUS_KEYWORDS) {
+            if (upper.equals(kw) || upper.startsWith(kw + " ") || upper.startsWith(kw + "\t")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** SQL*Plus keywords whose lines should be stripped before ANTLR4 parsing. */
+    private static final String[] SQLPLUS_KEYWORDS = {
+        "SET", "PROMPT", "WHENEVER", "SPOOL", "SHOW",
+        "COLUMN", "COL",
+        "TTITLE", "BTITLE", "REPHEADER", "REPFOOTER",
+        "BREAK", "COMPUTE", "CLEAR",
+        "REM", "REMARK",
+        "DEFINE", "UNDEFINE",
+        "EXECUTE", "EXEC",
+        "HOST",
+        "PAUSE", "ACCEPT", "VARIABLE",
+        "CONNECT", "DISCONNECT",
+    };
+
+    private static String basename(String path) {
+        if (path == null) return "";
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return slash >= 0 ? path.substring(slash + 1) : path;
+    }
+
     /** Internal result of the parse phase (before DB write). */
-    private record AnalysisResult(Path file, SemanticResult semantic, PipelineTimer timer) {}
+    private record AnalysisResult(Path file, SemanticResult semantic, PipelineTimer timer,
+                                   List<String> parseErrors) {}
 }

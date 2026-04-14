@@ -18,23 +18,23 @@ CREATE OR REPLACE PACKAGE BODY HR.PKG_EMPLOYEE_DML AS
         p_new_salary IN NUMBER
     ) IS
     BEGIN
-        UPDATE HR.EMPLOYEES e
-        SET    e.SALARY     = p_new_salary,
-               e.UPDATED_AT = SYSDATE
-        WHERE  e.EMPLOYEE_ID = p_id
-          AND  e.ACTIVE      = 'Y';
+        UPDATE HR.EMPLOYEES
+        SET    SALARY     = p_new_salary,
+               UPDATED_AT = SYSDATE
+        WHERE  EMPLOYEE_ID = p_id
+          AND  ACTIVE      = 'Y';
         COMMIT;
     END;
 
     PROCEDURE deactivate_employee(p_id IN NUMBER) IS
     BEGIN
-        UPDATE HR.EMPLOYEES e
-        SET    e.ACTIVE      = 'N',
-               e.UPDATED_AT  = SYSDATE
-        WHERE  e.EMPLOYEE_ID = p_id;
+        UPDATE HR.EMPLOYEES
+        SET    ACTIVE      = 'N',
+               UPDATED_AT  = SYSDATE
+        WHERE  EMPLOYEE_ID = p_id;
 
-        DELETE FROM HR.EMPLOYEE_ROLES er
-        WHERE  er.EMPLOYEE_ID = p_id;
+        DELETE FROM HR.EMPLOYEE_ROLES
+        WHERE  EMPLOYEE_ID = p_id;
 
         COMMIT;
     END;
@@ -64,12 +64,12 @@ CREATE OR REPLACE PACKAGE BODY HR.PKG_EMPLOYEE_DML AS
           AND  e.ACTIVE = 'Y';
 
         IF v_count > 0 THEN
-            UPDATE HR.DEPARTMENTS d
-            SET    d.HEADCOUNT       = v_count,
-                   d.TOTAL_SALARY    = v_total,
-                   d.AVG_SALARY      = v_avg,
-                   d.UPDATED_AT      = SYSDATE
-            WHERE  d.DEPARTMENT_ID = p_dept_id;
+            UPDATE HR.DEPARTMENTS
+            SET    HEADCOUNT    = v_count,
+                   TOTAL_SALARY = v_total,
+                   AVG_SALARY   = v_avg,
+                   UPDATED_AT   = SYSDATE
+            WHERE  DEPARTMENT_ID = p_dept_id;
         END IF;
         COMMIT;
     END;

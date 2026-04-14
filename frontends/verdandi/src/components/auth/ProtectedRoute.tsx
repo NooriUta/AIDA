@@ -19,7 +19,7 @@ export function ProtectedRoute({ children }: Props) {
   // ("/login") and when verdandi is mounted inside Shell at "/verdandi/*"
   // ("/verdandi/login").  React Router v6 resolves relative <Navigate to>
   // against the currently matched route segment.
-  if (!isAuthenticated) return <Navigate to="login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   return <>{children}</>;
 }

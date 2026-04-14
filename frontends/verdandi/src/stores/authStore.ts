@@ -15,7 +15,7 @@ interface AuthStore {
   error: string | null;
 
   login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   checkSession: () => Promise<void>;
   clearError: () => void;
   /** Silently renew the JWT if the user is authenticated. */
@@ -79,14 +79,21 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      // ── logout — fire-and-forget, clears cookie server-side ─────────────────
-      logout: () => {
+      // ── logout — await server call so httpOnly cookie is cleared BEFORE local
+      // state is wiped. Fire-and-forget caused a cyclic redirect: ProtectedRoute
+      // sent the user to /login while the cookie was still valid; App.checkSession()
+      // then found an active session and navigated back to /, creating a loop.
+      logout: async () => {
         stopRefreshTimer();
+        try {
+          await fetch(`${AUTH_BASE}/logout`, {
+            method: 'POST',
+            credentials: 'include',
+          });
+        } catch {
+          // Network error — still clear local state so user is logged out locally.
+        }
         set({ user: null, isAuthenticated: false, error: null });
-        fetch(`${AUTH_BASE}/logout`, {
-          method: 'POST',
-          credentials: 'include',
-        }).catch(() => {});
       },
 
       // ── checkSession — verifies the httpOnly cookie is still valid ───────────
@@ -101,14 +108,20 @@ export const useAuthStore = create<AuthStore>()(
           if (res.status === 401) {
             stopRefreshTimer();
             set({ user: null, isAuthenticated: false });
-          } else {
-            // Session still valid — start silent refresh cycle.
+          } else if (res.ok) {
+            // Session still valid — restore user in case storage was partially cleared,
+            // then start silent refresh cycle.
+            try {
+              const data = await res.json();
+              set((s) => ({ user: data ?? s.user }));
+            } catch { /* keep existing user state */ }
             startRefreshTimer(() => get().refreshToken());
             // Hydrate prefs if not yet synced (e.g. page reload)
             if (!usePrefsStore.getState().synced) {
               usePrefsStore.getState().fetchPrefs().catch(() => {});
             }
           }
+          // Non-401, non-ok (e.g. 500): fall through to catch path — keep existing state
         } catch {
           // Network down — keep existing state, will fail on next API call
         }

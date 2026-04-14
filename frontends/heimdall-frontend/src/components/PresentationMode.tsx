@@ -64,7 +64,7 @@ export function PresentationMode({ events, metrics, onExit }: PresentationModePr
 
       {/* Title */}
       <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', letterSpacing: '0.1em', color: 'var(--aida-app-heimdall)', textTransform: 'uppercase' }}>
-        HEIMDALL · LIVE
+        Heimðallr · LIVE
       </div>
 
       {/* Big 3 metrics */}

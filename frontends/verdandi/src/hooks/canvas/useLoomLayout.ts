@@ -328,12 +328,16 @@ export function useLoomLayout(
       let raf2: number;
       const raf1 = requestAnimationFrame(() => {
         raf2 = requestAnimationFrame(() => {
+          // Guard: if the node isn't in the current ReactFlow graph (e.g. filtered out
+          // by applyHiddenNodes / applyDirectionFilter), fitView falls back to fitting
+          // ALL nodes → full zoom-out. Skip the call instead.
+          if (!getNodes().some((n) => n.id === activeId)) return;
           fitView({
             nodes:   [{ id: activeId }],
             duration: 600,
             padding:  0.08,
             maxZoom:  1.8,
-            minZoom:  0.15,
+            minZoom:  0.5,   // prevent excessive zoom-out on large / expanded tables
           });
         });
       });

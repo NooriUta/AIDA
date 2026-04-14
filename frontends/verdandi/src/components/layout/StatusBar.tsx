@@ -58,7 +58,7 @@ export const StatusBar = memo(() => {
       <div style={{ flex: 1 }} />
       {user && <span>{user.role}</span>}
       <Divider />
-      <span style={{ color: 'var(--bd)', letterSpacing: '0.07em' }}>VERDANDI · LOOM</span>
+      <span style={{ color: 'var(--bd)', letterSpacing: '0.07em' }}>Verðanði · Loom</span>
     </footer>
   );
 });

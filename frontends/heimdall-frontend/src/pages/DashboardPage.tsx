@@ -6,6 +6,7 @@ import { ResolutionGauge }      from '../components/ResolutionGauge';
 import { EventLog }             from '../components/EventLog';
 import { ServiceHealthStrip }   from '../components/ServiceHealthStrip';
 import { RecentErrors }         from '../components/RecentErrors';
+import { DaliStatsWidget }      from '../components/DaliStatsWidget';
 import { useMetrics }           from '../hooks/useMetrics';
 import { useEventStream }       from '../hooks/useEventStream';
 import { useDashboardStore }    from '../stores/dashboardStore';
@@ -38,6 +39,9 @@ export default function DashboardPage() {
 
       {/* Metrics row */}
       <MetricsBar metrics={metrics} />
+
+      {/* Dali parse engine stats */}
+      <DaliStatsWidget />
 
       {/* Chart + Gauge + RecentErrors row */}
       <div style={{ display: 'flex', gap: 'var(--seer-space-4)', padding: '0 var(--seer-space-6) var(--seer-space-4)', flexWrap: 'wrap' }}>

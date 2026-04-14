@@ -166,7 +166,13 @@
         "notify.browser":  ["false"],
         "notify.harvest":  ["true"],
         "notify.errors":   ["true"],
-        "notify.digest":   ["false"]
+        "notify.digest":   ["false"],
+        "quota_mimir":     ["100"],
+        "quota_sessions":  ["10"],
+        "quota_atoms":     ["100000"],
+        "quota_workers":   ["8"],
+        "quota_anvil":     ["200"],
+        "source_bindings": ["hound,dali"]
       }
     },
     {
@@ -191,7 +197,13 @@
         "notify.browser":  ["false"],
         "notify.harvest":  ["false"],
         "notify.errors":   ["true"],
-        "notify.digest":   ["true"]
+        "notify.digest":   ["true"],
+        "quota_mimir":     ["20"],
+        "quota_sessions":  ["2"],
+        "quota_atoms":     ["50000"],
+        "quota_workers":   ["4"],
+        "quota_anvil":     ["20"],
+        "source_bindings": ["hound"]
       }
     },
     {
@@ -216,7 +228,13 @@
         "notify.browser":  ["false"],
         "notify.harvest":  ["false"],
         "notify.errors":   ["false"],
-        "notify.digest":   ["false"]
+        "notify.digest":   ["false"],
+        "quota_mimir":     ["5"],
+        "quota_sessions":  ["1"],
+        "quota_atoms":     ["10000"],
+        "quota_workers":   ["1"],
+        "quota_anvil":     ["5"],
+        "source_bindings": [""]
       }
     },
     {
@@ -241,7 +259,13 @@
         "notify.browser":  ["true"],
         "notify.harvest":  ["true"],
         "notify.errors":   ["true"],
-        "notify.digest":   ["false"]
+        "notify.digest":   ["false"],
+        "quota_mimir":     ["50"],
+        "quota_sessions":  ["5"],
+        "quota_atoms":     ["100000"],
+        "quota_workers":   ["8"],
+        "quota_anvil":     ["50"],
+        "source_bindings": ["hound,dali"]
       }
     },
     {
@@ -266,7 +290,13 @@
         "notify.browser":  ["false"],
         "notify.harvest":  ["false"],
         "notify.errors":   ["false"],
-        "notify.digest":   ["true"]
+        "notify.digest":   ["true"],
+        "quota_mimir":     ["10"],
+        "quota_sessions":  ["1"],
+        "quota_atoms":     ["0"],
+        "quota_workers":   ["0"],
+        "quota_anvil":     ["10"],
+        "source_bindings": [""]
       }
     },
     {
@@ -291,7 +321,13 @@
         "notify.browser":  ["false"],
         "notify.harvest":  ["false"],
         "notify.errors":   ["true"],
-        "notify.digest":   ["true"]
+        "notify.digest":   ["true"],
+        "quota_mimir":     ["30"],
+        "quota_sessions":  ["3"],
+        "quota_atoms":     ["50000"],
+        "quota_workers":   ["4"],
+        "quota_anvil":     ["30"],
+        "source_bindings": ["hound,dali"]
       }
     },
     {
@@ -316,7 +352,13 @@
         "notify.browser":  ["true"],
         "notify.harvest":  ["true"],
         "notify.errors":   ["true"],
-        "notify.digest":   ["false"]
+        "notify.digest":   ["false"],
+        "quota_mimir":     ["50"],
+        "quota_sessions":  ["5"],
+        "quota_atoms":     ["50000"],
+        "quota_workers":   ["6"],
+        "quota_anvil":     ["50"],
+        "source_bindings": ["hound,dali"]
       }
     }
   ]

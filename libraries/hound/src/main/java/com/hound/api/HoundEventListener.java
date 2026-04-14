@@ -40,6 +40,17 @@ public interface HoundEventListener {
     /** Called once after a file is fully parsed and written to YGG. */
     default void onFileParseCompleted(String file, ParseResult result) {}
 
+    /**
+     * Called for each ANTLR4 syntax error encountered while parsing {@code file}.
+     * Fires during the parse phase (before semantic walk).
+     *
+     * @param file    file currently being parsed
+     * @param line    1-based line number of the offending token
+     * @param charPos 0-based character position within the line
+     * @param msg     ANTLR4 error message (e.g. "mismatched input 'X' expecting …")
+     */
+    default void onParseError(String file, int line, int charPos, String msg) {}
+
     /** Called if an unrecoverable error occurs while processing {@code file}. */
     default void onError(String file, Throwable error) {}
 }

@@ -11,6 +11,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jobrunr.jobs.annotations.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.dali.heimdall.HeimdallEmitter;
 import studio.seer.dali.service.SessionService;
 import studio.seer.shared.FileResult;
 import studio.seer.shared.ParseSessionInput;
@@ -21,7 +22,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -54,6 +54,7 @@ public class ParseJob {
 
     @Inject HoundParser    houndParser;
     @Inject SessionService sessionService;
+    @Inject HeimdallEmitter emitter;
 
     @ConfigProperty(name = "ygg.url")      String yggUrl;
     @ConfigProperty(name = "ygg.db")       String yggDb;
@@ -65,6 +66,9 @@ public class ParseJob {
         String src = input.source().strip();
         log.info("[{}] ParseJob starting: source={} dialect={} preview={} clearBeforeWrite={}",
                 sessionId, src, input.dialect(), input.preview(), input.clearBeforeWrite());
+
+        long startMs = System.currentTimeMillis();
+        emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(), input.clearBeforeWrite());
 
         try {
             HoundConfig config = buildConfig(input);
@@ -85,9 +89,9 @@ public class ParseJob {
 
         } catch (Exception e) {
             log.error("[{}] ParseJob failed: {}", sessionId, e.getMessage(), e);
-            // Capture the full cause chain as a user-visible error message
             String errorMsg = buildErrorMessage(e);
             sessionService.failSession(sessionId, errorMsg);
+            emitter.sessionFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs);
             throw new RuntimeException("ParseJob failed for session " + sessionId, e);
         }
     }
@@ -112,11 +116,13 @@ public class ParseJob {
     private void runSingle(String sessionId, Path file, HoundConfig config) {
         sessionService.startSession(sessionId, false, 1);
 
-        DaliHoundListener listener = new DaliHoundListener(sessionId);
+        DaliHoundListener listener = new DaliHoundListener(sessionId, config.dialect(), emitter);
         ParseResult result = houndParser.parse(file, config, listener);
 
         FileResult fr = toFileResult(result);
         sessionService.completeSession(sessionId, result, List.of(fr));
+        emitter.sessionCompleted(sessionId, result.atomCount(), result.resolutionRate(),
+                result.durationMs(), 1);
     }
 
     // ── Batch (directory) ─────────────────────────────────────────────────────
@@ -135,7 +141,7 @@ public class ParseJob {
 
         // Parse file-by-file so we can update progress after each one
         for (Path file : files) {
-            DaliHoundListener listener = new DaliHoundListener(sessionId);
+            DaliHoundListener listener = new DaliHoundListener(sessionId, config.dialect(), emitter);
             ParseResult result = houndParser.parse(file, config, listener);
             FileResult fr = toFileResult(result);
             fileResults.add(fr);
@@ -146,6 +152,8 @@ public class ParseJob {
 
         ParseResult merged = merge(input.source(), fileResults);
         sessionService.completeSession(sessionId, merged, fileResults);
+        emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
+                merged.durationMs(), fileResults.size());
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

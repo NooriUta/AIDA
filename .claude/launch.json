@@ -3,47 +3,55 @@
   "configurations": [
     {
       "name": "verdandi",
-      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
-      "runtimeArgs": ["C:/AIDA/aida-root/frontends/verdandi/node_modules/vite/bin/vite.js"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 5173,
-      "cwd": "C:/AIDA/aida-root/frontends/verdandi"
+      "cwd": "frontends/verdandi"
     },
     {
       "name": "chur",
-      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
-      "runtimeArgs": ["C:/AIDA/aida-root/bff/chur/node_modules/tsx/dist/cli.mjs", "watch", "--env-file-if-exists=.env", "src/server.ts"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 3000,
-      "cwd": "C:/AIDA/aida-root/bff/chur"
+      "cwd": "bff/chur"
     },
     {
       "name": "shuttle",
-      "runtimeExecutable": "C:/AIDA/aida-root/gradlew.bat",
+      "runtimeExecutable": "gradlew.bat",
       "runtimeArgs": [":services:shuttle:quarkusDev"],
       "port": 8080,
       "autoPort": false,
-      "cwd": "C:/AIDA/aida-root"
+      "cwd": "."
     },
     {
       "name": "heimdall-backend",
-      "runtimeExecutable": "C:/AIDA/aida-root/gradlew.bat",
+      "runtimeExecutable": "gradlew.bat",
       "runtimeArgs": [":services:heimdall-backend:quarkusDev"],
       "port": 9093,
       "autoPort": false,
-      "cwd": "C:/AIDA/aida-root"
+      "cwd": "."
     },
     {
       "name": "heimdall-frontend",
-      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
-      "runtimeArgs": ["C:/AIDA/aida-root/frontends/heimdall-frontend/node_modules/vite/bin/vite.js"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 5174,
-      "cwd": "C:/AIDA/aida-root/frontends/heimdall-frontend"
+      "cwd": "frontends/heimdall-frontend"
     },
     {
       "name": "shell",
-      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
-      "runtimeArgs": ["C:/AIDA/aida-root/frontends/shell/node_modules/vite/bin/vite.js"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 5175,
-      "cwd": "C:/AIDA/aida-root/frontends/shell"
+      "cwd": "frontends/shell"
+    },
+    {
+      "name": "dali",
+      "runtimeExecutable": "gradlew.bat",
+      "runtimeArgs": [":services:dali:quarkusDev"],
+      "port": 9090,
+      "autoPort": false,
+      "cwd": "."
     }
   ]
 }

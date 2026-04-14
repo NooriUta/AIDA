@@ -50,6 +50,8 @@ class RemoteWriter {
         Map<String, String> records = new HashMap<>();
         /** key = field_geoid → RID (HAS_RECORD_FIELD) */
         Map<String, String> recordFields = new HashMap<>();
+        /** constraint_geoid → RID  (DaliPrimaryKey / DaliForeignKey) */
+        Map<String, String> constraints = new HashMap<>();
         /** RID of the DaliSession vertex (BELONGS_TO_SESSION edges) */
         String sessionRid = null;
     }
@@ -76,6 +78,7 @@ class RemoteWriter {
         cache.outputCols = buildRidMap("DaliOutputColumn","col_key",       sid);
         cache.records      = buildRidMap("DaliRecord",      "record_geoid",  sid);
         cache.recordFields = buildRidMap("DaliRecordField", "field_geoid",   sid);
+        cache.constraints  = buildConstraintRidMap(sid);
         cache.ocByOrder  = buildOcByOrderMap(sid);
         cache.affCols    = buildAffColMap(sid);
         cache.sessionRid = buildRidMap("DaliSession", "session_id", sid)
@@ -129,6 +132,30 @@ class RemoteWriter {
     }
 
     /**
+     * Builds constraint_geoid → RID map by querying both DaliPrimaryKey and DaliForeignKey.
+     * DaliConstraint is an abstract supertype — ArcadeDB stores concrete subtypes only.
+     */
+    private Map<String, String> buildConstraintRidMap(String sid) {
+        Map<String, String> map = new HashMap<>();
+        for (String type : new String[]{"DaliPrimaryKey", "DaliForeignKey"}) {
+            try {
+                var rs = db.query("sql",
+                        "SELECT @rid AS rid, constraint_geoid FROM " + type + " WHERE session_id = :sid",
+                        Map.of("sid", sid));
+                while (rs.hasNext()) {
+                    var doc = rs.next().toMap();
+                    String key = (String) doc.get("constraint_geoid");
+                    String rid = (String) doc.get("rid");
+                    if (key != null && rid != null) map.put(key, rid);
+                }
+            } catch (Exception e) {
+                logger.warn("Constraint RID map failed for {}: {}", type, e.getMessage());
+            }
+        }
+        return map;
+    }
+
+    /**
      * Ad-hoc mode: resolves canonical vertex deduplication before the NDJSON batch.
      *
      * <p>Strategy:
@@ -147,34 +174,55 @@ class RemoteWriter {
      * @return geoid → actual DB RID for all pre-existing canonical vertices.
      *         Empty map if {@code str} has no canonical vertices or queries fail.
      */
-    /** Result of ad-hoc schema pre-insertion: RID map + which schema geoids are brand-new. */
-    private record AdHocInsertResult(Map<String, String> rids, Set<String> newSchemaGeoids) {}
+    /**
+     * Result of ad-hoc canonical pre-insertion: RID map + which schema/table/column geoids
+     * are brand-new (inserted this session, not pre-existing).
+     */
+    private record AdHocInsertResult(Map<String, String> rids, Set<String> newSchemaGeoids,
+                                     Set<String> newTableGeoids, Set<String> newColumnGeoids) {}
 
+    /**
+     * Ad-hoc mode: pre-inserts canonical objects (DaliSchema, DaliTable, DaliColumn) before
+     * the NDJSON batch to ensure idempotency across sessions.
+     *
+     * <p>Strategy per type:
+     * <ol>
+     *   <li>Try INSERT for each object.
+     *   <li>On DuplicatedKeyException → already exists; log debug.
+     *       If the current session defines the table/column as 'master' (DDL), UPDATE data_source.
+     *   <li>Query actual RIDs of all wanted objects and return them in the result map.
+     *       The batch builder registers these in canonicalRids → skips those vertices and uses
+     *       their actual RIDs for edge resolution.
+     * </ol>
+     *
+     * <p>This prevents DuplicatedKeyException in the batch when the same column/table appears
+     * in multiple concurrent sessions.
+     */
     @SuppressWarnings("unchecked")
     private AdHocInsertResult preInsertAdHocSchemas(String sid, Structure str) {
-        if (str == null) return new AdHocInsertResult(Map.of(), Set.of());
+        if (str == null) return new AdHocInsertResult(Map.of(), Set.of(), Set.of(), Set.of());
         Map<String, String> result = new HashMap<>();
-        Set<String> newSchemaGeoids = new LinkedHashSet<>();
+        Set<String> newSchemaGeoids  = new LinkedHashSet<>();
+        Set<String> newTableGeoids   = new LinkedHashSet<>();
+        Set<String> newColumnGeoids  = new LinkedHashSet<>();
 
-        // ── DaliSchema: pre-insert individually (UPSERT semantics) ────────────────
+        // ── DaliSchema: pre-insert individually ──────────────────────────────────
         if (str.getSchemas() != null && !str.getSchemas().isEmpty()) {
             for (var e : str.getSchemas().entrySet()) {
                 Map<String, Object> sc = (Map<String, Object>) e.getValue();
                 try {
                     rcmd("INSERT INTO DaliSchema SET session_id=?, schema_geoid=?, schema_name=?, db_name=?, db_geoid=?",
                             sid, e.getKey(), sc.get("name"), null, null);
-                    newSchemaGeoids.add(e.getKey()); // INSERT succeeded → this is a new schema
+                    newSchemaGeoids.add(e.getKey());
                 } catch (RuntimeException ex) {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
-                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                         logger.debug("[ad-hoc] DaliSchema '{}' already exists — reusing", e.getKey());
-                        // not added to newSchemaGeoids → will be counted as duplicate
                     } else {
                         throw ex;
                     }
                 }
             }
-            // Query actual RIDs for all schemas (newly inserted or pre-existing)
             try {
                 Set<String> wanted = str.getSchemas().keySet();
                 var rs = db.query("sql",
@@ -193,8 +241,39 @@ class RemoteWriter {
             }
         }
 
-        // ── DaliTable: query pre-existing records (batch handles new ones) ─────────
+        // ── DaliTable: pre-insert individually with duplicate-key resilience ─────
+        // This prevents DuplicatedKeyException in the NDJSON batch when the same table
+        // is referenced by multiple concurrent sessions.
         if (str.getTables() != null && !str.getTables().isEmpty()) {
+            for (var e : str.getTables().entrySet()) {
+                TableInfo t = e.getValue();
+                boolean tblMaster = isMasterTable(e.getKey(), str);
+                boolean isView    = isViewTable(e.getKey(), str);
+                String effectiveType = isView ? "VIEW" : t.tableType();
+                String ds = tblMaster ? MASTER : RECONSTRUCTED;
+                try {
+                    rcmd("INSERT INTO DaliTable SET session_id=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
+                            sid, e.getKey(), t.tableName(), t.schemaGeoid(), effectiveType,
+                            toJson(new ArrayList<>(t.aliases())), t.columnCount(), ds);
+                    newTableGeoids.add(e.getKey());
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                        logger.debug("[ad-hoc] DaliTable '{}' already exists — reusing", e.getKey());
+                        // Upgrade reconstructed → master if DDL now defines this table
+                        if (tblMaster) {
+                            try {
+                                rcmd("UPDATE DaliTable SET data_source=? WHERE db_name IS NULL AND table_geoid=? AND (data_source IS NULL OR data_source <> ?)",
+                                        MASTER, e.getKey(), MASTER);
+                            } catch (Exception upEx) {
+                                logger.warn("[ad-hoc] Failed to upgrade DaliTable '{}' to master: {}", e.getKey(), upEx.getMessage());
+                            }
+                        }
+                    } else {
+                        throw ex;
+                    }
+                }
+            }
             try {
                 Set<String> wanted = str.getTables().keySet();
                 var rs = db.query("sql",
@@ -213,8 +292,43 @@ class RemoteWriter {
             }
         }
 
-        // ── DaliColumn: query pre-existing records (batch handles new ones) ────────
+        // ── DaliColumn: pre-insert individually with duplicate-key resilience ────
         if (str.getColumns() != null && !str.getColumns().isEmpty()) {
+            for (var e : str.getColumns().entrySet()) {
+                ColumnInfo c = e.getValue();
+                boolean colMaster = isMasterTable(c.getTableGeoid(), str);
+                String ds = colMaster ? MASTER : RECONSTRUCTED;
+                try {
+                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                            sid, e.getKey(), c.getTableGeoid(), c.getColumnName(),
+                            c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
+                            c.getOrdinalPosition(),
+                            toJson(new ArrayList<>(c.getUsedInStatements())),
+                            ds, c.getDataType(), c.isRequired(), c.getDefaultValue(),
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                    newColumnGeoids.add(e.getKey());
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                        logger.debug("[ad-hoc] DaliColumn '{}' already exists — reusing", e.getKey());
+                        // Upgrade reconstructed → master if DDL now defines this column's table
+                        try {
+                            String upd = colMaster
+                                ? "UPDATE DaliColumn SET data_source=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=?"
+                                : "UPDATE DaliColumn SET is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=? AND (is_pk = false AND is_fk = false)";
+                            if (colMaster) {
+                                rcmd(upd, MASTER, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                            } else if (c.isPk() || c.isFk()) {
+                                rcmd(upd, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                            }
+                        } catch (Exception upEx) {
+                            logger.warn("[ad-hoc] Failed to upgrade DaliColumn '{}': {}", e.getKey(), upEx.getMessage());
+                        }
+                    } else {
+                        throw ex;
+                    }
+                }
+            }
             try {
                 Set<String> wanted = str.getColumns().keySet();
                 var rs = db.query("sql",
@@ -233,9 +347,16 @@ class RemoteWriter {
             }
         }
 
-        logger.debug("[ad-hoc] preInsertAdHocSchemas: {} canonical RIDs resolved (schemas+tables+columns), {} new schemas",
-                result.size(), newSchemaGeoids.size());
-        return new AdHocInsertResult(result, Collections.unmodifiableSet(newSchemaGeoids));
+        logger.debug("[ad-hoc] preInsertAdHocCanonical: {} canonical RIDs resolved (schemas:{} tables:{} columns:{}), new: S:{} T:{} C:{}",
+                result.size(),
+                str.getSchemas() != null ? str.getSchemas().size() : 0,
+                str.getTables()  != null ? str.getTables().size()  : 0,
+                str.getColumns() != null ? str.getColumns().size() : 0,
+                newSchemaGeoids.size(), newTableGeoids.size(), newColumnGeoids.size());
+        return new AdHocInsertResult(result,
+                Collections.unmodifiableSet(newSchemaGeoids),
+                Collections.unmodifiableSet(newTableGeoids),
+                Collections.unmodifiableSet(newColumnGeoids));
     }
 
     private Map<String, String> buildOcByOrderMap(String sid) {
@@ -404,10 +525,18 @@ class RemoteWriter {
             if (pool != null) {
                 String cg = pool.canonicalSchema(e.getKey());
                 if (!pool.hasSchemaRid(cg)) {
-                    rcmd("INSERT INTO DaliSchema SET db_name=?, db_geoid=?, schema_geoid=?, schema_name=?",
-                            dbName, dbName, e.getKey(), sc.get("name"));
-                    pool.putSchemaRid(cg, cg);
-                    newSchemaGeoids.add(e.getKey());
+                    try {
+                        rcmd("INSERT INTO DaliSchema SET db_name=?, db_geoid=?, schema_geoid=?, schema_name=?",
+                                dbName, dbName, e.getKey(), sc.get("name"));
+                        pool.putSchemaRid(cg, cg);
+                        newSchemaGeoids.add(e.getKey());
+                    } catch (RuntimeException ex) {
+                        String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                            pool.putSchemaRid(cg, cg);
+                            logger.debug("[write/pool] DaliSchema '{}' already exists — reusing", e.getKey());
+                        } else throw ex;
+                    }
                 }
             } else {
                 String schDbGeoid = (String) sc.get("db");
@@ -415,9 +544,17 @@ class RemoteWriter {
                 String schDbName = (schDbGeoid != null && str.getDatabases().containsKey(schDbGeoid))
                         ? (String) ((Map<String, Object>) str.getDatabases().get(schDbGeoid)).get("name")
                         : dbName;
-                rcmd("INSERT INTO DaliSchema SET session_id=?, schema_geoid=?, schema_name=?, db_name=?, db_geoid=?",
-                        sid, e.getKey(), sc.get("name"),
-                        schDbName, schDbGeoid != null ? schDbGeoid : schDbName);
+                try {
+                    rcmd("INSERT INTO DaliSchema SET session_id=?, schema_geoid=?, schema_name=?, db_name=?, db_geoid=?",
+                            sid, e.getKey(), sc.get("name"),
+                            schDbName, schDbGeoid != null ? schDbGeoid : schDbName);
+                    newSchemaGeoids.add(e.getKey());
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                        logger.debug("[write/non-pool] DaliSchema '{}' already exists — reusing", e.getKey());
+                    } else throw ex;
+                }
             }
         }
 
@@ -434,26 +571,57 @@ class RemoteWriter {
         // ── DaliTable ──
         for (var e : str.getTables().entrySet()) {
             TableInfo t = e.getValue();
-            boolean tblMaster = isMasterTable(e.getKey(), str);
+            boolean tblMaster  = isMasterTable(e.getKey(), str);
+            boolean isView     = isViewTable(e.getKey(), str);
+            // CREATE VIEW overrides any default 'TABLE' type set during reconstruction
+            String  effectiveType = isView ? "VIEW" : t.tableType();
             if (pool != null) {
                 String cg = pool.canonical(e.getKey());
                 if (!pool.hasTableRid(cg)) {
-                    rcmd("INSERT INTO DaliTable SET db_name=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
-                            dbName, e.getKey(), t.tableName(), t.schemaGeoid(), t.tableType(),
-                            toJson(new ArrayList<>(t.aliases())), t.columnCount(),
-                            tblMaster ? MASTER : RECONSTRUCTED);
-                    pool.putTableRid(cg, cg);
-                    newTableGeoids.add(e.getKey());
+                    try {
+                        rcmd("INSERT INTO DaliTable SET db_name=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
+                                dbName, e.getKey(), t.tableName(), t.schemaGeoid(), effectiveType,
+                                toJson(new ArrayList<>(t.aliases())), t.columnCount(),
+                                tblMaster ? MASTER : RECONSTRUCTED);
+                        pool.putTableRid(cg, cg);
+                        newTableGeoids.add(e.getKey());
+                    } catch (RuntimeException ex) {
+                        String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                            pool.putTableRid(cg, cg);
+                            logger.debug("[write/pool] DaliTable '{}' already exists — reusing", e.getKey());
+                        } else throw ex;
+                    }
                 } else if (tblMaster) {
-                    // upgrade reconstructed → master if DDL now confirms this table
-                    rcmd("UPDATE DaliTable SET data_source=? WHERE db_name=? AND table_geoid=? AND (data_source IS NULL OR data_source <> ?)",
-                            MASTER, dbName, e.getKey(), MASTER);
+                    if (isView) {
+                        // reconstructed TABLE → master VIEW: update both data_source AND table_type
+                        rcmd("UPDATE DaliTable SET data_source=?, table_type=? WHERE db_name=? AND table_geoid=?",
+                                MASTER, "VIEW", dbName, e.getKey());
+                    } else {
+                        // upgrade reconstructed → master, keep table_type as is
+                        rcmd("UPDATE DaliTable SET data_source=? WHERE db_name=? AND table_geoid=? AND (data_source IS NULL OR data_source <> ?)",
+                                MASTER, dbName, e.getKey(), MASTER);
+                    }
                 }
             } else {
-                rcmd("INSERT INTO DaliTable SET session_id=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
-                        sid, e.getKey(), t.tableName(), t.schemaGeoid(), t.tableType(),
-                        toJson(new ArrayList<>(t.aliases())), t.columnCount(),
-                        tblMaster ? MASTER : RECONSTRUCTED);
+                // Non-pool (ad-hoc) REMOTE path: handle duplicate gracefully
+                try {
+                    rcmd("INSERT INTO DaliTable SET session_id=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
+                            sid, e.getKey(), t.tableName(), t.schemaGeoid(), effectiveType,
+                            toJson(new ArrayList<>(t.aliases())), t.columnCount(),
+                            tblMaster ? MASTER : RECONSTRUCTED);
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                        logger.debug("[ad-hoc] DaliTable '{}' already exists — reusing", e.getKey());
+                        if (tblMaster) {
+                            rcmd("UPDATE DaliTable SET data_source=? WHERE db_name IS NULL AND table_geoid=? AND (data_source IS NULL OR data_source <> ?)",
+                                    MASTER, e.getKey(), MASTER);
+                        }
+                    } else {
+                        throw ex;
+                    }
+                }
             }
         }
 
@@ -464,12 +632,14 @@ class RemoteWriter {
             if (pool != null) {
                 String cg = pool.canonicalCol(c.getTableGeoid(), c.getColumnName());
                 if (!pool.hasColumnRid(cg)) {
-                    rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?",
+                    rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
                             dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                             c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                             c.getOrdinalPosition(),
                             toJson(new ArrayList<>(c.getUsedInStatements())),
-                            colMaster ? MASTER : RECONSTRUCTED);
+                            colMaster ? MASTER : RECONSTRUCTED,
+                            c.getDataType(), c.isRequired(), c.getDefaultValue(),
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
                     pool.putColumnRid(cg, cg);
                     newColumnGeoids.add(e.getKey());
                 } else if (colMaster) {
@@ -477,11 +647,35 @@ class RemoteWriter {
                             MASTER, dbName, e.getKey(), MASTER);
                 }
             } else {
-                rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?",
-                        sid, e.getKey(), c.getTableGeoid(), c.getColumnName(), c.getExpression(), c.getAlias(),
-                        c.isOutput(), c.getOrder(), c.getOrdinalPosition(),
-                        toJson(new ArrayList<>(c.getUsedInStatements())),
-                        colMaster ? MASTER : RECONSTRUCTED);
+                // Non-pool (ad-hoc) REMOTE path: handle duplicate gracefully
+                try {
+                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                            sid, e.getKey(), c.getTableGeoid(), c.getColumnName(), c.getExpression(), c.getAlias(),
+                            c.isOutput(), c.getOrder(), c.getOrdinalPosition(),
+                            toJson(new ArrayList<>(c.getUsedInStatements())),
+                            colMaster ? MASTER : RECONSTRUCTED,
+                            c.getDataType(), c.isRequired(), c.getDefaultValue(),
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                    if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                        logger.debug("[ad-hoc] DaliColumn '{}' already exists — reusing", e.getKey());
+                        try {
+                            String upd = colMaster
+                                ? "UPDATE DaliColumn SET data_source=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=?"
+                                : "UPDATE DaliColumn SET is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=? AND (is_pk = false AND is_fk = false)";
+                            if (colMaster) {
+                                rcmd(upd, MASTER, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                            } else if (c.isPk() || c.isFk()) {
+                                rcmd(upd, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                            }
+                        } catch (Exception upEx) {
+                            logger.warn("[ad-hoc] Failed to upgrade DaliColumn '{}': {}", e.getKey(), upEx.getMessage());
+                        }
+                    } else {
+                        throw ex;
+                    }
+                }
             }
         }
 
@@ -534,6 +728,61 @@ class RemoteWriter {
                 s.getJoins().size(), s.getColumnsOutput().size(), countInputColumns(s),
                 computeDepth(s.getParentStatementGeoid(), str.getStatements()),
                 computeStatementQuality(s));
+        }
+
+        // ── DaliDDLStatement (v27) — separate vertex for schema-mutating DDL ──────
+        // Stores ALTER / CREATE / DROP statements independently of DaliStatement.
+        // KNOWN ISSUE: edges DaliDDLStatement → DaliTable / DaliColumn are not yet
+        // created (ALTER TABLE column change tracking deferred — see known-issues.md).
+        for (var e : str.getStatements().entrySet()) {
+            StatementInfo s = e.getValue();
+            if (!isDdl(s.getType())) continue;
+            try {
+                if (pool != null) {
+                    rcmd("INSERT INTO DaliDDLStatement SET db_name=?, stmt_geoid=?, type=?, line_start=?, line_end=?, target_table_geoids=?, short_name=?",
+                            dbName, e.getKey(), s.getType(), s.getLineStart(), s.getLineEnd(),
+                            toJson(new ArrayList<>(s.getTargetTables().keySet())), s.getShortName());
+                } else {
+                    rcmd("INSERT INTO DaliDDLStatement SET session_id=?, stmt_geoid=?, type=?, line_start=?, line_end=?, target_table_geoids=?, short_name=?",
+                            sid, e.getKey(), s.getType(), s.getLineStart(), s.getLineEnd(),
+                            toJson(new ArrayList<>(s.getTargetTables().keySet())), s.getShortName());
+                }
+            } catch (RuntimeException ex) {
+                String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
+                    logger.debug("[ddl] DaliDDLStatement '{}' already exists — skipping", e.getKey());
+                } else throw ex;
+            }
+        }
+
+        // ── DaliPrimaryKey / DaliForeignKey (extends DaliConstraint) ──────────────
+        for (var e : str.getConstraints().entrySet()) {
+            ConstraintInfo c = e.getValue();
+            String colNamesJson = toJson(c.getColumnNames());
+            if (c.isPrimaryKey()) {
+                if (pool != null) {
+                    rcmd("INSERT INTO DaliPrimaryKey SET db_name=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
+                            dbName, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), colNamesJson);
+                } else {
+                    rcmd("INSERT INTO DaliPrimaryKey SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
+                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), colNamesJson);
+                }
+            } else if (c.isForeignKey()) {
+                String refColNamesJson = toJson(c.getRefColumnNames());
+                if (pool != null) {
+                    rcmd("INSERT INTO DaliForeignKey SET db_name=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?, ref_table_geoid=?, ref_column_names=?, on_delete=?",
+                            dbName, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), colNamesJson,
+                            c.getRefTableGeoid(), refColNamesJson, c.getOnDelete());
+                } else {
+                    rcmd("INSERT INTO DaliForeignKey SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?, ref_table_geoid=?, ref_column_names=?, on_delete=?",
+                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), colNamesJson,
+                            c.getRefTableGeoid(), refColNamesJson, c.getOnDelete());
+                }
+            }
         }
 
         // ── DaliAffectedColumn ──
@@ -937,6 +1186,40 @@ class RemoteWriter {
             }
         }
 
+        // ── Constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, IS_PK/FK_COLUMN, REFERENCES_*) ──
+        for (var e : str.getConstraints().entrySet()) {
+            ConstraintInfo c = e.getValue();
+            String constraintRid = rid.constraints.get(e.getKey());
+            if (constraintRid == null) continue;
+
+            // HAS_PRIMARY_KEY / HAS_FOREIGN_KEY: host DaliTable → DaliConstraint
+            String hostTableRid = rid.tables.get(c.getHostTableGeoid());
+            if (hostTableRid != null) {
+                edgeByRid(c.isPrimaryKey() ? "HAS_PRIMARY_KEY" : "HAS_FOREIGN_KEY",
+                        hostTableRid, constraintRid, sid);
+            }
+
+            // IS_PK_COLUMN / IS_FK_COLUMN: DaliConstraint → DaliColumn (host table, ordered)
+            String colEdge = c.isPrimaryKey() ? "IS_PK_COLUMN" : "IS_FK_COLUMN";
+            for (int i = 0; i < c.getColumnNames().size(); i++) {
+                String colGeoid = c.getHostTableGeoid() + "." + c.getColumnNames().get(i);
+                String colRid = rid.columns.get(colGeoid);
+                if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+            }
+
+            // FK-specific: REFERENCES_TABLE + REFERENCES_COLUMN
+            if (c.isForeignKey() && c.getRefTableGeoid() != null) {
+                String refTableRid = rid.tables.get(c.getRefTableGeoid());
+                if (refTableRid != null) edgeByRid("REFERENCES_TABLE", constraintRid, refTableRid, sid);
+
+                for (int i = 0; i < c.getRefColumnNames().size(); i++) {
+                    String refColGeoid = c.getRefTableGeoid() + "." + c.getRefColumnNames().get(i);
+                    String refColRid = rid.columns.get(refColGeoid);
+                    if (refColRid != null) edgeByRid("REFERENCES_COLUMN", constraintRid, refColRid, sid, "order_id", i + 1);
+                }
+            }
+        }
+
         // ── HAS_AFFECTED_COL ──
         for (var e : str.getStatements().entrySet()) {
             if (e.getValue().getAffectedColumns().isEmpty()) continue;
@@ -1103,7 +1386,7 @@ class RemoteWriter {
                         newSchemaGeoids.add(e.getKey());
                     } catch (RuntimeException ex) {
                         String msg = ex.getMessage() != null ? ex.getMessage() : "";
-                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                             pool.putSchemaRid(cg, cg); // register to avoid re-attempting
                             logger.debug("[pool] DaliSchema '{}' already exists in db '{}' — reusing", e.getKey(), dbName);
                             // not in newSchemaGeoids → counted as duplicate below
@@ -1116,19 +1399,27 @@ class RemoteWriter {
                 TableInfo t = e.getValue();
                 String cg = pool.canonical(e.getKey());
                 if (!pool.hasTableRid(cg)) {
+                    boolean tblMaster = isMasterTable(e.getKey(), str);
+                    boolean isView    = isViewTable(e.getKey(), str);
+                    String effectiveType = isView ? "VIEW" : t.tableType();
                     try {
-                        rcmd("INSERT INTO DaliTable SET db_name=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?",
-                                dbName, e.getKey(), t.tableName(), t.schemaGeoid(), t.tableType(),
-                                toJson(new ArrayList<>(t.aliases())), t.columnCount());
+                        rcmd("INSERT INTO DaliTable SET db_name=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
+                                dbName, e.getKey(), t.tableName(), t.schemaGeoid(), effectiveType,
+                                toJson(new ArrayList<>(t.aliases())), t.columnCount(),
+                                tblMaster ? MASTER : RECONSTRUCTED);
                         pool.putTableRid(cg, cg);
                         newTableGeoids.add(e.getKey());
                     } catch (RuntimeException ex) {
                         String msg = ex.getMessage() != null ? ex.getMessage() : "";
-                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                             pool.putTableRid(cg, cg);
                             logger.debug("[pool] DaliTable '{}' already exists in db '{}' — reusing", e.getKey(), dbName);
                         } else throw ex;
                     }
+                } else if (isMasterTable(e.getKey(), str)) {
+                    // upgrade reconstructed → master if DDL now confirms this table
+                    rcmd("UPDATE DaliTable SET data_source=? WHERE db_name=? AND table_geoid=? AND (data_source IS NULL OR data_source <> ?)",
+                            MASTER, dbName, e.getKey(), MASTER);
                 }
             }
 
@@ -1136,21 +1427,36 @@ class RemoteWriter {
                 ColumnInfo c = e.getValue();
                 String cg = pool.canonicalCol(c.getTableGeoid(), c.getColumnName());
                 if (!pool.hasColumnRid(cg)) {
+                    boolean colMaster = isMasterTable(c.getTableGeoid(), str);
                     try {
-                        rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?",
+                        rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
                                 dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                                 c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                                 c.getOrdinalPosition(),
-                                toJson(new ArrayList<>(c.getUsedInStatements())));
+                                toJson(new ArrayList<>(c.getUsedInStatements())),
+                                colMaster ? MASTER : RECONSTRUCTED,
+                                c.getDataType(), c.isRequired(), c.getDefaultValue(),
+                                c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
                         pool.putColumnRid(cg, cg);
                         newColumnGeoids.add(e.getKey());
                     } catch (RuntimeException ex) {
                         String msg = ex.getMessage() != null ? ex.getMessage() : "";
-                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key")) {
+                        if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                             pool.putColumnRid(cg, cg);
                             logger.debug("[pool] DaliColumn '{}' already exists in db '{}' — reusing", e.getKey(), dbName);
+                            if (c.isPk() || c.isFk()) {
+                                try {
+                                    rcmd("UPDATE DaliColumn SET is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name=? AND column_geoid=? AND (is_pk = false AND is_fk = false)",
+                                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), dbName, e.getKey());
+                                } catch (Exception upEx) {
+                                    logger.warn("[pool] Failed to update PK/FK for DaliColumn '{}': {}", e.getKey(), upEx.getMessage());
+                                }
+                            }
                         } else throw ex;
                     }
+                } else if (isMasterTable(c.getTableGeoid(), str)) {
+                    rcmd("UPDATE DaliColumn SET data_source=? WHERE db_name=? AND column_geoid=? AND (data_source IS NULL OR data_source <> ?)",
+                            MASTER, dbName, e.getKey(), MASTER);
                 }
             }
 
@@ -1224,18 +1530,30 @@ class RemoteWriter {
 
         } else {
             // ── Ad-hoc mode ──────────────────────────────────────────────────────────
-            // Pre-insert DaliSchema vertices individually with duplicate-key resilience.
-            // Without this, two files referencing the same schema (e.g. CRM) would both try
-            // to INSERT DaliSchema in their respective batches → DuplicatedKeyException.
+            // Pre-insert DaliSchema, DaliTable, DaliColumn individually with duplicate-key
+            // resilience. Without this, two files referencing the same canonical object
+            // (schema, table, column) would both try to INSERT in their respective batches
+            // → DuplicatedKeyException on the unique (db_name, geoid) index.
+            // For master objects (DDL session), pre-insertion also upgrades data_source.
             AdHocInsertResult adHoc = preInsertAdHocSchemas(sid, str);
+            // All canonical objects are now pre-inserted → their RIDs go into canonicalRids.
+            // The batch factory skips DaliSchema/DaliTable/DaliColumn vertices but still
+            // creates CONTAINS_TABLE and HAS_COLUMN edges using the actual DB RIDs.
             builder = JsonlBatchBuilder.buildFromResult(sid, result,
                     adHoc.rids().isEmpty() ? null : adHoc.rids());
 
-            // Register schema new/dup counts (Table/Column duplicates are tracked in the factory
-            // via recordDuplicate; new Tables/Columns are tracked via appendVertex).
+            // Register canonical type stats (pre-inserted outside the batch).
             for (String geoid : str.getSchemas().keySet()) {
                 if (adHoc.newSchemaGeoids().contains(geoid)) builder.recordInserted("DaliSchema");
                 else builder.recordDuplicate("DaliSchema");
+            }
+            for (String geoid : str.getTables().keySet()) {
+                if (adHoc.newTableGeoids().contains(geoid)) builder.recordInserted("DaliTable");
+                else builder.recordDuplicate("DaliTable");
+            }
+            for (String geoid : str.getColumns().keySet()) {
+                if (adHoc.newColumnGeoids().contains(geoid)) builder.recordInserted("DaliColumn");
+                else builder.recordDuplicate("DaliColumn");
             }
         }
 
@@ -1243,6 +1561,47 @@ class RemoteWriter {
         logger.debug("Batch payload: {} vertices, {} edges, {} dropped, {} bytes",
                 builder.vertexCount(), builder.edgeCount(), builder.droppedEdgeCount(), payload.length());
         client.send(payload, sid);
+
+        // Post-batch: constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, IS_PK_COLUMN,
+        // IS_FK_COLUMN, REFERENCES_TABLE, REFERENCES_COLUMN).
+        // Must run AFTER client.send() because DaliPrimaryKey/DaliForeignKey vertices
+        // are inserted by the batch and their RIDs are only available afterward.
+        if (str.getConstraints() != null && !str.getConstraints().isEmpty()) {
+            Map<String, String> constraintRids = buildConstraintRidMap(sid);
+            Map<String, String> tblRids  = pool != null
+                    ? buildRidMapByField("DaliTable",  "table_geoid",  "db_name", dbName)
+                    : buildRidMap("DaliTable",  "table_geoid", sid);
+            Map<String, String> colRids  = pool != null
+                    ? buildRidMapByField("DaliColumn", "column_geoid", "db_name", dbName)
+                    : buildRidMap("DaliColumn", "column_geoid", sid);
+            for (var e : str.getConstraints().entrySet()) {
+                ConstraintInfo c = e.getValue();
+                String constraintRid = constraintRids.get(e.getKey());
+                if (constraintRid == null) continue;
+                // HAS_PRIMARY_KEY / HAS_FOREIGN_KEY: host table → constraint
+                String hostRid = tblRids.get(c.getHostTableGeoid());
+                if (hostRid != null)
+                    edgeByRid(c.isPrimaryKey() ? "HAS_PRIMARY_KEY" : "HAS_FOREIGN_KEY",
+                            hostRid, constraintRid, sid);
+                // IS_PK_COLUMN / IS_FK_COLUMN: constraint → column (ordered)
+                String colEdge = c.isPrimaryKey() ? "IS_PK_COLUMN" : "IS_FK_COLUMN";
+                for (int i = 0; i < c.getColumnNames().size(); i++) {
+                    String colRid = colRids.get(c.getHostTableGeoid() + "." + c.getColumnNames().get(i));
+                    if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                }
+                // REFERENCES_TABLE + REFERENCES_COLUMN (FK only)
+                if (c.isForeignKey() && c.getRefTableGeoid() != null) {
+                    String refTblRid = tblRids.get(c.getRefTableGeoid());
+                    if (refTblRid != null) edgeByRid("REFERENCES_TABLE", constraintRid, refTblRid, sid);
+                    for (int i = 0; i < c.getRefColumnNames().size(); i++) {
+                        String refColRid = colRids.get(c.getRefTableGeoid() + "." + c.getRefColumnNames().get(i));
+                        if (refColRid != null) edgeByRid("REFERENCES_COLUMN", constraintRid, refColRid, sid, "order_id", i + 1);
+                    }
+                }
+            }
+            logger.debug("Constraint edges: {} constraints processed (PK/FK/IS_PK/IS_FK/REF)",
+                    constraintRids.size());
+        }
 
         // Post-batch: DaliSnippet (document type — batch endpoint rejects @type "document")
         for (var e : str.getStatements().entrySet()) {
@@ -1342,9 +1701,16 @@ class RemoteWriter {
                 }
             }
         }
-        logger.warn("Remote cmd FAILED: {} — {}",
-                sqlTemplate.substring(0, Math.min(sqlTemplate.length(), 100)),
-                lastEx != null ? lastEx.getMessage() : "unknown");
+        String errMsg = lastEx != null ? lastEx.getMessage() : "unknown";
+        boolean isDuplicateKey = errMsg.contains("Duplicated key") || errMsg.contains("DuplicatedKeyException") || errMsg.contains("Found duplicate key");
+        if (isDuplicateKey) {
+            logger.debug("Remote cmd dup-key: {} — {}",
+                    sqlTemplate.substring(0, Math.min(sqlTemplate.length(), 100)), errMsg);
+        } else {
+            logger.warn("Remote cmd FAILED: {} — {}",
+                    sqlTemplate.substring(0, Math.min(sqlTemplate.length(), 100)), errMsg);
+        }
+        throw new RuntimeException("Remote cmd FAILED: " + errMsg, lastEx);
     }
 
     private void edgeByRid(String edgeType, String fromRid, String toRid, String sid) {

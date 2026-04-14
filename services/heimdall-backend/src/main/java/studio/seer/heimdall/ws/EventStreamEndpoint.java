@@ -2,6 +2,7 @@ package studio.seer.heimdall.ws;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.websockets.next.OnClose;
+import io.quarkus.websockets.next.OnError;
 import io.quarkus.websockets.next.OnOpen;
 import io.quarkus.websockets.next.WebSocket;
 import io.quarkus.websockets.next.WebSocketConnection;
@@ -94,6 +95,22 @@ public class EventStreamEndpoint {
     public void onClose(WebSocketConnection connection) {
         LOG.infof("WebSocket disconnected: %s", connection.id());
         cleanup(connection.id());
+    }
+
+    /**
+     * Handles abrupt client disconnects (e.g. browser tab close / refresh on Windows).
+     * Windows WSAECONNRESET surfaces as IOException "An existing connection was forcibly
+     * closed by the remote host" — this is normal and should not be logged as ERROR.
+     */
+    @OnError
+    public void onError(WebSocketConnection connection, Throwable error) {
+        cleanup(connection.id());
+        if (error instanceof java.io.IOException) {
+            LOG.debugf("WebSocket %s closed abruptly (client disconnect): %s",
+                       connection.id(), error.getMessage());
+        } else {
+            LOG.errorf("WebSocket %s unhandled error: %s", connection.id(), error.getMessage());
+        }
     }
 
     private void cleanup(String connectionId) {

@@ -29,11 +29,13 @@ public class KnotResource {
     public Uni<List<KnotSession>> knotSessions() {
         long start = System.currentTimeMillis();
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
-                null, null, 0, Map.of("op", "knotSessions"));
+                null, null, 0, Map.of("op", "knotSessions", "call", "knotSessions()"));
         return knotService.knotSessions()
                 .invoke(sessions -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
                         null, null, System.currentTimeMillis() - start,
-                        Map.of("op", "knotSessions", "count", sessions != null ? sessions.size() : 0)));
+                        Map.of("op", "knotSessions",
+                               "count", sessions != null ? sessions.size() : 0,
+                               "call", "knotSessions() → " + (sessions != null ? sessions.size() : 0) + " sessions")));
     }
 
     @Query("knotReport")
@@ -45,9 +47,39 @@ public class KnotResource {
     ) {
         long start = System.currentTimeMillis();
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
-                null, null, 0, Map.of("op", "knotReport", "sessionId", sessionId != null ? sessionId : ""));
+                null, null, 0,
+                Map.of("op", "knotReport", "sessionId", sessionId != null ? sessionId : "",
+                       "call", "knotReport(sessionId=" + (sessionId != null ? sessionId : "") + ")"));
         return knotService.knotReport(sessionId)
                 .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
-                        null, null, System.currentTimeMillis() - start, Map.of("op", "knotReport")));
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotReport",
+                               "sessionId", sessionId != null ? sessionId : "",
+                               "call", "knotReport(sessionId=" + (sessionId != null ? sessionId : "") + ")")));
+    }
+
+    @Query("knotTableDetail")
+    @Description("KNOT — lazy column detail for one table: PK/FK/type/default + SQL snippet. Role: viewer+")
+    public Uni<KnotTableDetail> knotTableDetail(
+        @Name("sessionId")
+        @Description("session_id of the DaliSession — used to scope snippet lookup")
+        String sessionId,
+        @Name("tableGeoid")
+        @Description("table_geoid of the DaliTable vertex")
+        String tableGeoid
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "knotTableDetail",
+                       "call", "knotTableDetail(sessionId=" + (sessionId != null ? sessionId : "")
+                               + ", tableGeoid=" + (tableGeoid != null ? tableGeoid : "") + ")"));
+        return knotService.knotTableDetail(sessionId, tableGeoid)
+                .invoke(detail -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotTableDetail",
+                               "tableGeoid", tableGeoid != null ? tableGeoid : "",
+                               "call", "knotTableDetail(tableGeoid=" + (tableGeoid != null ? tableGeoid : "")
+                                       + ") → " + (detail != null ? detail.columns().size() : 0) + " cols")));
     }
 }

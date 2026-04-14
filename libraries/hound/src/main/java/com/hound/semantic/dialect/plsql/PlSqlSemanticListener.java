@@ -1427,6 +1427,7 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (fullName == null || fullName.isBlank()) return;
         base.onAlterTableEnter(fullName);
         base.onStatementEnter("ALTER_TABLE", extract(ctx), getStartLine(ctx), getEndLine(ctx));
+        base.registerDdlTableAsSource();
     }
 
     @Override
@@ -1436,16 +1437,182 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     }
 
     /**
+     * T14 (Step 1): Creates a statement scope for CREATE INDEX so that column-name atoms
+     * in the index column list are attached to a statement and can be resolved via the
+     * implicit-table strategy (the indexed table is registered as source).
+     */
+    @Override
+    public void enterCreate_index(PlSqlParser.Create_indexContext ctx) {
+        if (ctx == null) return;
+        String tableRef = null;
+        if (ctx.table_index_clause() != null && ctx.table_index_clause().tableview_name() != null) {
+            tableRef = BaseSemanticListener.cleanIdentifier(
+                    ctx.table_index_clause().tableview_name().getText());
+        } else if (ctx.bitmap_join_index_clause() != null
+                && !ctx.bitmap_join_index_clause().tableview_name().isEmpty()) {
+            tableRef = BaseSemanticListener.cleanIdentifier(
+                    ctx.bitmap_join_index_clause().tableview_name().get(0).getText());
+        }
+        base.onCreateIndexEnter(tableRef, extract(ctx), getStartLine(ctx), getEndLine(ctx));
+    }
+
+    @Override
+    public void exitCreate_index(PlSqlParser.Create_indexContext ctx) {
+        base.onStatementExit();
+    }
+
+    /**
      * T14: Fires for every column_definition in the parse tree.
      * Only acts when inside a DDL context (enterCreate_table or enterAlter_table set ddl_table_geoid).
+     * Extracts column name, DDL data type, NOT NULL constraint, and DEFAULT expression.
+     *
+     * <p>Atom suppression: DEFAULT expressions contain atom nodes (literals, pseudocolumns like USER,
+     * SYSTIMESTAMP, etc.). BaseSemanticListener.addAtom() suppresses these when ddl_table_geoid is set,
+     * so no DaliAtom lineage records are created for DDL default values.</p>
      */
     @Override
     public void enterColumn_definition(PlSqlParser.Column_definitionContext ctx) {
+        // Suppress atoms for the entire column definition sub-tree (DEFAULT expressions,
+        // inline constraints, data type tokens). Structural info is extracted explicitly below.
+        base.setDdlAtomCtx("SUPPRESS");
         if (ctx == null || ctx.column_name() == null) return;
         String colName = BaseSemanticListener.cleanColumnName(ctx.column_name().getText());
-        if (colName != null && !colName.isBlank()) {
-            base.onDdlColumnDefinition(colName);
+        if (colName == null || colName.isBlank()) return;
+
+        // Extract data type: prefer datatype() (e.g. VARCHAR2, NUMBER), fall back to type_name()
+        // (user-defined / package types like SYS.XMLTYPE or MY_SCHEMA.MY_TYPE).
+        String dataType = null;
+        if (ctx.datatype() != null) {
+            dataType = ctx.datatype().getText();
+        } else if (ctx.type_name() != null) {
+            dataType = ctx.type_name().getText();
         }
+        if (dataType != null) dataType = dataType.toUpperCase();
+
+        // Extract DEFAULT expression text (e.g. "'N'", "SYSTIMESTAMP", "USER", "SYS_GUID()").
+        // ctx.expression() is the single ExpressionContext child for the DEFAULT value.
+        String defaultValue = null;
+        if (ctx.DEFAULT() != null && ctx.expression() != null) {
+            defaultValue = ctx.expression().getText().toUpperCase();
+        }
+
+        // Detect NOT NULL constraint from inline_constraint list.
+        // ic.NOT() != null && ic.NULL_() != null → NOT NULL_ in grammar.
+        boolean isRequired = false;
+        for (PlSqlParser.Inline_constraintContext ic : ctx.inline_constraint()) {
+            if (ic.NOT() != null && ic.NULL_() != null) {
+                isRequired = true;
+                break;
+            }
+        }
+
+        base.onDdlColumnDefinition(colName, dataType, isRequired, defaultValue);
+    }
+
+    @Override
+    public void exitColumn_definition(PlSqlParser.Column_definitionContext ctx) {
+        base.setDdlAtomCtx(null);  // restore atom creation for out-of-line constraints
+    }
+
+    /**
+     * Suppresses atoms inside REFERENCES ... (table + column list) — the FK target info is
+     * already captured structurally via ConstraintInfo / REFERENCES_TABLE / REFERENCES_COLUMN edges.
+     * Only active in DDL context to avoid suppressing SELECT-clause references.
+     */
+    @Override
+    public void enterReferences_clause(PlSqlParser.References_clauseContext ctx) {
+        if (base.isInDdlContext()) base.setDdlAtomCtx("SUPPRESS");
+    }
+
+    @Override
+    public void exitReferences_clause(PlSqlParser.References_clauseContext ctx) {
+        if (base.isInDdlContext()) base.setDdlAtomCtx(null);
+    }
+
+    // =========================================================================
+    // Out-of-line constraints (PK, FK, UNIQUE, CHECK)
+    // =========================================================================
+
+    /**
+     * Handles out_of_line_constraint inside ALTER TABLE … ADD CONSTRAINT or CREATE TABLE.
+     * Currently processes PRIMARY KEY and FOREIGN KEY; UNIQUE and CHECK are recognized but
+     * not yet persisted (deferred).
+     *
+     * <p>Only fires when ddl_table_geoid is set (i.e. inside a DDL context).
+     * BaseSemanticListener.onPrimaryKeyConstraint / onForeignKeyConstraint handle geoid
+     * computation and builder registration.</p>
+     */
+    @Override
+    public void enterOut_of_line_constraint(PlSqlParser.Out_of_line_constraintContext ctx) {
+        if (ctx == null) return;
+
+        // Must be inside a DDL context (ALTER TABLE or CREATE TABLE sets ddl_table_geoid)
+        // We check via the listener methods — they will guard internally.
+
+        // ── PRIMARY KEY ──────────────────────────────────────────────────────
+        if (ctx.PRIMARY() != null && ctx.KEY() != null) {
+            String constraintName = null;
+            if (ctx.constraint_name() != null) {
+                constraintName = BaseSemanticListener.cleanIdentifier(ctx.constraint_name().getText());
+            }
+            // Columns are direct children of out_of_line_constraint (not via paren_column_list)
+            // Grammar: PRIMARY KEY '(' column_name (',' column_name)* ')'
+            List<String> pkColumns = new ArrayList<>();
+            for (PlSqlParser.Column_nameContext cn : ctx.column_name()) {
+                String name = BaseSemanticListener.cleanColumnName(cn.getText());
+                if (name != null && !name.isBlank()) pkColumns.add(name.toUpperCase());
+            }
+            base.onPrimaryKeyConstraint(constraintName, pkColumns);
+            return;
+        }
+
+        // ── FOREIGN KEY ──────────────────────────────────────────────────────
+        if (ctx.foreign_key_clause() != null) {
+            String constraintName = null;
+            if (ctx.constraint_name() != null) {
+                constraintName = BaseSemanticListener.cleanIdentifier(ctx.constraint_name().getText());
+            }
+
+            PlSqlParser.Foreign_key_clauseContext fkCtx = ctx.foreign_key_clause();
+
+            // FK columns (in the host table)
+            List<String> fkColumns = extractColumnList(fkCtx.paren_column_list());
+
+            // References clause
+            PlSqlParser.References_clauseContext refCtx = fkCtx.references_clause();
+            if (refCtx == null) return;
+
+            String refTableRaw = refCtx.tableview_name() != null
+                    ? refCtx.tableview_name().getText() : null;
+            List<String> refColumns = extractColumnList(refCtx.paren_column_list());
+
+            // ON DELETE action — from references_clause (ON DELETE CASCADE / SET NULL_)
+            String onDelete = null;
+            if (refCtx.DELETE() != null) {
+                if (refCtx.CASCADE() != null)      onDelete = "CASCADE";
+                else if (refCtx.NULL_() != null)   onDelete = "SET NULL";
+            }
+            // Fallback: check on_delete_clause at the end of foreign_key_clause
+            if (onDelete == null && fkCtx.on_delete_clause() != null) {
+                PlSqlParser.On_delete_clauseContext odCtx = fkCtx.on_delete_clause();
+                if (odCtx.CASCADE() != null)      onDelete = "CASCADE";
+                else if (odCtx.NULL_() != null)   onDelete = "SET NULL";
+            }
+
+            base.onForeignKeyConstraint(constraintName, fkColumns, refTableRaw, refColumns, onDelete);
+        }
+        // UNIQUE and CHECK: deferred (KI-005)
+    }
+
+    /** Extracts ordered column names from a paren_column_list context. */
+    private List<String> extractColumnList(PlSqlParser.Paren_column_listContext pclCtx) {
+        List<String> cols = new ArrayList<>();
+        if (pclCtx == null || pclCtx.column_list() == null) return cols;
+        for (PlSqlParser.Column_nameContext cn : pclCtx.column_list().column_name()) {
+            String name = BaseSemanticListener.cleanColumnName(cn.getText());
+            if (name != null && !name.isBlank()) cols.add(name.toUpperCase());
+        }
+        return cols;
     }
 
     // =========================================================================

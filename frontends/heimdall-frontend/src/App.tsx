@@ -348,7 +348,7 @@ function AppLayout() {
           textTransform: 'uppercase',
           flexShrink:    0,
         }}>
-          HEIMDALL
+          HEIMÐALLR
         </span>
 
         {/* Nav links */}
@@ -450,7 +450,7 @@ export default function App() {
             <Route path="events"    element={<EventStreamPage />} />
             <Route path="demodebug" element={<ControlsPage />} />
             <Route path="users"     element={<UsersPage />} />
-            <Route path="*"         element={<Navigate to="services" replace />} />
+            <Route path="*"         element={<Navigate to="/services" replace />} />
           </Route>
         </Route>
       </Routes>

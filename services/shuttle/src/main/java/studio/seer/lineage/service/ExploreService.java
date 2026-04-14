@@ -174,7 +174,8 @@ public class ExploreService {
         );
 
         return arcade.cypher(cypher, params)
-            .map(rows -> buildResult(rows, schemaName, "DaliSchema"));
+            .map(rows -> buildResult(rows, schemaName, "DaliSchema"))
+            .flatMap(this::enrichDataSource);
     }
 
     // ── Database scope (all schemas in a DB) ─────────────────────────────────
@@ -278,7 +279,8 @@ public class ExploreService {
             """;
 
         return arcade.cypher(cypher, Map.of("dbName", dbName))
-            .map(rows -> buildResult(rows, dbName, "DaliDatabase"));
+            .map(rows -> buildResult(rows, dbName, "DaliDatabase"))
+            .flatMap(this::enrichDataSource);
     }
 
     // ── Statement columns (second-pass enrichment) ───────────────────────────
@@ -389,7 +391,8 @@ public class ExploreService {
             """;
 
         return arcade.cypher(cypher, Map.of("pkg", packageName))
-            .map(rows -> buildResult(rows, packageName, "DaliPackage"));
+            .map(rows -> buildResult(rows, packageName, "DaliPackage"))
+            .flatMap(this::enrichDataSource);
     }
 
     // ── RID-based (generic, bidirectional) ───────────────────────────────────
@@ -527,7 +530,8 @@ public class ExploreService {
                 for (Object raw : results)
                     all.addAll((List<Map<String, Object>>) raw);
                 return buildResult(all, rid, "");
-            });
+            })
+            .flatMap(this::enrichDataSource);
     }
 
     // ── Result builder ────────────────────────────────────────────────────────
@@ -562,8 +566,8 @@ public class ExploreService {
 
             if (rootId == null) rootId = srcId;
 
-            nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of()));
-            nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, Map.of()));
+            nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of(), ""));
+            nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, Map.of(), ""));
 
             String edgeId = srcId + "__" + edgeType + "__" + tgtId;
             if (edgeIdsSeen.add(edgeId)) {
@@ -595,21 +599,62 @@ public class ExploreService {
             String srcId    = str(n, "@rid");
             String srcType  = str(n, "@type");
             String srcLabel = nodeLabel(n);
+            String srcDs    = str(n, "data_source");
             String tgtId    = str(m, "@rid");
             String tgtType  = str(m, "@type");
             String tgtLabel = nodeLabel(m);
             String tgtScope = str(m, "schema_geoid");
+            String tgtDs    = str(m, "data_source");
             String edgeType = str(r, "@type");
             String edgeId   = str(r, "@rid");
             if (edgeId.isBlank()) edgeId = srcId + "__" + edgeType + "__" + tgtId;
 
-            nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of()));
-            nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, Map.of()));
+            nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of(), srcDs));
+            nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, Map.of(), tgtDs));
             edges.add(new GraphEdge(edgeId, srcId, tgtId, edgeType));
         }
 
         boolean hasMore = nodesById.size() >= NODE_LIMIT || rows.size() >= NODE_LIMIT;
         return new ExploreResult(new ArrayList<>(nodesById.values()), edges, hasMore);
+    }
+
+    /**
+     * Secondary enrichment: fetches data_source for all DaliTable nodes in the result.
+     * Public so LineageService can chain it after buildResult().
+     *
+     * <p>Uses UNWIND + single-value id(t) = rid instead of id(t) IN $ids to avoid
+     * ArcadeDB Cypher type-mismatch: id() returns a LINK type in WHERE context, which
+     * does not compare equal to String list elements in the IN operator.
+     */
+    public Uni<ExploreResult> enrichDataSource(ExploreResult result) {
+        List<String> tableIds = result.nodes().stream()
+                .filter(n -> "DaliTable".equals(n.type()))
+                .map(GraphNode::id)
+                .toList();
+        if (tableIds.isEmpty()) return Uni.createFrom().item(result);
+        String cypher = """
+                UNWIND $ids AS rid
+                MATCH (t:DaliTable)
+                WHERE id(t) = rid
+                RETURN id(t) AS id, coalesce(t.data_source, '') AS ds
+                """;
+        return arcade.cypher(cypher, Map.of("ids", tableIds))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> {
+                    Map<String, String> dsMap = new java.util.HashMap<>();
+                    for (Map<String, Object> row : rows) {
+                        String id = str(row, "id");
+                        String ds = str(row, "ds");
+                        if (!id.isBlank() && !ds.isBlank()) dsMap.put(id, ds);
+                    }
+                    if (dsMap.isEmpty()) return result;
+                    List<GraphNode> enriched = result.nodes().stream()
+                            .map(n -> dsMap.containsKey(n.id())
+                                    ? new GraphNode(n.id(), n.type(), n.label(), n.scope(), n.meta(), dsMap.get(n.id()))
+                                    : n)
+                            .toList();
+                    return new ExploreResult(enriched, result.edges(), result.hasMore());
+                });
     }
 
     /** Best-effort human label from any vertex property map. */

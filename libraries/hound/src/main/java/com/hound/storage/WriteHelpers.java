@@ -31,14 +31,31 @@ final class WriteHelpers {
     // ── data_source helpers ─────────────────────────────────────────────────
 
     /**
-     * Returns true if this table/view is *defined* in the current session
-     * (i.e. targeted by a DDL statement — CREATE TABLE/VIEW/etc.).
-     * False = table is only *referenced* (reconstructed from DML/PL-SQL).
+     * Returns true if this table/view is *defined* in the current session via DDL
+     * (CREATE TABLE, ALTER TABLE, CREATE VIEW, etc.) — data_source='master'.
+     * False = table is only *referenced* in DML/PL-SQL — data_source='reconstructed'.
+     *
+     * <p>Uses Structure.getDdlTableGeoids() — a dedicated Set populated by
+     * BaseSemanticListener.initDdlTable() at parse time. Does NOT scan StatementInfo.targetTables.
      */
     static boolean isMasterTable(String tableGeoid, Structure str) {
         if (str == null || tableGeoid == null) return false;
+        return str.getDdlTableGeoids().contains(tableGeoid);
+    }
+
+    /**
+     * Returns true if any {@code CREATE_VIEW} statement in this session targets
+     * the given table geoid.
+     *
+     * <p>Used to override {@code table_type = 'VIEW'} when the parser first sees
+     * a view name only via DML references (creating it as {@code reconstructed / TABLE})
+     * and later encounters the {@code CREATE VIEW} definition in the same session.
+     */
+    static boolean isViewTable(String tableGeoid, Structure str) {
+        if (str == null || tableGeoid == null) return false;
         return str.getStatements().values().stream()
-                .anyMatch(s -> isDdl(s.getType()) && s.getTargetTables().containsKey(tableGeoid));
+                .anyMatch(s -> "CREATE_VIEW".equals(s.getType())
+                        && s.getTargetTables().containsKey(tableGeoid));
     }
 
     // ── JSON / hash / string ────────────────────────────────────────────────

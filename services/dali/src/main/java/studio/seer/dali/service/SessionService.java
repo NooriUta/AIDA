@@ -2,6 +2,7 @@ package studio.seer.dali.service;
 
 import com.hound.api.ParseResult;
 import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Instance;
@@ -9,7 +10,9 @@ import jakarta.inject.Inject;
 import org.jobrunr.scheduling.JobScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.dali.heimdall.HeimdallEmitter;
 import studio.seer.dali.job.ParseJob;
+import studio.seer.dali.storage.FriggSchemaInitializer;
 import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.FileResult;
 import studio.seer.shared.ParseSessionInput;
@@ -25,15 +28,21 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+// BUG-SS-017: @Priority(20) guarantees this bean's StartupEvent observer fires AFTER
+// FriggSchemaInitializer (@Priority(10)) and JobRunrLifecycle (@Priority(15)),
+// so the schema is ready before we attempt repository.findAll().
 @ApplicationScoped
+@Priority(20)
 public class SessionService {
 
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
     // Instance<> defers resolution until first use — JobScheduler is not available
     // at StartupEvent time (JobRunrLifecycle initialises it in its own onStart handler).
-    @Inject Instance<JobScheduler> jobScheduler;
-    @Inject SessionRepository      repository;
+    @Inject Instance<JobScheduler>   jobScheduler;
+    @Inject SessionRepository        repository;
+    @Inject HeimdallEmitter          emitter;
+    @Inject FriggSchemaInitializer   schemaInitializer;   // BUG-SS-012: guard enqueue()
 
     private final ConcurrentMap<String, Session> sessions = new ConcurrentHashMap<>();
 
@@ -41,17 +50,17 @@ public class SessionService {
 
     /**
      * Loads persisted sessions from FRIGG into the in-memory cache on startup.
-     * Runs after FriggSchemaInitializer (both observe StartupEvent; schema init
-     * is a separate bean that fires first in practice since it is declared earlier,
-     * but the load is wrapped in try-catch so it degrades gracefully if FRIGG is down).
+     * Guaranteed to run after {@link FriggSchemaInitializer} ({@code @Priority(10)}) and
+     * {@code JobRunrLifecycle} ({@code @Priority(15)}) due to {@code @Priority(20)} on this bean.
      */
     void onStart(@Observes StartupEvent ev) {
         try {
             List<Session> persisted = repository.findAll(500);
             int loaded = 0, reset = 0;
             for (Session s : persisted) {
-                // JobRunr uses InMemoryStorageProvider — all queued jobs are lost on restart.
-                // Mark any QUEUED or RUNNING sessions as FAILED so they don't get stuck forever.
+                // JobRunr jobs survived the restart (ArcadeDB-backed), but sessions in
+                // QUEUED or RUNNING state may have been interrupted mid-execution.
+                // Mark them FAILED so they don't get stuck forever.
                 if (s.status() == SessionStatus.QUEUED || s.status() == SessionStatus.RUNNING) {
                     Session failed = new Session(
                             s.id(), SessionStatus.FAILED,
@@ -62,7 +71,7 @@ public class SessionService {
                             s.vertexStats(),
                             s.resolutionRate(), s.durationMs(),
                             s.warnings(),
-                            List.of("Server restarted — job was not executed (in-memory queue lost)"),
+                            List.of("Server restarted — session was QUEUED/RUNNING and could not be recovered"),
                             s.fileResults(),
                             false); // will be set true after persist()
                     sessions.put(failed.id(), failed);
@@ -93,6 +102,12 @@ public class SessionService {
 
     /** Enqueue a new parse session. */
     public Session enqueue(ParseSessionInput input) {
+        // BUG-SS-012: refuse new jobs if the FRIGG schema is not ready
+        if (!schemaInitializer.isSchemaReady()) {
+            throw new IllegalStateException(
+                "FRIGG schema is not fully initialised — Dali started with a broken FRIGG connection. " +
+                "Check startup logs and restart the service.");
+        }
         // Concurrency guard for clearBeforeWrite operations
         if (!input.preview()) {
             if (input.clearBeforeWrite()) {
@@ -130,7 +145,16 @@ public class SessionService {
                 List.of(), List.of(), List.of(), false);
         sessions.put(sessionId, session);
         persist(session);
-        jobScheduler.get().<ParseJob>enqueue(j -> j.execute(sessionId, input));
+        emitter.jobEnqueued(sessionId, input.source(), input.dialect());
+        // BUG-SS-011: jobScheduler producer throws IllegalStateException if JobRunr
+        // failed to initialise at startup; surface as a meaningful error rather than NPE.
+        try {
+            jobScheduler.get().<ParseJob>enqueue(j -> j.execute(sessionId, input));
+        } catch (Exception e) {
+            log.error("Failed to enqueue job for session {}: {}", sessionId, e.getMessage());
+            throw new IllegalStateException(
+                "Job scheduling unavailable (JobRunr did not initialise — check startup logs): " + e.getMessage(), e);
+        }
         log.info("Session enqueued: id={} dialect={} source={}", sessionId, input.dialect(), input.source());
         return session;
     }

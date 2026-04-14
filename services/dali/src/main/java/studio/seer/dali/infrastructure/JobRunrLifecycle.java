@@ -2,27 +2,29 @@ package studio.seer.dali.infrastructure;
 
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Produces;
 import jakarta.enterprise.inject.spi.CDI;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.jobrunr.configuration.JobRunr;
 import org.jobrunr.configuration.JobRunrConfiguration;
 import org.jobrunr.scheduling.JobScheduler;
 import org.jobrunr.server.JobActivator;
-import org.jobrunr.storage.InMemoryStorageProvider;
 import org.jobrunr.storage.StorageProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.dali.storage.ArcadeDbStorageProvider;
 
 /**
  * Single-responsibility bean: initialises and tears down all JobRunr infrastructure.
  *
  * <p>Produces:
  * <ul>
- *   <li>{@link StorageProvider} — {@link InMemoryStorageProvider} for dev;
- *       swap to {@code ArcadeDbStorageProvider} when FRIGG is wired.</li>
+ *   <li>{@link StorageProvider} — {@link ArcadeDbStorageProvider} backed by FRIGG
+ *       so job state survives Dali restarts.</li>
  *   <li>{@link JobScheduler} — taken directly from
  *       {@link JobRunrConfiguration#initialize()} so {@code setJobMapper()}
  *       has already been called on the storage provider.</li>
@@ -32,14 +34,16 @@ import org.slf4j.LoggerFactory;
  * {@code @Inject} fields in {@link studio.seer.dali.job.ParseJob} work at
  * execution time.
  */
+// BUG-SS-017: @Priority(15) fires after FriggSchemaInitializer (@Priority(10))
+// but before SessionService (@Priority(20)) so JobRunr is up before sessions reload.
 @ApplicationScoped
+@Priority(15)
 public class JobRunrLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(JobRunrLifecycle.class);
 
-    // Created eagerly — before StartupEvent — so that the @Produces method
-    // can return it without null-checking.
-    private final InMemoryStorageProvider storageProvider = new InMemoryStorageProvider();
+    @Inject
+    ArcadeDbStorageProvider arcadeDbStorageProvider;
 
     private volatile JobRunrConfiguration.JobRunrConfigurationResult jobRunrResult;
 
@@ -48,9 +52,8 @@ public class JobRunrLifecycle {
     @Produces
     @ApplicationScoped
     public StorageProvider storageProvider() {
-        // TODO(Д10 / integration): return new ArcadeDbStorageProvider(friggGateway)
-        log.info("JobRunr: using InMemoryStorageProvider (dev mode — state lost on restart)");
-        return storageProvider;
+        log.info("JobRunr: using ArcadeDbStorageProvider (FRIGG — state persisted across restarts)");
+        return arcadeDbStorageProvider;
     }
 
     /**
@@ -78,12 +81,20 @@ public class JobRunrLifecycle {
                 return CDI.current().select(type).get();
             }
         };
-        jobRunrResult = JobRunr.configure()
-                .useStorageProvider(storageProvider)
-                .useJobActivator(activator)
-                .useBackgroundJobServer()
-                .initialize();
-        log.info("JobRunr: ready — BackgroundJobServer started");
+        try {
+            jobRunrResult = JobRunr.configure()
+                    .useStorageProvider(arcadeDbStorageProvider)
+                    .useJobActivator(activator)
+                    .useBackgroundJobServer()
+                    .initialize();
+            log.info("JobRunr: ready — BackgroundJobServer started");
+        } catch (Exception e) {
+            log.error("JobRunr: initialisation FAILED — job scheduling is unavailable. " +
+                      "Sessions can be accepted but no jobs will be enqueued until Dali restarts. " +
+                      "Cause: {}", e.getMessage(), e);
+            // jobRunrResult stays null; jobScheduler() producer will throw IllegalStateException
+            // on first call, which SessionService.enqueue() surfaces as a 503.
+        }
     }
 
     void onStop(@Observes ShutdownEvent ev) {

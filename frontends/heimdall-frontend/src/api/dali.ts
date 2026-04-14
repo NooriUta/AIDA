@@ -97,3 +97,22 @@ export async function getSessionsArchive(limit = 200): Promise<DaliSession[]> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+export interface YggStats {
+  tables:          number;
+  columns:         number;
+  sessions:        number;
+  statements:      number;
+  routines:        number;
+  atomsTotal:      number;
+  atomsResolved:   number;
+  atomsConstant:   number;
+  atomsUnresolved: number;
+  atomsPending:    number;
+}
+
+export async function getYggStats(): Promise<YggStats> {
+  const res = await fetch(`${BASE}/api/stats`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

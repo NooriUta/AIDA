@@ -1,5 +1,8 @@
 package studio.seer.dali.storage;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import org.jobrunr.jobs.Job;
 import org.jobrunr.jobs.RecurringJob;
 import org.jobrunr.jobs.mappers.JobMapper;
@@ -13,6 +16,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -25,19 +29,8 @@ import java.util.stream.Collectors;
  * {@link Job} serialisation, and {@link JacksonJsonMapper} for other objects
  * ({@link BackgroundJobServerStatus}).
  *
- * <p><b>TODO(integration / Д10):</b> Wire this into
- * {@code JobRunrProducer.storageProvider()} to replace {@code InMemoryStorageProvider}:
- * <pre>{@code
- * @Inject FriggGateway frigg;
- *
- * @Produces @ApplicationScoped
- * public StorageProvider storageProvider() {
- *     return new ArcadeDbStorageProvider(frigg);
- * }
- * }</pre>
- * This class is intentionally NOT a CDI bean ({@code @ApplicationScoped}) to avoid
- * ambiguous-dependency errors while {@code InMemoryStorageProvider} is still active.
  */
+@Singleton
 public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     private static final Logger log = LoggerFactory.getLogger(ArcadeDbStorageProvider.class);
@@ -46,6 +39,12 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     private final JacksonJsonMapper jsonMapper; // for BackgroundJobServerStatus
     private       JobMapper     jobMapper;       // for Job objects — set by JobRunr
 
+    // In-memory metadata store — single-node, no clustering needed.
+    // Stores JobRunrMetadata by composite key "name/owner".
+    // Critical: JobRunr uses "database_version/cluster" to check if data version >= 6.0.0.
+    private final ConcurrentHashMap<String, JobRunrMetadata> metadataStore = new ConcurrentHashMap<>();
+
+    @Inject
     public ArcadeDbStorageProvider(FriggGateway frigg) {
         super(RateLimiter.Builder.rateLimit().withoutLimits());
         this.frigg       = frigg;
@@ -113,10 +112,17 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public int removeTimedOutBackgroundJobServers(Instant heartbeatOlderThan) {
-        List<Map<String, Object>> r = frigg.sql(
-            "DELETE FROM `jobrunr_servers` WHERE lastHeartbeat < :before RETURN BEFORE @rid",
-            Map.of("before", heartbeatOlderThan.toString()));
-        return r != null ? r.size() : 0;
+        // Count then delete — ArcadeDB does not support RETURN BEFORE in DELETE
+        List<Map<String, Object>> cnt = frigg.sql(
+            "SELECT count(*) as cnt FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
+            Map.of("cutoff", heartbeatOlderThan.toString()));
+        int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
+                ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
+        if (count > 0) {
+            frigg.sql("DELETE FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
+                    Map.of("cutoff", heartbeatOlderThan.toString()));
+        }
+        return count;
     }
 
     // ─── Job CRUD ──────────────────────────────────────────────────────────────
@@ -161,6 +167,8 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public List<Job> getJobList(StateName state, AmountRequest amountRequest) {
+        // BUG-SS-013 (rev): AmountRequest in JobRunr 7.3.0 exposes getLimit() only — no getOffset().
+        // ArcadeDB SQL SKIP with named params is unsupported; pagination is handled by JobRunr internally.
         List<Map<String, Object>> rows = frigg.sql(
             "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = :state LIMIT :limit",
             Map.of("state", state.name(), "limit", amountRequest.getLimit()));
@@ -169,9 +177,10 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public List<Job> getJobList(StateName state, Instant updatedBefore, AmountRequest amountRequest) {
+        // BUG-SS-013 (rev): same — getOffset() does not exist in JobRunr 7.3.0 AmountRequest.
         List<Map<String, Object>> rows = frigg.sql(
-            "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :before LIMIT :limit",
-            Map.of("state", state.name(), "before", updatedBefore.toString(),
+            "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :cutoff LIMIT :limit",
+            Map.of("state", state.name(), "cutoff", updatedBefore.toString(),
                    "limit", amountRequest.getLimit()));
         return deserializeJobs(rows);
     }
@@ -179,25 +188,37 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     @Override
     public List<Job> getScheduledJobs(Instant scheduledBefore, AmountRequest amountRequest) {
         List<Map<String, Object>> rows = frigg.sql(
-            "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = 'SCHEDULED' AND scheduledAt < :before LIMIT :limit",
-            Map.of("before", scheduledBefore.toString(), "limit", amountRequest.getLimit()));
+            "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = 'SCHEDULED' AND scheduledAt < :cutoff LIMIT :limit",
+            Map.of("cutoff", scheduledBefore.toString(), "limit", amountRequest.getLimit()));
         return deserializeJobs(rows);
     }
 
     @Override
     public int deletePermanently(UUID id) {
-        List<Map<String, Object>> r = frigg.sql(
-            "DELETE FROM `jobrunr_jobs` WHERE id = :id RETURN BEFORE @rid",
+        // ArcadeDB does not support RETURN BEFORE in DELETE — count then delete
+        List<Map<String, Object>> cnt = frigg.sql(
+            "SELECT count(*) as cnt FROM `jobrunr_jobs` WHERE id = :id",
             Map.of("id", id.toString()));
-        return r != null ? r.size() : 0;
+        int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
+                ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
+        if (count > 0) {
+            frigg.sql("DELETE FROM `jobrunr_jobs` WHERE id = :id", Map.of("id", id.toString()));
+        }
+        return count;
     }
 
     @Override
     public int deleteJobsPermanently(StateName state, Instant updatedBefore) {
-        List<Map<String, Object>> r = frigg.sql(
-            "DELETE FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :before RETURN BEFORE @rid",
-            Map.of("state", state.name(), "before", updatedBefore.toString()));
-        return r != null ? r.size() : 0;
+        List<Map<String, Object>> cnt = frigg.sql(
+            "SELECT count(*) as cnt FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :cutoff",
+            Map.of("state", state.name(), "cutoff", updatedBefore.toString()));
+        int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
+                ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
+        if (count > 0) {
+            frigg.sql("DELETE FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :cutoff",
+                    Map.of("state", state.name(), "cutoff", updatedBefore.toString()));
+        }
+        return count;
     }
 
     @Override
@@ -256,22 +277,27 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public void saveMetadata(JobRunrMetadata metadata) {
-        // stub — metadata used for cluster lock; not critical for single-node
+        String key = metadata.getName() + "/" + metadata.getOwner();
+        metadataStore.put(key, metadata);
+        log.debug("JobRunr: saveMetadata key={} value={}", key, metadata.getValue());
     }
 
     @Override
     public List<JobRunrMetadata> getMetadata(String name) {
-        return List.of();
+        return metadataStore.values().stream()
+                .filter(m -> name.equals(m.getName()))
+                .collect(Collectors.toList());
     }
 
     @Override
     public JobRunrMetadata getMetadata(String name, String owner) {
-        return null;
+        return metadataStore.get(name + "/" + owner);
     }
 
     @Override
     public void deleteMetadata(String name) {
-        // stub
+        metadataStore.entrySet().removeIf(e -> e.getKey().startsWith(name + "/"));
+        log.debug("JobRunr: deleteMetadata name={}", name);
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

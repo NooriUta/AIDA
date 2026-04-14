@@ -4,8 +4,8 @@ import { EventLog }          from '../components/EventLog';
 import { useEventStream }    from '../hooks/useEventStream';
 import type { EventFilter, EventLevel } from 'aida-shared';
 
-// Active: chur, shuttle, heimdall. Deferred: hound (H3.8). Planned: verdandi.
-const COMPONENTS = ['', 'chur', 'shuttle', 'heimdall', 'hound', 'verdandi'];
+// Active: chur, shuttle, heimdall, dali. Deferred: hound (H3.8). Planned: verdandi.
+const COMPONENTS = ['', 'chur', 'shuttle', 'heimdall', 'dali', 'hound', 'verdandi'];
 const LEVELS: Array<'' | EventLevel> = ['', 'INFO', 'WARN', 'ERROR'];
 
 const selectStyle: React.CSSProperties = {
