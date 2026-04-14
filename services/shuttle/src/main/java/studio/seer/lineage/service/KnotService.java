@@ -582,17 +582,36 @@ public class KnotService {
             .toList();
     }
 
-    // ── Snippet by geoid (lazy, called from KNOT inspector on demand) ─────────
+    // ── Snippet by geoid OR RID (lazy, called from KNOT inspector on demand) ──
+    //
+    // The KNOT standalone page passes the real stmt_geoid (from the KnotStatement
+    // batch query). The LOOM canvas inspector uses ArcadeDB RIDs as React Flow
+    // node IDs (see ExploreService projection), so it passes values like
+    // "#25:12304". We accept both:
+    //   - Input starts with '#' → resolve via the DaliStatement RID → stmt_geoid
+    //     → DaliSnippet lookup
+    //   - Anything else → direct DaliSnippet lookup by stmt_geoid
 
-    public Uni<String> knotSnippet(String stmtGeoid) {
-        if (stmtGeoid == null || stmtGeoid.isBlank()) return Uni.createFrom().nullItem();
-        String sql = """
-            SELECT snippet
-            FROM DaliSnippet
-            WHERE stmt_geoid = :geoid
-            LIMIT 1
-            """;
-        return arcade.sql(sql, Map.of("geoid", stmtGeoid))
+    public Uni<String> knotSnippet(String idOrGeoid) {
+        if (idOrGeoid == null || idOrGeoid.isBlank()) return Uni.createFrom().nullItem();
+        boolean isRid = idOrGeoid.startsWith("#");
+        String sql = isRid
+            ? """
+                SELECT snippet
+                FROM DaliSnippet
+                WHERE stmt_geoid = (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid LIMIT 1)
+                LIMIT 1
+                """
+            : """
+                SELECT snippet
+                FROM DaliSnippet
+                WHERE stmt_geoid = :geoid
+                LIMIT 1
+                """;
+        Map<String, Object> params = isRid
+            ? Map.of("rid",   idOrGeoid)
+            : Map.of("geoid", idOrGeoid);
+        return arcade.sql(sql, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.isEmpty() ? null : str(rows.get(0), "snippet"))
             .map(s -> (s == null || s.isBlank()) ? null : s);

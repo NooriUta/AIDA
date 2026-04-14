@@ -516,6 +516,8 @@
     "sql":           "SQL",
     "copySql":       "Copy SQL",
     "copied":        "Copied!",
+    "sqlLoading":    "Loading SQL…",
+    "sqlError":      "Failed to load SQL",
     "joinType":      "Join type",
     "joinLeft":      "Left table",
     "joinRight":     "Right table",

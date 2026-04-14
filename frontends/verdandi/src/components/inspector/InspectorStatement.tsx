@@ -2,6 +2,7 @@ import { memo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
+import { useKnotSnippet } from '../../services/hooks';
 import { InspectorSection, InspectorRow } from './InspectorSection';
 
 interface Props { data: DaliNodeData; nodeId: string }
@@ -103,7 +104,7 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
       </InspectorSection>
 
       {/* ── SQL preview ──────────────────────────────────────────────────────── */}
-      <SqlSection data={data} />
+      <SqlSection data={data} stmtGeoid={nodeId} />
 
       <InspectorSection
         title={`${t('inspector.outputColumns')} (${columns.length})`}
@@ -124,14 +125,35 @@ export const InspectorStatement = memo(({ data, nodeId }: Props) => {
 });
 
 // ── SQL preview section ──────────────────────────────────────────────────────
+//
+// Source of the SQL text, in priority order:
+//   1. data.metadata.sqlText   — pre-loaded from transformExplore (rare)
+//   2. data.metadata.snippet   — same, alternate property name
+//   3. useKnotSnippet(geoid)   — lazy GraphQL fetch from DaliSnippet via
+//                                services/shuttle KnotService.knotSnippet.
+//
+// The DaliStatement's React Flow node id equals the stmt_geoid (see
+// transformExplore.ts where allStmtIds feeds rfNodes[].id), so we pass
+// the inspector's nodeId directly to useKnotSnippet.
 
-function SqlSection({ data }: { data: DaliNodeData }) {
+function SqlSection({ data, stmtGeoid }: { data: DaliNodeData; stmtGeoid: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
-  const sqlText = typeof data.metadata?.sqlText === 'string' ? data.metadata.sqlText
+  const preloaded =
+    typeof data.metadata?.sqlText === 'string' ? data.metadata.sqlText
     : typeof data.metadata?.snippet === 'string' ? data.metadata.snippet
     : '';
+
+  // Fire the backend query only when no pre-loaded snippet is present.
+  // useKnotSnippet caches at staleTime = 5 min, so re-selecting the same
+  // statement within a session does not re-hit the network.
+  const { data: fetched, isFetching, isError } = useKnotSnippet(
+    stmtGeoid,
+    !preloaded && !!stmtGeoid,
+  );
+
+  const sqlText = preloaded || fetched || '';
 
   const handleCopy = useCallback(() => {
     if (!sqlText) return;
@@ -142,7 +164,7 @@ function SqlSection({ data }: { data: DaliNodeData }) {
   }, [sqlText]);
 
   return (
-    <InspectorSection title={t('inspector.sql')} defaultOpen={!!sqlText}>
+    <InspectorSection title={t('inspector.sql')} defaultOpen>
       {sqlText ? (
         <div style={{ position: 'relative' }}>
           <pre style={{
@@ -173,6 +195,14 @@ function SqlSection({ data }: { data: DaliNodeData }) {
           >
             {copied ? t('inspector.copied') : t('inspector.copySql')}
           </button>
+        </div>
+      ) : isFetching ? (
+        <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+          {t('inspector.sqlLoading')}
+        </div>
+      ) : isError ? (
+        <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--err)' }}>
+          {t('inspector.sqlError')}
         </div>
       ) : (
         <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>

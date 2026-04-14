@@ -516,6 +516,8 @@
     "sql":           "SQL",
     "copySql":       "Скопировать SQL",
     "copied":        "Скопировано!",
+    "sqlLoading":    "Загружаю SQL…",
+    "sqlError":      "Не удалось загрузить SQL",
     "joinType":      "Тип JOIN",
     "joinLeft":      "Левая таблица",
     "joinRight":     "Правая таблица",
