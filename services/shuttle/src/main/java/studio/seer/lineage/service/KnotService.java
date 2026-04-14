@@ -633,7 +633,7 @@ public class KnotService {
 
     public Uni<StatementExtras> knotStatementExtras(String idOrGeoid) {
         if (idOrGeoid == null || idOrGeoid.isBlank())
-            return Uni.createFrom().item(new StatementExtras(List.of(), List.of(), 0));
+            return Uni.createFrom().item(new StatementExtras(List.of(), List.of(), 0, List.of()));
 
         boolean isRid = idOrGeoid.startsWith("#");
 
@@ -709,13 +709,92 @@ public class KnotService {
                 .sorted((a, b) -> Integer.compare(b.count(), a.count()))  // DESC
                 .toList());
 
-        return Uni.combine().all().unis(descendantsUni, atomsUni)
+        // Source tables — DIRECT (root READS_FROM) + SUBQUERY (descendant reads,
+        // hoisted to root). Two Cypher queries combined via Uni.concat.
+
+        // Use Cypher for both — ArcadeDB SQL TRAVERSE doesn't easily join back to
+        // stmt labels. Cypher handles the RID lookup via id() + numeric conversion
+        // is fiddly, so we first resolve the stmt_geoid via SQL if input is a RID.
+
+        Uni<String> geoidUni = isRid
+            ? arcade.sql(
+                "SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid LIMIT 1",
+                Map.of("rid", idOrGeoid))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> rows.isEmpty() ? null : str(rows.get(0), "stmt_geoid"))
+            : Uni.createFrom().item(idOrGeoid);
+
+        Uni<List<SourceTableRef>> sourcesUni = geoidUni.flatMap(rootGeoid -> {
+            if (rootGeoid == null) return Uni.createFrom().item(List.<SourceTableRef>of());
+
+            // Direct reads of the root stmt itself — Cypher keeps it clean.
+            // id(t) in ArcadeDB Cypher returns the '#cluster:pos' string.
+            Uni<List<SourceTableRef>> directUni = arcade.cypher("""
+                    MATCH (s:DaliStatement {stmt_geoid: $geoid})-[:READS_FROM]->(t:DaliTable)
+                    RETURN DISTINCT id(t)         AS tblRid,
+                                    t.table_geoid  AS tableGeoid,
+                                    t.table_name   AS tableName,
+                                    t.schema_geoid AS schemaGeoid
+                    LIMIT 500
+                    """, Map.of("geoid", rootGeoid))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> rows.stream()
+                    .map(r -> new SourceTableRef(
+                        str(r, "tblRid"),
+                        str(r, "tableGeoid"),
+                        str(r, "tableName"),
+                        str(r, "schemaGeoid"),
+                        "DIRECT",
+                        null))
+                    .toList());
+
+            // Hoisted reads — descendant reads a table via CHILD_OF* chain.
+            // sub→root via CHILD_OF*1..30 (child→parent direction), then
+            // sub-[:READS_FROM]->table. Returns which sub attributed the read.
+            Uni<List<SourceTableRef>> hoistedUni = arcade.cypher("""
+                    MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root:DaliStatement {stmt_geoid: $geoid})
+                    MATCH (sub)-[:READS_FROM]->(t:DaliTable)
+                    RETURN DISTINCT id(t)          AS tblRid,
+                                    t.table_geoid  AS tableGeoid,
+                                    t.table_name   AS tableName,
+                                    t.schema_geoid AS schemaGeoid,
+                                    sub.stmt_geoid AS subGeoid
+                    LIMIT 2000
+                    """, Map.of("geoid", rootGeoid))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> rows.stream()
+                    .map(r -> new SourceTableRef(
+                        str(r, "tblRid"),
+                        str(r, "tableGeoid"),
+                        str(r, "tableName"),
+                        str(r, "schemaGeoid"),
+                        "SUBQUERY",
+                        str(r, "subGeoid")))
+                    .toList());
+
+            return Uni.combine().all().unis(directUni, hoistedUni)
+                .asTuple()
+                .map(tuple -> {
+                    List<SourceTableRef> combined = new ArrayList<>(tuple.getItem1());
+                    // Dedup by tableGeoid: if a table already appears as DIRECT,
+                    // don't add a SUBQUERY row for it.
+                    java.util.Set<String> seen = new java.util.HashSet<>();
+                    for (SourceTableRef r : combined) if (r.tableGeoid() != null) seen.add(r.tableGeoid());
+                    for (SourceTableRef r : tuple.getItem2()) {
+                        if (r.tableGeoid() != null && seen.add(r.tableGeoid())) combined.add(r);
+                    }
+                    return combined;
+                });
+        });
+
+        return Uni.combine().all().unis(descendantsUni, atomsUni, sourcesUni)
             .asTuple()
             .map(tuple -> {
                 List<SubqueryInfo>     descendants = tuple.getItem1();
                 List<AtomContextCount> atoms       = tuple.getItem2();
+                List<SourceTableRef>   sources     = tuple.getItem3();
                 int total = atoms.stream().mapToInt(AtomContextCount::count).sum();
-                return new StatementExtras(descendants, atoms, total);
+                return new StatementExtras(descendants, atoms, total, sources);
             });
     }
 

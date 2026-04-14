@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { FileCode } from 'lucide-react';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
-import type { SubqueryInfo } from '../../services/lineage';
+import type { SubqueryInfo, SourceTableRef } from '../../services/lineage';
 import { useKnotSnippet, useStatementExtras } from '../../services/hooks';
 import { InspectorSection, InspectorRow } from './InspectorSection';
 
@@ -411,8 +411,46 @@ function ExtraPanel({ stmtGeoid }: { stmtGeoid: string }) {
     );
   }
 
+  const sources = data?.sourceTables ?? [];
+  const directSources   = sources.filter((s) => s.sourceKind === 'DIRECT');
+  const subquerySources = sources.filter((s) => s.sourceKind === 'SUBQUERY');
+
   return (
     <>
+      {/* ── Source tables (DIRECT vs SUBQUERY) ──────────────────────────────── */}
+      <InspectorSection
+        title={`${t('inspector.sourceTables')} (${sources.length})`}
+        defaultOpen={sources.length > 0}
+      >
+        {sources.length === 0 ? (
+          <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+            {t('inspector.noSourceTables')}
+          </div>
+        ) : (
+          <div style={{ marginTop: 2 }}>
+            {directSources.length > 0 && (
+              <div style={{
+                padding: '4px 10px 2px', fontSize: '9px',
+                color: 'var(--t3)', letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>
+                {t('inspector.sourceDirect')} · {directSources.length}
+              </div>
+            )}
+            {directSources.map((s) => <SourceRow key={s.rid} src={s} />)}
+            {subquerySources.length > 0 && (
+              <div style={{
+                padding: '6px 10px 2px', marginTop: directSources.length > 0 ? 4 : 0,
+                fontSize: '9px', color: 'var(--t3)', letterSpacing: '0.06em', textTransform: 'uppercase',
+                borderTop: directSources.length > 0 ? '1px solid var(--bd)' : 'none',
+              }}>
+                {t('inspector.sourceViaSubquery')} · {subquerySources.length}
+              </div>
+            )}
+            {subquerySources.map((s) => <SourceRow key={s.rid} src={s} />)}
+          </div>
+        )}
+      </InspectorSection>
+
       {/* ── Subqueries (all descendants, recursive) ─────────────────────────── */}
       <InspectorSection title={`${t('inspector.subqueries')} (${tree.items.length})`}>
         {tree.items.length === 0 ? (
@@ -489,6 +527,53 @@ function ExtraPanel({ stmtGeoid }: { stmtGeoid: string }) {
         )}
       </InspectorSection>
     </>
+  );
+}
+
+// ── Source-row (used by ExtraPanel's source-tables section) ────────────────
+
+function SourceRow({ src }: { src: SourceTableRef }) {
+  return (
+    <div
+      title={`${src.tableGeoid}${src.viaStmtGeoid ? `\nvia ${src.viaStmtGeoid}` : ''}`}
+      style={{
+        display:     'flex',
+        alignItems:  'center',
+        gap:         6,
+        padding:     '3px 10px',
+        borderTop:   '1px solid var(--bd)',
+        fontSize:    '11px',
+      }}
+    >
+      <span
+        className="mono"
+        style={{
+          flex:         1,
+          color:        'var(--t1)',
+          overflow:     'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace:   'nowrap',
+          fontFamily:   'var(--mono)',
+        }}
+      >
+        {src.tableName || src.tableGeoid}
+      </span>
+      {src.schemaGeoid && (
+        <span
+          style={{
+            fontSize:    '9px',
+            color:       'var(--t3)',
+            fontFamily:  'var(--mono)',
+            padding:     '1px 5px',
+            borderRadius: 2,
+            border:      '0.5px solid var(--bd)',
+            flexShrink:  0,
+          }}
+        >
+          {src.schemaGeoid}
+        </span>
+      )}
+    </div>
   );
 }
 

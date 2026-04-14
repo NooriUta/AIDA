@@ -37,9 +37,20 @@ public class ExploreService {
     ArcadeGateway arcade;
 
     public Uni<ExploreResult> explore(String scope) {
+        return explore(scope, false);
+    }
+
+    /**
+     * @param includeExternal when true, appends extra UNION ALL segments that
+     *   fetch READS_FROM / WRITES_TO / DATA_FLOW / FILTER_FLOW edges whose
+     *   table endpoint is in a DIFFERENT schema than {@code scope}. Default
+     *   false (the legacy behavior — only same-schema edges are returned).
+     *   Only honored for schema scope today; pkg / db / rid scopes ignore it.
+     */
+    public Uni<ExploreResult> explore(String scope, boolean includeExternal) {
         ScopeRef ref = ScopeRef.parse(scope);
         return switch (ref.type()) {
-            case "schema" -> exploreSchema(ref.name(), ref.dbName());
+            case "schema" -> exploreSchema(ref.name(), ref.dbName(), includeExternal);
             case "pkg"    -> explorePackage(ref.name());
             case "db"     -> exploreByDatabase(ref.name());
             default       -> exploreByRid(ref.name());
@@ -49,6 +60,56 @@ public class ExploreService {
     // ── Schema scope ──────────────────────────────────────────────────────────
 
     private Uni<ExploreResult> exploreSchema(String schemaName, String dbName) {
+        return exploreSchema(schemaName, dbName, false);
+    }
+
+    /**
+     * Extra UNION ALL branches appended when includeExternal=true. Picks up
+     * cross-schema READS_FROM / WRITES_TO from both the root stmts and their
+     * descendants (via CHILD_OF*0..30 — the `0` bound includes the root itself
+     * so a single pattern covers both direct and hoisted reads).
+     *
+     * <p><b>Design note (performance).</b> The first attempt used the same
+     * {@code NOT (s)-[:CONTAINS_TABLE]->(t)} exclusion as the same-schema
+     * segments, but that combined two variable-length patterns with a negative
+     * subgraph check and blew past the 30 s query budget on any real schema.
+     * Replaced with a cheap property filter {@code t.schema_geoid <> $schema}
+     * — ArcadeDB evaluates that per-row instead of scheduling a subgraph
+     * probe. Returns the same rows, just orders of magnitude faster.</p>
+     */
+    private static final String EXTERNAL_EXTENSION = """
+            UNION ALL
+            // EXT-READS_FROM — any stmt (root or descendant) in this schema
+            // that reads from a table in a DIFFERENT schema. `*0..30` on
+            // CHILD_OF makes sub = rootStmt for direct reads, and 1..30
+            // for hoisted reads, in a single pattern.
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_ROUTINE]->(r1)-[:CONTAINS_ROUTINE*0..1]->(rr:DaliRoutine)
+                  -[:CONTAINS_STMT]->(rootStmt:DaliStatement)
+            WHERE coalesce(rootStmt.parent_statement, '') = ''
+            MATCH (rootStmt)<-[:CHILD_OF*0..30]-(sub:DaliStatement)-[:READS_FROM]->(t:DaliTable)
+            WHERE t.schema_geoid IS NOT NULL AND t.schema_geoid <> $schema
+            RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
+                   'DaliTable' AS tgtType, 'READS_FROM' AS edgeType
+            LIMIT 2000
+            UNION ALL
+            // EXT-WRITES_TO — same as above but for WRITES_TO
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_ROUTINE]->(r1)-[:CONTAINS_ROUTINE*0..1]->(rr:DaliRoutine)
+                  -[:CONTAINS_STMT]->(rootStmt:DaliStatement)
+            WHERE coalesce(rootStmt.parent_statement, '') = ''
+            MATCH (rootStmt)<-[:CHILD_OF*0..30]-(sub:DaliStatement)-[:WRITES_TO]->(t:DaliTable)
+            WHERE t.schema_geoid IS NOT NULL AND t.schema_geoid <> $schema
+            RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
+                   'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
+            LIMIT 1000
+            """;
+
+    private Uni<ExploreResult> exploreSchema(String schemaName, String dbName, boolean includeExternal) {
         // ─── Phase 1: Входит в схему (structural membership) ────────────────────
         // 1.1  schema → tables
         // 1.3  schema → routines / packages  (all direct CONTAINS_ROUTINE children)
@@ -196,7 +257,7 @@ public class ExploreService {
                    id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
                    'DaliStatement' AS tgtType, 'FILTER_FLOW' AS edgeType
             LIMIT 2000
-            """;
+            """ + (includeExternal ? EXTERNAL_EXTENSION : "");
 
         // ArcadeDB Cypher bug: $param IS NULL does not work in WHERE clauses.
         // Workaround: use empty string as sentinel ($dbName = '' OR ...).

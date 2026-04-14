@@ -79,8 +79,8 @@ const OVERVIEW = /* GraphQL */ `
 `;
 
 const EXPLORE = /* GraphQL */ `
-  query Explore($scope: String!) {
-    explore(scope: $scope) {
+  query Explore($scope: String!, $includeExternal: Boolean) {
+    explore(scope: $scope, includeExternal: $includeExternal) {
       nodes { id type label scope dataSource meta { key value } }
       edges { id source target type }
       hasMore
@@ -156,13 +156,17 @@ export async function fetchOverview(): Promise<SchemaNode[]> {
   return data.overview;
 }
 
-export async function fetchExplore(scope: string): Promise<ExploreResult> {
+export async function fetchExplore(scope: string, includeExternal = false): Promise<ExploreResult> {
   const t0 = performance.now();
-  const data = await gqlClient.request<{ explore: ExploreResult }>(EXPLORE, { scope });
+  const data = await gqlClient.request<{ explore: ExploreResult }>(
+    EXPLORE,
+    { scope, includeExternal },
+  );
   const ms = (performance.now() - t0).toFixed(0);
   const n = data.explore.nodes?.length ?? 0;
   const e = data.explore.edges?.length ?? 0;
-  console.info(`[LOOM] explore(${scope}) — ${ms} ms  (${n} nodes, ${e} edges)`);
+  const extSuffix = includeExternal ? ' +ext' : '';
+  console.info(`[LOOM] explore(${scope}${extSuffix}) — ${ms} ms  (${n} nodes, ${e} edges)`);
   return data.explore;
 }
 
@@ -571,10 +575,20 @@ export interface AtomContextCount {
   count:   number;
 }
 
+export interface SourceTableRef {
+  rid:          string;
+  tableGeoid:   string;
+  tableName:    string;
+  schemaGeoid:  string;
+  sourceKind:   'DIRECT' | 'SUBQUERY';
+  viaStmtGeoid: string | null;
+}
+
 export interface StatementExtras {
   descendants:    SubqueryInfo[];
   atomContexts:   AtomContextCount[];
   totalAtomCount: number;
+  sourceTables:   SourceTableRef[];
 }
 
 const KNOT_STATEMENT_EXTRAS = /* GraphQL */ `
@@ -583,6 +597,7 @@ const KNOT_STATEMENT_EXTRAS = /* GraphQL */ `
       descendants { rid stmtGeoid stmtType parentStmtGeoid }
       atomContexts { context count }
       totalAtomCount
+      sourceTables { rid tableGeoid tableName schemaGeoid sourceKind viaStmtGeoid }
     }
   }
 `;

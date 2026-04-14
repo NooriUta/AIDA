@@ -57,11 +57,14 @@ export function useOverview() {
 
 // ── L2: Explore ───────────────────────────────────────────────────────────────
 
-export function useExplore(scope: string | null) {
+export function useExplore(scope: string | null, includeExternal = false) {
   const onError = useOnUnauthorized();
   return useQuery({
-    queryKey: qk.explore(scope ?? ''),
-    queryFn:  () => fetchExplore(scope!),
+    // includeExternal goes into the query key so enabling the toggle triggers
+    // a refetch with a separate cache entry — otherwise React Query would
+    // return the non-external result from cache.
+    queryKey: [...qk.explore(scope ?? ''), includeExternal] as const,
+    queryFn:  () => fetchExplore(scope!, includeExternal),
     enabled:  !!scope,
     staleTime: 30_000,
     retry: 2,

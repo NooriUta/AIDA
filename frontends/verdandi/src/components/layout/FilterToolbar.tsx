@@ -88,6 +88,7 @@ export const FilterToolbar = memo(() => {
     setDepth,
     setDirection,
     toggleMappingMode,
+    toggleIncludeExternal,
     navigateToLevel,
     jumpTo,
     clearFilter,
@@ -104,6 +105,7 @@ export const FilterToolbar = memo(() => {
     upstream,
     downstream,
     tableLevelView,
+    includeExternal,
   } = filter;
 
   // ── Hooks must be called unconditionally (Rules of Hooks) ─────────────────
@@ -402,6 +404,15 @@ export const FilterToolbar = memo(() => {
       </ToolbarToggleButton>
       <ToolbarToggleButton active={downstream} onClick={() => setDirection(upstream, !downstream)}>
         &#x2193; {t('toolbar.downstream')}
+      </ToolbarToggleButton>
+
+      {/* ── External sources toggle — cross-schema READS/WRITES ─────────── */}
+      <ToolbarToggleButton
+        active={includeExternal}
+        onClick={toggleIncludeExternal}
+        title={t('inspector.includeExternalHint')}
+      >
+        &#x21F1; {t('inspector.includeExternal')}
       </ToolbarToggleButton>
 
       {/* ── Spacer ─────────────────────────────────────────────────────────── */}
