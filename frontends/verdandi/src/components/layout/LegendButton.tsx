@@ -29,19 +29,22 @@ const EDGE_ROWS: Record<'L1' | 'L2' | 'L3', EdgeRow[]> = {
     { color: 'var(--t3)', dash: '6 3', label: 'legend.edge.usesDatabase'   },
   ],
   L2: [
-    { color: 'var(--inf)',                   label: 'legend.edge.readsFrom'    },
-    { color: 'var(--wrn)', dash: '5 3',      label: 'legend.edge.writesTo'     },
-    { color: 'var(--acc)', animated: true,   label: 'legend.edge.dataFlow'     },
-    { color: 'var(--wrn)', animated: true,   label: 'legend.edge.filterFlow'   },
-    { color: 'var(--inf)',                   label: 'legend.edge.joinFlow'     },
-    { color: 'var(--t3)', dash: '4 2',       label: 'legend.edge.containsStmt' },
+    // Four-way distinct data-flow row. Colour + dash + animation must match
+    // transformHelpers.getEdgeStyle so the canvas and the legend agree.
+    { color: 'var(--inf)',                     label: 'legend.edge.readsFrom'    },
+    { color: 'var(--wrn)', dash: '8 3',        label: 'legend.edge.writesTo'     },
+    { color: 'var(--acc)', dash: '5 3', animated: true, label: 'legend.edge.dataFlow'   },
+    { color: '#B87AA8',    dash: '1 4', animated: true, label: 'legend.edge.filterFlow' },
+    { color: 'var(--inf)',                     label: 'legend.edge.joinFlow'     },
+    { color: 'var(--t3)',  dash: '4 2',        label: 'legend.edge.containsStmt' },
   ],
   L3: [
-    { color: 'var(--inf)',                   label: 'legend.edge.readsFrom'    },
-    { color: 'var(--wrn)', dash: '5 3',      label: 'legend.edge.writesTo'     },
-    { color: 'var(--acc)', animated: true,   label: 'legend.edge.dataFlow'     },
-    { color: 'var(--acc)', animated: true,   label: 'legend.edge.atomProduces' },
-    { color: 'var(--inf)', dash: '4 3',      label: 'legend.edge.atomRefCol'   },
+    { color: 'var(--inf)',                     label: 'legend.edge.readsFrom'    },
+    { color: 'var(--wrn)', dash: '8 3',        label: 'legend.edge.writesTo'     },
+    { color: 'var(--acc)', dash: '5 3', animated: true, label: 'legend.edge.dataFlow'     },
+    { color: '#B87AA8',    dash: '1 4', animated: true, label: 'legend.edge.filterFlow'   },
+    { color: 'var(--acc)',              animated: true, label: 'legend.edge.atomProduces' },
+    { color: 'var(--inf)', dash: '4 3',        label: 'legend.edge.atomRefCol'   },
   ],
 };
 
@@ -72,13 +75,16 @@ const DASH_ANIM_STYLE = `
 @keyframes loom-dash-march { to { stroke-dashoffset: -16; } }`;
 
 function EdgeSwatch({ color, dash, animated }: Pick<EdgeRow, 'color' | 'dash' | 'animated'>) {
+  // Explicit `dash` always wins — lets animated rows use bespoke patterns
+  // (e.g. FILTER_FLOW dots "1 4") instead of the old "5 3" hard-coded default.
+  const effectiveDash = dash ?? (animated ? '5 3' : undefined);
   return (
     <svg width="26" height="10" viewBox="0 0 26 10" style={{ flexShrink: 0 }}>
       {animated && <style>{DASH_ANIM_STYLE}</style>}
       <line
         x1="0" y1="5" x2="26" y2="5"
         stroke={color} strokeWidth="1.5"
-        strokeDasharray={animated ? '5 3' : (dash ?? undefined)}
+        strokeDasharray={effectiveDash}
         style={animated ? { animation: 'loom-dash-march 0.5s linear infinite' } : undefined}
       />
     </svg>

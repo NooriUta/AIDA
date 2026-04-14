@@ -47,10 +47,17 @@ export function getEdgeStyle(type: DaliEdgeType): CSSProperties {
     case 'HAS_SERVICE':     return { stroke: '#A8B860', strokeWidth: 1.5 };
     case 'USES_DATABASE':   return { stroke: '#665c48', strokeWidth: 1.5, strokeDasharray: '6 3' };
     // ── Data flow ────────────────────────────────────────────────────────────
+    // Each of the four primary data-flow edge types gets a unique combination
+    // of (colour, dash pattern, animated) so they stay distinguishable at any
+    // zoom level and on dense canvases:
+    //   READS_FROM  — teal  solid           (consumption, incoming, calm)
+    //   WRITES_TO   — amber long-dash 8/3   (production, outgoing, static)
+    //   DATA_FLOW   — lime  medium-dash 5/3 (column→column, animated flow)
+    //   FILTER_FLOW — mauve dots       1/4  (filter predicate, animated dots)
     case 'READS_FROM':      return { stroke: '#88B8A8', strokeWidth: 1.5 };
-    case 'WRITES_TO':       return { stroke: '#D4922A', strokeWidth: 1.5, strokeDasharray: '5 3' };
-    case 'DATA_FLOW':       return { stroke: '#A8B860', strokeWidth: 1.5 };
-    case 'FILTER_FLOW':     return { stroke: '#D4922A', strokeWidth: 1.5 };
+    case 'WRITES_TO':       return { stroke: '#D4922A', strokeWidth: 1.5, strokeDasharray: '8 3' };
+    case 'DATA_FLOW':       return { stroke: '#A8B860', strokeWidth: 1.5, strokeDasharray: '5 3' };
+    case 'FILTER_FLOW':     return { stroke: '#B87AA8', strokeWidth: 1.5, strokeDasharray: '1 4' };
     case 'JOIN_FLOW':       return { stroke: '#88B8A8', strokeWidth: 1.5 };
     case 'UNION_FLOW':      return { stroke: '#A8B860', strokeWidth: 1.5 };
     case 'ATOM_PRODUCES':   return { stroke: '#A8B860', strokeWidth: 1.5 };

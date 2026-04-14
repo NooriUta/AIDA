@@ -167,6 +167,35 @@ public class ExploreService {
                    id(target) AS tgtId, target.table_name AS tgtLabel, target.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
             LIMIT 200
+            UNION ALL
+            // 2.3 DATA_FLOW aggregated to table → statement
+            //   DB shape: DaliColumn -[:DATA_FLOW]-> DaliOutputColumn
+            //   L2 has no DaliColumn / DaliOutputColumn nodes, so we aggregate:
+            //     srcTable = the column's owning table (via HAS_COLUMN)
+            //     tgtStmt  = the output column's owning statement (via HAS_OUTPUT_COL)
+            //   Only root statements emitted (same convention as READS_FROM above).
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
+            MATCH (srcCol)-[:DATA_FLOW]->(oc:DaliOutputColumn)<-[:HAS_OUTPUT_COL]-(stmt:DaliStatement)
+            WHERE coalesce(stmt.parent_statement, '') = ''
+            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
+                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'DATA_FLOW' AS edgeType
+            LIMIT 2000
+            UNION ALL
+            // 2.4 FILTER_FLOW aggregated to table → statement
+            //   DB shape: DaliColumn -[:FILTER_FLOW]-> DaliStatement  (WHERE / HAVING / JOIN)
+            //   L2 aggregation: srcTable = column's owning table, tgtStmt = stmt directly.
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
+            MATCH (srcCol)-[:FILTER_FLOW]->(stmt:DaliStatement)
+            WHERE coalesce(stmt.parent_statement, '') = ''
+            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
+                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'FILTER_FLOW' AS edgeType
+            LIMIT 2000
             """;
 
         // ArcadeDB Cypher bug: $param IS NULL does not work in WHERE clauses.
