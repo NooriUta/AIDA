@@ -43,6 +43,13 @@ export interface GraphEdge {
   source: string;
   target: string;
   type: string;
+  /** React Flow handle ids inside the parent source / target nodes.
+   *  Backend sets these for column-level DATA_FLOW / FILTER_FLOW
+   *  (e.g. `'src-#13:41061'` / `'tgt-#31:26805'`) so the edge routes
+   *  into the specific column row instead of the node default handle.
+   *  Null / empty = route to node default handle. */
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
 }
 
 export interface ExploreResult {
@@ -79,10 +86,10 @@ const OVERVIEW = /* GraphQL */ `
 `;
 
 const EXPLORE = /* GraphQL */ `
-  query Explore($scope: String!) {
-    explore(scope: $scope) {
+  query Explore($scope: String!, $includeExternal: Boolean) {
+    explore(scope: $scope, includeExternal: $includeExternal) {
       nodes { id type label scope dataSource meta { key value } }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -92,7 +99,7 @@ const LINEAGE = /* GraphQL */ `
   query Lineage($nodeId: String!) {
     lineage(nodeId: $nodeId) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -102,7 +109,7 @@ const UPSTREAM = /* GraphQL */ `
   query Upstream($nodeId: String!) {
     upstream(nodeId: $nodeId) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -112,7 +119,7 @@ const DOWNSTREAM = /* GraphQL */ `
   query Downstream($nodeId: String!) {
     downstream(nodeId: $nodeId) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -122,7 +129,7 @@ const EXPAND_DEEP = /* GraphQL */ `
   query ExpandDeep($nodeId: String!, $depth: Int!) {
     expandDeep(nodeId: $nodeId, depth: $depth) {
       nodes { id type label scope dataSource }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -132,7 +139,7 @@ const STMT_COLUMNS = /* GraphQL */ `
   query StmtColumns($ids: [String]!) {
     stmtColumns(ids: $ids) {
       nodes { id type label scope dataSource meta { key value } }
-      edges { id source target type }
+      edges { id source target type sourceHandle targetHandle }
       hasMore
     }
   }
@@ -156,13 +163,17 @@ export async function fetchOverview(): Promise<SchemaNode[]> {
   return data.overview;
 }
 
-export async function fetchExplore(scope: string): Promise<ExploreResult> {
+export async function fetchExplore(scope: string, includeExternal = false): Promise<ExploreResult> {
   const t0 = performance.now();
-  const data = await gqlClient.request<{ explore: ExploreResult }>(EXPLORE, { scope });
+  const data = await gqlClient.request<{ explore: ExploreResult }>(
+    EXPLORE,
+    { scope, includeExternal },
+  );
   const ms = (performance.now() - t0).toFixed(0);
   const n = data.explore.nodes?.length ?? 0;
   const e = data.explore.edges?.length ?? 0;
-  console.info(`[LOOM] explore(${scope}) — ${ms} ms  (${n} nodes, ${e} edges)`);
+  const extSuffix = includeExternal ? ' +ext' : '';
+  console.info(`[LOOM] explore(${scope}${extSuffix}) — ${ms} ms  (${n} nodes, ${e} edges)`);
   return data.explore;
 }
 
@@ -552,6 +563,58 @@ export async function fetchKnotSnippet(stmtGeoid: string): Promise<string | null
     { stmtGeoid },
   );
   return data.knotSnippet ?? null;
+}
+
+// ── Lazy statement extras (descendants + atom stats) ─────────────────────────
+// Feeds the LOOM Inspector "Дополнительно" tab. Accepts either an ArcadeDB @rid
+// ("#25:8333") or a stmt_geoid string — the backend resolver in KnotService.java
+// routes on the '#' prefix.
+
+export interface SubqueryInfo {
+  rid:             string;
+  stmtGeoid:       string;
+  stmtType:        string;
+  parentStmtGeoid: string | null;
+}
+
+export interface AtomContextCount {
+  context: string;
+  count:   number;
+}
+
+export interface SourceTableRef {
+  rid:          string;
+  tableGeoid:   string;
+  tableName:    string;
+  schemaGeoid:  string;
+  sourceKind:   'DIRECT' | 'SUBQUERY';
+  viaStmtGeoid: string | null;
+}
+
+export interface StatementExtras {
+  descendants:    SubqueryInfo[];
+  atomContexts:   AtomContextCount[];
+  totalAtomCount: number;
+  sourceTables:   SourceTableRef[];
+}
+
+const KNOT_STATEMENT_EXTRAS = /* GraphQL */ `
+  query KnotStatementExtras($stmtGeoid: String!) {
+    knotStatementExtras(stmtGeoid: $stmtGeoid) {
+      descendants { rid stmtGeoid stmtType parentStmtGeoid }
+      atomContexts { context count }
+      totalAtomCount
+      sourceTables { rid tableGeoid tableName schemaGeoid sourceKind viaStmtGeoid }
+    }
+  }
+`;
+
+export async function fetchStatementExtras(stmtGeoid: string): Promise<StatementExtras | null> {
+  const data = await gqlClient.request<{ knotStatementExtras: StatementExtras | null }>(
+    KNOT_STATEMENT_EXTRAS,
+    { stmtGeoid },
+  );
+  return data.knotStatementExtras ?? null;
 }
 
 // ── Error helpers ─────────────────────────────────────────────────────────────

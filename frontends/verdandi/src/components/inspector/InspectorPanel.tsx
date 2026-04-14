@@ -43,23 +43,20 @@ export const InspectorPanel = memo(() => {
     </div>
   );
 
-  // DaliTable
+  // DaliTable — InspectorTable renders its own rich header (schema + table
+  // name + type badge + column count), mirroring the canvas TableNode.
   if (nodeType === 'DaliTable') {
     return wrapPanel(
-      <>
-        <InspectorHeader label={selectedNodeData.label} />
-        <InspectorTable data={selectedNodeData} nodeId={selectedNodeId} />
-      </>
+      <InspectorTable data={selectedNodeData} nodeId={selectedNodeId} />
     );
   }
 
-  // DaliStatement
+  // DaliStatement — no InspectorHeader; InspectorStatement renders its own
+  // rich header that mirrors the canvas StatementNode card (icon, groupPath,
+  // title, op-badge, column-count subline).
   if (nodeType === 'DaliStatement') {
     return wrapPanel(
-      <>
-        <InspectorHeader label={selectedNodeData.label} />
-        <InspectorStatement data={selectedNodeData} nodeId={selectedNodeId} />
-      </>
+      <InspectorStatement data={selectedNodeData} nodeId={selectedNodeId} />
     );
   }
 

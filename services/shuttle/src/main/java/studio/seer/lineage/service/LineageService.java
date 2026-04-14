@@ -85,11 +85,19 @@ public class LineageService {
             .flatMap(exploreService::enrichDataSource);
     }
 
-    /** Upstream only — what feeds into nodeId (incoming edges). Root statements only. */
+    /** Upstream only — what feeds into nodeId (incoming edges). Root statements only.
+     *  For DaliStatement roots, also hoists READS_FROM from descendants via
+     *  CHILD_OF*1..30 so an INSERT/MERGE that reads only through sub-queries
+     *  still surfaces its source tables on the canvas — matches what the
+     *  KNOT Inspector "Исходные таблицы" section already shows. */
     public Uni<ExploreResult> upstream(String nodeId) {
         // Use swapped variable so id(n) refers to the node we found, not the pattern destination
         // BUG-VC-002: Exclude DaliConstraint/DaliPrimaryKey/DaliForeignKey constraint nodes.
         // DaliAtom excluded — ANTLR4 atom nodes not renderable in LOOM canvas.
+        // IMPORTANT: Cypher UNION requires every branch to project the SAME
+        // column list. The hoisted DATA_FLOW / FILTER_FLOW branches emit
+        // sourceHandle / targetHandle for column-level routing, so every
+        // earlier branch also emits two empty strings in those positions.
         String cypher = """
             MATCH (m)-[r]->(n)
             WHERE id(n) = $nodeId
@@ -101,15 +109,66 @@ public class LineageService {
                    id(n) AS tgtId, labels(n)[0] AS tgtType,
                    coalesce(n.table_name, n.column_name, n.routine_name,
                             n.package_name, n.stmt_geoid, n.app_name, n.schema_name, '') AS tgtLabel,
-                   n.schema_geoid AS tgtScope, type(r) AS edgeType
-            LIMIT 200
+                   n.schema_geoid AS tgtScope, type(r) AS edgeType,
+                   '' AS sourceHandle, '' AS targetHandle
+            UNION
+            // Hoisted READS_FROM: source tables read by any descendant of a
+            // DaliStatement root, attributed to the root so the canvas draws
+            // the edge table → root.
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
+            MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root)
+            MATCH (sub)-[:READS_FROM]->(t:DaliTable)
+            RETURN id(t) AS srcId, 'DaliTable' AS srcType,
+                   coalesce(t.table_name, '') AS srcLabel,
+                   id(root) AS tgtId, 'DaliStatement' AS tgtType,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
+                   t.schema_geoid AS tgtScope, 'READS_FROM' AS edgeType,
+                   '' AS sourceHandle, '' AS targetHandle
+            UNION
+            // DATA_FLOW column-level: srcTable → root with per-column handle
+            // routing. Anchors at (srcTable, root) so React Flow finds the
+            // mounted parent nodes; sourceHandle / targetHandle point at
+            // the specific column row inside each card.
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
+            MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
+            MATCH (sub)-[:HAS_OUTPUT_COL]->(oc:DaliOutputColumn)<-[:DATA_FLOW]-(srcCol:DaliColumn)
+            MATCH (srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol)
+            RETURN id(srcTbl) AS srcId, 'DaliTable' AS srcType,
+                   coalesce(srcTbl.table_name, '') AS srcLabel,
+                   id(root) AS tgtId, 'DaliStatement' AS tgtType,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
+                   srcTbl.schema_geoid AS tgtScope, 'DATA_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   'tgt-' + id(oc)     AS targetHandle
+            UNION
+            // FILTER_FLOW column-level: srcTable → root. Source handle
+            // points at the specific column used in the predicate; target
+            // handle is empty because filter edges land on the stmt header.
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
+            MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
+            MATCH (srcCol:DaliColumn)-[:FILTER_FLOW]->(sub)
+            MATCH (srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol)
+            RETURN id(srcTbl) AS srcId, 'DaliTable' AS srcType,
+                   coalesce(srcTbl.table_name, '') AS srcLabel,
+                   id(root) AS tgtId, 'DaliStatement' AS tgtType,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
+                   srcTbl.schema_geoid AS tgtScope, 'FILTER_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   ''                  AS targetHandle
+            LIMIT 2000
             """;
         return arcade.cypher(cypher, Map.of("nodeId", nodeId))
                 .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
                 .flatMap(exploreService::enrichDataSource);
     }
 
-    /** Downstream only — what nodeId feeds into (outgoing edges). Root statements only. */
+    /** Downstream only — what nodeId feeds into (outgoing edges). Root statements only.
+     *  Symmetric to {@link #upstream}: for DaliStatement roots, hoists
+     *  WRITES_TO from descendants so the downstream button surfaces the
+     *  actual tables written even when the writes happen inside sub-queries. */
     public Uni<ExploreResult> downstream(String nodeId) {
         // BUG-VC-002: Exclude DaliConstraint/DaliPrimaryKey/DaliForeignKey constraint nodes.
         // DaliAtom excluded — ANTLR4 atom nodes not renderable in LOOM canvas.
@@ -125,7 +184,18 @@ public class LineageService {
                    coalesce(m.table_name, m.column_name, m.routine_name,
                             m.package_name, m.stmt_geoid, m.app_name, m.schema_name, '') AS tgtLabel,
                    m.schema_geoid AS tgtScope, type(r) AS edgeType
-            LIMIT 200
+            UNION
+            // Hoisted: tables written by descendants attributed to the root.
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
+            MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root)
+            MATCH (sub)-[:WRITES_TO]->(t:DaliTable)
+            RETURN id(root) AS srcId, 'DaliStatement' AS srcType,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS srcLabel,
+                   id(t) AS tgtId, 'DaliTable' AS tgtType,
+                   coalesce(t.table_name, '') AS tgtLabel,
+                   t.schema_geoid AS tgtScope, 'WRITES_TO' AS edgeType
+            LIMIT 500
             """;
         return arcade.cypher(cypher, Map.of("nodeId", nodeId))
                 .map(rows -> ExploreService.buildResult(rows, nodeId, ""))

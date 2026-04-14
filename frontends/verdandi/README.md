@@ -3,7 +3,10 @@
 VERDANDI is the primary module of **SEER Studio** (alongside URD and SKULD).
 It provides interactive data lineage visualization through three sub-modules:
 
-- **LOOM** — Graph-based lineage explorer (L1 > L2 > L3 > L4 drill-down)
+- **LOOM** — Graph-based lineage explorer with 5 navigation levels
+  (L1 schemas → L2 routines+tables aggregated → L3 statements+columns+records →
+  L4 single-statement subquery drill → L5 expression breakdown, deferred).
+  See `docs/loom/LOOM_5LEVEL_ARCHITECTURE.md` for the full level reference.
 - **KNOT** — Code-level analysis and SQL inspection
 - **ANVIL** — Impact analysis (planned, H2)
 

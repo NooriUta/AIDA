@@ -142,7 +142,7 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       }}
       onClick={() => selectNode(id)}
     >
-      {!isCompact && <NodeExpandButtons nodeId={id} show={selected ?? false} />}
+      {!isCompact && <NodeExpandButtons nodeId={id} show />}
       {/* Both default handles BEFORE column rows — React Flow picks the first handle of each
           type when sourceHandle/targetHandle is unspecified on an edge. Column handles
           (src-colId / tgt-colId) come AFTER so node-level WRITES_TO/READS_FROM

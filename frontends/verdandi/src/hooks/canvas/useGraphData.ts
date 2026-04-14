@@ -16,11 +16,15 @@ export function useGraphData() {
     currentScope,
     expansionGqlNodes,
     expansionGqlEdges,
+    filter,
   } = useLoomStore();
 
   // All three are always called (Rules of Hooks); enabled flags prevent firing.
   const overviewQ = useOverview();
-  const exploreQ  = useExplore(viewLevel === 'L2' ? currentScope : null);
+  const exploreQ  = useExplore(
+    viewLevel === 'L2' ? currentScope : null,
+    filter.includeExternal,
+  );
   const lineageQ  = useLineage(viewLevel === 'L3' ? currentScope : null);
 
   const activeQuery = viewLevel === 'L1' ? overviewQ

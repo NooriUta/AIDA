@@ -19,6 +19,9 @@ export interface ExpansionGqlNode {
 }
 export interface ExpansionGqlEdge {
   id: string; source: string; target: string; type: string;
+  /** Column-level handle ids — see services/lineage.ts::GraphEdge. */
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
 }
 
 export interface FilterState {
@@ -33,6 +36,9 @@ export interface FilterState {
   downstream:       boolean;
   tableLevelView:   boolean;
   showCfEdges:      boolean;
+  /** When true, L2 explore query fetches cross-schema READS_FROM / WRITES_TO
+   *  edges (external sources). Default false — scoped to current schema. */
+  includeExternal:  boolean;
 }
 
 export interface L1ScopeItem {
@@ -147,9 +153,10 @@ export interface LoomStore {
   setFieldFilter:       (columnName: string | null) => void;
   setDepth:             (depth: number) => void;
   setDirection:         (upstream: boolean, downstream: boolean) => void;
-  toggleTableLevelView: () => void;
-  toggleCfEdges:        () => void;
-  toggleMappingMode:    () => void;
+  toggleTableLevelView:  () => void;
+  toggleCfEdges:         () => void;
+  toggleMappingMode:     () => void;
+  toggleIncludeExternal: () => void;
   clearFilter:          () => void;
   setAvailableFields:   (fields: string[]) => void;
   setAvailableTables:   (tables: { id: string; label: string }[]) => void;
@@ -201,6 +208,7 @@ export const FILTER_DEFAULTS: FilterState = {
   downstream:       true,
   tableLevelView:   false,
   showCfEdges:      true,
+  includeExternal:  false,
 };
 
 // ─── Store ────────────────────────────────────────────────────────────────────

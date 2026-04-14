@@ -15,6 +15,11 @@ const FILTER_DEFAULTS = {
   downstream:       true,
   tableLevelView:   false,
   showCfEdges:      true,
+  // When true, the L2 explore query also fetches READS_FROM / WRITES_TO
+  // edges whose table endpoint is in a DIFFERENT schema (external sources).
+  // Default off — the canvas stays scoped to the current schema unless the
+  // user explicitly opts in to seeing cross-schema lineage.
+  includeExternal:  false,
 };
 
 export function filterActions(set: Set) {
@@ -51,6 +56,8 @@ export function filterActions(set: Set) {
       set((s) => ({ filter: { ...s.filter, upstream, downstream } })),
     toggleTableLevelView:   () =>
       set((s) => ({ filter: { ...s.filter, tableLevelView: !s.filter.tableLevelView } })),
+    toggleIncludeExternal:  () =>
+      set((s) => ({ filter: { ...s.filter, includeExternal: !s.filter.includeExternal } })),
     toggleCfEdges:          () =>
       set((s) => ({ filter: { ...s.filter, showCfEdges: !s.filter.showCfEdges } })),
     /** Switch between column mapping (cf edges + column level) and table mapping */

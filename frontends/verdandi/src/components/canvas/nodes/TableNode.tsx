@@ -166,7 +166,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
       }}
       onClick={() => selectNode(id)}
     >
-      <NodeExpandButtons nodeId={id} show={selected ?? false} />
+      <NodeExpandButtons nodeId={id} show />
       {/* Both default handles BEFORE column rows — React Flow picks the first handle of
           each type when sourceHandle/targetHandle is unspecified on an edge. Column handles
           (src-colId / tgt-colId) come AFTER so node-level WRITES_TO/READS_FROM route to header. */}

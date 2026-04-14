@@ -37,9 +37,20 @@ public class ExploreService {
     ArcadeGateway arcade;
 
     public Uni<ExploreResult> explore(String scope) {
+        return explore(scope, false);
+    }
+
+    /**
+     * @param includeExternal when true, appends extra UNION ALL segments that
+     *   fetch READS_FROM / WRITES_TO / DATA_FLOW / FILTER_FLOW edges whose
+     *   table endpoint is in a DIFFERENT schema than {@code scope}. Default
+     *   false (the legacy behavior — only same-schema edges are returned).
+     *   Only honored for schema scope today; pkg / db / rid scopes ignore it.
+     */
+    public Uni<ExploreResult> explore(String scope, boolean includeExternal) {
         ScopeRef ref = ScopeRef.parse(scope);
         return switch (ref.type()) {
-            case "schema" -> exploreSchema(ref.name(), ref.dbName());
+            case "schema" -> exploreSchema(ref.name(), ref.dbName(), includeExternal);
             case "pkg"    -> explorePackage(ref.name());
             case "db"     -> exploreByDatabase(ref.name());
             default       -> exploreByRid(ref.name());
@@ -49,6 +60,56 @@ public class ExploreService {
     // ── Schema scope ──────────────────────────────────────────────────────────
 
     private Uni<ExploreResult> exploreSchema(String schemaName, String dbName) {
+        return exploreSchema(schemaName, dbName, false);
+    }
+
+    /**
+     * Extra UNION ALL branches appended when includeExternal=true. Picks up
+     * cross-schema READS_FROM / WRITES_TO from both the root stmts and their
+     * descendants (via CHILD_OF*0..30 — the `0` bound includes the root itself
+     * so a single pattern covers both direct and hoisted reads).
+     *
+     * <p><b>Design note (performance).</b> The first attempt used the same
+     * {@code NOT (s)-[:CONTAINS_TABLE]->(t)} exclusion as the same-schema
+     * segments, but that combined two variable-length patterns with a negative
+     * subgraph check and blew past the 30 s query budget on any real schema.
+     * Replaced with a cheap property filter {@code t.schema_geoid <> $schema}
+     * — ArcadeDB evaluates that per-row instead of scheduling a subgraph
+     * probe. Returns the same rows, just orders of magnitude faster.</p>
+     */
+    private static final String EXTERNAL_EXTENSION = """
+            UNION ALL
+            // EXT-READS_FROM — any stmt (root or descendant) in this schema
+            // that reads from a table in a DIFFERENT schema. `*0..30` on
+            // CHILD_OF makes sub = rootStmt for direct reads, and 1..30
+            // for hoisted reads, in a single pattern.
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_ROUTINE]->(r1)-[:CONTAINS_ROUTINE*0..1]->(rr:DaliRoutine)
+                  -[:CONTAINS_STMT]->(rootStmt:DaliStatement)
+            WHERE coalesce(rootStmt.parent_statement, '') = ''
+            MATCH (rootStmt)<-[:CHILD_OF*0..30]-(sub:DaliStatement)-[:READS_FROM]->(t:DaliTable)
+            WHERE t.schema_geoid IS NOT NULL AND t.schema_geoid <> $schema
+            RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
+                   'DaliTable' AS tgtType, 'READS_FROM' AS edgeType
+            LIMIT 2000
+            UNION ALL
+            // EXT-WRITES_TO — same as above but for WRITES_TO
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_ROUTINE]->(r1)-[:CONTAINS_ROUTINE*0..1]->(rr:DaliRoutine)
+                  -[:CONTAINS_STMT]->(rootStmt:DaliStatement)
+            WHERE coalesce(rootStmt.parent_statement, '') = ''
+            MATCH (rootStmt)<-[:CHILD_OF*0..30]-(sub:DaliStatement)-[:WRITES_TO]->(t:DaliTable)
+            WHERE t.schema_geoid IS NOT NULL AND t.schema_geoid <> $schema
+            RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
+                   'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
+            LIMIT 1000
+            """;
+
+    private Uni<ExploreResult> exploreSchema(String schemaName, String dbName, boolean includeExternal) {
         // ─── Phase 1: Входит в схему (structural membership) ────────────────────
         // 1.1  schema → tables
         // 1.3  schema → routines / packages  (all direct CONTAINS_ROUTINE children)
@@ -167,7 +228,7 @@ public class ExploreService {
                    id(target) AS tgtId, target.table_name AS tgtLabel, target.schema_geoid AS tgtScope,
                    'DaliTable' AS tgtType, 'WRITES_TO' AS edgeType
             LIMIT 200
-            """;
+            """ + (includeExternal ? EXTERNAL_EXTENSION : "");
 
         // ArcadeDB Cypher bug: $param IS NULL does not work in WHERE clauses.
         // Workaround: use empty string as sentinel ($dbName = '' OR ...).
@@ -176,8 +237,52 @@ public class ExploreService {
             "dbName", dbName == null || dbName.isBlank() ? "" : dbName
         );
 
-        return arcade.cypher(cypher, params)
-            .map(rows -> buildResult(rows, schemaName, "DaliSchema"))
+        // Column-level DATA_FLOW / FILTER_FLOW is produced by a SEPARATE query
+        // that emits per-row sourceHandle / targetHandle. We keep it separate
+        // from the main UNION ALL chain because Cypher UNION ALL demands every
+        // branch project the same column list, and adding handle columns to
+        // all ~10 base branches would balloon the query text for little gain.
+        // Running it in parallel via Uni.combine() is cheaper.
+        //
+        // The old aggregated segments 2.3 / 2.4 (table → stmt without handles)
+        // have been removed — this query supersedes them by also producing
+        // the same (srcTable, tgtStmt) pair rows plus the column handles
+        // that React Flow uses to route into specific column rows.
+        String columnFlowCypher = """
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
+            MATCH (srcCol)-[:DATA_FLOW]->(oc:DaliOutputColumn)<-[:HAS_OUTPUT_COL]-(stmt:DaliStatement)
+            WHERE coalesce(stmt.parent_statement, '') = ''
+            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
+                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'DATA_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   'tgt-' + id(oc)     AS targetHandle
+            UNION
+            MATCH (s:DaliSchema)
+            WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
+            MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
+            MATCH (srcCol)-[:FILTER_FLOW]->(stmt:DaliStatement)
+            WHERE coalesce(stmt.parent_statement, '') = ''
+            RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
+                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   'DaliStatement' AS tgtType, 'FILTER_FLOW' AS edgeType,
+                   'src-' + id(srcCol) AS sourceHandle,
+                   ''                  AS targetHandle
+            LIMIT 4000
+            """;
+
+        var baseUni = arcade.cypher(cypher, params);
+        var colUni  = arcade.cypher(columnFlowCypher, params).onFailure().recoverWithItem(List.of());
+
+        return Uni.combine().all().unis(baseUni, colUni).asTuple()
+            .map(tuple -> {
+                var merged = new ArrayList<Map<String, Object>>(tuple.getItem1().size() + tuple.getItem2().size());
+                merged.addAll(tuple.getItem1());
+                merged.addAll(tuple.getItem2());
+                return buildResult(merged, schemaName, "DaliSchema");
+            })
             .flatMap(this::enrichDataSource);
     }
 
@@ -670,9 +775,21 @@ public class ExploreService {
             nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of(), ""));
             nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, tgtMeta, ""));
 
-            String edgeId = srcId + "__" + edgeType + "__" + tgtId;
+            // Column-level routing hints — when a Cypher segment wants the edge
+            // to land on a specific column handle inside the parent card, it
+            // returns sourceHandle / targetHandle columns and the edge id is
+            // expanded to include them so dedup doesn't collapse multiple
+            // column-to-column edges between the same parent pair.
+            String srcHandle = str(row, "sourceHandle");
+            String tgtHandle = str(row, "targetHandle");
+            String edgeId = srcId
+                + (srcHandle.isEmpty() ? "" : "/" + srcHandle)
+                + "__" + edgeType + "__" + tgtId
+                + (tgtHandle.isEmpty() ? "" : "/" + tgtHandle);
             if (edgeIdsSeen.add(edgeId)) {
-                edges.add(new GraphEdge(edgeId, srcId, tgtId, edgeType));
+                edges.add(new GraphEdge(edgeId, srcId, tgtId, edgeType,
+                    srcHandle.isEmpty() ? null : srcHandle,
+                    tgtHandle.isEmpty() ? null : tgtHandle));
             }
         }
 

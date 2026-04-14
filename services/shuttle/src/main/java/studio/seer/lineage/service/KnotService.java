@@ -582,20 +582,220 @@ public class KnotService {
             .toList();
     }
 
-    // ── Snippet by geoid (lazy, called from KNOT inspector on demand) ─────────
+    // ── Snippet by geoid OR RID (lazy, called from KNOT inspector on demand) ──
+    //
+    // The KNOT standalone page passes the real stmt_geoid (from the KnotStatement
+    // batch query). The LOOM canvas inspector uses ArcadeDB RIDs as React Flow
+    // node IDs (see ExploreService projection), so it passes values like
+    // "#25:12304". We accept both:
+    //   - Input starts with '#' → resolve via the DaliStatement RID → stmt_geoid
+    //     → DaliSnippet lookup
+    //   - Anything else → direct DaliSnippet lookup by stmt_geoid
 
-    public Uni<String> knotSnippet(String stmtGeoid) {
-        if (stmtGeoid == null || stmtGeoid.isBlank()) return Uni.createFrom().nullItem();
-        String sql = """
-            SELECT snippet
-            FROM DaliSnippet
-            WHERE stmt_geoid = :geoid
-            LIMIT 1
-            """;
-        return arcade.sql(sql, Map.of("geoid", stmtGeoid))
+    public Uni<String> knotSnippet(String idOrGeoid) {
+        if (idOrGeoid == null || idOrGeoid.isBlank()) return Uni.createFrom().nullItem();
+        boolean isRid = idOrGeoid.startsWith("#");
+        // ArcadeDB SQL subqueries return a result set, so the RID path must use
+        // `IN (SELECT …)` — `= (SELECT …)` compares a string to a record and
+        // always yields no rows (discovered the hard way during LOOM wire-up).
+        String sql = isRid
+            ? """
+                SELECT snippet
+                FROM DaliSnippet
+                WHERE stmt_geoid IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid)
+                LIMIT 1
+                """
+            : """
+                SELECT snippet
+                FROM DaliSnippet
+                WHERE stmt_geoid = :geoid
+                LIMIT 1
+                """;
+        Map<String, Object> params = isRid
+            ? Map.of("rid",   idOrGeoid)
+            : Map.of("geoid", idOrGeoid);
+        return arcade.sql(sql, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.isEmpty() ? null : str(rows.get(0), "snippet"))
             .map(s -> (s == null || s.isBlank()) ? null : s);
+    }
+
+    // ── Statement extras (descendants + atom stats, lazy from Inspector) ──────
+    //
+    // Powers the LOOM Inspector "Дополнительно" tab. Returns:
+    //   * all recursive CHILD_OF descendants (sub-queries, CTEs, inline views)
+    //   * DaliAtom counts grouped by parent_context for the root stmt
+    //
+    // Accepts either an ArcadeDB @rid ("#25:8333") — as passed by the LOOM
+    // Inspector which uses RIDs as React Flow node ids — or a stmt_geoid
+    // string (as the standalone KNOT page would pass). Mirrors knotSnippet's
+    // dual-input pattern.
+
+    public Uni<StatementExtras> knotStatementExtras(String idOrGeoid) {
+        if (idOrGeoid == null || idOrGeoid.isBlank())
+            return Uni.createFrom().item(new StatementExtras(List.of(), List.of(), 0, List.of()));
+
+        boolean isRid = idOrGeoid.startsWith("#");
+
+        // Descendants via TRAVERSE in('CHILD_OF') — matches the way Hound
+        // stores parent/child ("child -[:CHILD_OF]-> parent", so in('CHILD_OF')
+        // on the parent yields its children). MAXDEPTH 30 covers the deepest
+        // nested CTE/subquery trees observed in the corpus with margin.
+        String descendantSql = isRid
+            ? """
+                SELECT @rid as rid, stmt_geoid, type as stmtType, parent_statement as parentStmtGeoid
+                FROM (
+                    TRAVERSE in('CHILD_OF')
+                    FROM (SELECT FROM DaliStatement WHERE @rid = :rid)
+                    MAXDEPTH 30
+                )
+                WHERE @rid <> :rid
+                ORDER BY parent_statement, stmt_geoid
+                LIMIT 500
+                """
+            : """
+                SELECT @rid as rid, stmt_geoid, type as stmtType, parent_statement as parentStmtGeoid
+                FROM (
+                    TRAVERSE in('CHILD_OF')
+                    FROM (SELECT FROM DaliStatement WHERE stmt_geoid = :geoid)
+                    MAXDEPTH 30
+                )
+                WHERE stmt_geoid <> :geoid
+                ORDER BY parent_statement, stmt_geoid
+                LIMIT 500
+                """;
+
+        // Atom breakdown — scoped to the root statement's stmt_geoid.
+        // Subquery in the WHERE uses IN (SELECT …) per the scalar-vs-set
+        // lesson learned in the knotSnippet fix (commit a7b810d).
+        String atomSql = isRid
+            ? """
+                SELECT parent_context as ctx, count(*) as cnt
+                FROM DaliAtom
+                WHERE statement_geoid IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid)
+                GROUP BY parent_context
+                """
+            : """
+                SELECT parent_context as ctx, count(*) as cnt
+                FROM DaliAtom
+                WHERE statement_geoid = :geoid
+                GROUP BY parent_context
+                """;
+
+        Map<String, Object> params = isRid
+            ? Map.of("rid",   idOrGeoid)
+            : Map.of("geoid", idOrGeoid);
+
+        Uni<List<SubqueryInfo>> descendantsUni = arcade.sql(descendantSql, params)
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.stream()
+                .map(r -> new SubqueryInfo(
+                    str(r, "rid"),
+                    str(r, "stmt_geoid"),
+                    str(r, "stmtType"),
+                    str(r, "parentStmtGeoid")))
+                .toList());
+
+        Uni<List<AtomContextCount>> atomsUni = arcade.sql(atomSql, params)
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.stream()
+                .map(r -> {
+                    String ctx = str(r, "ctx");
+                    if (ctx == null || ctx.isBlank()) ctx = "UNKNOWN";
+                    Object cntObj = r.get("cnt");
+                    int cnt = cntObj instanceof Number n ? n.intValue() : 0;
+                    return new AtomContextCount(ctx, cnt);
+                })
+                .sorted((a, b) -> Integer.compare(b.count(), a.count()))  // DESC
+                .toList());
+
+        // Source tables — DIRECT (root READS_FROM) + SUBQUERY (descendant reads,
+        // hoisted to root). Two Cypher queries combined via Uni.concat.
+
+        // Use Cypher for both — ArcadeDB SQL TRAVERSE doesn't easily join back to
+        // stmt labels. Cypher handles the RID lookup via id() + numeric conversion
+        // is fiddly, so we first resolve the stmt_geoid via SQL if input is a RID.
+
+        Uni<String> geoidUni = isRid
+            ? arcade.sql(
+                "SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid LIMIT 1",
+                Map.of("rid", idOrGeoid))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> rows.isEmpty() ? null : str(rows.get(0), "stmt_geoid"))
+            : Uni.createFrom().item(idOrGeoid);
+
+        Uni<List<SourceTableRef>> sourcesUni = geoidUni.flatMap(rootGeoid -> {
+            if (rootGeoid == null) return Uni.createFrom().item(List.<SourceTableRef>of());
+
+            // Direct reads of the root stmt itself — Cypher keeps it clean.
+            // id(t) in ArcadeDB Cypher returns the '#cluster:pos' string.
+            Uni<List<SourceTableRef>> directUni = arcade.cypher("""
+                    MATCH (s:DaliStatement {stmt_geoid: $geoid})-[:READS_FROM]->(t:DaliTable)
+                    RETURN DISTINCT id(t)         AS tblRid,
+                                    t.table_geoid  AS tableGeoid,
+                                    t.table_name   AS tableName,
+                                    t.schema_geoid AS schemaGeoid
+                    LIMIT 500
+                    """, Map.of("geoid", rootGeoid))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> rows.stream()
+                    .map(r -> new SourceTableRef(
+                        str(r, "tblRid"),
+                        str(r, "tableGeoid"),
+                        str(r, "tableName"),
+                        str(r, "schemaGeoid"),
+                        "DIRECT",
+                        null))
+                    .toList());
+
+            // Hoisted reads — descendant reads a table via CHILD_OF* chain.
+            // sub→root via CHILD_OF*1..30 (child→parent direction), then
+            // sub-[:READS_FROM]->table. Returns which sub attributed the read.
+            Uni<List<SourceTableRef>> hoistedUni = arcade.cypher("""
+                    MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root:DaliStatement {stmt_geoid: $geoid})
+                    MATCH (sub)-[:READS_FROM]->(t:DaliTable)
+                    RETURN DISTINCT id(t)          AS tblRid,
+                                    t.table_geoid  AS tableGeoid,
+                                    t.table_name   AS tableName,
+                                    t.schema_geoid AS schemaGeoid,
+                                    sub.stmt_geoid AS subGeoid
+                    LIMIT 2000
+                    """, Map.of("geoid", rootGeoid))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> rows.stream()
+                    .map(r -> new SourceTableRef(
+                        str(r, "tblRid"),
+                        str(r, "tableGeoid"),
+                        str(r, "tableName"),
+                        str(r, "schemaGeoid"),
+                        "SUBQUERY",
+                        str(r, "subGeoid")))
+                    .toList());
+
+            return Uni.combine().all().unis(directUni, hoistedUni)
+                .asTuple()
+                .map(tuple -> {
+                    List<SourceTableRef> combined = new ArrayList<>(tuple.getItem1());
+                    // Dedup by tableGeoid: if a table already appears as DIRECT,
+                    // don't add a SUBQUERY row for it.
+                    java.util.Set<String> seen = new java.util.HashSet<>();
+                    for (SourceTableRef r : combined) if (r.tableGeoid() != null) seen.add(r.tableGeoid());
+                    for (SourceTableRef r : tuple.getItem2()) {
+                        if (r.tableGeoid() != null && seen.add(r.tableGeoid())) combined.add(r);
+                    }
+                    return combined;
+                });
+        });
+
+        return Uni.combine().all().unis(descendantsUni, atomsUni, sourcesUni)
+            .asTuple()
+            .map(tuple -> {
+                List<SubqueryInfo>     descendants = tuple.getItem1();
+                List<AtomContextCount> atoms       = tuple.getItem2();
+                List<SourceTableRef>   sources     = tuple.getItem3();
+                int total = atoms.stream().mapToInt(AtomContextCount::count).sum();
+                return new StatementExtras(descendants, atoms, total, sources);
+            });
     }
 
     // ── Snippets ──────────────────────────────────────────────────────────────

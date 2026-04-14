@@ -11,7 +11,10 @@ import { ToolbarDivider, IconLayers, ToolbarToggleButton } from '../ui/ToolbarPr
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEPTH_STEPS = [1, 2, 3, 5, 7, Infinity] as const;
-const DEPTH_DEFAULT = 5;
+// Default depth = ∞ so sources/sinks load lazily without arbitrary cap —
+// user-requested: "не должно быть ограничений подгрузки". The user can
+// still click a numeric preset if they want to narrow down.
+const DEPTH_DEFAULT = Infinity;
 
 // ─── Icons (inline SVG — no dependency) ──────────────────────────────────────
 function IconRoutine() {
@@ -85,6 +88,7 @@ export const FilterToolbar = memo(() => {
     setDepth,
     setDirection,
     toggleMappingMode,
+    toggleIncludeExternal,
     navigateToLevel,
     jumpTo,
     clearFilter,
@@ -101,6 +105,7 @@ export const FilterToolbar = memo(() => {
     upstream,
     downstream,
     tableLevelView,
+    includeExternal,
   } = filter;
 
   // ── Hooks must be called unconditionally (Rules of Hooks) ─────────────────
@@ -399,6 +404,15 @@ export const FilterToolbar = memo(() => {
       </ToolbarToggleButton>
       <ToolbarToggleButton active={downstream} onClick={() => setDirection(upstream, !downstream)}>
         &#x2193; {t('toolbar.downstream')}
+      </ToolbarToggleButton>
+
+      {/* ── External sources toggle — cross-schema READS/WRITES ─────────── */}
+      <ToolbarToggleButton
+        active={includeExternal}
+        onClick={toggleIncludeExternal}
+        title={t('inspector.includeExternalHint')}
+      >
+        &#x21F1; {t('inspector.includeExternal')}
       </ToolbarToggleButton>
 
       {/* ── Spacer ─────────────────────────────────────────────────────────── */}

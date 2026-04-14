@@ -10,6 +10,7 @@ import {
   fetchKnotSessions,
   fetchKnotReport,
   fetchKnotSnippet,
+  fetchStatementExtras,
   fetchExpandDeep,
   isUnauthorized,
 } from './lineage';
@@ -28,6 +29,7 @@ export const qk = {
   knotSessions: ()               => ['knotSessions']           as const,
   knotReport:   (sid: string)    => ['knotReport', sid]        as const,
   knotSnippet:  (geoid: string)  => ['knotSnippet', geoid]     as const,
+  stmtExtras:   (geoid: string)  => ['statementExtras', geoid] as const,
 };
 
 // ── 401 handler — auto-logout when session expires ────────────────────────────
@@ -55,11 +57,14 @@ export function useOverview() {
 
 // ── L2: Explore ───────────────────────────────────────────────────────────────
 
-export function useExplore(scope: string | null) {
+export function useExplore(scope: string | null, includeExternal = false) {
   const onError = useOnUnauthorized();
   return useQuery({
-    queryKey: qk.explore(scope ?? ''),
-    queryFn:  () => fetchExplore(scope!),
+    // includeExternal goes into the query key so enabling the toggle triggers
+    // a refetch with a separate cache entry — otherwise React Query would
+    // return the non-external result from cache.
+    queryKey: [...qk.explore(scope ?? ''), includeExternal] as const,
+    queryFn:  () => fetchExplore(scope!, includeExternal),
     enabled:  !!scope,
     staleTime: 30_000,
     retry: 2,
@@ -186,6 +191,26 @@ export function useKnotSnippet(stmtGeoid: string | null | undefined, enabled: bo
     queryFn:  () => fetchKnotSnippet(stmtGeoid!),
     enabled:  enabled && !!stmtGeoid,
     staleTime: 300_000,  // snippets don't change during a session — cache 5 min
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/**
+ * Lazy fetch of subquery tree + atom stats for one DaliStatement.
+ * Fires only while the LOOM Inspector "Дополнительно" tab is mounted — the
+ * parent component mounts ExtraPanel conditionally on tab === 'extra', so
+ * this hook naturally stays inactive for stmts the user never inspects.
+ * 5-min React Query staleTime makes re-opening the tab instant for the same
+ * statement within a session.
+ */
+export function useStatementExtras(stmtGeoid: string | null | undefined, enabled: boolean) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.stmtExtras(stmtGeoid ?? ''),
+    queryFn:  () => fetchStatementExtras(stmtGeoid!),
+    enabled:  enabled && !!stmtGeoid,
+    staleTime: 300_000,
     throwOnError: false,
     meta: { onError },
   });

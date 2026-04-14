@@ -56,21 +56,27 @@ public class LineageResource {
     public Uni<ExploreResult> explore(
         @Name("scope")
         @Description("'schema-<name>', 'pkg-<name>', or a raw @rid")
-        String scope
+        String scope,
+        @Name("includeExternal") @DefaultValue("false")
+        @Description("When true, also fetch READS_FROM / WRITES_TO / DATA_FLOW / FILTER_FLOW edges whose table endpoint is in a DIFFERENT schema. Default false (current schema only).")
+        Boolean includeExternal
     ) {
         long start = System.currentTimeMillis();
+        boolean ext = includeExternal != null && includeExternal;
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
                 null, null, 0,
                 Map.of("op", "explore", "scope", scope != null ? scope : "",
-                       "call", call("explore", "scope", scope != null ? scope : "")));
-        return exploreService.explore(scope)
+                       "includeExternal", ext,
+                       "call", call("explore", "scope", scope != null ? scope : "") + (ext ? " +external" : "")));
+        return exploreService.explore(scope, ext)
                 .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
                         null, null, System.currentTimeMillis() - start,
                         Map.of("op",    "explore",
                                "scope", scope != null ? scope : "",
+                               "includeExternal", ext,
                                "nodes", result != null ? result.nodes().size() : 0,
                                "edges", result != null ? result.edges().size() : 0,
-                               "call",  call("explore", "scope", scope != null ? scope : "")
+                               "call",  call("explore", "scope", scope != null ? scope : "") + (ext ? " +external" : "")
                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
