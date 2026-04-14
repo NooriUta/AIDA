@@ -49,6 +49,13 @@ public class YggStatsResource {
 
             Map<String, Long> atomsByStatus = atomCounts(auth);
 
+            // resolved   = status in ('Обработано', 'constant')
+            // unresolved = status is null OR status not in ('Обработано','constant') OR statement_geoid='unattached'
+            long atomsResolved   = countAtoms(auth,
+                    "status in ('Обработано', 'constant')");
+            long atomsUnresolved = countAtoms(auth,
+                    "status is null OR status NOT IN ['Обработано', 'constant'] OR statement_geoid = 'unattached'");
+
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("tables",           tables);
             result.put("columns",          columns);
@@ -56,9 +63,9 @@ public class YggStatsResource {
             result.put("statements",       statements);
             result.put("routines",         routines);
             result.put("atomsTotal",       atomsByStatus.values().stream().mapToLong(Long::longValue).sum());
-            result.put("atomsResolved",    atomsByStatus.getOrDefault("Обработано", 0L));
+            result.put("atomsResolved",    atomsResolved);
             result.put("atomsConstant",    atomsByStatus.getOrDefault("constant",   0L));
-            result.put("atomsUnresolved",  atomsByStatus.getOrDefault("unresolved", 0L));
+            result.put("atomsUnresolved",  atomsUnresolved);
             result.put("atomsPending",     atomsByStatus.getOrDefault("pending",    0L));
 
             return Response.ok(result).build();
@@ -71,6 +78,20 @@ public class YggStatsResource {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────
+
+    /** Counts DaliAtom rows matching an explicit WHERE clause. */
+    private long countAtoms(String auth, String where) {
+        try {
+            List<Map<String, Object>> rows = sql(auth,
+                    "SELECT count(*) as cnt FROM `DaliAtom` WHERE " + where);
+            if (rows == null || rows.isEmpty()) return 0L;
+            Object v = rows.get(0).get("cnt");
+            return v instanceof Number n ? n.longValue() : 0L;
+        } catch (Exception e) {
+            log.debug("countAtoms({}) failed: {}", where, e.getMessage());
+            return 0L;
+        }
+    }
 
     private long count(String auth, String type) {
         try {

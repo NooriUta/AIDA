@@ -52,6 +52,12 @@ class RemoteWriter {
         Map<String, String> recordFields = new HashMap<>();
         /** constraint_geoid → RID  (DaliPrimaryKey / DaliForeignKey) */
         Map<String, String> constraints = new HashMap<>();
+        /** KI-DDL-1: stmt_geoid → RID for DaliDDLStatement vertices */
+        Map<String, String> ddlStatements = new HashMap<>();
+        /** KI-RETURN-1: routineGeoid+":PARAM:"+param_name → RID */
+        Map<String, String> parameters = new HashMap<>();
+        /** KI-RETURN-1: routineGeoid+":VAR:"+var_name → RID */
+        Map<String, String> variables = new HashMap<>();
         /** RID of the DaliSession vertex (BELONGS_TO_SESSION edges) */
         String sessionRid = null;
     }
@@ -79,10 +85,20 @@ class RemoteWriter {
         cache.records      = buildRidMap("DaliRecord",      "record_geoid",  sid);
         cache.recordFields = buildRidMap("DaliRecordField", "field_geoid",   sid);
         cache.constraints  = buildConstraintRidMap(sid);
+        // KI-DDL-1: DaliDDLStatement — pool mode uses db_name filter, non-pool uses session_id
+        if (pool != null && dbName != null) {
+            cache.ddlStatements = buildRidMapByField("DaliDDLStatement", "stmt_geoid", "db_name", dbName);
+        } else {
+            cache.ddlStatements = buildRidMap("DaliDDLStatement", "stmt_geoid", sid);
+        }
         cache.ocByOrder  = buildOcByOrderMap(sid);
         cache.affCols    = buildAffColMap(sid);
         cache.sessionRid = buildRidMap("DaliSession", "session_id", sid)
                 .values().stream().findFirst().orElse(null);
+
+        // KI-RETURN-1: build compound-key maps for parameters + variables
+        cache.parameters = buildCompoundRidMap("DaliParameter", "routine_geoid", "param_name", ":PARAM:", sid);
+        cache.variables  = buildCompoundRidMap("DaliVariable",  "routine_geoid", "var_name",   ":VAR:",  sid);
 
         logger.info("RID cache [db={}, sid={}]: T:{} C:{} S:{} R:{} P:{} A:{} OC:{} OCo:{} AC:{} Rec:{}",
                 dbName != null ? dbName : "ad-hoc", sid,
@@ -112,6 +128,33 @@ class RemoteWriter {
         return map;
     }
 
+    /**
+     * KI-RETURN-1: builds a RID map keyed by compound geoid = prefixField + separator + nameField.
+     * Used for DaliParameter (key = routineGeoid + ":PARAM:" + param_name)
+     * and DaliVariable  (key = routineGeoid + ":VAR:"   + var_name).
+     */
+    private Map<String, String> buildCompoundRidMap(String type, String prefixField,
+                                                     String nameField, String separator, String sid) {
+        Map<String, String> map = new HashMap<>();
+        try {
+            var rs = db.query("sql",
+                    "SELECT @rid AS rid, " + prefixField + ", " + nameField
+                    + " FROM " + type + " WHERE session_id = :sid",
+                    Map.of("sid", sid));
+            while (rs.hasNext()) {
+                var doc = rs.next().toMap();
+                String prefix = (String) doc.get(prefixField);
+                String name   = (String) doc.get(nameField);
+                String rid    = (String) doc.get("rid");
+                if (prefix != null && name != null && rid != null)
+                    map.put(prefix + separator + name, rid);
+            }
+        } catch (Exception e) {
+            logger.warn("Compound RID map failed for {}: {}", type, e.getMessage());
+        }
+        return map;
+    }
+
     private Map<String, String> buildRidMapByField(String type, String keyField,
                                                     String filterField, String filterVal) {
         Map<String, String> map = new HashMap<>();
@@ -137,7 +180,7 @@ class RemoteWriter {
      */
     private Map<String, String> buildConstraintRidMap(String sid) {
         Map<String, String> map = new HashMap<>();
-        for (String type : new String[]{"DaliPrimaryKey", "DaliForeignKey"}) {
+        for (String type : new String[]{"DaliPrimaryKey", "DaliForeignKey", "DaliUniqueConstraint", "DaliCheckConstraint"}) {
             try {
                 var rs = db.query("sql",
                         "SELECT @rid AS rid, constraint_geoid FROM " + type + " WHERE session_id = :sid",
@@ -682,10 +725,12 @@ class RemoteWriter {
         // ── DaliRoutine ──
         for (var e : str.getRoutines().entrySet()) {
             RoutineInfo r = e.getValue();
-            rcmd("INSERT INTO DaliRoutine SET session_id=?, routine_geoid=?, routine_name=?, routine_type=?, return_type=?, line_start=?, package_geoid=?, schema_geoid=?, data_source=?",
+            rcmd("INSERT INTO DaliRoutine SET session_id=?, routine_geoid=?, routine_name=?, routine_type=?, return_type=?, line_start=?, package_geoid=?, schema_geoid=?, data_source=?, is_pipelined=?, autonomous_transaction=?",
                     sid, e.getKey(), r.getName(), r.getRoutineType(), r.getReturnType(),
                     r.getLineStart() > 0 ? r.getLineStart() : null,
-                    r.getPackageGeoid(), r.getSchemaGeoid(), MASTER);
+                    r.getPackageGeoid(), r.getSchemaGeoid(), MASTER,
+                    r.isPipelined() ? true : null,
+                    r.isAutonomousTransaction() ? true : null);
         }
         for (var e : str.getRoutines().entrySet()) {
             RoutineInfo r = e.getValue();
@@ -782,6 +827,28 @@ class RemoteWriter {
                             c.getHostTableGeoid(), colNamesJson,
                             c.getRefTableGeoid(), refColNamesJson, c.getOnDelete());
                 }
+            } else if (c.isUniqueConstraint()) {
+                // KI-005: DaliUniqueConstraint
+                if (pool != null) {
+                    rcmd("INSERT INTO DaliUniqueConstraint SET db_name=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
+                            dbName, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), colNamesJson);
+                } else {
+                    rcmd("INSERT INTO DaliUniqueConstraint SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
+                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), colNamesJson);
+                }
+            } else if (c.isCheckConstraint()) {
+                // KI-005: DaliCheckConstraint
+                if (pool != null) {
+                    rcmd("INSERT INTO DaliCheckConstraint SET db_name=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, check_expression=?",
+                            dbName, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), c.getCheckExpression());
+                } else {
+                    rcmd("INSERT INTO DaliCheckConstraint SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, check_expression=?",
+                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                            c.getHostTableGeoid(), c.getCheckExpression());
+                }
             }
         }
 
@@ -807,7 +874,8 @@ class RemoteWriter {
             }
         }
 
-        // ── DaliRecord + DaliRecordField (G6: BULK COLLECT targets) ──
+        // ── DaliRecord + DaliRecordField (G6: BULK COLLECT / KI-RETURN-1) ──
+        Set<String> insertedFieldGeoids = new HashSet<>(); // dedup within batch
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String fieldsJson = String.join(",", rec.getFields());
@@ -815,14 +883,14 @@ class RemoteWriter {
                     "routine_geoid=?, source_stmt_geoid=?, fields=?",
                 sid, rec.getGeoid(), rec.getVarName(),
                 rec.getRoutineGeoid(), rec.getSourceStatementGeoid(), fieldsJson);
-            // DaliRecordField — one vertex per named field (skipped for wildcard-only records)
-            List<String> fields = rec.getFields();
-            for (int fi = 0; fi < fields.size(); fi++) {
-                String fieldName = fields.get(fi);
-                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fieldName;
+            // DaliRecordField — one vertex per named field (dedup across batch)
+            for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
+                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+                if (!insertedFieldGeoids.add(fieldGeoid)) continue; // already inserted
                 rcmd("INSERT INTO DaliRecordField SET session_id=?, field_geoid=?, field_name=?, " +
-                        "field_order=?, record_geoid=?",
-                    sid, fieldGeoid, fieldName, fi + 1, rec.getGeoid());
+                        "field_order=?, record_geoid=?, data_type=?, ordinal_position=?, source_column_geoid=?",
+                    sid, fieldGeoid, fi.name(), fi.ordinalPosition(), rec.getGeoid(),
+                    fi.dataType(), fi.ordinalPosition(), fi.sourceColumnGeoid());
             }
         }
 
@@ -1186,25 +1254,37 @@ class RemoteWriter {
             }
         }
 
-        // ── Constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, IS_PK/FK_COLUMN, REFERENCES_*) ──
+        // ── Constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, HAS_UNIQUE_KEY, HAS_CHECK,
+        //    IS_PK/FK/UNIQUE_COLUMN, REFERENCES_*) ──
         for (var e : str.getConstraints().entrySet()) {
             ConstraintInfo c = e.getValue();
             String constraintRid = rid.constraints.get(e.getKey());
             if (constraintRid == null) continue;
 
-            // HAS_PRIMARY_KEY / HAS_FOREIGN_KEY: host DaliTable → DaliConstraint
+            // Table → Constraint edge
             String hostTableRid = rid.tables.get(c.getHostTableGeoid());
             if (hostTableRid != null) {
-                edgeByRid(c.isPrimaryKey() ? "HAS_PRIMARY_KEY" : "HAS_FOREIGN_KEY",
-                        hostTableRid, constraintRid, sid);
+                String tableEdge;
+                if      (c.isPrimaryKey())       tableEdge = "HAS_PRIMARY_KEY";
+                else if (c.isForeignKey())        tableEdge = "HAS_FOREIGN_KEY";
+                else if (c.isUniqueConstraint())  tableEdge = "HAS_UNIQUE_KEY";
+                else if (c.isCheckConstraint())   tableEdge = "HAS_CHECK";
+                else tableEdge = null;
+                if (tableEdge != null) edgeByRid(tableEdge, hostTableRid, constraintRid, sid);
             }
 
-            // IS_PK_COLUMN / IS_FK_COLUMN: DaliConstraint → DaliColumn (host table, ordered)
-            String colEdge = c.isPrimaryKey() ? "IS_PK_COLUMN" : "IS_FK_COLUMN";
-            for (int i = 0; i < c.getColumnNames().size(); i++) {
-                String colGeoid = c.getHostTableGeoid() + "." + c.getColumnNames().get(i);
-                String colRid = rid.columns.get(colGeoid);
-                if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+            // Constraint → Column edges (PK, FK, UQ only)
+            String colEdge;
+            if      (c.isPrimaryKey())      colEdge = "IS_PK_COLUMN";
+            else if (c.isForeignKey())       colEdge = "IS_FK_COLUMN";
+            else if (c.isUniqueConstraint()) colEdge = "IS_UNIQUE_COLUMN";
+            else colEdge = null;
+            if (colEdge != null) {
+                for (int i = 0; i < c.getColumnNames().size(); i++) {
+                    String colGeoid = c.getHostTableGeoid() + "." + c.getColumnNames().get(i);
+                    String colRid = rid.columns.get(colGeoid);
+                    if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                }
             }
 
             // FK-specific: REFERENCES_TABLE + REFERENCES_COLUMN
@@ -1217,6 +1297,57 @@ class RemoteWriter {
                     String refColRid = rid.columns.get(refColGeoid);
                     if (refColRid != null) edgeByRid("REFERENCES_COLUMN", constraintRid, refColRid, sid, "order_id", i + 1);
                 }
+            }
+        }
+
+        // ── KI-DDL-1: DaliDDLModifiesTable / DaliDDLModifiesColumn ──
+        for (var e : str.getStatements().entrySet()) {
+            StatementInfo ddlSi = e.getValue();
+            if (!isDdl(ddlSi.getType())) continue;
+            String ddlRid = rid.ddlStatements.get(e.getKey());
+            if (ddlRid == null) continue;
+            // DaliDDLStatement → DaliTable (target table of ALTER)
+            for (String tGeoid : ddlSi.getTargetTables().keySet()) {
+                String tRid = rid.tables.get(tGeoid);
+                if (tRid != null) edgeByRid("DaliDDLModifiesTable", ddlRid, tRid, sid);
+            }
+            // DaliDDLStatement → DaliColumn (each ADD/MODIFY/DROP column)
+            for (StatementInfo.AffectedColumnGeoid pair : ddlSi.getAffectedColumnGeoids()) {
+                String cRid = rid.columns.get(pair.geoid());
+                if (cRid != null)
+                    edgeByRid("DaliDDLModifiesColumn", ddlRid, cRid, sid,
+                              "operation", pair.operation());
+            }
+        }
+
+        // ── KI-RETURN-1: HAS_RECORD_FIELD ──
+        for (var e : str.getRecords().entrySet()) {
+            RecordInfo rec = e.getValue();
+            String recRid = rid.records.get(e.getKey());
+            if (recRid == null) continue;
+            for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
+                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+                String rfRid = rid.recordFields.get(fieldGeoid);
+                if (rfRid != null) edgeByRid("HAS_RECORD_FIELD", recRid, rfRid, sid);
+            }
+        }
+
+        // ── KI-RETURN-1: RETURNS_INTO ──
+        for (var e : str.getStatements().entrySet()) {
+            StatementInfo retSi = e.getValue();
+            if (retSi.getReturningTargets().isEmpty()) continue;
+            String stmtRid = rid.statements.get(e.getKey());
+            if (stmtRid == null) continue;
+            for (StatementInfo.ReturningTarget rt : retSi.getReturningTargets()) {
+                String targetRid = switch (rt.kind()) {
+                    case "PARAMETER"    -> rid.parameters.get(rt.targetGeoid());
+                    case "RECORD_FIELD" -> rid.recordFields.get(rt.targetGeoid());
+                    case "RECORD"       -> rid.records.get(rt.targetGeoid());
+                    default             -> rid.variables.get(rt.targetGeoid()); // VARIABLE
+                };
+                if (targetRid != null)
+                    edgeByRid("RETURNS_INTO", stmtRid, targetRid, sid,
+                              "returning_exprs", String.join(",", rt.expressions()));
             }
         }
 
@@ -1603,16 +1734,28 @@ class RemoteWriter {
                 ConstraintInfo c = e.getValue();
                 String constraintRid = constraintRids.get(e.getKey());
                 if (constraintRid == null) continue;
-                // HAS_PRIMARY_KEY / HAS_FOREIGN_KEY: host table → constraint
+                // Table → Constraint edge
                 String hostRid = tblRids.get(c.getHostTableGeoid());
-                if (hostRid != null)
-                    edgeByRid(c.isPrimaryKey() ? "HAS_PRIMARY_KEY" : "HAS_FOREIGN_KEY",
-                            hostRid, constraintRid, sid);
-                // IS_PK_COLUMN / IS_FK_COLUMN: constraint → column (ordered)
-                String colEdge = c.isPrimaryKey() ? "IS_PK_COLUMN" : "IS_FK_COLUMN";
-                for (int i = 0; i < c.getColumnNames().size(); i++) {
-                    String colRid = colRids.get(c.getHostTableGeoid() + "." + c.getColumnNames().get(i));
-                    if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                if (hostRid != null) {
+                    String tableEdge;
+                    if      (c.isPrimaryKey())       tableEdge = "HAS_PRIMARY_KEY";
+                    else if (c.isForeignKey())        tableEdge = "HAS_FOREIGN_KEY";
+                    else if (c.isUniqueConstraint())  tableEdge = "HAS_UNIQUE_KEY";
+                    else if (c.isCheckConstraint())   tableEdge = "HAS_CHECK";
+                    else tableEdge = null;
+                    if (tableEdge != null) edgeByRid(tableEdge, hostRid, constraintRid, sid);
+                }
+                // Constraint → Column edges (PK, FK, UQ only)
+                String colEdge;
+                if      (c.isPrimaryKey())      colEdge = "IS_PK_COLUMN";
+                else if (c.isForeignKey())       colEdge = "IS_FK_COLUMN";
+                else if (c.isUniqueConstraint()) colEdge = "IS_UNIQUE_COLUMN";
+                else colEdge = null;
+                if (colEdge != null) {
+                    for (int i = 0; i < c.getColumnNames().size(); i++) {
+                        String colRid = colRids.get(c.getHostTableGeoid() + "." + c.getColumnNames().get(i));
+                        if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                    }
                 }
                 // REFERENCES_TABLE + REFERENCES_COLUMN (FK only)
                 if (c.isForeignKey() && c.getRefTableGeoid() != null) {
@@ -1624,7 +1767,7 @@ class RemoteWriter {
                     }
                 }
             }
-            logger.debug("Constraint edges: {} constraints processed (PK/FK/IS_PK/IS_FK/REF)",
+            logger.debug("Constraint edges: {} constraints processed (PK/FK/UQ/CH)",
                     constraintRids.size());
         }
 

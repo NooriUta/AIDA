@@ -167,6 +167,24 @@ public class ScopeManager {
         cursorRecordAliases.clear();
     }
 
+    // ====================== Lateral / APPLY scope registry (KI-LATERAL-1, KI-APPLY-1) ======================
+
+    /** statement geoids that contain a LATERAL subquery or CROSS/OUTER APPLY join. */
+    private final java.util.Set<String> lateralStatements = new java.util.HashSet<>();
+
+    /**
+     * KI-LATERAL-1 / KI-APPLY-1: marks a statement as having a lateral-correlated source.
+     * Used by NameResolver (future pass) to look up outer scope for unresolved column refs.
+     */
+    public void markHasLateral(String stmtGeoid) {
+        if (stmtGeoid != null) lateralStatements.add(stmtGeoid);
+    }
+
+    /** Returns true if the given statement was marked as containing a LATERAL / APPLY join. */
+    public boolean hasLateral(String stmtGeoid) {
+        return stmtGeoid != null && lateralStatements.contains(stmtGeoid);
+    }
+
     @Override
     public String toString() {
         return "ScopeManager{depth=" + depth() + ", currentStatement=" + currentStatement() + "}";

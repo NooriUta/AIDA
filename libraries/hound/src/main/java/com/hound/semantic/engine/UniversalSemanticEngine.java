@@ -604,6 +604,39 @@ public class UniversalSemanticEngine {
         }
     }
 
+    /**
+     * KI-ROWTYPE-1: Handles a variable declared with %ROWTYPE.
+     * Creates a DaliRecord for the variable and schedules post-walk field population
+     * from the referenced table's columns.
+     *
+     * @param varName  variable name (e.g. "L_ROW")
+     * @param tableRef raw table reference before %ROWTYPE (e.g. "ORDERS" or "HR.ORDERS")
+     */
+    public void onRowtypeVariable(String varName, String tableRef) {
+        String routine = scopeManager.currentRoutine();
+        if (routine == null || varName == null || varName.isBlank()) return;
+
+        // Register as a variable for scope resolution (with %ROWTYPE suffix retained for type info)
+        RoutineInfo ri = builder.getRoutines().get(routine);
+        if (ri != null) ri.addTypedVariable(varName, tableRef + "%ROWTYPE");
+
+        // Create a DaliRecord so RETURNING INTO / FETCH BULK COLLECT can reference it
+        RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine);
+        if (rec == null) return;
+
+        // Resolve the table ref to a geoid (while scope is active)
+        String cleanRef = tableRef.trim().toUpperCase();
+        String tableGeoid;
+        if (cleanRef.contains(".")) {
+            tableGeoid = builder.ensureTable(cleanRef, null); // embedded schema
+        } else {
+            tableGeoid = builder.ensureTable(cleanRef, scopeManager.currentSchema());
+        }
+
+        pendingRowtypes.add(new PendingRowtype(rec.getGeoid(), tableGeoid));
+        logger.debug("KI-ROWTYPE-1: registered {} → table {}", rec.getGeoid(), tableGeoid);
+    }
+
     public void onRoutineReturnType(String returnType) {
         String routine = scopeManager.currentRoutine();
         if (routine != null) {
@@ -976,6 +1009,10 @@ public class UniversalSemanticEngine {
 
     private final List<Map<String, String>> pendingColumns = new ArrayList<>();
 
+    // KI-ROWTYPE-1: pending %ROWTYPE record → table column population
+    private record PendingRowtype(String recGeoid, String tableGeoid) {}
+    private final List<PendingRowtype> pendingRowtypes = new ArrayList<>();
+
     public void addPendingColumn(String columnRef, String statementGeoid) {
         pendingColumns.add(Map.of("ref", columnRef, "stmt", statementGeoid));
     }
@@ -1066,6 +1103,97 @@ public class UniversalSemanticEngine {
         for (int i = resolved.size() - 1; i >= 0; i--) pendingColumns.remove((int) resolved.get(i));
         logger.info("Pending columns: {} resolved, {} remaining",
                 pendingBefore - pendingColumns.size(), pendingColumns.size());
+
+        // Pass 3 (KI-PENDING-1): parent chain depth=1 — correlated subquery outer-table columns
+        if (!pendingColumns.isEmpty()) {
+            var stillAfterP3 = new ArrayList<Map<String, String>>();
+            int p3Resolved = 0;
+            for (var p : pendingColumns) {
+                String ref = p.get("ref");
+                String stmtGeoid = p.get("stmt");
+                String[] parts = ref.split("\\.");
+                // Only bare column names — qualified refs already failed exact resolution
+                if (parts.length > 1) { stillAfterP3.add(p); continue; }
+                String tGeoid = resolveViaParentChain(ref, stmtGeoid);
+                if (tGeoid != null) {
+                    builder.addColumn(tGeoid, ref, null, null);
+                    p3Resolved++;
+                } else {
+                    stillAfterP3.add(p);
+                }
+            }
+            pendingColumns.clear();
+            pendingColumns.addAll(stillAfterP3);
+            logger.info("Pass 3 (parent chain): {} resolved, {} remaining",
+                    p3Resolved, pendingColumns.size());
+        }
+
+        // Pass 4 (KI-PENDING-1): single-table fuzzy (quality=LOW) — bare column, one source table
+        if (!pendingColumns.isEmpty()) {
+            var stillAfterP4 = new ArrayList<Map<String, String>>();
+            int p4Resolved = 0;
+            for (var p : pendingColumns) {
+                String ref = p.get("ref");
+                String stmtGeoid = p.get("stmt");
+                String[] parts = ref.split("\\.");
+                if (parts.length > 1) { stillAfterP4.add(p); continue; }
+                var si = builder.getStatements().get(stmtGeoid);
+                if (si == null) { stillAfterP4.add(p); continue; }
+                List<String> sources = si.getSourceTableGeoids().stream()
+                        .filter(g -> !builder.getStatements().containsKey(g))
+                        .toList();
+                if (sources.size() != 1) { stillAfterP4.add(p); continue; }
+                builder.addColumn(sources.get(0), ref, null, null);
+                p4Resolved++;
+            }
+            pendingColumns.clear();
+            pendingColumns.addAll(stillAfterP4);
+            logger.info("Pass 4 (single-table fuzzy): {} resolved, {} remaining",
+                    p4Resolved, pendingColumns.size());
+        }
+
+        // Pass 5 (KI-ROWTYPE-1): populate %ROWTYPE record fields from resolved table columns
+        if (!pendingRowtypes.isEmpty()) {  // previously Pass 3, renumbered after KI-PENDING-1 passes
+            int rowtypesFilled = 0;
+            for (PendingRowtype pr : pendingRowtypes) {
+                RecordInfo rec = builder.getRecords().get(pr.recGeoid());
+                if (rec == null) continue;
+                long count = builder.getColumns().values().stream()
+                        .filter(c -> pr.tableGeoid().equals(c.getTableGeoid()))
+                        .sorted(Comparator.comparingInt(ColumnInfo::getOrdinalPosition))
+                        .peek(col -> rec.addField(
+                                col.getColumnName(), col.getDataType(),
+                                col.getOrdinalPosition(), col.getGeoid()))
+                        .count();
+                if (count > 0) rowtypesFilled++;
+                else logger.debug("KI-ROWTYPE-1: no columns found for table {} (record {})",
+                        pr.tableGeoid(), pr.recGeoid());
+            }
+            logger.info("KI-ROWTYPE-1: {} of {} %ROWTYPE records populated with column fields",
+                    rowtypesFilled, pendingRowtypes.size());
+            pendingRowtypes.clear();
+        }
+    }
+
+    /**
+     * KI-PENDING-1 Pass 3: Tries to resolve a bare column name via the parent statement's
+     * source tables (depth=1). Covers correlated subqueries where an outer-FROM table
+     * already has the column registered in the builder.
+     *
+     * @return table geoid if found, null otherwise
+     */
+    private String resolveViaParentChain(String columnName, String stmtGeoid) {
+        var si = builder.getStatements().get(stmtGeoid);
+        if (si == null || si.getParentStatementGeoid() == null) return null;
+        var parentSi = builder.getStatements().get(si.getParentStatementGeoid());
+        if (parentSi == null) return null;
+        // Search parent's source tables (not subqueries) for the column
+        for (String srcGeoid : parentSi.getSourceTableGeoids()) {
+            if (builder.getStatements().containsKey(srcGeoid)) continue; // subquery, skip
+            String colGeoid = srcGeoid + "." + columnName.toUpperCase();
+            if (builder.getColumns().containsKey(colGeoid)) return srcGeoid;
+        }
+        return null;
     }
 
     /**

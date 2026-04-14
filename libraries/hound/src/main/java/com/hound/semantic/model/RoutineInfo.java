@@ -21,6 +21,10 @@ public class RoutineInfo {
     private final String parentRoutineGeoid; // null for top-level, geoid for nested
     private final int lineStart;             // source line of PROCEDURE/FUNCTION declaration
     private String returnType;
+    /** KI-PIPE-1: true if this function contains at least one PIPE ROW statement. */
+    private boolean pipelined = false;
+    /** KI-PRAGMA-1: true if PRAGMA AUTONOMOUS_TRANSACTION is declared. */
+    private boolean autonomousTransaction = false;
     private final List<ParameterInfo> typedParameters = new ArrayList<>();
     private final List<VariableInfo> typedVariables = new ArrayList<>();
 
@@ -55,6 +59,10 @@ public class RoutineInfo {
     public int getLineStart() { return lineStart; }
     public String getReturnType() { return returnType; }
     public void setReturnType(String rt) { this.returnType = rt; }
+    public boolean isPipelined()                  { return pipelined; }
+    public void setPipelined(boolean v)           { this.pipelined = v; }
+    public boolean isAutonomousTransaction()       { return autonomousTransaction; }
+    public void setAutonomousTransaction(boolean v){ this.autonomousTransaction = v; }
 
     // ═══════ Parameters ═══════
 
