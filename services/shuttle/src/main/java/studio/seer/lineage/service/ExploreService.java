@@ -248,17 +248,31 @@ public class ExploreService {
         // have been removed — this query supersedes them by also producing
         // the same (srcTable, tgtStmt) pair rows plus the column handles
         // that React Flow uses to route into specific column rows.
+        // Column-level DATA_FLOW: resolve the target handle to the ROOT stmt's
+        // OWN column handle (DaliAffectedColumn for INSERT/UPDATE/MERGE, or
+        // DaliOutputColumn for SELECT) by name-matching the descendant's
+        // DaliOutputColumn. If the root has neither matching column,
+        // targetHandle stays empty and the edge lands on the node default.
         String columnFlowCypher = """
             MATCH (s:DaliSchema)
             WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
             MATCH (s)-[:CONTAINS_TABLE]->(srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol:DaliColumn)
-            MATCH (srcCol)-[:DATA_FLOW]->(oc:DaliOutputColumn)<-[:HAS_OUTPUT_COL]-(stmt:DaliStatement)
-            WHERE coalesce(stmt.parent_statement, '') = ''
+            MATCH (srcCol)-[:DATA_FLOW]->(oc:DaliOutputColumn)<-[:HAS_OUTPUT_COL]-(sub:DaliStatement)
+            MATCH (sub)-[:CHILD_OF*0..30]->(root:DaliStatement)
+            WHERE coalesce(root.parent_statement, '') = ''
+            OPTIONAL MATCH (root)-[:HAS_AFFECTED_COL]->(rootAff:DaliAffectedColumn)
+                WHERE toUpper(coalesce(rootAff.column_name, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
+            OPTIONAL MATCH (root)-[:HAS_OUTPUT_COL]->(rootOc:DaliOutputColumn)
+                WHERE toUpper(coalesce(rootOc.name, rootOc.col_key, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
             RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
-                   id(stmt) AS tgtId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS tgtLabel, '' AS tgtScope,
+                   id(root) AS tgtId, coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel, '' AS tgtScope,
                    'DaliStatement' AS tgtType, 'DATA_FLOW' AS edgeType,
                    'src-' + id(srcCol) AS sourceHandle,
-                   'tgt-' + id(oc)     AS targetHandle
+                   CASE
+                     WHEN rootAff IS NOT NULL THEN 'tgt-' + id(rootAff)
+                     WHEN rootOc  IS NOT NULL THEN 'tgt-' + id(rootOc)
+                     ELSE ''
+                   END AS targetHandle
             UNION
             MATCH (s:DaliSchema)
             WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)

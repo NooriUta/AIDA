@@ -127,21 +127,36 @@ public class LineageService {
                    '' AS sourceHandle, '' AS targetHandle
             UNION
             // DATA_FLOW column-level: srcTable → root with per-column handle
-            // routing. Anchors at (srcTable, root) so React Flow finds the
-            // mounted parent nodes; sourceHandle / targetHandle point at
-            // the specific column row inside each card.
+            // routing. Anchors at (srcTable, root). The source handle points
+            // at the specific column row inside the source table card; the
+            // target handle must point at the ROOT statement's mounted
+            // column handle, which (for INSERT / UPDATE / MERGE roots) is a
+            // DaliAffectedColumn resolved by NAME-MATCH to the descendant's
+            // DaliOutputColumn. If the root has no matching affected column
+            // (e.g. a SELECT that has its own DaliOutputColumn), we fall
+            // back to id(oc) so SELECT roots still route correctly — and
+            // if the root has NEITHER, targetHandle stays empty and the
+            // edge lands on the stmt default handle.
             MATCH (root:DaliStatement)
             WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
             MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
             MATCH (sub)-[:HAS_OUTPUT_COL]->(oc:DaliOutputColumn)<-[:DATA_FLOW]-(srcCol:DaliColumn)
             MATCH (srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol)
+            OPTIONAL MATCH (root)-[:HAS_AFFECTED_COL]->(rootAff:DaliAffectedColumn)
+                WHERE toUpper(coalesce(rootAff.column_name, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
+            OPTIONAL MATCH (root)-[:HAS_OUTPUT_COL]->(rootOc:DaliOutputColumn)
+                WHERE toUpper(coalesce(rootOc.name, rootOc.col_key, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
             RETURN id(srcTbl) AS srcId, 'DaliTable' AS srcType,
                    coalesce(srcTbl.table_name, '') AS srcLabel,
                    id(root) AS tgtId, 'DaliStatement' AS tgtType,
                    coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
                    srcTbl.schema_geoid AS tgtScope, 'DATA_FLOW' AS edgeType,
                    'src-' + id(srcCol) AS sourceHandle,
-                   'tgt-' + id(oc)     AS targetHandle
+                   CASE
+                     WHEN rootAff IS NOT NULL THEN 'tgt-' + id(rootAff)
+                     WHEN rootOc  IS NOT NULL THEN 'tgt-' + id(rootOc)
+                     ELSE ''
+                   END AS targetHandle
             UNION
             // FILTER_FLOW column-level: srcTable → root. Source handle
             // points at the specific column used in the predicate; target
