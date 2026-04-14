@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.heimdall.HeimdallEmitter;
 
+import java.nio.file.Paths;
+
 /**
  * {@link HoundEventListener} that forwards parse events to SLF4J and HEIMDALL.
  *
@@ -48,6 +50,18 @@ public class DaliHoundListener implements HoundEventListener {
                 sessionId, file, result.atomCount(), result.vertexCount(), result.durationMs());
         // Emit ATOM_EXTRACTED with the total atom count for this file.
         emitter.atomExtracted(sessionId, file, result.atomCount());
+    }
+
+    @Override
+    public void onParseError(String file, int line, int charPos, String msg) {
+        log.warn("[{}] parse error     file={} line={}:{} msg={}", sessionId, file, line, charPos, msg);
+        emitter.parseError(sessionId, Paths.get(file).getFileName().toString(), line, charPos, msg);
+    }
+
+    @Override
+    public void onParseWarning(String file, int line, int charPos, String msg) {
+        log.debug("[{}] grammar limit   file={} line={}:{} msg={}", sessionId, file, line, charPos, msg);
+        emitter.parseWarning(sessionId, Paths.get(file).getFileName().toString(), line, charPos, msg);
     }
 
     @Override

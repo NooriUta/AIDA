@@ -14,35 +14,42 @@ import java.util.List;
 /**
  * ANTLR4 {@link org.antlr.v4.runtime.ANTLRErrorListener} for the PL/SQL grammar.
  *
- * <p>Collects every syntax error reported by the lexer and parser into an in-memory list
- * that callers can inspect after parsing. Each error is also:
+ * <p>Classifies every syntax error into two buckets:
  * <ul>
- *   <li>Logged at WARN level (file + line:col + message).
- *   <li>Forwarded to the supplied {@link HoundEventListener#onParseError} so that
- *       Dali/HEIMDALL can display it in the event stream and in {@code FileResult.errors}.
+ *   <li><b>errors</b> — genuine syntax problems in the source file (token recognition errors,
+ *       structural issues like missing END, mismatched tokens). These go into
+ *       {@code ParseResult.errors()} and cause {@code isSuccess() = false}.
+ *   <li><b>grammarLimitations</b> — valid Oracle SQL constructs not supported by the ANTLR4
+ *       grammar (e.g. {@code DATE 'YYYY-MM-DD'} in DEFAULT clauses, UPDATE with table alias).
+ *       These go into {@code ParseResult.warnings()} and do NOT affect {@code isSuccess()}.
  * </ul>
  *
- * <p>Usage:
- * <pre>{@code
- *   PlSqlErrorCollector errors = new PlSqlErrorCollector(filePath, listener);
- *   lexer.removeErrorListeners();
- *   lexer.addErrorListener(errors);
- *   parser.removeErrorListeners();
- *   parser.addErrorListener(errors);
- *   // ... parse ...
- *   List<String> parseErrors = errors.getErrors();
- * }</pre>
+ * <p>All items are also logged (errors at WARN, grammar limitations at DEBUG) and forwarded
+ * to the supplied {@link HoundEventListener} ({@code onParseError} / {@code onParseWarning}).
  */
 public class PlSqlErrorCollector extends BaseErrorListener {
 
     private static final Logger log = LoggerFactory.getLogger(PlSqlErrorCollector.class);
 
-    /** Maximum number of syntax errors collected per file (to avoid log spam). */
-    private static final int MAX_ERRORS = 50;
+    /** Maximum number of errors/warnings collected per file (to avoid log spam). */
+    private static final int MAX_ERRORS   = 50;
+    private static final int MAX_WARNINGS = 100;
 
-    private final String                file;
-    private final HoundEventListener    listener;
-    private final List<String>          errors = new ArrayList<>();
+    /**
+     * Message substrings that identify known ANTLR4 grammar limitations —
+     * valid Oracle SQL constructs missing from the grammar.
+     * These become warnings, not errors.
+     */
+    private static final List<String> GRAMMAR_LIMITATION_PATTERNS = List.of(
+            "extraneous input 'DATE'",       // DEFAULT DATE 'YYYY-MM-DD' literal
+            "extraneous input 'TIMESTAMP'",  // DEFAULT TIMESTAMP 'literal'
+            "missing 'SET' at"               // UPDATE tbl alias SET alias.col = val
+    );
+
+    private final String             file;
+    private final HoundEventListener listener;
+    private final List<String>       errors             = new ArrayList<>();
+    private final List<String>       grammarLimitations = new ArrayList<>();
 
     public PlSqlErrorCollector(String file, HoundEventListener listener) {
         this.file     = file;
@@ -56,28 +63,53 @@ public class PlSqlErrorCollector extends BaseErrorListener {
                             int charPositionInLine,
                             String msg,
                             RecognitionException e) {
-        if (errors.size() >= MAX_ERRORS) return;
-
         String entry = "line " + line + ":" + charPositionInLine + " — " + msg;
-        errors.add(entry);
 
-        log.warn("[ANTLR4] {} | {}", basename(file), entry);
-
-        try {
-            listener.onParseError(file, line, charPositionInLine, msg);
-        } catch (Exception ex) {
-            log.debug("[PlSqlErrorCollector] onParseError callback failed: {}", ex.getMessage());
+        if (isGrammarLimitation(msg)) {
+            if (grammarLimitations.size() >= MAX_WARNINGS) return;
+            grammarLimitations.add(entry);
+            log.debug("[ANTLR4-grammar] {} | {}", basename(file), entry);
+            try {
+                listener.onParseWarning(file, line, charPositionInLine, msg);
+            } catch (Exception ex) {
+                log.debug("[PlSqlErrorCollector] onParseWarning callback failed: {}", ex.getMessage());
+            }
+        } else {
+            if (errors.size() >= MAX_ERRORS) return;
+            errors.add(entry);
+            log.warn("[ANTLR4] {} | {}", basename(file), entry);
+            try {
+                listener.onParseError(file, line, charPositionInLine, msg);
+            } catch (Exception ex) {
+                log.debug("[PlSqlErrorCollector] onParseError callback failed: {}", ex.getMessage());
+            }
         }
     }
 
-    /** Returns an unmodifiable snapshot of collected syntax errors. */
+    /** Returns an unmodifiable list of genuine syntax errors (→ {@code ParseResult.errors()}). */
     public List<String> getErrors() {
         return Collections.unmodifiableList(errors);
     }
 
-    /** True if any syntax errors were collected. */
+    /**
+     * Returns an unmodifiable list of known grammar limitation notices
+     * (→ {@code ParseResult.warnings()}).
+     */
+    public List<String> getGrammarLimitations() {
+        return Collections.unmodifiableList(grammarLimitations);
+    }
+
+    /** True if any genuine syntax errors were collected. */
     public boolean hasErrors() {
         return !errors.isEmpty();
+    }
+
+    private static boolean isGrammarLimitation(String msg) {
+        if (msg == null) return false;
+        for (String pattern : GRAMMAR_LIMITATION_PATTERNS) {
+            if (msg.contains(pattern)) return true;
+        }
+        return false;
     }
 
     private static String basename(String path) {

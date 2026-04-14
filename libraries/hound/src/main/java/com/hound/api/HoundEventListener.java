@@ -51,6 +51,17 @@ public interface HoundEventListener {
      */
     default void onParseError(String file, int line, int charPos, String msg) {}
 
+    /**
+     * Called for each ANTLR4 syntax issue that is a <em>known grammar limitation</em>
+     * rather than a genuine bug in the SQL source (e.g. {@code DATE 'literal'} in DEFAULT
+     * clauses, or UPDATE with a table alias — valid Oracle SQL not covered by the grammar).
+     *
+     * <p>These are informational — the parse continues and results are still useful.
+     * They go into {@link ParseResult#warnings()} (not {@code errors()}) so that
+     * {@code isSuccess()} remains {@code true}.
+     */
+    default void onParseWarning(String file, int line, int charPos, String msg) {}
+
     /** Called if an unrecoverable error occurs while processing {@code file}. */
     default void onError(String file, Throwable error) {}
 }

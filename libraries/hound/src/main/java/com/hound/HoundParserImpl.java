@@ -112,7 +112,7 @@ public class HoundParserImpl implements HoundParser {
                         if (writer != null) {
                             ws = writer.saveResult(ar.semantic(), ar.timer(), pool, schema);
                         }
-                        pr = toParseResult(ar.semantic(), ar.timer(), ws, ar.parseErrors());
+                        pr = toParseResult(ar.semantic(), ar.timer(), ws, ar.parseErrors(), ar.parseWarnings());
                     } else {
                         pr = emptyResult(file.toString());
                     }
@@ -159,7 +159,7 @@ public class HoundParserImpl implements HoundParser {
         String rawSql = readFileWithFallback(file);
         if (rawSql.isBlank()) {
             logger.warn("Empty file: {}", file);
-            return new AnalysisResult(file, null, new PipelineTimer(), List.of());
+            return new AnalysisResult(file, null, new PipelineTimer(), List.of(), List.of());
         }
 
         // Strip SQL*Plus directives before handing to ANTLR4.
@@ -173,8 +173,8 @@ public class HoundParserImpl implements HoundParser {
         // Pass listener so AtomProcessor/StructureAndLineageBuilder fire events (C.1.3)
         UniversalSemanticEngine engine = new UniversalSemanticEngine(listener, file.toString());
         Object dialectListener = createDialectListener(config.dialect(), engine, defaultSchema);
-        List<String> parseErrors = parseAndWalk(sql, config.dialect(), dialectListener,
-                                                file.toString(), listener, timer);
+        ParseOutcome outcome = parseAndWalk(sql, config.dialect(), dialectListener,
+                                            file.toString(), listener, timer);
 
         timer.start("resolve");
         engine.resolvePendingColumns();
@@ -188,7 +188,7 @@ public class HoundParserImpl implements HoundParser {
                 parseWalkResolveMs
         ).withRawScript(rawSql);
 
-        return new AnalysisResult(file, result, timer, parseErrors);
+        return new AnalysisResult(file, result, timer, outcome.errors(), outcome.warnings());
     }
 
     /**
@@ -206,13 +206,13 @@ public class HoundParserImpl implements HoundParser {
         if (writer != null) {
             ws = writer.saveResult(ar.semantic(), ar.timer(), pool, dbName);
         }
-        return toParseResult(ar.semantic(), ar.timer(), ws, ar.parseErrors());
+        return toParseResult(ar.semantic(), ar.timer(), ws, ar.parseErrors(), ar.parseWarnings());
     }
 
     // ─── SemanticResult → ParseResult ────────────────────────────
 
     private static ParseResult toParseResult(SemanticResult sem, PipelineTimer timer, WriteStats ws,
-                                              List<String> parseErrors) {
+                                              List<String> parseErrors, List<String> parseWarnings) {
         Structure s = sem.getStructure();
 
         int atomCount;
@@ -260,13 +260,13 @@ public class HoundParserImpl implements HoundParser {
         long durationMs = timer.ms("parse") + timer.ms("walk")
                 + timer.ms("resolve") + timer.writeMs();
 
-        // ANTLR4 syntax errors are errors for this file (parser recovered, result is partial).
-        // At process level they are handled as WARN — the batch continues with remaining files.
-        List<String> fileErrors = parseErrors != null && !parseErrors.isEmpty()
-                ? parseErrors
-                : List.of();
+        // Genuine ANTLR4 syntax errors → ParseResult.errors() (isSuccess = false).
+        // Known grammar limitations (DATE literal in DEFAULT, UPDATE alias, etc.) →
+        // ParseResult.warnings() (isSuccess stays true — parse completed, result is usable).
+        List<String> fileErrors   = parseErrors   != null ? parseErrors   : List.of();
+        List<String> fileWarnings = parseWarnings != null ? parseWarnings : List.of();
         return new ParseResult(sem.getFilePath(), atomCount, vertexCount, edgeCount,
-                droppedEdgeCount, vertexStats, resolutionRate, List.of(), fileErrors, durationMs);
+                droppedEdgeCount, vertexStats, resolutionRate, fileWarnings, fileErrors, durationMs);
     }
 
     /**
@@ -343,7 +343,7 @@ public class HoundParserImpl implements HoundParser {
         };
     }
 
-    private static List<String> parseAndWalk(String sql, String dialect, Object listener,
+    private static ParseOutcome parseAndWalk(String sql, String dialect, Object listener,
                                               String filePath, HoundEventListener eventListener,
                                               PipelineTimer timer) {
         return switch (dialect.toLowerCase()) {
@@ -374,7 +374,7 @@ public class HoundParserImpl implements HoundParser {
                 ParseTreeWalker.DEFAULT.walk((PlSqlSemanticListener) listener, tree);
                 timer.stop("walk");
 
-                yield errorCollector.getErrors();
+                yield new ParseOutcome(errorCollector.getErrors(), errorCollector.getGrammarLimitations());
             }
             default -> throw new IllegalArgumentException("Parser not implemented: " + dialect);
         };
@@ -478,5 +478,10 @@ public class HoundParserImpl implements HoundParser {
 
     /** Internal result of the parse phase (before DB write). */
     private record AnalysisResult(Path file, SemanticResult semantic, PipelineTimer timer,
-                                   List<String> parseErrors) {}
+                                   List<String> parseErrors, List<String> parseWarnings) {}
+
+    /** Errors + grammar-limitation warnings returned from {@link #parseAndWalk}. */
+    private record ParseOutcome(List<String> errors, List<String> warnings) {
+        static ParseOutcome empty() { return new ParseOutcome(List.of(), List.of()); }
+    }
 }

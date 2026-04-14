@@ -33,21 +33,26 @@ class ParseErrorFixtureTest {
 
     // ── helper ───────────────────────────────────────────────────────────────
 
-    record Capture(List<String> parseErrors, ParseResult result) {}
+    record Capture(List<String> parseErrors, List<String> parseWarnings, ParseResult result) {}
 
     private Capture parse(String fixtureName) throws Exception {
         HoundConfig config = HoundConfig.defaultDisabled("plsql");
-        List<String> captured = new ArrayList<>();
+        List<String> capturedErrors   = new ArrayList<>();
+        List<String> capturedWarnings = new ArrayList<>();
 
         HoundEventListener listener = new HoundEventListener() {
             @Override
             public void onParseError(String file, int line, int charPos, String msg) {
-                captured.add("line " + line + ":" + charPos + " — " + msg);
+                capturedErrors.add("line " + line + ":" + charPos + " — " + msg);
+            }
+            @Override
+            public void onParseWarning(String file, int line, int charPos, String msg) {
+                capturedWarnings.add("line " + line + ":" + charPos + " — " + msg);
             }
         };
 
         ParseResult result = new HoundParserImpl().parse(fixture(fixtureName), config, listener);
-        return new Capture(captured, result);
+        return new Capture(capturedErrors, capturedWarnings, result);
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────
@@ -86,20 +91,26 @@ class ParseErrorFixtureTest {
 
     /**
      * UPDATE with a table alias (UPDATE tbl alias SET alias.col = val) is a known
-     * PL/SQL grammar limitation. Expect ≥1 ANTLR4 error; the procedure body
-     * is still partially parsed.
+     * PL/SQL grammar limitation. Goes to parseWarnings (not parseErrors) so that
+     * isSuccess() remains true — the file parses but with a grammar notice.
      */
     @Test
-    void updateAlias_knownGrammarLimitation_atLeastOneAntlrError() throws Exception {
+    void updateAlias_knownGrammarLimitation_isWarningNotError() throws Exception {
         Capture c = parse("err_update_alias.sql");
 
-        assertFalse(c.parseErrors().isEmpty(),
-                "Expected ≥1 ANTLR4 error for UPDATE alias construct, but got none");
-        // At least one error must mention 'SET' or '=' (grammar confusion point)
-        boolean mentionsSetOrEq = c.parseErrors().stream()
-                .anyMatch(e -> e.contains("SET") || e.contains("="));
-        assertTrue(mentionsSetOrEq,
-                "Expected error to mention 'SET' or '=', got: " + c.parseErrors());
+        // Must be a WARNING (grammar limitation), not an error
+        assertFalse(c.parseWarnings().isEmpty(),
+                "Expected ≥1 grammar limitation warning for UPDATE alias, but got none");
+        assertTrue(c.parseErrors().isEmpty(),
+                "UPDATE alias must NOT appear as an error, got: " + c.parseErrors());
+        // At least one warning must mention 'SET' (grammar confusion point)
+        assertTrue(c.parseWarnings().stream().anyMatch(e -> e.contains("SET")),
+                "Expected grammar warning to mention 'SET', got: " + c.parseWarnings());
+        // isSuccess = true because grammar limitations do not count as errors
+        assertTrue(c.result().isSuccess(),
+                "isSuccess() must be true for grammar limitation (warnings only)");
+        assertFalse(c.result().warnings().isEmpty(),
+                "ParseResult.warnings() must contain the grammar limitation notice");
     }
 
     /**
@@ -146,7 +157,7 @@ class ParseErrorFixtureTest {
                 "SELECT 2 FROM DUAL;\n";       // line 5 — kept
 
         String result = HoundParserImpl.stripSqlPlusDirectives(input, "test.sql");
-        String[] lines = result.split("\n", -1);
+        String[] lines = result.split("\n");  // without -1: trailing empty token dropped
 
         assertEquals(5, lines.length, "Line count must be preserved");
         assertTrue(lines[0].isBlank(),  "line 1 (SET) must be blank");

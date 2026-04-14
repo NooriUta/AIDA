@@ -109,6 +109,30 @@ public class HeimdallEmitter {
                 "atomCount", atomCount));
     }
 
+    /**
+     * Emitted when ANTLR4 reports a genuine syntax error inside a file.
+     * Level is WARN — the file is still (partially) parsed; the session continues.
+     */
+    public void parseError(String sessionId, String file, int line, int col, String msg) {
+        warn(EventType.PARSE_ERROR, sessionId, Map.of(
+                "file", file,
+                "line", line,
+                "col",  col,
+                "msg",  msg != null ? msg : ""));
+    }
+
+    /**
+     * Emitted when ANTLR4 reports a known grammar limitation (not a bug in the source file).
+     * Level is INFO — informational only; does not affect {@code isSuccess()} or the ✗ indicator.
+     */
+    public void parseWarning(String sessionId, String file, int line, int col, String msg) {
+        info(EventType.PARSE_WARNING, sessionId, Map.of(
+                "file", file,
+                "line", line,
+                "col",  col,
+                "msg",  msg != null ? msg : ""));
+    }
+
     /** Emitted when Hound encounters an error parsing a file. */
     public void fileParsingFailed(String sessionId, String file, String error) {
         emit(build(EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, Map.of(
