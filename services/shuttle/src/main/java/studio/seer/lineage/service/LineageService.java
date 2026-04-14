@@ -120,7 +120,37 @@ public class LineageService {
                    id(root) AS tgtId, 'DaliStatement' AS tgtType,
                    coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
                    t.schema_geoid AS tgtScope, 'READS_FROM' AS edgeType
-            LIMIT 500
+            UNION
+            // DATA_FLOW aggregated to srcTable → root stmt. Mirrors the
+            // corresponding segment in ExploreService.exploreSchema — column
+            // lives on the table, OutputColumn lives on a stmt, we collapse
+            // to (table → root) so the canvas renders an animated lime dash
+            // from each source table to the INSERT / MERGE root.
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
+            MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
+            MATCH (sub)-[:HAS_OUTPUT_COL]->(oc:DaliOutputColumn)<-[:DATA_FLOW]-(srcCol:DaliColumn)
+            MATCH (srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol)
+            RETURN id(srcTbl) AS srcId, 'DaliTable' AS srcType,
+                   coalesce(srcTbl.table_name, '') AS srcLabel,
+                   id(root) AS tgtId, 'DaliStatement' AS tgtType,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
+                   srcTbl.schema_geoid AS tgtScope, 'DATA_FLOW' AS edgeType
+            UNION
+            // FILTER_FLOW aggregated to srcTable → root. Column used in
+            // WHERE / HAVING / JOIN of the root stmt or any descendant;
+            // rendered as a mauve dotted animated edge on the canvas.
+            MATCH (root:DaliStatement)
+            WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
+            MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
+            MATCH (srcCol:DaliColumn)-[:FILTER_FLOW]->(sub)
+            MATCH (srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol)
+            RETURN id(srcTbl) AS srcId, 'DaliTable' AS srcType,
+                   coalesce(srcTbl.table_name, '') AS srcLabel,
+                   id(root) AS tgtId, 'DaliStatement' AS tgtType,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel,
+                   srcTbl.schema_geoid AS tgtScope, 'FILTER_FLOW' AS edgeType
+            LIMIT 1000
             """;
         return arcade.cypher(cypher, Map.of("nodeId", nodeId))
                 .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
