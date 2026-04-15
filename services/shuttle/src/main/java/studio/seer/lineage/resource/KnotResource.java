@@ -127,4 +127,26 @@ public class KnotResource {
                                "call", "knotTableDetail(tableGeoid=" + (tableGeoid != null ? tableGeoid : "")
                                        + ") → " + (detail != null ? detail.columns().size() : 0) + " cols")));
     }
+
+    @Query("knotScript")
+    @Description("KNOT — full source file text for a session (from DaliSnippetScript). Lazy — fires only when the Source tab is open. Role: viewer+")
+    public Uni<KnotScript> knotScript(
+        @Name("sessionId")
+        @Description("session_id of the DaliSession whose source file to retrieve")
+        String sessionId
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "knotScript",
+                       "call", "knotScript(sessionId=" + (sessionId != null ? sessionId : "") + ")"));
+        return knotService.knotScript(sessionId)
+                .invoke(s -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotScript",
+                               "sessionId", sessionId != null ? sessionId : "",
+                               "call", "knotScript(sessionId=" + (sessionId != null ? sessionId : "")
+                                       + ") → " + (s != null ? s.lineCount() + " lines, "
+                                               + s.charCount() + " chars" : "null"))));
+    }
 }

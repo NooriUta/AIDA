@@ -267,7 +267,20 @@
       "structure": "Structure",
       "statements": "Statements",
       "routines": "Routines",
-      "atoms": "Atoms"
+      "atoms": "Atoms",
+      "source": "Source"
+    },
+    "source": {
+      "loading": "Loading source file…",
+      "empty": "Source file not recorded for this session",
+      "lines": "lines",
+      "largeFile": "Large file — paginated view",
+      "jumpPlaceholder": "line #",
+      "go": "Go",
+      "copy": "Copy all",
+      "prev": "Prev",
+      "next": "Next",
+      "pageOf": "Page {{page}} / {{total}} · lines {{from}}–{{to}}"
     },
     "session": {
       "tables": "Tables",

@@ -13,6 +13,7 @@ import {
   fetchKnotSessions,
   fetchKnotReport,
   fetchKnotSnippet,
+  fetchKnotScript,
   fetchStatementExtras,
   fetchExpandDeep,
   isUnauthorized,
@@ -32,6 +33,7 @@ export const qk = {
   knotSessions:  ()               => ['knotSessions']           as const,
   knotReport:    (sid: string)    => ['knotReport', sid]        as const,
   knotSnippet:   (geoid: string)  => ['knotSnippet', geoid]     as const,
+  knotScript:    (sid: string)    => ['knotScript', sid]        as const,
   stmtExtras:    (geoid: string)  => ['statementExtras', geoid] as const,
   routineDetail: (nodeId: string) => ['routineDetail', nodeId]  as const,
 };
@@ -239,6 +241,19 @@ export function useRoutineDetail(nodeId: string | null) {
     queryFn:  () => fetchRoutineDetail(nodeId!),
     enabled:  !!nodeId,
     staleTime: 60_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/** Lazy full-source fetch — enabled only when the Source tab is active. */
+export function useKnotScript(sessionId: string | null | undefined, enabled: boolean) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.knotScript(sessionId ?? ''),
+    queryFn:  () => fetchKnotScript(sessionId!),
+    enabled:  enabled && !!sessionId,
+    staleTime: 600_000,  // source doesn't change within a session — cache 10 min
     throwOnError: false,
     meta: { onError },
   });

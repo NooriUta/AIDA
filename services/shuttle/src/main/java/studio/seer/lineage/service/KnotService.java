@@ -620,6 +620,35 @@ public class KnotService {
             .map(s -> (s == null || s.isBlank()) ? null : s);
     }
 
+    // ── Full source file (lazy, called from KNOT "Исходник" tab) ─────────────
+    //
+    // Returns the full text of the parsed source file for a session.
+    // DaliSnippetScript stores one document per Hound parse run with the
+    // complete raw PL/SQL text (up to several MB for large packages).
+    // Accessed via session_id SQL lookup (no graph edge to DaliSession).
+
+    public Uni<KnotScript> knotScript(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return Uni.createFrom().nullItem();
+        String sql = """
+            SELECT file_path, script, line_count, char_count
+            FROM DaliSnippetScript
+            WHERE session_id = :sid
+            LIMIT 1
+            """;
+        return arcade.sql(sql, Map.of("sid", sessionId))
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> {
+                    if (rows.isEmpty()) return null;
+                    var r = rows.get(0);
+                    return new KnotScript(
+                            str(r, "file_path"),
+                            str(r, "script"),
+                            num(r, "line_count"),
+                            num(r, "char_count")
+                    );
+                });
+    }
+
     // ── Statement extras (descendants + atom stats, lazy from Inspector) ──────
     //
     // Powers the LOOM Inspector "Дополнительно" tab. Returns:
