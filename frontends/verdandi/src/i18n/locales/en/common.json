@@ -267,7 +267,20 @@
       "structure": "Structure",
       "statements": "Statements",
       "routines": "Routines",
-      "atoms": "Atoms"
+      "atoms": "Atoms",
+      "source": "Source"
+    },
+    "source": {
+      "loading": "Loading source file…",
+      "empty": "Source file not recorded for this session",
+      "lines": "lines",
+      "largeFile": "Large file — paginated view",
+      "jumpPlaceholder": "line #",
+      "go": "Go",
+      "copy": "Copy all",
+      "prev": "Prev",
+      "next": "Next",
+      "pageOf": "Page {{page}} / {{total}} · lines {{from}}–{{to}}"
     },
     "session": {
       "tables": "Tables",
@@ -509,6 +522,14 @@
     "drillDown":     "Drill-down →",
     "parameters":    "Parameters",
     "noParameters":  "No parameters",
+    "variables":     "Variables",
+    "noVariables":   "No variables",
+    "statements":    "Statements",
+    "noStatements":  "No statements",
+    "callsTo":       "Calls",
+    "calledBy":      "Called by",
+    "noCalls":       "None",
+    "package":       "Package",
     "openInKnot":    "Open in KNOT",
     "dataType":      "Data type",
     "operation":     "Operation",
@@ -555,7 +576,9 @@
     "joinOn":        "Condition",
     "direction":     "Direction",
     "routine":       "Routine",
-    "default":       "Default"
+    "default":       "Default",
+    "fields":        "Fields",
+    "noFields":      "No fields"
   },
 
   "stub": {

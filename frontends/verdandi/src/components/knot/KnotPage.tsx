@@ -7,10 +7,11 @@ import { KnotStructure } from './KnotStructure';
 import { KnotRoutines } from './KnotRoutines';
 import { KnotStatements } from './KnotStatements';
 import { KnotAtoms } from './KnotAtoms';
+import { KnotSource } from './KnotSource';
 import { useKnotSessions, useKnotReport } from '../../services/hooks';
 import type { KnotSession } from '../../services/lineage';
 
-type TabId = 'summary' | 'structure' | 'routines' | 'statements' | 'atoms';
+type TabId = 'summary' | 'structure' | 'routines' | 'statements' | 'atoms' | 'source';
 
 export const KnotPage = memo(() => {
   const { t } = useTranslation();
@@ -97,6 +98,7 @@ export const KnotPage = memo(() => {
     { id: 'routines',   key: 'knot.tabs.routines',   count: tabCounts.routines },
     { id: 'statements', key: 'knot.tabs.statements', count: tabCounts.statements },
     { id: 'atoms',      key: 'knot.tabs.atoms',      count: tabCounts.atoms },
+    { id: 'source',     key: 'knot.tabs.source' },
   ];
 
   return (
@@ -369,6 +371,10 @@ export const KnotPage = memo(() => {
                 {activeTab === 'routines'   && <KnotRoutines   session={report.session} routines={report.routines ?? []} statements={report.statements} calls={report.calls ?? []} parameters={report.parameters ?? []} variables={report.variables ?? []} />}
                 {activeTab === 'statements' && <KnotStatements statements={report.statements} snippets={report.snippets} atoms={report.atoms} outputColumns={report.outputColumns} affectedColumns={report.affectedColumns} />}
                 {activeTab === 'atoms'      && <KnotAtoms      session={report.session} atoms={report.atoms} />}
+                {/* Source tab: lazy-loaded, stays mounted to avoid re-fetch on tab switch */}
+                <div style={{ display: activeTab === 'source' ? 'contents' : 'none' }}>
+                  <KnotSource sessionId={selectedId ?? ''} active={activeTab === 'source'} />
+                </div>
               </>
             )}
           </div>

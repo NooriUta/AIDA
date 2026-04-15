@@ -135,10 +135,10 @@ describe('sessionLabel', () => {
 // ─── getEdgeStyle ────────────────────────────────────────────────────────────
 
 describe('getEdgeStyle', () => {
-  it('returns amber stroke for WRITES_TO (dashed)', () => {
+  it('returns amber stroke for WRITES_TO (solid)', () => {
     const s = getEdgeStyle('WRITES_TO');
     expect(s.stroke).toBe('#D4922A');
-    expect(s.strokeDasharray).toBeTruthy();
+    expect(s.strokeDasharray).toBeUndefined();
   });
 
   it('returns teal stroke for READS_FROM (solid)', () => {

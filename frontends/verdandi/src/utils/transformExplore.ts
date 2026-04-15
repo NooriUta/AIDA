@@ -10,9 +10,10 @@ import {
   extractRoutineKind,
   parseStmtLabel,
 } from './transformHelpers';
-import { TRANSFORM } from './constants';
+import { TRANSFORM, LAYOUT } from './constants';
 
 const { L2_MAX_COLS, EDGE_CURVATURE } = TRANSFORM;
+const { NODE_WIDTH, NODE_HEIGHT_BASE } = LAYOUT;
 
 // ─── Nesting edges: build visual hierarchy (Schema → Routine → Stmt) ─────────
 // CONTAINS_ROUTINE is dual-purpose: Schema→Routine AND Routine→Routine.
@@ -22,6 +23,10 @@ const NESTING_EDGES = new Set<string>([
   'CONTAINS_ROUTINE', 'CONTAINS_STMT', 'CONTAINS_PACKAGE',
   'CONTAINS_TABLE', 'BELONGS_TO_SESSION',
   'HAS_COLUMN', 'HAS_OUTPUT_COL', 'HAS_AFFECTED_COL', 'HAS_PARAMETER', 'HAS_VARIABLE',
+  // Phase S2.4 — PL/SQL record field containment: fields render as rows inside RecordNode,
+  // never as separate canvas nodes. RETURNS_INTO (stmt→record) is NOT suppressed — it renders
+  // as a visible edge. BULK_COLLECTS_INTO and RECORD_USED_IN are handled below in SUPPRESSED_EDGES.
+  'HAS_RECORD_FIELD',
 ]);
 
 // ─── Suppressed edges: ALL structural/containment edges hidden from arrows ───
@@ -31,7 +36,8 @@ const SUPPRESSED_EDGES = new Set<string>([
   ...NESTING_EDGES,
   'CONTAINS_PACKAGE',
   'CHILD_OF', 'USES_SUBQUERY', 'NESTED_IN',
-  'CALLS',
+  // NOTE: 'CALLS' is intentionally NOT suppressed — routine→routine call edges
+  // are rendered at L2 AGG to show inter-procedure call flow.
   'ROUTINE_USES_TABLE',
   'ATOM_REF_TABLE',
   'ATOM_REF_COLUMN',
@@ -44,6 +50,10 @@ const SUPPRESSED_EDGES = new Set<string>([
   'CONTAINS_SCHEMA',
   'HAS_SERVICE',
   'USES_DATABASE',
+  // Phase S2.4 — PL/SQL record containment (virtual edge emitted by backend)
+  'CONTAINS_RECORD',
+  // NODE_ONLY self-edges (emitted for routine aggregate standalone nodes)
+  'NODE_ONLY',
 ]);
 
 // ─── L2 edge whitelist: only data-flow arrows on the canvas ─────────────────
@@ -230,10 +240,26 @@ function transformSchemaExplore(result: ExploreResult): {
     renderedIds.add(extId);
   }
 
+  // Phase S2.6 — build stmt → owner lookup so StatementNode header segments
+  // can be made clickable (navigates back to L2 scoped to that routine/package).
+  const stmtToRoutine = new Map<string, string>();
+  const routineToParent = new Map<string, string>();
+  for (const e of result.edges) {
+    if (e.type === 'CONTAINS_STMT') stmtToRoutine.set(e.target, e.source);
+    if (e.type === 'CONTAINS_ROUTINE') {
+      const src = nodeById.get(e.source);
+      if (src?.type === 'DaliPackage' || src?.type === 'DaliSchema') {
+        routineToParent.set(e.target, e.source);
+      }
+    }
+  }
+
   for (const stmtId of allStmtIds) {
     const nd = nodeById.get(stmtId);
     if (!nd) continue;
     const { shortLabel, groupPath } = parseStmtLabel(nd.label);
+    const ownerRoutineId  = stmtToRoutine.get(stmtId);
+    const ownerPackageId  = ownerRoutineId ? routineToParent.get(ownerRoutineId) : undefined;
     rfNodes.push({
       id:       stmtId,
       type:     'statementNode',
@@ -242,7 +268,13 @@ function transformSchemaExplore(result: ExploreResult): {
         label:             shortLabel,
         nodeType:          'DaliStatement' as DaliNodeType,
         childrenAvailable: true,
-        metadata:          { scope: nd.scope, groupPath, fullLabel: nd.label },
+        metadata:          {
+          scope:          nd.scope,
+          groupPath,
+          fullLabel:      nd.label,
+          ownerRoutineId: ownerRoutineId  ?? undefined,
+          ownerPackageId: ownerPackageId  ?? undefined,
+        },
         operation:         extractStatementType(nd.label),
         columns:           columnsByParent.get(stmtId),
       },
@@ -421,6 +453,26 @@ export function transformGqlExplore(
     }
   }
 
+  // Phase S2.4 — collect DaliRecordField rows into RecordNode's data.columns
+  // (analogous to DaliColumn→TableNode and DaliOutputColumn→StatementNode)
+  const fieldsByRecord = new Map<string, Array<{ id: string; name: string; type: string; isPrimaryKey: boolean; isForeignKey: boolean }>>();
+  for (const e of result.edges) {
+    if (e.type !== 'HAS_RECORD_FIELD') continue;
+    const fieldNode = nodeById.get(e.target);
+    if (!fieldNode || fieldNode.type !== 'DaliRecordField') continue;
+    if (!fieldsByRecord.has(e.source)) fieldsByRecord.set(e.source, []);
+    const fields = fieldsByRecord.get(e.source)!;
+    const metaMap = Object.fromEntries((fieldNode.meta ?? []).map((m) => [m.key, m.value]));
+    fields.push({
+      id:           fieldNode.id,
+      name:         fieldNode.label,
+      type:         metaMap['dataType'] ?? metaMap['data_type'] ?? '',
+      isPrimaryKey: false,
+      // Use isForeignKey as a proxy for "has source_column_geoid" (%ROWTYPE origin badge)
+      isForeignKey: !!(metaMap['source_column_geoid']),
+    });
+  }
+
   const { subqueryIds, syntheticEdges } = hoistSubqueryReads(result);
 
   const nodes: LoomNode[] = result.nodes
@@ -429,6 +481,7 @@ export function transformGqlExplore(
       n.type !== 'DaliColumn'        &&
       n.type !== 'DaliAffectedColumn' &&
       n.type !== 'DaliAtom'          &&
+      n.type !== 'DaliRecordField'   &&  // Phase S2.4: fields render inside RecordNode
       !subqueryIds.has(n.id),
     )
     .map((n) => {
@@ -437,6 +490,20 @@ export function transformGqlExplore(
       const { shortLabel, groupPath } = nodeType === 'DaliStatement'
         ? parseStmtLabel(n.label)
         : { shortLabel: n.label, groupPath: [] as string[] };
+
+      // For DaliRoutine nodes from exploreRoutineAggregate, the backend now populates
+      // node.scope = schema_geoid and node.meta with packageName / routineType.
+      const nodeMeta = Object.fromEntries((n.meta ?? []).map((m) => [m.key, m.value]));
+      const schemaName  = isFlatRoutine ? (n.scope || undefined) : undefined;
+      const packageName = isFlatRoutine ? (nodeMeta['packageName'] || undefined) : undefined;
+      // Prefer backend-supplied routineType (e.g. "PROCEDURE") over label-parsing heuristic.
+      const routineKindRaw = nodeMeta['routineType'];
+      const routineKind = isFlatRoutine
+        ? (routineKindRaw
+            ? ({ PROCEDURE: 'PROC', FUNCTION: 'FUNC', TRIGGER: 'TRIG', PACKAGE: 'PKG' }[routineKindRaw.toUpperCase()] ?? routineKindRaw)
+            : extractRoutineKind(n.label, nodeType))
+        : undefined;
+
       return {
         id: n.id,
         type: NODE_TYPE_MAP[nodeType] ?? 'schemaNode',
@@ -450,14 +517,68 @@ export function transformGqlExplore(
             dataSource:  n.dataSource || undefined,
             groupPath:   groupPath.length > 0 ? groupPath : undefined,
             fullLabel:   nodeType === 'DaliStatement' ? n.label : undefined,
-            routineKind: isFlatRoutine ? extractRoutineKind(n.label, nodeType) : undefined,
+            routineKind,
+            schemaName,   // Phase S2.3+: schema_geoid from backend, shown in RoutineNode header
+            packageName,  // Phase S2.3+: package_geoid from backend, shown in RoutineNode header
           },
           schema:    n.scope || undefined,
-          columns:   outputColsByStmt.get(n.id) ?? columnsByTable.get(n.id),
+          columns:   outputColsByStmt.get(n.id)
+                  ?? columnsByTable.get(n.id)
+                  ?? fieldsByRecord.get(n.id),  // Phase S2.4 — DaliRecord fields
           operation: nodeType === 'DaliStatement' ? extractStatementType(n.label) : undefined,
         },
       };
     });
+
+  // ── Package compound grouping (L2 AGG, package scope) ───────────────────────
+  // When the backend returns a DaliPackage node + CONTAINS_ROUTINE edges,
+  // group child DaliRoutine nodes as compound children of the Package container.
+  // ELK positions the Package group relative to Table nodes; Routines inside
+  // the group keep pre-computed relative positions (not moved by ELK).
+  {
+    const pkgNodeMap = new Map<string, LoomNode>();
+    for (const n of nodes) {
+      if (n.data.nodeType === 'DaliPackage') pkgNodeMap.set(n.id, n);
+    }
+
+    if (pkgNodeMap.size > 0) {
+      // Build package → [routineId] mapping from CONTAINS_ROUTINE edges
+      const routinesByPkg = new Map<string, string[]>();
+      for (const e of result.edges) {
+        if (e.type !== 'CONTAINS_ROUTINE') continue;
+        if (!pkgNodeMap.has(e.source)) continue;
+        if (!routinesByPkg.has(e.source)) routinesByPkg.set(e.source, []);
+        routinesByPkg.get(e.source)!.push(e.target);
+      }
+
+      const ROUTINE_H = NODE_HEIGHT_BASE; // RoutineNode height — matches constants.ts LAYOUT.NODE_HEIGHT_BASE (80px)
+      const HDR_H     = 40;              // PackageGroupNode header area
+      const PAD_SIDE  = 16;              // left / right inner padding
+      const PAD_INNER = 10;             // vertical gap between routines
+
+      const nodeById = new Map(nodes.map((n) => [n.id, n]));
+      for (const [pkgId, pkgNode] of pkgNodeMap) {
+        const childIds = routinesByPkg.get(pkgId) ?? [];
+        let yOffset = HDR_H + PAD_INNER;
+
+        for (const rid of childIds) {
+          const rNode = nodeById.get(rid);
+          if (!rNode) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rNode as any).parentId = pkgId;
+          rNode.position = { x: PAD_SIDE, y: yOffset };
+          yOffset += ROUTINE_H + PAD_INNER;
+        }
+
+        // Override node type → compound container
+        pkgNode.type = 'packageGroupNode';
+        const childCount = childIds.filter((rid) => nodeById.has(rid)).length;
+        const groupW     = NODE_WIDTH + PAD_SIDE * 2; // 400 + 32 = 432px — wide enough to contain RoutineNodes
+        const groupH     = HDR_H + childCount * (ROUTINE_H + PAD_INNER) + PAD_INNER;
+        pkgNode.style    = { ...(pkgNode.style ?? {}), width: groupW, height: groupH };
+      }
+    }
+  }
 
   const nodeIds = new Set(nodes.map((n) => n.id));
   // Merge with external node IDs so edges connecting new expansion nodes to

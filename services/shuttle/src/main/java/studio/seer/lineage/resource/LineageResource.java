@@ -51,6 +51,51 @@ public class LineageResource {
 
     // ── L2: Explore ───────────────────────────────────────────────────────────
 
+    @Query("exploreRoutineAggregate")
+    @Description("New L2 — routines + tables with aggregated READS_FROM / WRITES_TO edges (cross-routine data flow at a glance, no per-statement explosion). Role: viewer+")
+    public Uni<ExploreResult> exploreRoutineAggregate(
+        @Name("scope")
+        @Description("'schema-<name>' or 'pkg-<name>'")
+        String scope
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "exploreRoutineAggregate", "scope", scope != null ? scope : "",
+                       "call", call("exploreRoutineAggregate", "scope", scope != null ? scope : "")));
+        return exploreService.exploreRoutineAggregate(scope)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",    "exploreRoutineAggregate",
+                               "scope", scope != null ? scope : "",
+                               "nodes", result != null ? result.nodes().size() : 0,
+                               "edges", result != null ? result.edges().size() : 0,
+                               "call",  call("exploreRoutineAggregate", "scope", scope != null ? scope : "")
+                                        + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                        + (result != null ? result.edges().size() : 0) + " edges")));
+    }
+
+    @Query("routineDetail")
+    @Description("Inspector data for a single DaliRoutine — parameters, variables, root statements, and CALLS edges (in/out). Role: viewer+")
+    public Uni<ExploreResult> routineDetail(
+        @Name("nodeId")
+        @Description("Raw @rid of the DaliRoutine vertex")
+        String nodeId
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "routineDetail", "nodeId", nodeId != null ? nodeId : "",
+                       "call", call("routineDetail", "nodeId", nodeId != null ? nodeId : "")));
+        return exploreService.exploreRoutineDetail(nodeId)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",    "routineDetail",
+                               "nodeId", nodeId != null ? nodeId : "",
+                               "nodes", result != null ? result.nodes().size() : 0,
+                               "edges", result != null ? result.edges().size() : 0)));
+    }
+
     @Query("explore")
     @Description("L2 — tables and routines within a schema or package scope. Role: viewer+")
     public Uni<ExploreResult> explore(
@@ -79,6 +124,32 @@ public class LineageResource {
                                "call",  call("explore", "scope", scope != null ? scope : "") + (ext ? " +external" : "")
                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
                                         + (result != null ? result.edges().size() : 0) + " edges")));
+    }
+
+    // ── L4: Statement subquery tree ──────────────────────────────────────────
+
+    @Query("exploreStatementTree")
+    @Description("L4 — subquery tree + tables + DATA_FLOW for one DaliStatement. Role: viewer+")
+    public Uni<ExploreResult> exploreStatementTree(
+        @Name("stmtId")
+        @Description("@rid of the root DaliStatement to drill into")
+        String stmtId
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "exploreStatementTree", "stmtId", stmtId != null ? stmtId : "",
+                       "call", call("exploreStatementTree", "stmtId", stmtId != null ? stmtId : "")));
+        return exploreService.exploreStatementTree(stmtId)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",     "exploreStatementTree",
+                               "stmtId", stmtId != null ? stmtId : "",
+                               "nodes",  result != null ? result.nodes().size() : 0,
+                               "edges",  result != null ? result.edges().size() : 0,
+                               "call",   call("exploreStatementTree", "stmtId", stmtId != null ? stmtId : "")
+                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
+                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
     // ── L2+: Statement column enrichment ─────────────────────────────────────

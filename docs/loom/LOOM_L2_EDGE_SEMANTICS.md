@@ -1,8 +1,8 @@
 # LOOM L2 — Data-flow edge semantics
 
 **Документ:** `LOOM_L2_EDGE_SEMANTICS`
-**Версия:** 1.0
-**Дата:** 14.04.2026
+**Версия:** 1.1
+**Дата:** 15.04.2026
 **Статус:** ACTIVE — reference для команды и будущих промотов level-логики
 
 Объясняет как четыре основных dataflow-ребра (`READS_FROM`, `WRITES_TO`,
@@ -238,12 +238,23 @@ INSERT'ов читают из BMRT.* — те же кросс-schema кейсы 
 ключ, см. `frontends/verdandi/src/utils/transformHelpers.ts:42-57` и
 обновления 14.04.2026:
 
+### Основные data-flow edges (L2 + L3)
+
 | Edge | Цвет | Паттерн | Animated |
 |------|------|---------|----------|
 | `READS_FROM` | `#88B8A8` teal | solid | ❌ |
-| `WRITES_TO` | `#D4922A` amber | long-dash `8 3` | ❌ |
+| `WRITES_TO` | `#D4922A` amber | **solid** *(было long-dash `8 3`, изменено 15.04.2026)* | ❌ |
 | `DATA_FLOW` | `#A8B860` lime | medium-dash `5 3` | ✅ flowing |
 | `FILTER_FLOW` | `#B87AA8` mauve | dots `1 4` | ✅ flowing |
+
+### PL/SQL record edges (L3 только)
+
+| Edge | Цвет | Паттерн | Откуда → Куда |
+|------|------|---------|--------------|
+| `BULK_COLLECTS_INTO` | `#D4922A` amber | dash `5 3` | `DaliStatement` → `DaliRecord` |
+| `RETURNS_INTO` | `#B87AA8` mauve | solid | `DaliStatement` → `DaliRecord` |
+| `RECORD_USED_IN` | `#88B8A8` teal | dash `5 3` | `DaliRecord` → `DaliStatement` |
+| `HAS_RECORD_FIELD` | — | **подавлен** | `DaliRecord` → `DaliRecordField` (поля внутри ноды) |
 
 Каждый тип различим на любом zoom level. Legend (`LegendButton.tsx`)
 отражает эти же токены.
@@ -255,3 +266,4 @@ INSERT'ов читают из BMRT.* — те же кросс-schema кейсы 
 | Дата | Версия | Что |
 |------|--------|-----|
 | 14.04.2026 | 1.0 | Initial — объясняет все 4 edge-типа, их Cypher-источники в `ExploreService.exploreSchema`, hoisting через CHILD_OF*, и cross-schema blind-spot для INSERT `#25:8333`. |
+| 15.04.2026 | 1.1 | WRITES_TO переведён на solid (убран `strokeDasharray: '8 3'`). Добавлен раздел PL/SQL record edges: BULK_COLLECTS_INTO / RETURNS_INTO / RECORD_USED_IN (Q6–Q8 в `exploreRoutineScope`). HAS_RECORD_FIELD в NESTING_EDGES — поля внутри RecordNode, не стрелки. |

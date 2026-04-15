@@ -177,6 +177,78 @@ export async function fetchExplore(scope: string, includeExternal = false): Prom
   return data.explore;
 }
 
+const EXPLORE_ROUTINE_AGGREGATE = /* GraphQL */ `
+  query ExploreRoutineAggregate($scope: String!) {
+    exploreRoutineAggregate(scope: $scope) {
+      nodes { id type label scope dataSource meta { key value } }
+      edges { id source target type sourceHandle targetHandle }
+      hasMore
+    }
+  }
+`;
+
+export async function fetchRoutineAggregate(scope: string): Promise<ExploreResult> {
+  const t0 = performance.now();
+  const data = await gqlClient.request<{ exploreRoutineAggregate: ExploreResult }>(
+    EXPLORE_ROUTINE_AGGREGATE,
+    { scope },
+  );
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.exploreRoutineAggregate.nodes?.length ?? 0;
+  const e = data.exploreRoutineAggregate.edges?.length ?? 0;
+  console.info(`[LOOM] routineAggregate(${scope}) — ${ms} ms  (${n} nodes, ${e} edges)`);
+  return data.exploreRoutineAggregate;
+}
+
+// ── Routine detail (inspector) ────────────────────────────────────────────────
+
+const ROUTINE_DETAIL = /* GraphQL */ `
+  query RoutineDetail($nodeId: String!) {
+    routineDetail(nodeId: $nodeId) {
+      nodes { id type label scope meta { key value } }
+      edges { id source target type }
+      hasMore
+    }
+  }
+`;
+
+export async function fetchRoutineDetail(nodeId: string): Promise<ExploreResult> {
+  const t0 = performance.now();
+  const data = await gqlClient.request<{ routineDetail: ExploreResult }>(
+    ROUTINE_DETAIL,
+    { nodeId },
+  );
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.routineDetail.nodes?.length ?? 0;
+  console.info(`[LOOM] routineDetail(${nodeId}) — ${ms} ms  (${n} nodes)`);
+  return data.routineDetail;
+}
+
+// ── L4: Statement-tree drill ──────────────────────────────────────────────────
+
+const EXPLORE_STATEMENT_TREE = /* GraphQL */ `
+  query ExploreStatementTree($stmtId: String!) {
+    exploreStatementTree(stmtId: $stmtId) {
+      nodes { id type label scope dataSource meta { key value } }
+      edges { id source target type sourceHandle targetHandle }
+      hasMore
+    }
+  }
+`;
+
+export async function fetchStatementTree(stmtId: string): Promise<ExploreResult> {
+  const t0 = performance.now();
+  const data = await gqlClient.request<{ exploreStatementTree: ExploreResult }>(
+    EXPLORE_STATEMENT_TREE,
+    { stmtId },
+  );
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.exploreStatementTree.nodes?.length ?? 0;
+  const e = data.exploreStatementTree.edges?.length ?? 0;
+  console.info(`[LOOM] statementTree(${stmtId}) — ${ms} ms  (${n} nodes, ${e} edges)`);
+  return data.exploreStatementTree;
+}
+
 export async function fetchLineage(nodeId: string): Promise<ExploreResult> {
   const t0 = performance.now();
   const data = await gqlClient.request<{ lineage: ExploreResult }>(LINEAGE, { nodeId });
@@ -563,6 +635,34 @@ export async function fetchKnotSnippet(stmtGeoid: string): Promise<string | null
     { stmtGeoid },
   );
   return data.knotSnippet ?? null;
+}
+
+// ── Full source file (by sessionId) — KNOT "Исходник" tab ───────────────────
+
+export interface KnotScript {
+  filePath:  string;
+  script:    string;
+  lineCount: number;
+  charCount: number;
+}
+
+const KNOT_SCRIPT = /* GraphQL */ `
+  query KnotScript($sessionId: String!) {
+    knotScript(sessionId: $sessionId) {
+      filePath
+      script
+      lineCount
+      charCount
+    }
+  }
+`;
+
+export async function fetchKnotScript(sessionId: string): Promise<KnotScript | null> {
+  const data = await gqlClient.request<{ knotScript: KnotScript | null }>(
+    KNOT_SCRIPT,
+    { sessionId },
+  );
+  return data.knotScript ?? null;
 }
 
 // ── Lazy statement extras (descendants + atom stats) ─────────────────────────

@@ -21,9 +21,11 @@ import { SchemaGroupNode }  from './nodes/SchemaGroupNode';
 import { PackageNode }      from './nodes/PackageNode';
 import { TableNode }        from './nodes/TableNode';
 import { RoutineNode }      from './nodes/RoutineNode';
+import { RecordNode }       from './nodes/RecordNode';
 import { ColumnNode }       from './nodes/ColumnNode';
 import { StatementNode }    from './nodes/StatementNode';
-import { RoutineGroupNode } from './nodes/RoutineGroupNode';
+import { RoutineGroupNode }  from './nodes/RoutineGroupNode';
+import { PackageGroupNode }  from './nodes/PackageGroupNode';
 import { ApplicationNode }  from './nodes/ApplicationNode';
 import { DatabaseNode }     from './nodes/DatabaseNode';
 import { L1SchemaNode }     from './nodes/L1SchemaNode';
@@ -53,7 +55,9 @@ const NODE_TYPES: NodeTypes = {
   packageNode:      PackageNode      as NodeTypes[string],
   tableNode:        TableNode        as NodeTypes[string],
   routineNode:      RoutineNode      as NodeTypes[string],
-  routineGroupNode: RoutineGroupNode as NodeTypes[string],
+  recordNode:       RecordNode       as NodeTypes[string],  // Phase S2.4 — PL/SQL records
+  routineGroupNode:  RoutineGroupNode  as NodeTypes[string],
+  packageGroupNode:  PackageGroupNode  as NodeTypes[string],
   statementNode:    StatementNode    as NodeTypes[string],
   columnNode:       ColumnNode       as NodeTypes[string],
   atomNode:         ColumnNode       as NodeTypes[string], // reuse ColumnNode for atoms
@@ -173,9 +177,9 @@ const LoomCanvasInner = memo(() => {
   // Double-click = DrillDown (architecture rule: single=filter, double=drill):
   //   L1: Application        → scope filter (stays on L1, dims other apps)
   //   L1: Database / Schema  → drillDown to L2
-  //   L2: Table / Statement / Schema / Package / Database → drillDown to L3
-  //   L3: no drill-down (leaf level)
-  //   Column / Atom / Routine / Join → no drill-down (leaf nodes)
+  //   L2: Table / Statement / Schema / Package / Database / Routine → drillDown to L3
+  //   L3: DaliStatement → drillDown to L4 (statement tree); all other types = leaf level
+  //   Column / Atom / Join → no drill-down (leaf nodes)
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     // L1: Application scope-filter
     if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {
@@ -183,15 +187,15 @@ const LoomCanvasInner = memo(() => {
       return;
     }
 
-    // No drill-down from L3 (leaf level)
-    if (viewLevel === 'L3') return;
+    // L3: only DaliStatement can drill down to L4; all other types are leaf-level at L3.
+    if (viewLevel === 'L3' && node.data.nodeType !== 'DaliStatement') return;
 
-    // Only drillable types (Table, Statement, Schema, Package, Database)
+    // Only drillable types (Table, Statement, Schema, Package, Database, Routine)
     const nt = node.data.nodeType;
     if (
       nt !== 'DaliTable'    && nt !== 'DaliStatement' &&
       nt !== 'DaliSchema'   && nt !== 'DaliPackage'   &&
-      nt !== 'DaliDatabase'
+      nt !== 'DaliDatabase' && nt !== 'DaliRoutine'
     ) return;
 
     // Build scope string
@@ -203,6 +207,10 @@ const LoomCanvasInner = memo(() => {
       scope = `pkg-${node.data.label}`;
     } else if (nt === 'DaliDatabase') {
       scope = `db-${node.data.label}`;
+    } else if (nt === 'DaliRoutine') {
+      // "routine-<@rid>" routes to exploreRoutineScope on the backend:
+      // focused L3 view — root stmts + tables + records only, no subqueries or params.
+      scope = `routine-${node.id}`;
     } else {
       scope = node.id;
     }

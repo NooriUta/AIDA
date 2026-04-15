@@ -8,6 +8,17 @@ import type { ExploreResult } from '../services/lineage';
 import type { ColumnInfo } from '../types/domain';
 import type { LoomNode, LoomEdge } from '../types/graph';
 import { TRANSFORM } from './constants';
+import { getEdgeStyle } from './transformHelpers';
+
+/** Extract just the stroke colour for the given edge type from the 4-way
+ *  palette so cfEdges (fine-grain column-level flow lines) use the same
+ *  colour as their aggregated table-level counterparts in the legend.
+ *  cfEdges keep their own thinner stroke / dash / opacity so they read
+ *  as a secondary "detail" overlay on top of the main edges. */
+function cfStroke(edgeType: 'READS_FROM' | 'WRITES_TO'): string {
+  const s = getEdgeStyle(edgeType);
+  return (typeof s.stroke === 'string' ? s.stroke : '') || (edgeType === 'WRITES_TO' ? '#D4922A' : '#88B8A8');
+}
 
 export function applyStmtColumns(
   nodes: LoomNode[],
@@ -118,7 +129,11 @@ export function applyStmtColumns(
             targetHandle: `tgt-${tColId}`,
             type:         'default',
             animated:     false,
-            style:        { stroke: '#D4922A', strokeWidth: 1, strokeDasharray: '3 2', opacity: 0.75 },
+            // Colour pulled from the 4-way legend palette (getEdgeStyle) so
+            // cfEdges and their aggregated table-level counterparts use the
+            // exact same stroke. Thinner width + lighter dash + reduced
+            // opacity keep them visually "secondary" to the aggregated lines.
+            style:        { stroke: cfStroke('WRITES_TO'), strokeWidth: 1, strokeDasharray: '3 2', opacity: 0.75 },
             data:         { edgeType: 'HAS_AFFECTED_COL', parentStmtId: stmtId },
           });
         }
@@ -135,7 +150,7 @@ export function applyStmtColumns(
             targetHandle: `tgt-${sColId}`,
             type:         'default',
             animated:     false,
-            style:        { stroke: '#88B8A8', strokeWidth: 1, strokeDasharray: '3 2', opacity: 0.75 },
+            style:        { stroke: cfStroke('READS_FROM'), strokeWidth: 1, strokeDasharray: '3 2', opacity: 0.75 },
             data:         { edgeType: 'HAS_OUTPUT_COL', parentStmtId: stmtId },
           });
         }

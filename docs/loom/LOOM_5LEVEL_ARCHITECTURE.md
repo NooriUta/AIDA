@@ -1,8 +1,8 @@
 # LOOM — 5-Level Navigation Architecture
 
 **Документ:** `LOOM_5LEVEL_ARCHITECTURE`
-**Версия:** 1.0
-**Дата:** 14.04.2026
+**Версия:** 1.2
+**Дата:** 15.04.2026
 **Статус:** ACTIVE — implementation plan in `docs/sprints/PLAN_LOOM_5LEVEL_APR2026.md`
 
 ---
@@ -138,16 +138,27 @@ records (BULK COLLECT, RETURNING INTO, %ROWTYPE variables) with the edge
 data but the LOOM frontend has no node component for it, so the records are
 invisible on the canvas.
 
-**This sprint fixes that on L3:**
+**Реализовано (commit `0912ef7`, 15.04.2026):**
 
-- Backend: extend `ExploreService.exploreSchema / explorePackage` Cypher UNION
-  chain with three new segments scoped by `routine_geoid IN $routineGeoids`:
-  - `DaliRecord` vertices owned by routines in scope
-  - `HAS_RECORD_FIELD` structural edges
-  - `RETURNS_INTO` data-flow edges from in-scope statements
-- Frontend: new `RecordNode.tsx` (cloned from `TableNode.tsx`), new
-  `InspectorRecord.tsx`, new legend entries, `NODE_TYPE_MAP` + `getEdgeStyle`
-  additions.
+**Backend — `exploreRoutineScope` (L3 view) получил три новых Cypher запроса:**
+
+| # | Запрос | Ребро | Описание |
+|---|--------|-------|----------|
+| Q6 | `bulkCollectsQ` | `BULK_COLLECTS_INTO` | root stmt → DaliRecord (BULK COLLECT INTO) |
+| Q7 | `returnsIntoQ` | `RETURNS_INTO` | root stmt → DaliRecord (RETURNING INTO record) |
+| Q8 | `recordUsedInQ` | `RECORD_USED_IN` | DaliRecord → root stmt (record used in INSERT) |
+
+Q5b (`HAS_RECORD_FIELD`) уже был — поля встраиваются в `RecordNode.data.columns`,
+не рендерятся как отдельные canvas-ноды.
+
+**Frontend:**
+- `RecordNode.tsx` — новый компонент (mauve `#B87AA8`), показывает поля как строки
+  с `field_name` + `data_type`, handle на каждую строку, `→` badge при `%ROWTYPE`
+- `InspectorRecord.tsx` — inspector-панель при выборе DaliRecord (поля, routine/stmt context)
+- `domain.ts` — `BULK_COLLECTS_INTO` + `RECORD_USED_IN` добавлены в `DaliEdgeType`
+- `transformHelpers.ts` — стили: amber dash для `BULK_COLLECTS_INTO`, mauve solid для
+  `RETURNS_INTO`, teal dash для `RECORD_USED_IN`; `HAS_RECORD_FIELD` подавлен в
+  `NESTING_EDGES` (поля внутри ноды, не стрелки)
 
 A record field with `source_column_geoid` populated (from `%ROWTYPE`) gets a small
 `→` badge and a link back to the source `DaliColumn` in the inspector — this is
@@ -230,3 +241,4 @@ Carried over to the next sprint:
 |---|---|---|
 | 14.04.2026 | 1.0 | Initial document. Specifies 5-level scheme with new L2 (routine aggregate) and L4 (statement drill), records rendering on L3, KNOT snippet in LOOM inspector, StatementNode click-back. L5 deferred. |
 | 15.04.2026 | 1.1 | Sprint close — known-issues section added (column-level `DATA_FLOW` target handle + legend/palette mismatch for cfEdges). Phase 1 / 6 / 6c-1 / 6c-2 shipped; Phases 2 / 3 / 4 / 4b / 4c / 5 deferred to next sprint. |
+| 15.04.2026 | 1.2 | Record edges wired on L3: Q6 BULK_COLLECTS_INTO + Q7 RETURNS_INTO + Q8 RECORD_USED_IN added to `exploreRoutineScope`. PackageGroupNode compound container for L2 AGG package scope (ELK sizes from RoutineNode dimensions). WRITES_TO changed to solid line. Variables in InspectorRoutine (property-based Cypher). HAS_RECORD_FIELD moved to NESTING_EDGES (suppressed as arrow). BULK_COLLECTS_INTO + RECORD_USED_IN added to DaliEdgeType. |

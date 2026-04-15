@@ -267,7 +267,20 @@
       "structure": "Структура",
       "statements": "Запросы",
       "routines": "Процедуры",
-      "atoms": "Атомы"
+      "atoms": "Атомы",
+      "source": "Исходник"
+    },
+    "source": {
+      "loading": "Загрузка исходного файла…",
+      "empty": "Исходный файл для этой сессии не сохранён",
+      "lines": "строк",
+      "largeFile": "Большой файл — постраничный вывод",
+      "jumpPlaceholder": "строка №",
+      "go": "Перейти",
+      "copy": "Копировать всё",
+      "prev": "Назад",
+      "next": "Вперёд",
+      "pageOf": "Страница {{page}} / {{total}} · строки {{from}}–{{to}}"
     },
     "session": {
       "tables": "Таблицы",
@@ -509,6 +522,14 @@
     "drillDown":     "Drill-down →",
     "parameters":    "Параметры",
     "noParameters":  "Нет параметров",
+    "variables":     "Переменные",
+    "noVariables":   "Нет переменных",
+    "statements":    "Statements",
+    "noStatements":  "Нет statements",
+    "callsTo":       "Вызывает",
+    "calledBy":      "Вызывается из",
+    "noCalls":       "Нет",
+    "package":       "Пакет",
     "openInKnot":    "Открыть в KNOT",
     "dataType":      "Тип данных",
     "operation":     "Операция",
@@ -555,7 +576,9 @@
     "joinOn":        "Условие",
     "direction":     "Направление",
     "routine":       "Процедура",
-    "default":       "По умолчанию"
+    "default":       "По умолчанию",
+    "fields":        "Поля",
+    "noFields":      "Нет полей"
   },
 
   "stub": {

@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import {
   fetchOverview,
   fetchExplore,
+  fetchRoutineAggregate,
+  fetchRoutineDetail,
+  fetchStatementTree,
   fetchLineage,
   fetchUpstream,
   fetchDownstream,
@@ -10,6 +13,7 @@ import {
   fetchKnotSessions,
   fetchKnotReport,
   fetchKnotSnippet,
+  fetchKnotScript,
   fetchStatementExtras,
   fetchExpandDeep,
   isUnauthorized,
@@ -19,17 +23,19 @@ import { useAuthStore } from '../stores/authStore';
 // ── Query keys ────────────────────────────────────────────────────────────────
 
 export const qk = {
-  overview:     ()               => ['overview']               as const,
-  explore:      (scope: string)  => ['explore', scope]         as const,
-  lineage:      (nodeId: string) => ['lineage', nodeId]        as const,
-  upstream:     (nodeId: string) => ['upstream', nodeId]       as const,
-  downstream:   (nodeId: string) => ['downstream', nodeId]     as const,
-  expandDeep:   (nodeId: string, depth: number) => ['expandDeep', nodeId, depth] as const,
-  search:       (q: string)      => ['search', q]              as const,
-  knotSessions: ()               => ['knotSessions']           as const,
-  knotReport:   (sid: string)    => ['knotReport', sid]        as const,
-  knotSnippet:  (geoid: string)  => ['knotSnippet', geoid]     as const,
-  stmtExtras:   (geoid: string)  => ['statementExtras', geoid] as const,
+  overview:      ()               => ['overview']               as const,
+  explore:       (scope: string)  => ['explore', scope]         as const,
+  lineage:       (nodeId: string) => ['lineage', nodeId]        as const,
+  upstream:      (nodeId: string) => ['upstream', nodeId]       as const,
+  downstream:    (nodeId: string) => ['downstream', nodeId]     as const,
+  expandDeep:    (nodeId: string, depth: number) => ['expandDeep', nodeId, depth] as const,
+  search:        (q: string)      => ['search', q]              as const,
+  knotSessions:  ()               => ['knotSessions']           as const,
+  knotReport:    (sid: string)    => ['knotReport', sid]        as const,
+  knotSnippet:   (geoid: string)  => ['knotSnippet', geoid]     as const,
+  knotScript:    (sid: string)    => ['knotScript', sid]        as const,
+  stmtExtras:    (geoid: string)  => ['statementExtras', geoid] as const,
+  routineDetail: (nodeId: string) => ['routineDetail', nodeId]  as const,
 };
 
 // ── 401 handler — auto-logout when session expires ────────────────────────────
@@ -66,6 +72,45 @@ export function useExplore(scope: string | null, includeExternal = false) {
     queryKey: [...qk.explore(scope ?? ''), includeExternal] as const,
     queryFn:  () => fetchExplore(scope!, includeExternal),
     enabled:  !!scope,
+    staleTime: 30_000,
+    retry: 2,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/**
+ * Phase S2.3 — new L2 view. Fetches the routines+tables aggregated result
+ * from exploreRoutineAggregate. Activated when viewLevel === 'L2' and
+ * filter.routineAggregate is true (the default).
+ */
+export function useRoutineAggregate(scope: string | null) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: ['routineAggregate', scope ?? ''] as const,
+    queryFn:  () => fetchRoutineAggregate(scope!),
+    enabled:  !!scope,
+    staleTime: 30_000,
+    retry: 2,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+// ── L4: Statement-tree drill ──────────────────────────────────────────────────
+
+/**
+ * Phase S2.5 — fetches the subquery tree for a single DaliStatement.
+ * Activated when viewLevel === 'L4' and currentScope is a statement @rid.
+ * Returns root stmt + all child sub-statements + their READS_FROM tables
+ * + HAS_OUTPUT_COL + DATA_FLOW edges.
+ */
+export function useStatementTree(stmtId: string | null) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: ['statementTree', stmtId ?? ''] as const,
+    queryFn:  () => fetchStatementTree(stmtId!),
+    enabled:  !!stmtId,
     staleTime: 30_000,
     retry: 2,
     throwOnError: false,
@@ -178,6 +223,37 @@ export function useKnotReport(sessionId: string | null) {
     queryFn:  () => fetchKnotReport(sessionId!),
     enabled:  !!sessionId,
     staleTime: 60_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/**
+ * Inspector detail for a DaliRoutine node.
+ * Returns parameters (DaliParameter), variables (DaliVariable), root statements
+ * (DaliStatement), and CALLS edges in both directions.
+ * Fires whenever a routine node is selected in the inspector panel.
+ */
+export function useRoutineDetail(nodeId: string | null) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.routineDetail(nodeId ?? ''),
+    queryFn:  () => fetchRoutineDetail(nodeId!),
+    enabled:  !!nodeId,
+    staleTime: 60_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/** Lazy full-source fetch — enabled only when the Source tab is active. */
+export function useKnotScript(sessionId: string | null | undefined, enabled: boolean) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.knotScript(sessionId ?? ''),
+    queryFn:  () => fetchKnotScript(sessionId!),
+    enabled:  enabled && !!sessionId,
+    staleTime: 600_000,  // source doesn't change within a session — cache 10 min
     throwOnError: false,
     meta: { onError },
   });

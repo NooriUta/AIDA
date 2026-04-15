@@ -89,6 +89,7 @@ export const FilterToolbar = memo(() => {
     setDirection,
     toggleMappingMode,
     toggleIncludeExternal,
+    toggleRoutineAggregate,
     navigateToLevel,
     jumpTo,
     clearFilter,
@@ -106,6 +107,7 @@ export const FilterToolbar = memo(() => {
     downstream,
     tableLevelView,
     includeExternal,
+    routineAggregate,
   } = filter;
 
   // ── Hooks must be called unconditionally (Rules of Hooks) ─────────────────
@@ -178,7 +180,8 @@ export const FilterToolbar = memo(() => {
       padding: '0 12px',
       background: 'var(--bg2)',
       borderBottom: '1px solid var(--bd)',
-      overflow: 'hidden',
+      overflowX: 'auto',
+      overflowY: 'hidden',
     }}>
 
       {/* ── Start object pill / quick-switcher ────────────────────────────── */}
@@ -278,8 +281,8 @@ export const FilterToolbar = memo(() => {
 
       <ToolbarDivider />
 
-      {/* ── Table / Stmt selects (L2 only) ────────────────────────────────── */}
-      {viewLevel === 'L2' && availableTables.length > 0 && (
+      {/* ── Table / Stmt selects (L2 and L3 EXP) ──────────────────────────── */}
+      {(viewLevel === 'L2' || (viewLevel === 'L3' && !routineAggregate)) && availableTables.length > 0 && (
         <>
           <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>{t('toolbar.table')}:</span>
           <select
@@ -414,6 +417,19 @@ export const FilterToolbar = memo(() => {
       >
         &#x21F1; {t('inspector.includeExternal')}
       </ToolbarToggleButton>
+
+      {/* ── Routine-aggregate toggle: AGG (new) ↔ EXP (explore) — L2 only ── */}
+      {viewLevel === 'L2' && (
+        <ToolbarToggleButton
+          active={routineAggregate}
+          onClick={toggleRoutineAggregate}
+          title={routineAggregate
+            ? t('toolbar.routineAggregateHint', 'Switch to detailed exploration mode')
+            : t('toolbar.routineExploreHint', 'Switch to routine-aggregate overview')}
+        >
+          {routineAggregate ? '⊞ AGG' : '⊕ EXP'}
+        </ToolbarToggleButton>
+      )}
 
       {/* ── Spacer ─────────────────────────────────────────────────────────── */}
       <div style={{ flex: '1 1 auto' }} />

@@ -15,7 +15,10 @@ export type DaliNodeType =
   | 'DaliOutputColumn'
   | 'DaliParameter'
   | 'DaliVariable'
-  | 'DaliAffectedColumn';
+  | 'DaliAffectedColumn'
+  // Phase S2.4 — PL/SQL record containers (BULK COLLECT / RETURNING INTO / %ROWTYPE targets)
+  | 'DaliRecord'
+  | 'DaliRecordField';
 
 // ─── Dali Edge Types ─────────────────────────────────────────────────────────
 export type DaliEdgeType =
@@ -48,10 +51,25 @@ export type DaliEdgeType =
   | 'JOIN_FLOW'
   | 'UNION_FLOW'
   | 'ATOM_PRODUCES'
-  | 'ROUTINE_USES_TABLE';
+  | 'ROUTINE_USES_TABLE'
+  // Phase S2.4 — PL/SQL record edges
+  | 'HAS_RECORD_FIELD'     // DaliRecord → DaliRecordField (structural containment, suppressed as arrow)
+  | 'BULK_COLLECTS_INTO'   // DaliStatement → DaliRecord (BULK COLLECT INTO result)
+  | 'RETURNS_INTO'         // DaliStatement → DaliRecord/Field/Var/Param (RETURNING INTO)
+  | 'RECORD_USED_IN';      // DaliRecord → DaliStatement (record consumed by INSERT etc.)
 
 // ─── Visualisation levels ────────────────────────────────────────────────────
-export type ViewLevel = 'L1' | 'L2' | 'L3';
+//
+// Per the 5-level plan in docs/loom/LOOM_5LEVEL_ARCHITECTURE.md:
+//   L1 — database/schema overview
+//   L2 — routines+tables aggregated (filter.routineAggregate=true) or
+//        manual EXP explore toggle (routineAggregate=false)
+//   L3 — dual-mode based on filter.routineAggregate:
+//          false = EXP explore (arrived via Routine drill-down from L2 AGG)
+//          true  = column-atom lineage (direct navigation)
+//   L4 — single-statement drill (subquery tree + output column flow)
+//   L5 — expression-column breakdown (deferred)
+export type ViewLevel = 'L1' | 'L2' | 'L3' | 'L4';
 
 // ─── Column info (used inside TableNodeData) ─────────────────────────────────
 export interface ColumnInfo {
