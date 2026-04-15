@@ -143,6 +143,97 @@ describe('toggleMappingMode', () => {
   });
 });
 
+// ── setDepth ────────────────────────────────────────────────────────────────
+
+describe('setDepth', () => {
+  it('sets depth', () => {
+    const { actions, getState } = setup({ depth: 5 });
+    actions.setDepth(3);
+    expect(getState().filter.depth).toBe(3);
+  });
+});
+
+// ── setDirection ────────────────────────────────────────────────────────────
+
+describe('setDirection', () => {
+  it('sets upstream and downstream independently', () => {
+    const { actions, getState } = setup({ upstream: true, downstream: true });
+    actions.setDirection(false, true);
+    expect(getState().filter.upstream).toBe(false);
+    expect(getState().filter.downstream).toBe(true);
+  });
+});
+
+// ── toggleIncludeExternal ───────────────────────────────────────────────────
+
+describe('toggleIncludeExternal', () => {
+  it('flips includeExternal', () => {
+    const { actions, getState } = setup({ includeExternal: false } as any);
+    actions.toggleIncludeExternal();
+    expect(getState().filter.includeExternal).toBe(true);
+    actions.toggleIncludeExternal();
+    expect(getState().filter.includeExternal).toBe(false);
+  });
+});
+
+// ── toggleRoutineAggregate ──────────────────────────────────────────────────
+
+describe('toggleRoutineAggregate', () => {
+  it('flips routineAggregate', () => {
+    const { actions, getState } = setup({ routineAggregate: false } as any);
+    actions.toggleRoutineAggregate();
+    expect(getState().filter.routineAggregate).toBe(true);
+    actions.toggleRoutineAggregate();
+    expect(getState().filter.routineAggregate).toBe(false);
+  });
+});
+
+// ── toggleCfEdges ───────────────────────────────────────────────────────────
+
+describe('toggleCfEdges', () => {
+  it('flips showCfEdges', () => {
+    const { actions, getState } = setup({ showCfEdges: true });
+    actions.toggleCfEdges();
+    expect(getState().filter.showCfEdges).toBe(false);
+    actions.toggleCfEdges();
+    expect(getState().filter.showCfEdges).toBe(true);
+  });
+});
+
+// ── setAvailable* helpers ───────────────────────────────────────────────────
+
+describe('setAvailableFields', () => {
+  it('replaces availableFields', () => {
+    const { actions, getState } = setup({}, { availableFields: [] });
+    actions.setAvailableFields(['f1', 'f2']);
+    expect(getState().availableFields).toEqual(['f1', 'f2']);
+  });
+});
+
+describe('setAvailableTables', () => {
+  it('replaces availableTables', () => {
+    const { actions, getState } = setup({}, { availableTables: [] });
+    actions.setAvailableTables([{ id: 't1', label: 'tbl' }]);
+    expect(getState().availableTables).toEqual([{ id: 't1', label: 'tbl' }]);
+  });
+});
+
+describe('setAvailableStmts', () => {
+  it('replaces availableStmts', () => {
+    const { actions, getState } = setup({}, { availableStmts: [] });
+    actions.setAvailableStmts([{ id: 's1', label: 'SELECT 1', connectedTableIds: ['t1'] }]);
+    expect(getState().availableStmts).toEqual([{ id: 's1', label: 'SELECT 1', connectedTableIds: ['t1'] }]);
+  });
+});
+
+describe('setAvailableColumns', () => {
+  it('replaces availableColumns', () => {
+    const { actions, getState } = setup();
+    actions.setAvailableColumns([{ id: 'c2', name: 'col2' }]);
+    expect(getState().availableColumns).toEqual([{ id: 'c2', name: 'col2' }]);
+  });
+});
+
 // ── clearFilter ─────────────────────────────────────────────────────────────
 
 describe('clearFilter', () => {
