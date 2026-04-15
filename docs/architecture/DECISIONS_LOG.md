@@ -11,8 +11,8 @@
 
 ## 📋 Quick status
 
-**Зафиксированных решений:** 17
-**Открытых вопросов:** 28 (Q1, Q3-Q22, Q24-Q32)
+**Зафиксированных решений:** 18
+**Открытых вопросов:** 27 (Q1, Q3-Q22, Q24-Q31) — Q32/Q36 закрыты
 **Сознательно отложено:** 10 (D1-D10)
 
 ---
@@ -186,3 +186,4 @@
 | 14.04.2026 | 2.2 | **Lineage Gaps Sprint 2 DONE.** Q31–Q35 добавлены. 14 KI items реализованы, 3 (JSON, XML, NESTREC) → Sprint 3 backlog. Bugfix Dali YGG stats atomsResolved/atomsUnresolved. |
 | 14.04.2026 | 2.3 | **LOOM 5-level sprint OPEN.** Решение #20 добавлено. PR #10 Sprint 2 merged. Новая ветка `feature/loom-5level-apr2026`. Новый документ `LOOM_5LEVEL_ARCHITECTURE.md`. План в `PLAN_LOOM_5LEVEL_APR2026.md`. 8 фаз: docs → KNOT snippet → backend L2 agg → renumber → L2 view → L3 records → L4 stmt-drill → StatementNode click-back. L5 (expression breakdown) отложен. |
 | 15.04.2026 | 2.4 | **LOOM 5-level sprint CLOSING (partial).** 15 коммитов на `feature/loom-5level-apr2026`. Shipped: Phase 1 docs (LOOM_5LEVEL_ARCHITECTURE + L2_EDGE_SEMANTICS refs), Phase 6 (KNOT snippet в LOOM InspectorStatement), Phase 6c-1 (knotStatementExtras backend + real Extra tab с descendants / atom stats), Phase 6c-2 (source tables Direct/Subquery + External sources toggle), 4-way edge styling (READS_FROM teal / WRITES_TO amber dash / DATA_FLOW lime animated / FILTER_FLOW mauve dots), rich Inspector header card с 4 вкладками (Основное / Дополнительно / Статистика / SQL), upstream hoist через CHILD_OF*, column-level handle routing для FILTER_FLOW. **Deferred**: Phase 2 / 3 / 4 / 4b / 4c / 5 (backend `exploreRoutineAggregate`, frontend level renumbering, new L2 view, L4 statement-drill, L3 DaliRecord rendering, StatementNode click-back). **Known issues**: column-level `DATA_FLOW` target handle не мапится на output col (только source side работает, FILTER_FLOW ok); `cfEdges` palette не синхронизирована с легендой. Обе занесены в `LOOM_5LEVEL_ARCHITECTURE.md §Known issues` для следующего спринта. |
+| 15.04.2026 | 2.5 | **Q36 закрыт: DaliRecord edges на L3 + PackageGroupNode compound layout.** Решение #21 добавлено. Commit `0912ef7`: (a) `exploreRoutineScope` Q6–Q8 — BULK_COLLECTS_INTO / RETURNS_INTO / RECORD_USED_IN рёбра между Statement и Record теперь возвращаются backend'ом и рисуются на L3 канвасе; (b) HAS_RECORD_FIELD перемещён в NESTING_EDGES — поля DaliRecordField встраиваются строками внутрь RecordNode, не рисуются стрелками; (c) PackageGroupNode — новый compound ELK-контейнер для L2 AGG package scope, дочерние RoutineNode вложены через parentId, размер вычисляется от NODE_WIDTH/NODE_HEIGHT_BASE; (d) WRITES_TO edge переведён на solid (удалён strokeDasharray); (e) Variables в InspectorRoutine — property-based Cypher (`v.routine_geoid = r.routine_geoid`). Docs: LOOM_5LEVEL_ARCHITECTURE v1.2 + LOOM_L2_EDGE_SEMANTICS v1.1. |
