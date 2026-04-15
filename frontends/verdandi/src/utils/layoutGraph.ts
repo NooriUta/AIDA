@@ -24,8 +24,8 @@ function getNodeHeight(node: LoomNode): number {
     const cols = Math.min(node.data.columns?.length ?? 0, maxCols);
     return NODE_HEIGHT_BASE + cols * COL_ROW_HEIGHT + (cols > 0 ? 24 : 0);
   }
-  // Routine group: height is pre-computed and stored in style
-  if (node.type === 'routineGroupNode') {
+  // Routine/Package group: height is pre-computed and stored in style.height
+  if (node.type === 'routineGroupNode' || node.type === 'packageGroupNode') {
     return typeof node.style?.height === 'number' ? node.style.height : NODE_HEIGHT_BASE;
   }
   return NODE_HEIGHT_BASE;
@@ -49,9 +49,12 @@ function applyGridLayout(nodes: LoomNode[]): LoomNode[] {
 // visual rendering but excluded from ELK: they create deep hierarchical chains
 // that, combined with cyclic data-flow edges, confuse the layered algorithm
 // and can produce degenerate (all-at-origin) layouts.
+// CALLS is included so routine→routine call relationships inform ELK positioning
+// at L2 AGG (routines that only call each other, with no shared table, would
+// otherwise appear as unconnected components and be placed far apart).
 const DATA_FLOW_FOR_LAYOUT = new Set([
   'READS_FROM', 'WRITES_TO', 'DATA_FLOW',
-  'FILTER_FLOW', 'JOIN_FLOW', 'UNION_FLOW', 'ATOM_PRODUCES',
+  'FILTER_FLOW', 'JOIN_FLOW', 'UNION_FLOW', 'ATOM_PRODUCES', 'CALLS',
 ]);
 
 // ─── ELK types (minimal, avoids dependency on @types/elkjs) ──────────────────

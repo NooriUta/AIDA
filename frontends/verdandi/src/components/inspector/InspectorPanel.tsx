@@ -9,6 +9,7 @@ import { InspectorRoutine }   from './InspectorRoutine';
 import { InspectorColumn }    from './InspectorColumn';
 import { InspectorJoin }      from './InspectorJoin';
 import { InspectorParameter } from './InspectorParameter';
+import { InspectorRecord }    from './InspectorRecord';
 
 // ── Header ────────────────────────────────────────────────────────────────────
 function InspectorHeader({ label }: { label: string }) {
@@ -106,6 +107,16 @@ export const InspectorPanel = memo(() => {
       <>
         <InspectorHeader label={selectedNodeData.label} />
         <InspectorParameter data={selectedNodeData} nodeId={selectedNodeId} />
+      </>
+    );
+  }
+
+  // DaliRecord
+  if (nodeType === 'DaliRecord') {
+    return wrapPanel(
+      <>
+        <InspectorHeader label={selectedNodeData.label} />
+        <InspectorRecord data={selectedNodeData} nodeId={selectedNodeId} />
       </>
     );
   }

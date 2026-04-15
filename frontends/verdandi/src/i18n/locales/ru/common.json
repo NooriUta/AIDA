@@ -509,6 +509,14 @@
     "drillDown":     "Drill-down →",
     "parameters":    "Параметры",
     "noParameters":  "Нет параметров",
+    "variables":     "Переменные",
+    "noVariables":   "Нет переменных",
+    "statements":    "Statements",
+    "noStatements":  "Нет statements",
+    "callsTo":       "Вызывает",
+    "calledBy":      "Вызывается из",
+    "noCalls":       "Нет",
+    "package":       "Пакет",
     "openInKnot":    "Открыть в KNOT",
     "dataType":      "Тип данных",
     "operation":     "Операция",
@@ -555,7 +563,9 @@
     "joinOn":        "Условие",
     "direction":     "Направление",
     "routine":       "Процедура",
-    "default":       "По умолчанию"
+    "default":       "По умолчанию",
+    "fields":        "Поля",
+    "noFields":      "Нет полей"
   },
 
   "stub": {

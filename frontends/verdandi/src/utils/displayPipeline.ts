@@ -186,12 +186,29 @@ export function applyCfEdgeToggle(
   const hasCfEdges = graph.edges.some((e) => CF_EDGE_TYPES.has(e.data?.edgeType as string));
   if (!hasCfEdges) return graph;
 
+  // Build set of RoutineNode IDs: their READS_FROM / WRITES_TO / CALLS edges have
+  // no column-level equivalent and must stay visible even at fine-grain zoom.
+  // Without this guard, edges between routines and tables are hidden by the
+  // .loom-column-mode .loom-flow CSS rule when the user zooms into L3 EXP.
+  const routineNodeIds = new Set(
+    graph.nodes
+      .filter((n) => n.type === 'routineNode' || n.type === 'routineGroupNode')
+      .map((n) => n.id),
+  );
+
   // Column mode: tag CF and flow edges with CSS classes for visibility control.
   // Do NOT filter — ELK needs READS_FROM / WRITES_TO for layered layout.
   return {
     nodes: graph.nodes,
     edges: graph.edges.map((e) => {
-      const tc = edgeTypeClass(e.data?.edgeType as string);
+      const et = e.data?.edgeType as string | undefined;
+      // Edges touching a RoutineNode are never hidden — they carry no column-level
+      // replacements so hiding them would disconnect routines from the graph.
+      if (et && TABLE_FLOW_TYPES.has(et) &&
+          (routineNodeIds.has(e.source) || routineNodeIds.has(e.target))) {
+        return e;
+      }
+      const tc = edgeTypeClass(et);
       if (!tc) return e;
       const cls = e.className ? `${e.className} ${tc}` : tc;
       return cls !== e.className ? { ...e, className: cls } : e;

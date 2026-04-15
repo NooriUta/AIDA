@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { NodeToolbar, Position } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, CheckCircle, Loader2 } from 'lucide-react';
 import { useLoomStore } from '../../../stores/loomStore';
+import { useZoomLevel, LOD_COMPACT_ZOOM } from '../ZoomLevelContext';
 
 interface NodeExpandButtonsProps {
   nodeId: string;
@@ -17,6 +18,12 @@ export const NodeExpandButtons = memo(({ nodeId, show }: NodeExpandButtonsProps)
   const expandedUpstreamIds  = useLoomStore((s) => s.expandedUpstreamIds);
   const expandedDownstreamIds = useLoomStore((s) => s.expandedDownstreamIds);
   const requestExpand        = useLoomStore((s) => s.requestExpand);
+
+  // Arrows are shown only when zoomed in past the LOD threshold — the same point
+  // where table/statement column rows become visible. Hidden at low zoom to avoid
+  // cluttering the overview canvas with tiny overlapping chevrons.
+  const isDetailZoom = useZoomLevel() >= LOD_COMPACT_ZOOM;
+  const isVisible    = show && isDetailZoom;
 
   const isLoadingUp   = expandRequest?.nodeId === nodeId && expandRequest.direction === 'upstream';
   const isLoadingDown = expandRequest?.nodeId === nodeId && expandRequest.direction === 'downstream';
@@ -63,7 +70,7 @@ export const NodeExpandButtons = memo(({ nodeId, show }: NodeExpandButtonsProps)
   return (
     <>
       {/* ── Upstream: left side ─────────────────────────────────────────── */}
-      <NodeToolbar position={Position.Left} isVisible={show} offset={6}>
+      <NodeToolbar position={Position.Left} isVisible={isVisible} offset={6}>
         {makeBtn(
           upDone,
           isLoadingUp,
@@ -78,7 +85,7 @@ export const NodeExpandButtons = memo(({ nodeId, show }: NodeExpandButtonsProps)
       </NodeToolbar>
 
       {/* ── Downstream: right side ──────────────────────────────────────── */}
-      <NodeToolbar position={Position.Right} isVisible={show} offset={6}>
+      <NodeToolbar position={Position.Right} isVisible={isVisible} offset={6}>
         {makeBtn(
           downDone,
           isLoadingDown,

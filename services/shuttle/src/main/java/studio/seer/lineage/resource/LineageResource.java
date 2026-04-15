@@ -75,6 +75,27 @@ public class LineageResource {
                                         + (result != null ? result.edges().size() : 0) + " edges")));
     }
 
+    @Query("routineDetail")
+    @Description("Inspector data for a single DaliRoutine — parameters, variables, root statements, and CALLS edges (in/out). Role: viewer+")
+    public Uni<ExploreResult> routineDetail(
+        @Name("nodeId")
+        @Description("Raw @rid of the DaliRoutine vertex")
+        String nodeId
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "routineDetail", "nodeId", nodeId != null ? nodeId : "",
+                       "call", call("routineDetail", "nodeId", nodeId != null ? nodeId : "")));
+        return exploreService.exploreRoutineDetail(nodeId)
+                .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op",    "routineDetail",
+                               "nodeId", nodeId != null ? nodeId : "",
+                               "nodes", result != null ? result.nodes().size() : 0,
+                               "edges", result != null ? result.edges().size() : 0)));
+    }
+
     @Query("explore")
     @Description("L2 — tables and routines within a schema or package scope. Role: viewer+")
     public Uni<ExploreResult> explore(

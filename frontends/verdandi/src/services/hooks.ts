@@ -3,6 +3,7 @@ import {
   fetchOverview,
   fetchExplore,
   fetchRoutineAggregate,
+  fetchRoutineDetail,
   fetchStatementTree,
   fetchLineage,
   fetchUpstream,
@@ -21,17 +22,18 @@ import { useAuthStore } from '../stores/authStore';
 // ── Query keys ────────────────────────────────────────────────────────────────
 
 export const qk = {
-  overview:     ()               => ['overview']               as const,
-  explore:      (scope: string)  => ['explore', scope]         as const,
-  lineage:      (nodeId: string) => ['lineage', nodeId]        as const,
-  upstream:     (nodeId: string) => ['upstream', nodeId]       as const,
-  downstream:   (nodeId: string) => ['downstream', nodeId]     as const,
-  expandDeep:   (nodeId: string, depth: number) => ['expandDeep', nodeId, depth] as const,
-  search:       (q: string)      => ['search', q]              as const,
-  knotSessions: ()               => ['knotSessions']           as const,
-  knotReport:   (sid: string)    => ['knotReport', sid]        as const,
-  knotSnippet:  (geoid: string)  => ['knotSnippet', geoid]     as const,
-  stmtExtras:   (geoid: string)  => ['statementExtras', geoid] as const,
+  overview:      ()               => ['overview']               as const,
+  explore:       (scope: string)  => ['explore', scope]         as const,
+  lineage:       (nodeId: string) => ['lineage', nodeId]        as const,
+  upstream:      (nodeId: string) => ['upstream', nodeId]       as const,
+  downstream:    (nodeId: string) => ['downstream', nodeId]     as const,
+  expandDeep:    (nodeId: string, depth: number) => ['expandDeep', nodeId, depth] as const,
+  search:        (q: string)      => ['search', q]              as const,
+  knotSessions:  ()               => ['knotSessions']           as const,
+  knotReport:    (sid: string)    => ['knotReport', sid]        as const,
+  knotSnippet:   (geoid: string)  => ['knotSnippet', geoid]     as const,
+  stmtExtras:    (geoid: string)  => ['statementExtras', geoid] as const,
+  routineDetail: (nodeId: string) => ['routineDetail', nodeId]  as const,
 };
 
 // ── 401 handler — auto-logout when session expires ────────────────────────────
@@ -218,6 +220,24 @@ export function useKnotReport(sessionId: string | null) {
     queryKey: qk.knotReport(sessionId ?? ''),
     queryFn:  () => fetchKnotReport(sessionId!),
     enabled:  !!sessionId,
+    staleTime: 60_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/**
+ * Inspector detail for a DaliRoutine node.
+ * Returns parameters (DaliParameter), variables (DaliVariable), root statements
+ * (DaliStatement), and CALLS edges in both directions.
+ * Fires whenever a routine node is selected in the inspector panel.
+ */
+export function useRoutineDetail(nodeId: string | null) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.routineDetail(nodeId ?? ''),
+    queryFn:  () => fetchRoutineDetail(nodeId!),
+    enabled:  !!nodeId,
     staleTime: 60_000,
     throwOnError: false,
     meta: { onError },

@@ -180,7 +180,8 @@ export const FilterToolbar = memo(() => {
       padding: '0 12px',
       background: 'var(--bg2)',
       borderBottom: '1px solid var(--bd)',
-      overflow: 'hidden',
+      overflowX: 'auto',
+      overflowY: 'hidden',
     }}>
 
       {/* ── Start object pill / quick-switcher ────────────────────────────── */}

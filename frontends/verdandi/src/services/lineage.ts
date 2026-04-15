@@ -200,6 +200,30 @@ export async function fetchRoutineAggregate(scope: string): Promise<ExploreResul
   return data.exploreRoutineAggregate;
 }
 
+// ── Routine detail (inspector) ────────────────────────────────────────────────
+
+const ROUTINE_DETAIL = /* GraphQL */ `
+  query RoutineDetail($nodeId: String!) {
+    routineDetail(nodeId: $nodeId) {
+      nodes { id type label scope meta { key value } }
+      edges { id source target type }
+      hasMore
+    }
+  }
+`;
+
+export async function fetchRoutineDetail(nodeId: string): Promise<ExploreResult> {
+  const t0 = performance.now();
+  const data = await gqlClient.request<{ routineDetail: ExploreResult }>(
+    ROUTINE_DETAIL,
+    { nodeId },
+  );
+  const ms = (performance.now() - t0).toFixed(0);
+  const n = data.routineDetail.nodes?.length ?? 0;
+  console.info(`[LOOM] routineDetail(${nodeId}) — ${ms} ms  (${n} nodes)`);
+  return data.routineDetail;
+}
+
 // ── L4: Statement-tree drill ──────────────────────────────────────────────────
 
 const EXPLORE_STATEMENT_TREE = /* GraphQL */ `

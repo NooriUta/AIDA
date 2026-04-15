@@ -53,8 +53,10 @@ export type DaliEdgeType =
   | 'ATOM_PRODUCES'
   | 'ROUTINE_USES_TABLE'
   // Phase S2.4 — PL/SQL record edges
-  | 'HAS_RECORD_FIELD'  // DaliRecord → DaliRecordField (structural containment)
-  | 'RETURNS_INTO';     // DaliStatement → DaliRecordField/Variable/Parameter/Record (data flow)
+  | 'HAS_RECORD_FIELD'     // DaliRecord → DaliRecordField (structural containment, suppressed as arrow)
+  | 'BULK_COLLECTS_INTO'   // DaliStatement → DaliRecord (BULK COLLECT INTO result)
+  | 'RETURNS_INTO'         // DaliStatement → DaliRecord/Field/Var/Param (RETURNING INTO)
+  | 'RECORD_USED_IN';      // DaliRecord → DaliStatement (record consumed by INSERT etc.)
 
 // ─── Visualisation levels ────────────────────────────────────────────────────
 //

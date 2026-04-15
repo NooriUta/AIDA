@@ -50,10 +50,13 @@ public class ExploreService {
     public Uni<ExploreResult> explore(String scope, boolean includeExternal) {
         ScopeRef ref = ScopeRef.parse(scope);
         return switch (ref.type()) {
-            case "schema" -> exploreSchema(ref.name(), ref.dbName(), includeExternal);
-            case "pkg"    -> explorePackage(ref.name());
-            case "db"     -> exploreByDatabase(ref.name());
-            default       -> exploreByRid(ref.name());
+            case "schema"   -> exploreSchema(ref.name(), ref.dbName(), includeExternal);
+            case "pkg"      -> explorePackage(ref.name());
+            case "db"       -> exploreByDatabase(ref.name());
+            // "routine-<@rid>": focused L3 view — root stmts + tables + records only.
+            // Set by LoomCanvas when drilling from L2 AGG into a DaliRoutine node.
+            case "routine"  -> exploreRoutineScope(ref.name());
+            default         -> exploreByRid(ref.name());
         };
     }
 
@@ -331,15 +334,21 @@ public class ExploreService {
         // it back with a careful Cypher budget.
         String cypher;
         Map<String, Object> params;
+        // NOTE: CONTAINS_STMT connects DaliRoutine to ALL its statements (root + sub-query).
+        // We intentionally do NOT filter by parent_statement here — the goal is to collect
+        // ALL tables that any statement of the routine reads from / writes to, regardless
+        // of nesting depth. collect(DISTINCT tR/tW) deduplicates at the routine level so
+        // the canvas shows one consolidated edge per (routine, table) pair.
         if (isPackage) {
             cypher = """
                 MATCH (p:DaliPackage {package_name: $scope})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
                 OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
-                WHERE coalesce(stmt.parent_statement, '') = ''
                 OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
                 OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
-                WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
-                RETURN id(r) AS src, r.routine_name AS srcLabel,
+                WITH p, r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
+                RETURN id(p) AS pkgId, p.package_name AS pkgName,
+                       coalesce(p.schema_geoid, '') AS pkgSchema,
+                       id(r) AS src, r.routine_name AS srcLabel,
                        coalesce(r.schema_geoid, '') AS srcSchema,
                        coalesce(r.package_geoid, '') AS srcPackage,
                        coalesce(r.routine_type, '') AS srcKind,
@@ -355,7 +364,6 @@ public class ExploreService {
                 WITH s, CASE WHEN n1:DaliRoutine THEN n1 ELSE nested END AS r
                 WHERE r IS NOT NULL
                 OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
-                WHERE coalesce(stmt.parent_statement, '') = ''
                 OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
                 OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
                 WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
@@ -384,18 +392,16 @@ public class ExploreService {
 
         // External-routines query: only meaningful for schema scope.
         // Returns routines from other schemas that interact with tables in $scope.
+        // All statements of the external routine are checked (no parent_statement filter)
+        // so sub-query reads/writes are also captured.
         Uni<List<Map<String, Object>>> extQuery = finalIsPackage
             ? Uni.createFrom().item(List.of())
             : arcade.cypher("""
-                MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(stmt:DaliStatement)
+                MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(stmt:DaliStatement)-[:READS_FROM]->(tR:DaliTable)
                 WHERE extR.schema_geoid <> $scope
-                  AND coalesce(stmt.parent_statement, '') = ''
-                MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
-                WHERE tR.schema_geoid = $scope
+                  AND tR.schema_geoid = $scope
                 WITH extR, collect(DISTINCT tR) AS reads
-                OPTIONAL MATCH (extR)-[:CONTAINS_STMT]->(stmt2:DaliStatement)
-                WHERE coalesce(stmt2.parent_statement, '') = ''
-                MATCH (stmt2)-[:WRITES_TO]->(tW:DaliTable)
+                OPTIONAL MATCH (extR)-[:CONTAINS_STMT]->(stmt2:DaliStatement)-[:WRITES_TO]->(tW:DaliTable)
                 WHERE tW.schema_geoid = $scope
                 WITH extR, reads, collect(DISTINCT tW) AS writes
                 RETURN id(extR) AS src, extR.routine_name AS srcLabel,
@@ -407,16 +413,64 @@ public class ExploreService {
                 """, params)
               .onFailure().recoverWithItem(List.of());
 
-        return Uni.combine().all().unis(List.of(mainQuery, extQuery))
+        // CALLS query: routine→routine invocations within scope.
+        // Returns rows already in buildResult format (srcId/tgtId + CALLS edgeType).
+        // The callee (r2) may reside outside the current scope — it is added as an
+        // external RoutineNode with its own schema/package info.
+        String callsCypher = finalIsPackage ? """
+                MATCH (p:DaliPackage {package_name: $scope})-[:CONTAINS_ROUTINE]->(r1:DaliRoutine)
+                MATCH (r1)-[:CALLS]->(r2:DaliRoutine)
+                RETURN id(r1) AS srcId, r1.routine_name AS srcLabel, 'DaliRoutine' AS srcType,
+                       coalesce(r1.schema_geoid, '') AS srcScope,
+                       coalesce(r1.package_geoid, '') AS srcPackage,
+                       coalesce(r1.routine_type, '') AS srcKind,
+                       id(r2) AS tgtId, r2.routine_name AS tgtLabel, 'DaliRoutine' AS tgtType,
+                       coalesce(r2.schema_geoid, '') AS tgtScope,
+                       'CALLS' AS edgeType, '' AS sourceHandle, '' AS targetHandle
+                LIMIT 200
+                """ : """
+                MATCH (s:DaliSchema) WHERE s.schema_geoid = $scope
+                MATCH (s)-[:CONTAINS_ROUTINE]->(n1)
+                OPTIONAL MATCH (n1)-[:CONTAINS_ROUTINE]->(nested:DaliRoutine)
+                WITH CASE WHEN n1:DaliRoutine THEN n1 ELSE nested END AS r1
+                WHERE r1 IS NOT NULL
+                MATCH (r1)-[:CALLS]->(r2:DaliRoutine)
+                RETURN id(r1) AS srcId, r1.routine_name AS srcLabel, 'DaliRoutine' AS srcType,
+                       coalesce(r1.schema_geoid, '') AS srcScope,
+                       coalesce(r1.package_geoid, '') AS srcPackage,
+                       coalesce(r1.routine_type, '') AS srcKind,
+                       id(r2) AS tgtId, r2.routine_name AS tgtLabel, 'DaliRoutine' AS tgtType,
+                       coalesce(r2.schema_geoid, '') AS tgtScope,
+                       'CALLS' AS edgeType, '' AS sourceHandle, '' AS targetHandle
+                LIMIT 200
+                """;
+        Uni<List<Map<String, Object>>> callsQuery = arcade.cypher(callsCypher, params)
+            .onFailure().recoverWithItem(List.of());
+
+        return Uni.combine().all().unis(List.of(mainQuery, extQuery, callsQuery))
             .combinedWith(results -> {
-                var allRows = new ArrayList<Map<String, Object>>();
-                for (Object raw : results) {
-                    @SuppressWarnings("unchecked")
-                    var chunk = (List<Map<String, Object>>) raw;
-                    allRows.addAll(chunk);
-                }
+                // results[0] = main rows (routine→table in aggregated format)
+                // results[1] = ext rows  (cross-schema routine→table)
+                // results[2] = calls rows (routine→routine, already in buildResult format)
+                @SuppressWarnings("unchecked")
+                var mainRows  = (List<Map<String, Object>>) results.get(0);
+                @SuppressWarnings("unchecked")
+                var extRows   = (List<Map<String, Object>>) results.get(1);
+                @SuppressWarnings("unchecked")
+                var callRows  = (List<Map<String, Object>>) results.get(2);
+
+                var allRows = new ArrayList<Map<String, Object>>(mainRows);
+                allRows.addAll(extRows);
 
                 var flatRows = new ArrayList<Map<String, Object>>();
+
+                // Package scope: emit the DaliPackage node once (as NODE_ONLY self-row)
+                // so the frontend can use it as a compound group container for its Routines.
+                // pkgNodeId captured here so CONTAINS_ROUTINE edges can be emitted per-routine.
+                String pkgNodeId    = "";
+                String pkgNodeName  = "";
+                String pkgNodeScope = "";
+
                 for (var row : allRows) {
                     String rId     = str(row, "src");
                     String rLabel  = str(row, "srcLabel");
@@ -424,6 +478,30 @@ public class ExploreService {
                     String rPkg    = str(row, "srcPackage");
                     String rKind   = str(row, "srcKind");
                     if (rId == null || rId.isEmpty()) continue;
+
+                    // First routine row for package scope: emit Package self-node
+                    if (finalIsPackage && pkgNodeId.isEmpty()) {
+                        pkgNodeId    = str(row, "pkgId");
+                        pkgNodeName  = str(row, "pkgName");
+                        pkgNodeScope = str(row, "pkgSchema");
+                        if (!pkgNodeId.isEmpty()) {
+                            var pkgSelf = new HashMap<String, Object>();
+                            pkgSelf.put("srcId",        pkgNodeId);
+                            pkgSelf.put("srcLabel",     pkgNodeName);
+                            pkgSelf.put("srcType",      "DaliPackage");
+                            pkgSelf.put("srcScope",     pkgNodeScope);
+                            pkgSelf.put("srcPackage",   "");
+                            pkgSelf.put("srcKind",      "PKG");
+                            pkgSelf.put("tgtId",        pkgNodeId);
+                            pkgSelf.put("tgtLabel",     pkgNodeName);
+                            pkgSelf.put("tgtScope",     "");
+                            pkgSelf.put("tgtType",      "DaliPackage");
+                            pkgSelf.put("edgeType",     "NODE_ONLY");
+                            pkgSelf.put("sourceHandle", "");
+                            pkgSelf.put("targetHandle", "");
+                            flatRows.add(pkgSelf);
+                        }
+                    }
 
                     // Routine self-node — emitted via a dummy edge so
                     // buildResult registers the routine even without any reads/writes.
@@ -444,6 +522,27 @@ public class ExploreService {
                     selfRow.put("sourceHandle", "");
                     selfRow.put("targetHandle", "");
                     flatRows.add(selfRow);
+
+                    // CONTAINS_ROUTINE edge: Package → Routine.
+                    // Not rendered as an arrow (SUPPRESSED_EDGES) but used by the
+                    // frontend transform to build compound group layout.
+                    if (finalIsPackage && !pkgNodeId.isEmpty()) {
+                        var crRow = new HashMap<String, Object>();
+                        crRow.put("srcId",        pkgNodeId);
+                        crRow.put("srcLabel",     pkgNodeName);
+                        crRow.put("srcType",      "DaliPackage");
+                        crRow.put("srcScope",     pkgNodeScope);
+                        crRow.put("srcPackage",   "");
+                        crRow.put("srcKind",      "");
+                        crRow.put("tgtId",        rId);
+                        crRow.put("tgtLabel",     rLabel);
+                        crRow.put("tgtScope",     "");
+                        crRow.put("tgtType",      "DaliRoutine");
+                        crRow.put("edgeType",     "CONTAINS_ROUTINE");
+                        crRow.put("sourceHandle", "");
+                        crRow.put("targetHandle", "");
+                        flatRows.add(crRow);
+                    }
 
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> reads = (List<Map<String, Object>>) row.get("reads");
@@ -470,9 +569,294 @@ public class ExploreService {
                         }
                     }
                 }
+
+                // CALLS rows are already in buildResult column format — add directly.
+                // They contain both the caller (as srcId/srcLabel/srcType/srcScope/srcPackage/srcKind)
+                // and the callee (as tgtId/tgtLabel/tgtType/tgtScope) so both nodes are registered.
+                flatRows.addAll(callRows);
+
                 return buildResult(flatRows, finalScopeName, finalIsPackage ? "DaliPackage" : "DaliSchema");
             })
             .flatMap(this::enrichDataSource);
+    }
+
+    // ── Routine scope (L3 drill from L2 AGG into a specific routine) ─────────
+    /**
+     * Focused L3 view for a single DaliRoutine node.
+     *
+     * Returns only:
+     *   - Root DaliStatement nodes (parent_statement = '') of this routine
+     *   - DaliTable nodes reachable from those statements (READS_FROM / WRITES_TO),
+     *     including tables only reachable via sub-statement hoist (CHILD_OF path)
+     *   - DaliRecord + DaliRecordField (structural records: BULK COLLECT targets, %ROWTYPE)
+     *
+     * Intentionally EXCLUDES: DaliParameter, DaliVariable, DaliOutputColumn,
+     * DaliAffectedColumn, DaliAtom, non-root sub-statement nodes.
+     * Column detail arrives via the separate stmtColumns enrichment pass.
+     */
+    @SuppressWarnings("unchecked")
+    public Uni<ExploreResult> exploreRoutineScope(String routineRid) {
+        Map<String, Object> params = Map.of("rid", routineRid);
+
+        // Q1: Root statements — registered as standalone nodes (self-loop NODE_ONLY).
+        //     The routine itself is NOT included as a canvas node — the breadcrumb
+        //     already shows the routine context. Statements appear as top-level nodes
+        //     connected to tables via READS_FROM / WRITES_TO, which ELK can lay out cleanly.
+        String stmtsQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (r)-[:CONTAINS_STMT]->(s:DaliStatement)
+            WHERE coalesce(s.parent_statement, '') = ''
+            RETURN id(s) AS srcId,
+                   coalesce(s.stmt_geoid, s.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(s) AS tgtId,
+                   coalesce(s.stmt_geoid, s.snippet, '') AS tgtLabel,
+                   'DaliStatement' AS tgtType, '' AS tgtScope,
+                   'NODE_ONLY' AS edgeType, '' AS sourceHandle, '' AS targetHandle,
+                   '' AS tgtDataType
+            LIMIT 300
+            """;
+
+        // Q2: Direct READS_FROM from root stmts to tables
+        String directReadsQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (r)-[:CONTAINS_STMT]->(s:DaliStatement)
+            WHERE coalesce(s.parent_statement, '') = ''
+            MATCH (s)-[:READS_FROM]->(t:DaliTable)
+            RETURN id(s) AS srcId,
+                   coalesce(s.stmt_geoid, s.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(t) AS tgtId, coalesce(t.table_name, '') AS tgtLabel,
+                   'DaliTable' AS tgtType, coalesce(t.schema_geoid, '') AS tgtScope,
+                   'READS_FROM' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 500
+            """;
+
+        // Q3: Direct WRITES_TO from root stmts to tables
+        String directWritesQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (r)-[:CONTAINS_STMT]->(s:DaliStatement)
+            WHERE coalesce(s.parent_statement, '') = ''
+            MATCH (s)-[:WRITES_TO]->(t:DaliTable)
+            RETURN id(s) AS srcId,
+                   coalesce(s.stmt_geoid, s.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(t) AS tgtId, coalesce(t.table_name, '') AS tgtLabel,
+                   'DaliTable' AS tgtType, coalesce(t.schema_geoid, '') AS tgtScope,
+                   'WRITES_TO' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 500
+            """;
+
+        // Q4: Hoisted READS_FROM from sub-statements to their root stmt.
+        //     Edges appear as root_stmt → table, so no sub-stmt nodes leak into the graph.
+        //     CHILD_OF*1..20: sub-statements point CHILD_OF back toward root.
+        String hoistReadsQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (r)-[:CONTAINS_STMT]->(root:DaliStatement)
+            WHERE coalesce(root.parent_statement, '') = ''
+            MATCH (root)<-[:CHILD_OF*1..20]-(sub:DaliStatement)-[:READS_FROM]->(t:DaliTable)
+            RETURN DISTINCT id(root) AS srcId,
+                   coalesce(root.stmt_geoid, root.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(t) AS tgtId, coalesce(t.table_name, '') AS tgtLabel,
+                   'DaliTable' AS tgtType, coalesce(t.schema_geoid, '') AS tgtScope,
+                   'READS_FROM' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 1000
+            """;
+
+        // Q5a: Record self-loops — ensures records appear even if they have no fields.
+        //      srcId = tgtId = recId, edgeType = NODE_ONLY (suppressed on canvas).
+        String recordSelfQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (rec:DaliRecord) WHERE rec.routine_geoid = r.routine_geoid
+            RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(rec) AS tgtId, coalesce(rec.record_name, '') AS tgtLabel,
+                   'DaliRecord' AS tgtType, '' AS tgtScope,
+                   'NODE_ONLY' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 200
+            """;
+
+        // Q5b: HAS_RECORD_FIELD edges (rec → field) — fields embed inside RecordNode as rows.
+        //      tgtDataType populated so frontend fieldsByRecord map gets data_type.
+        String recordFieldsQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (rec:DaliRecord) WHERE rec.routine_geoid = r.routine_geoid
+            MATCH (rec)-[:HAS_RECORD_FIELD]->(f:DaliRecordField)
+            RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(f) AS tgtId, coalesce(f.field_name, '') AS tgtLabel,
+                   'DaliRecordField' AS tgtType, '' AS tgtScope,
+                   'HAS_RECORD_FIELD' AS edgeType, '' AS sourceHandle, '' AS targetHandle,
+                   coalesce(f.data_type, '') AS tgtDataType
+            LIMIT 1000
+            """;
+
+        // Q6: BULK_COLLECTS_INTO — cursor SELECT → DaliRecord.
+        //     Connects the statement that drives a BULK COLLECT to the record variable it fills.
+        String bulkCollectsQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (r)-[:CONTAINS_STMT]->(s:DaliStatement)
+            WHERE coalesce(s.parent_statement, '') = ''
+            MATCH (s)-[:BULK_COLLECTS_INTO]->(rec:DaliRecord)
+            RETURN id(s) AS srcId, coalesce(s.stmt_geoid, s.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(rec) AS tgtId, coalesce(rec.record_name, '') AS tgtLabel,
+                   'DaliRecord' AS tgtType, '' AS tgtScope,
+                   'BULK_COLLECTS_INTO' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 500
+            """;
+
+        // Q7: RETURNS_INTO — Statement → DaliRecord (RETURNING INTO <record>).
+        //     Only edges targeting DaliRecord are useful at L3; field-level targets are embedded
+        //     inside RecordNode and filtered from canvas nodes by the frontend.
+        String returnsIntoQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (r)-[:CONTAINS_STMT]->(s:DaliStatement)
+            WHERE coalesce(s.parent_statement, '') = ''
+            MATCH (s)-[:RETURNS_INTO]->(rec:DaliRecord)
+            RETURN id(s) AS srcId, coalesce(s.stmt_geoid, s.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(rec) AS tgtId, coalesce(rec.record_name, '') AS tgtLabel,
+                   'DaliRecord' AS tgtType, '' AS tgtScope,
+                   'RETURNS_INTO' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 500
+            """;
+
+        // Q8: RECORD_USED_IN — DaliRecord → DaliStatement (record consumed in INSERT/MERGE etc.)
+        String recordUsedInQ = """
+            MATCH (r:DaliRoutine) WHERE id(r) = $rid
+            MATCH (rec:DaliRecord) WHERE rec.routine_geoid = r.routine_geoid
+            MATCH (rec)-[:RECORD_USED_IN]->(s:DaliStatement)
+            WHERE coalesce(s.parent_statement, '') = ''
+            RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
+                   id(s) AS tgtId, coalesce(s.stmt_geoid, s.snippet, '') AS tgtLabel,
+                   'DaliStatement' AS tgtType, '' AS tgtScope,
+                   'RECORD_USED_IN' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 500
+            """;
+
+        return Uni.combine().all()
+            .unis(List.of(
+                arcade.cypher(stmtsQ,        params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(directReadsQ,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(directWritesQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(hoistReadsQ,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(recordSelfQ,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(recordFieldsQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(bulkCollectsQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(returnsIntoQ,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(recordUsedInQ, params).onFailure().recoverWithItem(List.of())
+            ))
+            .combinedWith(results -> {
+                var all = new ArrayList<Map<String, Object>>();
+                for (Object raw : results)
+                    all.addAll((List<Map<String, Object>>) raw);
+                return buildResult(all, routineRid, "DaliStatement");
+            })
+            .flatMap(this::enrichDataSource);
+    }
+
+    // ── Routine detail ────────────────────────────────────────────────────────
+    /**
+     * Inspector data for a single DaliRoutine node.
+     * Returns ExploreResult with:
+     *   - DaliParameter nodes (HAS_PARAMETER edges) with meta.dataType
+     *   - DaliVariable  nodes (any edge, type=DaliVariable)  with meta.dataType
+     *   - DaliStatement nodes (CONTAINS_STMT, root-level only — no parent_statement)
+     *   - CALLS edges in both directions (src=routine→callee, src=caller→routine)
+     *
+     * Used by the LOOM right-side inspector when a Routine node is selected.
+     * Zero canvas impact — result is not added to any graph.
+     */
+    @SuppressWarnings("unchecked")
+    public Uni<ExploreResult> exploreRoutineDetail(String nodeId) {
+        Map<String, Object> params = Map.of("rid", nodeId);
+
+        // 1. Parameters — via any edge, filtered to DaliParameter instances.
+        //    tgtDataType → populates meta.dataType in buildResult.
+        String paramsQ = """
+            MATCH (n:DaliRoutine) WHERE id(n) = $rid
+            MATCH (n)-[r]->(p:DaliParameter)
+            RETURN id(n) AS srcId, coalesce(n.routine_name, '') AS srcLabel, 'DaliRoutine' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, coalesce(n.routine_type, '') AS srcKind,
+                   id(p) AS tgtId, coalesce(p.param_name, p.name, '') AS tgtLabel,
+                   'DaliParameter' AS tgtType, '' AS tgtScope,
+                   type(r) AS edgeType, '' AS sourceHandle, '' AS targetHandle,
+                   coalesce(p.data_type, '') AS tgtDataType
+            LIMIT 100
+            """;
+
+        // 2. Variables — matched by routine_geoid property (same approach as DaliRecord)
+        //    to avoid dependency on HAS_VARIABLE edge existence in every parsed session.
+        String varsQ = """
+            MATCH (n:DaliRoutine) WHERE id(n) = $rid
+            MATCH (v:DaliVariable) WHERE v.routine_geoid = n.routine_geoid
+            RETURN id(n) AS srcId, coalesce(n.routine_name, '') AS srcLabel, 'DaliRoutine' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, coalesce(n.routine_type, '') AS srcKind,
+                   id(v) AS tgtId, coalesce(v.var_name, v.name, v.variable_name, '') AS tgtLabel,
+                   'DaliVariable' AS tgtType, '' AS tgtScope,
+                   'HAS_VARIABLE' AS edgeType, '' AS sourceHandle, '' AS targetHandle,
+                   coalesce(v.data_type, '') AS tgtDataType
+            LIMIT 200
+            """;
+
+        // 3. Root statements only (parent_statement = '' means not a subquery).
+        String stmtsQ = """
+            MATCH (n:DaliRoutine) WHERE id(n) = $rid
+            MATCH (n)-[:CONTAINS_STMT]->(s:DaliStatement)
+            WHERE coalesce(s.parent_statement, '') = ''
+            RETURN id(n) AS srcId, coalesce(n.routine_name, '') AS srcLabel, 'DaliRoutine' AS srcType,
+                   '' AS srcScope, '' AS srcPackage, coalesce(n.routine_type, '') AS srcKind,
+                   id(s) AS tgtId, coalesce(s.stmt_geoid, s.snippet, '') AS tgtLabel,
+                   'DaliStatement' AS tgtType, '' AS tgtScope,
+                   'CONTAINS_STMT' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 200
+            """;
+
+        // 4. CALLS outgoing (this routine → callees).
+        //    srcId = inspected routine, tgtId = callee → frontend filters edge.source === nodeId.
+        String callsOutQ = """
+            MATCH (n:DaliRoutine) WHERE id(n) = $rid
+            MATCH (n)-[:CALLS]->(r2:DaliRoutine)
+            RETURN id(n) AS srcId, coalesce(n.routine_name, '') AS srcLabel, 'DaliRoutine' AS srcType,
+                   coalesce(n.schema_geoid, '') AS srcScope, coalesce(n.package_geoid, '') AS srcPackage,
+                   coalesce(n.routine_type, '') AS srcKind,
+                   id(r2) AS tgtId, coalesce(r2.routine_name, '') AS tgtLabel,
+                   'DaliRoutine' AS tgtType, coalesce(r2.schema_geoid, '') AS tgtScope,
+                   'CALLS' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 50
+            """;
+
+        // 5. CALLS incoming (callers → this routine).
+        //    srcId = caller, tgtId = inspected routine → frontend filters edge.target === nodeId.
+        String callsInQ = """
+            MATCH (n:DaliRoutine) WHERE id(n) = $rid
+            MATCH (r1:DaliRoutine)-[:CALLS]->(n)
+            RETURN id(r1) AS srcId, coalesce(r1.routine_name, '') AS srcLabel, 'DaliRoutine' AS srcType,
+                   coalesce(r1.schema_geoid, '') AS srcScope, coalesce(r1.package_geoid, '') AS srcPackage,
+                   coalesce(r1.routine_type, '') AS srcKind,
+                   id(n) AS tgtId, coalesce(n.routine_name, '') AS tgtLabel,
+                   'DaliRoutine' AS tgtType, coalesce(n.schema_geoid, '') AS tgtScope,
+                   'CALLS' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
+            LIMIT 50
+            """;
+
+        return Uni.combine().all()
+            .unis(List.of(
+                arcade.cypher(paramsQ,    params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(varsQ,      params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(stmtsQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(callsOutQ,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypher(callsInQ,   params).onFailure().recoverWithItem(List.of())
+            ))
+            .combinedWith(results -> {
+                var all = new ArrayList<Map<String, Object>>();
+                for (Object raw : results)
+                    all.addAll((List<Map<String, Object>>) raw);
+                return buildResult(all, nodeId, "DaliRoutine");
+            });
     }
 
     /** Helper: build one (routine → table) row in the uniform format buildResult() expects. */

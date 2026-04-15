@@ -509,6 +509,14 @@
     "drillDown":     "Drill-down →",
     "parameters":    "Parameters",
     "noParameters":  "No parameters",
+    "variables":     "Variables",
+    "noVariables":   "No variables",
+    "statements":    "Statements",
+    "noStatements":  "No statements",
+    "callsTo":       "Calls",
+    "calledBy":      "Called by",
+    "noCalls":       "None",
+    "package":       "Package",
     "openInKnot":    "Open in KNOT",
     "dataType":      "Data type",
     "operation":     "Operation",
@@ -555,7 +563,9 @@
     "joinOn":        "Condition",
     "direction":     "Direction",
     "routine":       "Routine",
-    "default":       "Default"
+    "default":       "Default",
+    "fields":        "Fields",
+    "noFields":      "No fields"
   },
 
   "stub": {
