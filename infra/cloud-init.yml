@@ -1,0 +1,134 @@
+#cloud-config
+# AIDA VM bootstrap — Ubuntu 22.04 LTS
+# Applied once on first boot via Terraform metadata.user-data
+#
+# After boot:
+#   1. Docker + Compose plugin installed
+#   2. nginx + certbot installed
+#   3. yc CLI installed
+#   4. /opt/seer-studio created
+#   5. Lockbox secrets synced to .env.prod
+#   6. Backup cron configured
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose-plugin
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+  - jq
+  - curl
+  - wget
+  - unzip
+  - awscli          # Yandex Object Storage is S3-compatible
+
+users:
+  - default
+  - name: ubuntu
+    groups: docker
+    shell: /bin/bash
+
+write_files:
+  - path: /opt/seer-studio/infra/scripts/lockbox-sync.sh
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      # Pulled from Lockbox → /opt/seer-studio/.env.prod
+      yc lockbox payload get --name aida-prod \
+        --format json | jq -r '.entries[] | "\(.key)=\(.value)"' \
+        > /opt/seer-studio/.env.prod
+      chmod 600 /opt/seer-studio/.env.prod
+      echo "[lockbox-sync] secrets written to .env.prod"
+
+  - path: /opt/seer-studio/infra/scripts/backup-arcadedb.sh
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      DATE=$(date +%Y%m%d-%H%M%S)
+      BUCKET="s3://aida-arcadedb-backups"
+      source /opt/seer-studio/.env.prod
+
+      echo "[backup] triggering ArcadeDB backup API..."
+      curl -su "root:${ARCADEDB_ADMIN_PASSWORD}" \
+        -X POST http://localhost:2480/api/v1/server \
+        -H 'Content-Type: application/json' \
+        -d '{"command":"backup database hound"}' \
+        --fail --silent --show-error
+
+      echo "[backup] uploading to Object Storage..."
+      aws s3 sync /var/lib/arcadedb/backup \
+        "${BUCKET}/${DATE}/" \
+        --endpoint-url https://storage.yandexcloud.net
+
+      echo "[backup] pruning old backups (keep last 30)..."
+      KEYS=$(aws s3 ls "${BUCKET}/" \
+        --endpoint-url https://storage.yandexcloud.net \
+        | awk '{print $2}' | sort | head -n -30)
+      for key in $KEYS; do
+        aws s3 rm "${BUCKET}/${key}" \
+          --recursive \
+          --endpoint-url https://storage.yandexcloud.net
+      done
+
+      echo "[backup] done — ${DATE}"
+
+  - path: /etc/nginx/sites-available/aida
+    permissions: '0644'
+    content: |
+      # Placeholder — replaced by certbot after TLS cert issuance
+      server {
+          listen 80;
+          server_name _;
+          return 301 https://$host$request_uri;
+      }
+
+  - path: /opt/seer-studio/docker-compose-start.sh
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      cd /opt/seer-studio
+      /opt/seer-studio/infra/scripts/lockbox-sync.sh
+      docker compose \
+        -f docker-compose.prod.yml \
+        -f docker-compose.yc.yml \
+        up -d --remove-orphans --pull always
+
+runcmd:
+  # Enable docker
+  - systemctl enable --now docker
+  - usermod -aG docker ubuntu
+
+  # Create app directory
+  - mkdir -p /opt/seer-studio
+
+  # Install yc CLI
+  - curl -fsSL https://storage.yandexcloud.net/yc-cli/install.sh | bash -s -- --install-dir /usr/local
+  - ln -sf /usr/local/bin/yc /usr/bin/yc
+
+  # Set up nginx
+  - rm -f /etc/nginx/sites-enabled/default
+  - ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
+  - nginx -t && systemctl enable --now nginx
+
+  # Set up backup cron (daily at 03:00)
+  - |
+    echo "0 3 * * * ubuntu /opt/seer-studio/infra/scripts/backup-arcadedb.sh >> /var/log/aida-backup.log 2>&1" \
+      > /etc/cron.d/aida-backup
+    chmod 644 /etc/cron.d/aida-backup
+
+  # After provisioning: run TLS setup manually once DNS is pointing:
+  # certbot --nginx -d <domain> --non-interactive --agree-tos -m admin@<domain>
+
+final_message: |
+  AIDA VM bootstrap complete.
+  Next manual steps:
+    1. Point DNS A record to this VM's external IP
+    2. Run: certbot --nginx -d <domain> --non-interactive --agree-tos -m admin@<domain>
+    3. Clone repo to /opt/seer-studio
+    4. Run: /opt/seer-studio/docker-compose-start.sh

@@ -1,8 +1,8 @@
 # AIDA — Матрица интеграций (Integration Matrix)
 
 **Документ:** `INTEGRATIONS_MATRIX`
-**Версия:** 1.0
-**Дата:** 11.04.2026
+**Версия:** 1.2
+**Дата:** 15.04.2026
 **Статус:** Working document — партнёр `MODULES_TECH_STACK.md`
 
 Этот документ описывает **контракты** между модулями AIDA: кто с кем взаимодействует, через какой протокол, какого типа, с каким смыслом. Детали events payload schemas выносятся в отдельный HEIMDALL Event Schema document когда будет готов.
@@ -20,7 +20,7 @@
 | **S** | Subscription — long-lived stream событий | WebSocket, SSE, graphql-ws |
 | **Cmd** | Control command — async запрос с side-effect без возврата значения | REST POST, Reactive Messaging |
 
-Легенда статуса: ✅ working | 🔵 new | 🔬 proposed | ⚠️ TBD
+Легенда статуса: ✅ working (реализовано) | 🔵 planned/in-progress | 🔬 proposed | ⚠️ TBD
 
 ---
 
@@ -30,18 +30,19 @@
 
 | # | From | To | Type | Protocol | Tech | Status | Смысл |
 |---|---|---|---|---|---|---|---|
+| I0 | Shell (MF host) | VERDANDI + HEIMDALL frontend | — | MF lazy import | @module-federation/vite 1.14.2 | ✅ | Shell загружает remoteEntry.js от обоих MF remotes |
 | I1 | VERDANDI | Chur | C | HTTPS POST | fetch + Cookie | ✅ | «Залогиниться, получить data, logout» |
 | I2 | VERDANDI | Chur | S | WebSocket | graphql-ws / native | 🔵 | «Подпишись на события сессии» |
-| I3 | HEIMDALL frontend | Chur | C | HTTPS POST | fetch + Cookie | 🔵 | «Получить список sessions, metrics snapshot» |
-| I4 | HEIMDALL frontend | Chur | S | WebSocket | graphql-ws | 🔵 | «Подпишись на all events для admin dashboard» |
-| I5 | HEIMDALL frontend | Chur | Cmd | HTTPS POST | fetch + Cookie | 🔵 | «Reset / replay / cancel session» |
+| I3 | HEIMDALL frontend | Chur | C | HTTPS GET/POST | fetch + Cookie | ✅ | GET metrics/snapshot, POST control/reset, GET snapshots |
+| I4 | HEIMDALL frontend | Chur | S | WebSocket | Native WebSocket | ✅ | Live stream событий через Chur WS proxy → HEIMDALL ws/events |
+| I5 | HEIMDALL frontend | Chur | GET | HTTPS GET | fetch + Cookie | ✅ | GET /heimdall/users — список пользователей Keycloak |
 
 ### 2.2 Chur → Backend services
 
 | # | From | To | Type | Protocol | Tech | Status | Смысл |
 |---|---|---|---|---|---|---|---|
 | I6 | Chur | SHUTTLE | C (proxy) | HTTP POST | fetch + trusted headers | ✅ | «Проверь JWT, добавь X-Seer-User/Role, передай в SHUTTLE» |
-| I7 | Chur | HEIMDALL backend | C (proxy) | HTTP POST | fetch + trusted headers | 🔵 | «Проксирование admin queries в HEIMDALL» |
+| I7 | Chur | HEIMDALL backend | C (proxy) | HTTP GET/POST + WebSocket | fetch + @fastify/websocket | ✅ | Proxy routes: /heimdall/health, /heimdall/metrics/snapshot, /heimdall/control/:action, /heimdall/ws/events (WS) |
 | I8 | Chur | Keycloak | C | HTTP POST | jose + Direct Access Grants | ✅ | «Обменяй username/password на JWT» |
 | I9 | Chur | Keycloak | C | HTTP GET | jose + JWKS | ✅ | «Проверь подпись JWT через public key» |
 
@@ -122,34 +123,47 @@ Hound поддерживает **три режима записи** в YGG, уп
 
 ### 2.9 HEIMDALL event collection (cross-cutting)
 
-**Важный нюанс:** Как именно компоненты отправляют events в HEIMDALL backend — **открытый вопрос (Q25)**. Варианты:
-- **A:** HTTP POST (каждый эмиттер POST /events на HEIMDALL) — просто, надёжно, но overhead
-- **B:** SmallRye Reactive Messaging in-memory channel — работает если все в одном Quarkus процессе (неприменимо для Hound как library)
-- **C:** SmallRye Reactive Messaging с Kafka/Pulsar broker — production-grade, но +1 процесс
-- **D:** Hybrid — CDI events in-process + HTTP POST bridge для cross-service
-
-**Рекомендация:** начать с **A (HTTP POST)** для простоты, мигрировать на C в post-HighLoad при необходимости durability.
+**Q25 CLOSED (internal transport).** Реализованный паттерн:
+- **SHUTTLE → HEIMDALL:** `HeimdallEmitter` — dual-path async (non-blocking):
+  1. HTTP POST `/events` к HEIMDALL backend (fire-and-forget, 202 Accepted)
+  2. In-process `HeimdallEventBus` (BroadcastProcessor) для GraphQL subscriptions (I33)
+  - Гарантия: downtime HEIMDALL не блокирует SHUTTLE операции.
+- **Dali → HEIMDALL:** HTTP POST (аналогичный паттерн, реализация в scope Dali engineering)
+- **Внешний transport (Kafka):** D6, post-HighLoad.
 
 | # | From | To | Type | Protocol | Tech | Status | Смысл |
 |---|---|---|---|---|---|---|---|
-| I26 | Hound | HEIMDALL backend | E | CDI events → network (TBD bridge) | Q25 | 🔵 | parsing events: file_parsing_started, atom_extracted, resolution_completed |
-| I27 | Dali Core | HEIMDALL backend | E | CDI events → network (TBD bridge) | Q25 | 🔵 | orchestration events: session_started, worker_dispatched, job_completed |
-| I28 | MIMIR backend | HEIMDALL backend | E | CDI events → network (TBD bridge) | Q25 | 🔵 | LLM events: tool_call_started, tool_call_completed, llm_response_ready |
-| I29 | ANVIL backend | HEIMDALL backend | E | CDI events → network (TBD bridge) | Q25 | 🔵 | algorithm events: traversal_started, traversal_progress, traversal_completed |
-| I30 | SHUTTLE | HEIMDALL backend | E | CDI events → network (TBD bridge) | Q25 | 🔵 | API events: request_received, request_completed, subscription_opened |
-| I31 | VERDANDI | HEIMDALL backend | E | WebSocket upstream | ⚠️ TBD | 🔬 low priority | UI events (optional): user_clicked_node, filter_changed |
+| I26 | Hound | HEIMDALL backend | E | (through Dali orchestration) | HTTP POST via Dali | 🔵 | parsing events через Dali worker |
+| I27 | Dali Core | HEIMDALL backend | E | HTTP POST fire-and-forget | Quarkus REST client | 🔵 planned | orchestration events: session_started, worker_dispatched, job_completed |
+| I28 | MIMIR backend | HEIMDALL backend | E | HTTP POST | TBD | 🔵 | LLM events |
+| I29 | ANVIL backend | HEIMDALL backend | E | HTTP POST | TBD | 🔵 | algorithm events |
+| I30 | SHUTTLE | HEIMDALL backend | E | **HTTP POST fire-and-forget** | **HeimdallEmitter** | ✅ | API events (request_received, request_completed). Non-blocking, 202 Accepted. |
+| I31 | VERDANDI | HEIMDALL backend | E | WebSocket upstream | ⚠️ TBD | 🔬 low priority | UI events (optional) |
 
 ### 2.10 HEIMDALL control commands (обратный канал)
 
 | # | From | To | Type | Protocol | Tech | Status | Смысл |
 |---|---|---|---|---|---|---|---|
-| I32 | HEIMDALL backend | Dali Core | Cmd | HTTP POST или JobRunr API | direct REST | 🔵 | reset/replay/cancel running jobs |
-| I33 | HEIMDALL backend | VERDANDI (clients) | S | WebSocket | graphql-ws через SHUTTLE subscriptions | 🔵 | Stream metrics и filtered events подписчикам (VERDANDI использует graphql-ws, не native) |
-| I34 | HEIMDALL backend | HEIMDALL frontend | S | **Native WebSocket** `/ws/events` | raw JSON stream | 🔵 | Admin dashboard real-time event stream + metrics (✅ Q13 CLOSED) |
+| I32 | HEIMDALL backend | Dali Core | Cmd | HTTP POST | `POST /control/cancel/{sessionId}` | ✅ (endpoint есть, Dali-side TBD) | Cancel running Dali session |
+| I33 | SHUTTLE | VERDANDI (clients) | S | WebSocket | graphql-ws через SHUTTLE SmallRye subscriptions | ✅ | HeimdallEventBus (BroadcastProcessor) in-process → graphql-ws |
+| I34 | HEIMDALL backend | HEIMDALL frontend | S | **Native WebSocket** `ws://:9093/ws/events` | Vert.x WebSocket, raw JSON | ✅ | Cold replay (200 events) + live stream + filter query param |
 
-**Нюанс I33 vs I34:** SHUTTLE может быть средним узлом для VERDANDI WebSocket (VERDANDI подписывается через SHUTTLE, который проксирует от HEIMDALL). Или HEIMDALL может иметь свой WebSocket напрямую. Зависит от Q24 (HEIMDALL backend deployment).
+**Нюанс I33 vs I34:** I33 — SHUTTLE как промежуточный узел через HeimdallEventBus in-process. I34 — прямой WebSocket от HEIMDALL backend. Chur проксирует I34 для HEIMDALL frontend через @fastify/websocket.
 
-### 2.11 Keycloak (auth infrastructure)
+### 2.11 HEIMDALL backend → FRIGG (persistence)
+
+| # | From | To | Type | Protocol | Tech | Status | Смысл |
+|---|---|---|---|---|---|---|---|
+| I36 | HEIMDALL backend | FRIGG (ArcadeDB :2481) | W/R | ArcadeDB HTTP REST | Quarkus REST client | ✅ | Persist snapshots (`POST /control/snapshot`), read snapshots list, user prefs CRUD |
+
+### 2.12 HEIMDALL backend — служебные интеграции
+
+| # | From | To | Type | Protocol | Tech | Status | Смысл |
+|---|---|---|---|---|---|---|---|
+| I37 | HEIMDALL backend | filesystem docs/ | R | Java NIO (Files.walk + Files.readString) | DocsResource | ✅ (dev) | Serve `.md` файлы из volume-mounted docs/ для просмотра в браузере |
+| I38 | Chur | Keycloak Admin API | C | HTTP GET | fetch | ✅ | GET /heimdall/users → Keycloak Admin REST API (list users, block/unblock) |
+
+### 2.13 Keycloak (auth infrastructure)
 
 | # | From | To | Type | Protocol | Tech | Status | Смысл |
 |---|---|---|---|---|---|---|---|
@@ -228,8 +242,8 @@ Hound поддерживает **три режима записи** в YGG, уп
 
 | # | Вопрос | Влияет на |
 |---|---|---|
-| Q24 | HEIMDALL backend deployment (отдельный процесс vs embedded) | I7, I33, I34 |
-| Q25 | Event bus transport (HTTP POST / Kafka / Reactive Messaging) | I26-I31 |
+| **✅ Q24** | HEIMDALL backend deployment — **CLOSED**: отдельный Quarkus сервис :9093 ✅ | I7, I34 — реализованы |
+| **✅ Q25** | Event bus transport — **CLOSED (internal)**: HTTP POST fire-and-forget (I30) + Mutiny BroadcastProcessor (I33) | I26-I31 — I30 ✅, остальные planned |
 | Q26 | ANVIL direct из SHUTTLE или только через MIMIR | I13, I22 |
 | Q27 | HoundConfig полная схема | I14 детали |
 | Q31 | UC2a preview implementation (6α vs 6β) | Новые интеграции для preview lifecycle |
@@ -241,3 +255,4 @@ Hound поддерживает **три режима записи** в YGG, уп
 | Дата | Версия | Что изменилось |
 |---|---|---|
 | 11.04.2026 | 1.0 | Initial draft матрицы. 35 known интеграций. I11 зафиксирован как HTTP REST с shared Gradle module. I14 зафиксирован как in-JVM call. I17a/b/c разделён на три моды. I18 новая интеграция для FRIGG как JobRunr persistence. Arrow Flight — strategic note в §8 архитектурного документа, не прорабатывается для October. |
+| 15.04.2026 | 1.2 | Актуализация по кодовой базе: I0 добавлен (Shell MF host). I3/I4/I5 → ✅ (HEIMDALL frontend работает). I7 → ✅ (Chur HEIMDALL proxy routes: health/metrics/control/ws). I30 → ✅ (SHUTTLE HeimdallEmitter HTTP POST + BroadcastProcessor). I33 → ✅ (HeimdallEventBus in-process → SHUTTLE subscriptions). I34 → ✅ (ws://:9093/ws/events native WebSocket, cold replay 200 + live + filter). I36 NEW (HEIMDALL→FRIGG ArcadeDB snapshots). I37 NEW (DocsResource). I38 NEW (Chur→Keycloak Admin API). Q24 CLOSED, Q25 CLOSED (internal). |

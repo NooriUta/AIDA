@@ -134,11 +134,17 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
   const roles = seerRoles ?? realmRoles ?? [];
   const role  = pickHighestRole(roles);
 
-  // Extract scopes from the JWT `scope` claim (space-separated string).
+  // Extract scopes from the JWT `scope` claim.
+  // Keycloak may return `scope` as a space-separated string OR as a string[].
+  // Array.isArray guard handles both — without it, .split() throws at runtime
+  // when KC is configured to emit scope as an array (FIX-B / INV-3).
   // If the token has no AIDA/Seer scopes (KC scope mappers not configured),
   // fall back to deriving them from realm roles so that requireScope() works
   // without KC reconfiguration.
-  const jwtScopes = (payload as { scope?: string }).scope?.split(' ').filter(Boolean) ?? [];
+  const rawScope = (payload as { scope?: string | string[] }).scope;
+  const jwtScopes = Array.isArray(rawScope)
+    ? rawScope.filter(Boolean)
+    : (rawScope?.split(' ').filter(Boolean) ?? []);
   const hasAidaScopes = jwtScopes.some((s) => s.startsWith('aida:') || s.startsWith('seer:'));
   const scopes = hasAidaScopes ? jwtScopes : [...jwtScopes, ...deriveAidaScopes(roles)];
 

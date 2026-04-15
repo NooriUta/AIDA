@@ -7,39 +7,52 @@
 # Пример:
 #   ./scripts/rollback.sh abc1234f
 #
-# Требования: docker, docker compose, доступ к ghcr.io
+# Требования: docker, docker compose, yc CLI, доступ к YCR / GHCR
 #
 set -euo pipefail
 
 SHA=${1:?Usage: rollback.sh <git-sha>}
-REPO="ghcr.io/nooriuta/verdandi"
 COMPOSE_DIR="/opt/seer-studio"
-COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.prod.yml"
+
+# YCR (primary) — быстрее в пределах YC-региона
+YCR_REPO="cr.yandex/${YC_REGISTRY_ID:?YC_REGISTRY_ID not set}"
+# GHCR (fallback) — если YCR недоступен
+GHCR_REPO="ghcr.io/nooriuta/verdandi"
 
 echo "Rolling back to ${SHA}..."
 
-# Проверить что образы с таким тегом существуют в GHCR
+# Пробуем YCR, fallback на GHCR
 for svc in verdandi chur shuttle; do
-  echo "  Pulling ${REPO}/${svc}:${SHA}"
-  docker pull "${REPO}/${svc}:${SHA}"
-done
-
-# Пометить как latest
-for svc in verdandi chur shuttle; do
-  docker tag "${REPO}/${svc}:${SHA}" "${REPO}/${svc}:latest"
+  if docker pull "${YCR_REPO}/${svc}:${SHA}" 2>/dev/null; then
+    docker tag "${YCR_REPO}/${svc}:${SHA}" "${YCR_REPO}/${svc}:latest"
+    echo "  [${svc}] pulled from YCR"
+  else
+    echo "  [${svc}] YCR miss — falling back to GHCR"
+    docker pull "${GHCR_REPO}/${svc}:${SHA}"
+    docker tag  "${GHCR_REPO}/${svc}:${SHA}" "${YCR_REPO}/${svc}:latest"
+  fi
 done
 
 # Перезапустить стек
 cd "${COMPOSE_DIR}"
-docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
+docker compose \
+  -f docker-compose.prod.yml \
+  -f docker-compose.yc.yml \
+  up -d --remove-orphans
 
-# Подождать
-sleep 15
-
-# Health-check
-echo "Running health checks..."
-curl -sf http://localhost:13000/health  || { echo "FAIL: Chur";    exit 1; }
-curl -sf http://localhost:18080/q/health || { echo "FAIL: SHUTTLE"; exit 1; }
-curl -sf http://localhost:15173          || { echo "FAIL: verdandi"; exit 1; }
+# Health checks с retry (K-8 паттерн)
+echo "Waiting for services..."
+for svc in \
+  "http://localhost:13000/health:Chur" \
+  "http://localhost:18080/q/health:SHUTTLE" \
+  "http://localhost:15173/:verdandi"; do
+  url="${svc%%:*}"
+  name="${svc##*:}"
+  for i in $(seq 1 10); do
+    curl -sf "${url}" && break
+    echo "  [${name}] retry ${i}/10..."; sleep 5
+  done || { echo "${name} health check FAILED"; exit 1; }
+  echo "  [${name}] OK"
+done
 
 echo "Rollback to ${SHA} successful."

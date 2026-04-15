@@ -18,6 +18,10 @@ const DaliPage        = React.lazy(() => import('./pages/DaliPage'));
 const EventStreamPage = React.lazy(() => import('./pages/EventStreamPage'));
 const ControlsPage    = React.lazy(() => import('./pages/ControlsPage'));
 const UsersPage       = React.lazy(() => import('./pages/UsersPage'));
+const DocsPage        = React.lazy(() => import('./pages/DocsPage'));
+
+// Feature flag: show Docs nav link (dev only — toggle via localStorage)
+const DOCS_ENABLED = localStorage.getItem('heimdall.docs') === 'true';
 
 // ── Design token palettes ─────────────────────────────────────────────────────
 const PALETTES: Array<{ id: string; key: string; accent: string }> = [
@@ -358,6 +362,7 @@ function AppLayout() {
         <NavItem to="events"    label={t('nav.events')} />
         <NavItem to="demodebug" label={t('nav.demodebug')} />
         <NavItem to="users"     label={t('nav.users')} />
+        {DOCS_ENABLED && <NavItem to="docs" label="Docs [dev]" />}
 
         {/* Right-side toolbar */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -450,6 +455,7 @@ export default function App() {
             <Route path="events"    element={<EventStreamPage />} />
             <Route path="demodebug" element={<ControlsPage />} />
             <Route path="users"     element={<UsersPage />} />
+            <Route path="docs/*"    element={<DocsPage />} />
             <Route path="*"         element={<Navigate to="/services" replace />} />
           </Route>
         </Route>

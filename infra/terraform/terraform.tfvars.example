@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and fill in your values.
+# NEVER commit terraform.tfvars — it contains sensitive credentials.
+
+yc_token        = "your-oauth-token-or-sa-key-json"
+yc_cloud_id     = "b1g..."
+yc_folder_id    = "b1g..."
+yc_zone         = "ru-central1-a"
+domain          = "aida.yourcompany.com"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+vm_cores        = 4
+vm_memory_gb    = 8
+vm_disk_gb      = 50

@@ -25,3 +25,11 @@ docs/
 # ── Claude worktrees ─────────────────────────────────────────────────────────
 libraries/hound/src/.claude/
 .claude/
+
+# ── Secrets / credentials ─────────────────────────────────────────────────────
+.env*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx

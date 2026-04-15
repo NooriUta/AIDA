@@ -2,19 +2,24 @@ name: CI
 
 on:
   push:
-    branches: [master, 'feature/**']
+    branches: [master, 'feature/**', 'fix/**']   # K-1: fix/** добавлен
   pull_request:
     branches: [master]
+  workflow_dispatch:                               # K-7: ручной запуск
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read                                   # K-2: минимальные права
+
 jobs:
   # ── Library: Hound (ANTLR + ArcadeDB) ────────────────────────────────────────
   hound:
-    name: Hound — test
+    name: Hound — test + build
     runs-on: ubuntu-latest
+    timeout-minutes: 15                            # K-3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -23,12 +28,29 @@ jobs:
           java-version: 21
           cache: gradle
       - run: chmod +x gradlew
-      - run: ./gradlew :libraries:hound:test
+      - run: ./gradlew :libraries:hound:test --no-daemon --build-cache        # K-4
+      - run: ./gradlew :libraries:hound:build -x test --no-daemon --build-cache  # K-5
+
+  # ── Library: dali-models (shared schema) ─────────────────────────────────────
+  dali-models:                                     # K-6: новый job
+    name: dali-models — build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10                            # K-3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: chmod +x gradlew
+      - run: ./gradlew :shared:dali-models:build --no-daemon --build-cache    # K-4
 
   # ── Backend: SHUTTLE (Quarkus + Gradle) ──────────────────────────────────────
   shuttle:
     name: SHUTTLE — test + build
     runs-on: ubuntu-latest
+    timeout-minutes: 15                            # K-3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -37,13 +59,31 @@ jobs:
           java-version: 21
           cache: gradle
       - run: chmod +x gradlew
-      - run: ./gradlew :services:shuttle:test
-      - run: ./gradlew :services:shuttle:build -x test
+      - run: ./gradlew :services:shuttle:test --no-daemon --build-cache       # K-4
+      - run: ./gradlew :services:shuttle:build -x test --no-daemon --build-cache
+
+  # ── Backend: DALI (Quarkus + Gradle) ─────────────────────────────────────────
+  dali:                                            # C: новый job
+    name: DALI — test + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15                            # K-3
+    needs: [hound, dali-models]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: chmod +x gradlew
+      - run: ./gradlew :services:dali:test --no-daemon --build-cache          # K-4
+      - run: ./gradlew :services:dali:build -x test --no-daemon --build-cache
 
   # ── BFF: Chur (Fastify + Vitest) ────────────────────────────────────────────
   chur:
-    name: Chur — test + build
+    name: Chur — typecheck + test + build
     runs-on: ubuntu-latest
+    timeout-minutes: 10                            # K-3
     defaults:
       run:
         working-directory: bff/chur
@@ -55,6 +95,9 @@ jobs:
           cache: npm
           cache-dependency-path: bff/chur/package-lock.json
       - run: npm ci
+      - run: npm audit --audit-level=high          # K-9
+        continue-on-error: true
+      - run: npx tsc --noEmit                      # B3: явный typecheck
       - run: npm test
       - run: npm run build
 
@@ -62,6 +105,7 @@ jobs:
   verdandi:
     name: verdandi — lint + test + build
     runs-on: ubuntu-latest
+    timeout-minutes: 10                            # K-3
     defaults:
       run:
         working-directory: frontends/verdandi
@@ -73,14 +117,38 @@ jobs:
           cache: npm
           cache-dependency-path: frontends/verdandi/package-lock.json
       - run: npm ci
+      - run: npm audit --audit-level=high          # K-9
+        continue-on-error: true
       - run: npm test
       - run: npm run test:coverage
-      - run: npx vite build
+      - run: npm run build                         # B1: tsc -b + vite build (было npx vite build)
+
+  # ── Frontend: Shell (Module Federation host) ─────────────────────────────────
+  shell:                                           # B2: новый job
+    name: shell — typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10                            # K-3
+    defaults:
+      run:
+        working-directory: frontends/shell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontends/shell/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=high          # K-9
+        continue-on-error: true
+      - run: npm run build                         # = tsc && vite build
 
   # ── Backend: HEIMDALL (Quarkus + Gradle) ─────────────────────────────────────
   heimdall-backend:
     name: HEIMDALL backend — test + build
     runs-on: ubuntu-latest
+    timeout-minutes: 15                            # K-3
+    needs: [dali-models]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -89,13 +157,14 @@ jobs:
           java-version: 21
           cache: gradle
       - run: chmod +x gradlew
-      - run: ./gradlew :services:heimdall-backend:test
-      - run: ./gradlew :services:heimdall-backend:build -x test
+      - run: ./gradlew :services:heimdall-backend:test --no-daemon --build-cache  # K-4
+      - run: ./gradlew :services:heimdall-backend:build -x test --no-daemon --build-cache
 
   # ── Frontend: heimdall (Vite + Vitest) ───────────────────────────────────────
   heimdall-frontend:
     name: heimdall-frontend — test + build
     runs-on: ubuntu-latest
+    timeout-minutes: 10                            # K-3
     defaults:
       run:
         working-directory: frontends/heimdall-frontend
@@ -107,6 +176,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontends/heimdall-frontend/package-lock.json
       - run: npm ci
+      - run: npm audit --audit-level=high          # K-9
+        continue-on-error: true
       - run: npm test
       - run: npx tsc --noEmit
       - run: npx vite build

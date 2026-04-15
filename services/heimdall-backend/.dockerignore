@@ -1,2 +1,9 @@
 build/
 .gradle/
+.env*
+!.env.example
+*.log
+*.key
+*.pem
+*.p12
+*.pfx

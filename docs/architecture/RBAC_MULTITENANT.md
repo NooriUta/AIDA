@@ -1,7 +1,7 @@
 # AIDA — RBAC & Multi-Tenant Architecture
 
 **Документ:** `RBAC_MULTITENANT`
-**Версия:** 1.0
+**Версия:** 1.2
 **Дата:** 13.04.2026
 **Статус:** PROPOSED — требует подтверждения Q-MT1, Q-MT2, Q-MT3
 **Связанные документы:** `MODULES_TECH_STACK.md`, `DECISIONS_LOG.md`, `K8S_MIGRATION_TASKS.md`
@@ -322,8 +322,122 @@ Phase 2 — Multi-tenant (post-HighLoad):
 
 ---
 
+
+---
+
+## 12. Keycloak vs FRIGG — Storage split (зафиксировано в `types.ts`)
+
+### Keycloak (IAM — не дублировать)
+
+| Данные | Хранилище | Обоснование |
+|---|---|---|
+| Identity, роль, enabled | Keycloak native | IAM |
+| Profile: title, dept, phone | Keycloak attr | нужно admin-у в UsersPage |
+| `lang` | Keycloak attr `pref.lang` | admin может менять; identity-adjacent |
+| tz, dateFmt, startPage, avatarColor | Keycloak attr | сервер-сайд, cross-device |
+| notify.* (5 флагов) | Keycloak attr | сервер-сайд |
+
+### FRIGG (`UserPrefs` — источник истины для UI-prefs)
+
+| Данные | Хранилище | Обоснование |
+|---|---|---|
+| theme, palette, density, uiFont, monoFont, fontSize | FRIGG UserPrefs | cross-device UI sync |
+| quotas, sources, activity | FRIGG (R4.3) | операционные данные |
+
+> **localStorage = кэш FRIGG, не хранилище.** Instant read, debounced write (1.5s). Новое устройство → fetchPrefs → FRIGG → всё на месте.
+
+### Поток данных (финальный)
+
+```
+Логин
+  └─► Chur /auth/login → KC Direct Grant → сессия
+      └─► prefsStore.fetchPrefs()
+          └─► GET /prefs → Chur → heimdall-backend → FRIGG UserPrefs
+              └─► merge localStorage + applyDom ✅
+
+Изменение темы (verdandi)
+  └─► themeSlice.toggleTheme()
+      ├─► localStorage.setItem('seer-theme', next)  ← мгновенно
+      ├─► DOM data-theme = next
+      └─► prefsStore.savePrefs({ theme: next })
+          └─► debounce 1.5s → PUT /prefs → FRIGG     ← фоново
+
+Новое устройство
+  └─► нет localStorage → fetchPrefs → FRIGG → всё на месте ✅
+```
+
+- **Идентификация:** `username`, `email`, пароль, 2FA (built-in)
+- **Роль:** realm role
+- **Профиль:** `title`, `dept`, `phone`
+- **UI-настройки** (shared с verdandi через localStorage):
+  - `lang` → `seer-lang`
+  - `theme` → `seer-theme` (`dark`/`light`, не `auto`)
+  - `palette` → `seer-palette`
+  - `density` → `compact`/`normal` (не `comfortable`)
+  - `uiFont` → `seer-ui-font`
+  - `monoFont` → `seer-mono-font`
+  - `fontSize` → `seer-font-size`
+  - `tz`, `dateFmt`, `startPage`, `avatarColor`
+- **Уведомления:** `notify*`
+
+### FRIGG (только HEIMDALL, operational data)
+
+- **Квоты:** `mimir`, `sessions`, `atoms`, `workers`, `anvil`
+- **Source bindings:** `sources[]`
+- **Activity log**, история сессий, `lastActive`
+- **Snapshots** (уже реализовано в ControlResource)
+
+> **Ключевой вывод:** UI-настройки хранятся в Keycloak (не FRIGG) чтобы verdandi и heimdall-frontend видели одни и те же preferences. localStorage keys совпадают с verdandi: `seer-theme`, `seer-palette`, `seer-ui-font`, `seer-mono-font`, `seer-font-size`.
+
+> **TypeScript:** `authUser.role` из `aida-shared` — `'viewer'|'editor'|'admin'` (3 значения legacy). `UserRole` в HEIMDALL — 8 значений. Не кастовать напрямую, использовать `string[]` проверку scopes.
+
+
+---
+
+## 13. Реализация (Sprint UsersPage + Prefs — Apr 13, 2026)
+
+**Статус:** ✅ DONE · TypeScript все 3 проекта clean
+
+### Keycloak (`seer-realm.json`)
+- 8 realm-ролей (было 3)
+- 7 пользователей с атрибутами: title, dept, phone, avatarColor, tz, dateFmt, startPage, pref.lang, notify.*
+- sub-mapper + username-mapper в protocolMappers
+
+### Chur BFF
+- `keycloakAdmin.ts` — Admin REST API client (master realm): `listUsers()`, `updateUserAttrs()`, `setUserEnabled()`
+- `routes/prefs.ts` — GET/PUT `/prefs` (proxy → heimdall-backend, sub из сессии)
+- `routes/heimdall.ts` — GET `/heimdall/users`, PUT `/heimdall/users/:id/enabled`
+- `keycloak.ts` + `plugins/rbac.ts` — ROLE_PRIORITY и ROLE_RANK обновлены до 8 ролей
+
+### HEIMDALL backend
+- `UserPrefsRecord.java` — record(sub, theme, palette, density, uiFont, monoFont, fontSize)
+- `UserPrefsRepository.java` — FRIGG CRUD. Schema lazy init: `CREATE DOCUMENT TYPE UserPrefs IF NOT EXISTS` + UNIQUE index на sub. ArcadeDB UPSERT: `UPDATE UserPrefs SET ... UPSERT WHERE sub = :sub` — один round-trip
+- `UserPrefsResource.java` — GET/PUT `/api/prefs/{sub}`, graceful degradation
+
+### HEIMDALL frontend
+- `components/users/types.ts` — UserRole (8), UserPrefs, AidaUser, ROLES, SOURCES
+- `UserEditModal.tsx` — 820×580, sidebar nav, 7 секций
+- `UsersPage.tsx` — fetch `/heimdall/users` + fallback mock, KcUserView → AidaUser маппинг
+- `styles/heimdall.css` — ~50 новых классов
+
+### Verdandi
+- `stores/prefsStore.ts` — Zustand: `fetchPrefs()` (login) + `savePrefs(partial)` (debounced 1.5s)
+- `stores/slices/themeSlice.ts` — toggleTheme/setPalette → savePrefs
+- `stores/authStore.ts` — login()/checkSession() → fetchPrefs
+
+### Беклог (следующие спринты)
+| Задача | Sprint |
+|---|---|
+| FRIGG R4.3: UserQuota, SourceBinding — Java + endpoints | R4.3 |
+| Chur R4.12: GET/PUT `/heimdall/users/:id/attrs` — KC атрибуты из UserEditModal | R4.12 |
+| FRIGG R4.3: lastActive, activity log | R4.3 |
+| Verdandi R4.8: density/fontSize/fonts через savePrefs | R4.8 |
+| Тесты prefsStore + UserPrefsRepository | R4.x |
+
 ## История изменений
 
 | Дата | Версия | Что |
 |---|---|---|
+| 13.04.2026 | 1.2 | **UsersPage Sprint DONE.** Final storage split: localStorage=кэш, FRIGG=источник истины UI-prefs, Keycloak=identity+lang+notify. 8 ролей во всех слоях. UserPrefsRepository (lazy schema, UPSERT). prefsStore verdandi (debounced). Поток данных задокументирован. Беклог R4.3/R4.8/R4.12. |
+| 13.04.2026 | 1.1 | Keycloak vs FRIGG storage split зафиксирован (из types.ts UsersPage). UI-настройки → Keycloak (shared с verdandi localStorage keys). Operational data → FRIGG. TypeScript: authUser.role = 3 values legacy, UserRole = 8 values. |
 | 13.04.2026 | 1.0 | Initial. 8 ролей × 3 тира × 6 функциональных областей. Keycloak Organizations model. Chur + HEIMDALL реализация. Q-MT1..Q-MT5. |

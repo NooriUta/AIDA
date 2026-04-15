@@ -3,4 +3,9 @@ dist/
 e2e/
 test-results/
 .env*
+!.env.example
 *.log
+*.key
+*.pem
+*.p12
+*.pfx

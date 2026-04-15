@@ -49,6 +49,12 @@ services:
     depends_on:
       houndarcade:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/q/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   # ── Chur (auth gateway / BFF) ──────────────────────────────────────────────
   chur:
@@ -86,6 +92,12 @@ services:
         condition: service_started
       houndarcade:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ── verdandi (React frontend — Seiðr Studio) ──────────────────────────────
   verdandi:
@@ -97,6 +109,12 @@ services:
     depends_on:
       chur:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5173/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # ── heimdall-frontend (React — HEIMDALL Control Panel) ────────────────────
   heimdall-frontend:
@@ -110,6 +128,12 @@ services:
         condition: service_started
       heimdall-backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5174/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # ── Shell (Module Federation host — AIDA Platform entrypoint) ────────────
   shell:
@@ -128,6 +152,12 @@ services:
         condition: service_started
       heimdall-frontend:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5175/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # ── Dali (async PL/SQL parse service) ────────────────────────────────────
   # ВАЖНО: context = . (монорепо root), НЕ services/dali/.
@@ -216,6 +246,7 @@ services:
       COMPOSE_PROJECT_NAME: aida-root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./docs:/docs:ro          # M: dev-only docs viewer (GET /docs)
     depends_on:
       frigg:
         condition: service_healthy
