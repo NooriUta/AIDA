@@ -468,6 +468,30 @@ public class JsonlBatchBuilder {
             ));
         }
 
+        // 9d. DaliRecordField (G6: one vertex per named field; mirrors RemoteWriter.java:924-931)
+        //     Dedup within batch: same field_geoid may appear if multiple routines define records
+        //     with identical names (edge case). HashSet guards duplicate vertex writes.
+        {
+            Set<String> insertedFieldGeoids = new HashSet<>();
+            for (var e : str.getRecords().entrySet()) {
+                RecordInfo rec = e.getValue();
+                for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
+                    String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+                    if (!insertedFieldGeoids.add(fieldGeoid)) continue; // dedup
+                    b.appendVertex("DaliRecordField", fieldGeoid, mapOf(
+                            "session_id",        sid,
+                            "field_geoid",       fieldGeoid,
+                            "field_name",        fi.name(),
+                            "field_order",       fi.ordinalPosition(),
+                            "record_geoid",      rec.getGeoid(),
+                            "data_type",         fi.dataType(),          // null-ok: nullable for untyped collections
+                            "ordinal_position",  fi.ordinalPosition(),
+                            "source_column_geoid", fi.sourceColumnGeoid() // null-ok: populated for %ROWTYPE fields only
+                    ));
+                }
+            }
+        }
+
         // 10. DaliAtom
         // Build atomId map for edge creation later.
         // IMPORTANT: skip "routine" containers — they aggregate the same atoms already present
@@ -651,13 +675,18 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // Structural: BULK_COLLECTS_INTO, RECORD_USED_IN (G6: DaliRecord edges)
+        // Structural: BULK_COLLECTS_INTO, HAS_RECORD_FIELD, RECORD_USED_IN (G6: DaliRecord edges)
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recGeoid = rec.getGeoid();
             // DaliStatement(cursor SELECT) → BULK_COLLECTS_INTO → DaliRecord
             if (rec.getSourceStatementGeoid() != null)
                 b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
+            // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (mirrors RemoteWriter.java:1448-1453)
+            for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
+                String fieldGeoid = recGeoid + ":FIELD:" + fi.name();
+                b.appendEdge("HAS_RECORD_FIELD", recGeoid, fieldGeoid, sidProps);
+            }
             // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT)
             for (var stmtEntry : str.getStatements().entrySet()) {
                 if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
@@ -665,6 +694,19 @@ public class JsonlBatchBuilder {
                         ac -> rec.getVarName().equals(ac.get("dataset_alias")));
                 if (usesRecord)
                     b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
+            }
+        }
+
+        // Structural: RETURNS_INTO (KI-RETURN-1: mirrors RemoteWriter.java:1372-1389)
+        // targetGeoid is the external ID of the target vertex (field_geoid / record_geoid /
+        // variable geoid / parameter geoid) — same formula used by the semantic listener.
+        for (var e : str.getStatements().entrySet()) {
+            StatementInfo retSi = e.getValue();
+            if (retSi.getReturningTargets().isEmpty()) continue;
+            for (StatementInfo.ReturningTarget rt : retSi.getReturningTargets()) {
+                Map<String, Object> retProps = new java.util.HashMap<>(sidProps);
+                retProps.put("returning_exprs", String.join(",", rt.expressions()));
+                b.appendEdge("RETURNS_INTO", e.getKey(), rt.targetGeoid(), retProps);
             }
         }
 
