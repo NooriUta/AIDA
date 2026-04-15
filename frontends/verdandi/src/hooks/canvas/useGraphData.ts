@@ -21,10 +21,13 @@ export function useGraphData() {
   } = useLoomStore();
 
   // Always call every hook (Rules of Hooks); enabled flags prevent firing.
-  // Phase S2.3: L2 now has two modes depending on filter.routineAggregate.
-  //   routineAggregate=true  → useRoutineAggregate (new routines+tables view)
-  //   routineAggregate=false → useExplore (legacy detailed exploration)
-  // Phase S2.5: L4 → useStatementTree (single-statement subquery drill)
+  // Level → query routing:
+  //   L1                              → useOverview
+  //   L2                              → useRoutineAggregate (AGG mode, always)
+  //   L2 with routineAggregate=false  → useExplore (manual EXP toggle from L2)
+  //   L3 with routineAggregate=false  → useExplore (EXP, arrived via Routine drill-down)
+  //   L3 with routineAggregate=true   → useLineage  (column lineage, direct navigation)
+  //   L4                              → useStatementTree (single-statement drill)
   // Only one of the group is enabled at a time so React Query doesn't
   // pay for multiple simultaneous network calls per level switch.
   const overviewQ    = useOverview();
@@ -32,14 +35,19 @@ export function useGraphData() {
     viewLevel === 'L2' && filter.routineAggregate ? currentScope : null,
   );
   const exploreQ     = useExplore(
-    viewLevel === 'L2' && !filter.routineAggregate ? currentScope : null,
+    (viewLevel === 'L2' && !filter.routineAggregate) ||
+    (viewLevel === 'L3' && !filter.routineAggregate)
+      ? currentScope : null,
     filter.includeExternal,
   );
-  const lineageQ     = useLineage(viewLevel === 'L3' ? currentScope : null);
+  const lineageQ     = useLineage(
+    viewLevel === 'L3' && filter.routineAggregate ? currentScope : null,
+  );
   const stmtTreeQ    = useStatementTree(viewLevel === 'L4' ? currentScope : null);
 
   const activeQuery = viewLevel === 'L1' ? overviewQ
                     : viewLevel === 'L2' ? (filter.routineAggregate ? aggQ : exploreQ)
+                    : viewLevel === 'L3' ? (filter.routineAggregate ? lineageQ : exploreQ)
                     : viewLevel === 'L4' ? stmtTreeQ
                     : lineageQ;
 
@@ -47,11 +55,17 @@ export function useGraphData() {
   // Include expanded nodes so their columns are fetched too.
   // Phase S2.3: also pull IDs from the routine-aggregate response so any
   // DaliTable it returns gets its columns enriched the same way.
+  // Phase S2.3+: L3 EXP (routineAggregate=false) also needs column enrichment.
+  const needsEnrichment =
+    viewLevel === 'L2' ||
+    (viewLevel === 'L3' && !filter.routineAggregate);  // L3 EXP mode
+
   const stmtIds = useMemo(() => {
-    if (viewLevel !== 'L2') return [] as string[];
+    if (!needsEnrichment) return [] as string[];
     const ENRICHABLE = new Set(['DaliStatement', 'DaliTable']);
     const ids = new Set<string>();
-    const srcData = filter.routineAggregate ? aggQ.data : exploreQ.data;
+    // L2 AGG → aggQ, L2 EXP or L3 EXP → exploreQ
+    const srcData = (viewLevel === 'L2' && filter.routineAggregate) ? aggQ.data : exploreQ.data;
     if (srcData) {
       for (const n of srcData.nodes) {
         if (ENRICHABLE.has(n.type)) ids.add(n.id);
@@ -61,7 +75,7 @@ export function useGraphData() {
       if (ENRICHABLE.has(n.type)) ids.add(n.id);
     }
     return [...ids];
-  }, [viewLevel, filter.routineAggregate, aggQ.data, exploreQ.data, expansionGqlNodes]);
+  }, [needsEnrichment, viewLevel, filter.routineAggregate, aggQ.data, exploreQ.data, expansionGqlNodes]);
 
   const stmtColsQ = useStmtColumns(stmtIds);
 
@@ -73,7 +87,12 @@ export function useGraphData() {
       const l2data = filter.routineAggregate ? aggQ.data : exploreQ.data;
       if (l2data) base = transformGqlExplore(l2data);
     }
-    else if (viewLevel === 'L3' && lineageQ.data)  base = transformGqlExplore(lineageQ.data);
+    else if (viewLevel === 'L3') {
+      // L3 EXP (routineAggregate=false) → arrived by drilling from L2 AGG into a Routine
+      // L3 lineage (routineAggregate=true) → arrived via direct column-lineage navigation
+      const l3data = filter.routineAggregate ? lineageQ.data : exploreQ.data;
+      if (l3data) base = transformGqlExplore(l3data);
+    }
     else if (viewLevel === 'L4' && stmtTreeQ.data) base = transformGqlStatementTree(stmtTreeQ.data);
     if (!base) return null;
 
@@ -114,18 +133,20 @@ export function useGraphData() {
     }
 
     // Second-pass stmt column enrichment: apply before ELK so node heights are correct.
-    if (viewLevel === 'L2' && stmtColsQ.data && stmtColsQ.data.edges.length > 0) {
+    // Applies at L2 (both AGG and EXP) and L3 EXP (routineAggregate=false).
+    if (needsEnrichment && stmtColsQ.data && stmtColsQ.data.edges.length > 0) {
       const { nodes: enrichedNodes, cfEdges } = applyStmtColumns(base.nodes, base.edges, stmtColsQ.data);
       base = { nodes: enrichedNodes, edges: [...base.edges, ...cfEdges] };
     }
 
     return base;
-  }, [viewLevel, filter.routineAggregate, overviewQ.data, aggQ.data, exploreQ.data, lineageQ.data, stmtTreeQ.data, expansionGqlNodes, expansionGqlEdges, stmtColsQ.data]);
+  }, [needsEnrichment, viewLevel, filter.routineAggregate, overviewQ.data, aggQ.data, exploreQ.data, lineageQ.data, stmtTreeQ.data, expansionGqlNodes, expansionGqlEdges, stmtColsQ.data]);
 
   // True once column enrichment has settled (single ELK run prerequisite).
   // L4 is unaffected: stmtIds is [] for L4, stmtColsQ never fires.
+  // L3 lineage (routineAggregate=true) has no enrichment either.
   const stmtColsReady =
-    viewLevel !== 'L2' ||
+    !needsEnrichment ||
     stmtIds.length === 0 ||
     (!stmtColsQ.isLoading && !stmtColsQ.isFetching);
 

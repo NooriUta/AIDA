@@ -60,9 +60,11 @@ export type DaliEdgeType =
 //
 // Per the 5-level plan in docs/loom/LOOM_5LEVEL_ARCHITECTURE.md:
 //   L1 — database/schema overview
-//   L2 — routines+tables aggregated (when filter.routineAggregate = true) or
-//        detailed table+stmt exploration (toggle off)
-//   L3 — legacy column-atom lineage (reachable via direct navigation)
+//   L2 — routines+tables aggregated (filter.routineAggregate=true) or
+//        manual EXP explore toggle (routineAggregate=false)
+//   L3 — dual-mode based on filter.routineAggregate:
+//          false = EXP explore (arrived via Routine drill-down from L2 AGG)
+//          true  = column-atom lineage (direct navigation)
 //   L4 — single-statement drill (subquery tree + output column flow)
 //   L5 — expression-column breakdown (deferred)
 export type ViewLevel = 'L1' | 'L2' | 'L3' | 'L4';

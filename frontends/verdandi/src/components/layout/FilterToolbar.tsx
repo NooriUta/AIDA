@@ -280,8 +280,8 @@ export const FilterToolbar = memo(() => {
 
       <ToolbarDivider />
 
-      {/* ── Table / Stmt selects (L2 only) ────────────────────────────────── */}
-      {viewLevel === 'L2' && availableTables.length > 0 && (
+      {/* ── Table / Stmt selects (L2 and L3 EXP) ──────────────────────────── */}
+      {(viewLevel === 'L2' || (viewLevel === 'L3' && !routineAggregate)) && availableTables.length > 0 && (
         <>
           <span style={{ fontSize: 11, color: 'var(--t3)', flexShrink: 0 }}>{t('toolbar.table')}:</span>
           <select

@@ -35,14 +35,15 @@ export function navigationActions(set: Set, get: Get) {
     drillDown: (nodeId: string, label: string, nodeType?: DaliNodeType) => {
       const { viewLevel, currentScope, currentScopeLabel, navigationStack, filter } = get();
 
-      // ── Phase S2.3: L2 aggregate + routine/package → switch to L2 explore ──
+      // ── Phase S2.3: L2 aggregate + routine/package → L3 (detailed explore) ──
       // Double-clicking a RoutineNode or PackageNode on the aggregate canvas
-      // stays at L2 but flips routineAggregate=false so the explore mode
-      // fetches the detailed statement view for that specific routine/package.
+      // transitions to L3 (EXP mode) to show all statements within that routine /
+      // package. routineAggregate=false selects the explore query at L3.
       if (viewLevel === 'L2' && filter.routineAggregate &&
           (nodeType === 'DaliRoutine' || nodeType === 'DaliPackage')) {
         const scopeStr = nodeType === 'DaliPackage' ? `pkg-${label}` : nodeId;
         set({
+          viewLevel:         'L3',
           currentScope:      scopeStr,
           currentScopeLabel: label,
           navigationStack:   [...navigationStack, {
@@ -60,15 +61,43 @@ export function navigationActions(set: Set, get: Get) {
             startObjectLabel: label,
             fieldFilter:      null,
             depth:            Infinity,
-            routineAggregate: false,   // switch to explore mode
+            routineAggregate: false,   // L3 EXP mode — uses exploreQ
           },
           ...EMPTY_EXPAND,
         });
         return;
       }
 
-      // ── Phase S2.5: L2 explore + statement → L4 (statement drill) ──────────
+      // ── Phase S2.5: L2 explore (manual toggle) + statement → L4 ────────────
       if (viewLevel === 'L2' && !filter.routineAggregate && nodeType === 'DaliStatement') {
+        set({
+          viewLevel:         'L4',
+          currentScope:      nodeId,
+          currentScopeLabel: label,
+          navigationStack:   [...navigationStack, {
+            level:      viewLevel,
+            scope:      currentScope,
+            label:      currentScopeLabel ?? currentScope ?? viewLevel,
+            fromNodeId: nodeId,
+          }],
+          selectedNodeId: null,
+          availableFields: [],
+          filter: {
+            ...FILTER_DEFAULTS,
+            startObjectId:    nodeId,
+            startObjectType:  nodeType ?? null,
+            startObjectLabel: label,
+            fieldFilter:      null,
+            depth:            Infinity,
+            routineAggregate: false,
+          },
+          ...EMPTY_EXPAND,
+        });
+        return;
+      }
+
+      // ── Phase S2.6: L3 EXP + statement → L4 (statement drill) ──────────────
+      if (viewLevel === 'L3' && !filter.routineAggregate && nodeType === 'DaliStatement') {
         set({
           viewLevel:         'L4',
           currentScope:      nodeId,

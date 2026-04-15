@@ -484,6 +484,20 @@ export function transformGqlExplore(
       const { shortLabel, groupPath } = nodeType === 'DaliStatement'
         ? parseStmtLabel(n.label)
         : { shortLabel: n.label, groupPath: [] as string[] };
+
+      // For DaliRoutine nodes from exploreRoutineAggregate, the backend now populates
+      // node.scope = schema_geoid and node.meta with packageName / routineType.
+      const nodeMeta = Object.fromEntries((n.meta ?? []).map((m) => [m.key, m.value]));
+      const schemaName  = isFlatRoutine ? (n.scope || undefined) : undefined;
+      const packageName = isFlatRoutine ? (nodeMeta['packageName'] || undefined) : undefined;
+      // Prefer backend-supplied routineType (e.g. "PROCEDURE") over label-parsing heuristic.
+      const routineKindRaw = nodeMeta['routineType'];
+      const routineKind = isFlatRoutine
+        ? (routineKindRaw
+            ? ({ PROCEDURE: 'PROC', FUNCTION: 'FUNC', TRIGGER: 'TRIG', PACKAGE: 'PKG' }[routineKindRaw.toUpperCase()] ?? routineKindRaw)
+            : extractRoutineKind(n.label, nodeType))
+        : undefined;
+
       return {
         id: n.id,
         type: NODE_TYPE_MAP[nodeType] ?? 'schemaNode',
@@ -497,7 +511,9 @@ export function transformGqlExplore(
             dataSource:  n.dataSource || undefined,
             groupPath:   groupPath.length > 0 ? groupPath : undefined,
             fullLabel:   nodeType === 'DaliStatement' ? n.label : undefined,
-            routineKind: isFlatRoutine ? extractRoutineKind(n.label, nodeType) : undefined,
+            routineKind,
+            schemaName,   // Phase S2.3+: schema_geoid from backend, shown in RoutineNode header
+            packageName,  // Phase S2.3+: package_geoid from backend, shown in RoutineNode header
           },
           schema:    n.scope || undefined,
           columns:   outputColsByStmt.get(n.id)

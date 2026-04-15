@@ -179,6 +179,13 @@ export function applyCfEdgeToggle(
 ): Graph {
   if (viewLevel === 'L1' || tableLevelView) return graph;
 
+  // If there are no column-flow (CF) edges in the graph at all, there is nothing
+  // to show at fine-grain zoom — do NOT hide the table-flow edges.
+  // This keeps READS_FROM / WRITES_TO arrows visible in L2 AGG mode (routine→table)
+  // where column enrichment produces no CF edges (no statement columns to match).
+  const hasCfEdges = graph.edges.some((e) => CF_EDGE_TYPES.has(e.data?.edgeType as string));
+  if (!hasCfEdges) return graph;
+
   // Column mode: tag CF and flow edges with CSS classes for visibility control.
   // Do NOT filter — ELK needs READS_FROM / WRITES_TO for layered layout.
   return {

@@ -339,7 +339,11 @@ public class ExploreService {
                 OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
                 OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
                 WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
-                RETURN id(r) AS src, r.routine_name AS srcLabel, reads, writes
+                RETURN id(r) AS src, r.routine_name AS srcLabel,
+                       coalesce(r.schema_geoid, '') AS srcSchema,
+                       coalesce(r.package_geoid, '') AS srcPackage,
+                       coalesce(r.routine_type, '') AS srcKind,
+                       reads, writes
                 LIMIT 300
                 """;
             params = Map.of("scope", scopeName);
@@ -355,7 +359,11 @@ public class ExploreService {
                 OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
                 OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
                 WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
-                RETURN id(r) AS src, r.routine_name AS srcLabel, reads, writes
+                RETURN id(r) AS src, r.routine_name AS srcLabel,
+                       coalesce(r.schema_geoid, '') AS srcSchema,
+                       coalesce(r.package_geoid, '') AS srcPackage,
+                       coalesce(r.routine_type, '') AS srcKind,
+                       reads, writes
                 LIMIT 300
                 """;
             params = Map.of("scope", scopeName);
@@ -365,20 +373,69 @@ public class ExploreService {
         // ExploreResult rows. buildResult() will dedup and build the node
         // map. We also emit one "node-only" row per routine so routines
         // with zero reads/writes still render as standalone nodes.
-        return arcade.cypher(cypher, params)
-            .map(rows -> {
+        //
+        // For schema scope: also fetch external routines (from OTHER schemas)
+        // that read/write tables owned by this schema — gives the complete
+        // cross-schema data-flow picture on the aggregate canvas.
+        final String finalScopeName = scopeName;
+        final boolean finalIsPackage = isPackage;
+
+        Uni<List<Map<String, Object>>> mainQuery = arcade.cypher(cypher, params);
+
+        // External-routines query: only meaningful for schema scope.
+        // Returns routines from other schemas that interact with tables in $scope.
+        Uni<List<Map<String, Object>>> extQuery = finalIsPackage
+            ? Uni.createFrom().item(List.of())
+            : arcade.cypher("""
+                MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(stmt:DaliStatement)
+                WHERE extR.schema_geoid <> $scope
+                  AND coalesce(stmt.parent_statement, '') = ''
+                MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
+                WHERE tR.schema_geoid = $scope
+                WITH extR, collect(DISTINCT tR) AS reads
+                OPTIONAL MATCH (extR)-[:CONTAINS_STMT]->(stmt2:DaliStatement)
+                WHERE coalesce(stmt2.parent_statement, '') = ''
+                MATCH (stmt2)-[:WRITES_TO]->(tW:DaliTable)
+                WHERE tW.schema_geoid = $scope
+                WITH extR, reads, collect(DISTINCT tW) AS writes
+                RETURN id(extR) AS src, extR.routine_name AS srcLabel,
+                       coalesce(extR.schema_geoid, '') AS srcSchema,
+                       coalesce(extR.package_geoid, '') AS srcPackage,
+                       coalesce(extR.routine_type, '') AS srcKind,
+                       reads, writes
+                LIMIT 100
+                """, params)
+              .onFailure().recoverWithItem(List.of());
+
+        return Uni.combine().all().unis(List.of(mainQuery, extQuery))
+            .combinedWith(results -> {
+                var allRows = new ArrayList<Map<String, Object>>();
+                for (Object raw : results) {
+                    @SuppressWarnings("unchecked")
+                    var chunk = (List<Map<String, Object>>) raw;
+                    allRows.addAll(chunk);
+                }
+
                 var flatRows = new ArrayList<Map<String, Object>>();
-                for (var row : rows) {
-                    String rId    = str(row, "src");
-                    String rLabel = str(row, "srcLabel");
+                for (var row : allRows) {
+                    String rId     = str(row, "src");
+                    String rLabel  = str(row, "srcLabel");
+                    String rSchema = str(row, "srcSchema");
+                    String rPkg    = str(row, "srcPackage");
+                    String rKind   = str(row, "srcKind");
                     if (rId == null || rId.isEmpty()) continue;
 
                     // Routine self-node — emitted via a dummy edge so
-                    // buildResult registers the routine even without any reads/writes
+                    // buildResult registers the routine even without any reads/writes.
+                    // srcScope / srcPackage / srcKind are passed through so buildResult
+                    // can populate scope and meta on the GraphNode.
                     var selfRow = new HashMap<String, Object>();
                     selfRow.put("srcId",       rId);
                     selfRow.put("srcLabel",    rLabel);
                     selfRow.put("srcType",     "DaliRoutine");
+                    selfRow.put("srcScope",    rSchema);   // ← schema_geoid → node.scope
+                    selfRow.put("srcPackage",  rPkg);      // ← package_geoid → node.meta
+                    selfRow.put("srcKind",     rKind);     // ← routine_type  → node.meta
                     selfRow.put("tgtId",       rId);
                     selfRow.put("tgtLabel",    rLabel);
                     selfRow.put("tgtScope",    "");
@@ -393,7 +450,11 @@ public class ExploreService {
                     if (reads != null) {
                         for (var t : reads) {
                             if (t == null) continue;
-                            flatRows.add(makeRoutineTableRow(rId, rLabel, t, "READS_FROM"));
+                            var r = makeRoutineTableRow(rId, rLabel, t, "READS_FROM");
+                            r.put("srcScope",   rSchema);
+                            r.put("srcPackage", rPkg);
+                            r.put("srcKind",    rKind);
+                            flatRows.add(r);
                         }
                     }
                     @SuppressWarnings("unchecked")
@@ -401,11 +462,15 @@ public class ExploreService {
                     if (writes != null) {
                         for (var t : writes) {
                             if (t == null) continue;
-                            flatRows.add(makeRoutineTableRow(rId, rLabel, t, "WRITES_TO"));
+                            var w = makeRoutineTableRow(rId, rLabel, t, "WRITES_TO");
+                            w.put("srcScope",   rSchema);
+                            w.put("srcPackage", rPkg);
+                            w.put("srcKind",    rKind);
+                            flatRows.add(w);
                         }
                     }
                 }
-                return buildResult(flatRows, scopeName, isPackage ? "DaliPackage" : "DaliSchema");
+                return buildResult(flatRows, finalScopeName, finalIsPackage ? "DaliPackage" : "DaliSchema");
             })
             .flatMap(this::enrichDataSource);
     }
@@ -1104,7 +1169,20 @@ public class ExploreService {
 
             if (rootId == null) rootId = srcId;
 
-            nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, "", Map.of(), ""));
+            // Optional source-node scope and meta — present for routine nodes returned
+            // by exploreRoutineAggregate (srcScope=schema_geoid, srcPackage, srcKind).
+            // All other callers leave these columns absent; str() returns "" safely.
+            String srcScope   = str(row, "srcScope");
+            String srcPackage = str(row, "srcPackage");
+            String srcKind    = str(row, "srcKind");
+            Map<String, String> srcMeta = Map.of();
+            if (!srcPackage.isEmpty() || !srcKind.isEmpty()) {
+                var sm = new java.util.HashMap<String, String>();
+                if (!srcPackage.isEmpty()) sm.put("packageName", srcPackage);
+                if (!srcKind.isEmpty())    sm.put("routineType", srcKind);
+                srcMeta = java.util.Collections.unmodifiableMap(sm);
+            }
+            nodesById.putIfAbsent(srcId, new GraphNode(srcId, srcType, srcLabel, srcScope, srcMeta, ""));
             nodesById.putIfAbsent(tgtId, new GraphNode(tgtId, tgtType, tgtLabel, tgtScope, tgtMeta, ""));
 
             // Column-level routing hints — when a Cypher segment wants the edge
