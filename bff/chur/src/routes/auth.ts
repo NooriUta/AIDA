@@ -36,6 +36,8 @@ const COOKIE_OPTS = {
   sameSite: (IS_PROD ? 'strict' : 'lax') as 'strict' | 'lax',
   secure:   process.env.COOKIE_SECURE === 'true' || (IS_PROD && process.env.COOKIE_SECURE !== 'false'),
   maxAge:   8 * 60 * 60, // 8 h
+  // Share session across seer.* and heimdall.* subdomains
+  ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
 };
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
