@@ -46,7 +46,7 @@ services:
       QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://ygg:2480}
       ARCADE_DB:       ${ARCADEDB_DB:-hound}
       ARCADE_USER:     ${ARCADEDB_USER:-root}
-      ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      ARCADE_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD:-playwithdata}
       QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
     ports:
       - "18080:8080"
@@ -54,7 +54,7 @@ services:
       ygg:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/q/health/live || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/q/health/live || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 8
@@ -76,7 +76,7 @@ services:
       ARCADEDB_URL:           ${ARCADEDB_URL:-http://ygg:2480}
       ARCADEDB_DB:            ${ARCADEDB_DB:-hound}
       ARCADEDB_USER:          ${ARCADEDB_USER:-root}
-      ARCADEDB_PASS:          ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      ARCADEDB_PASS:          ${ARCADEDB_ADMIN_PASSWORD:-playwithdata}
       LINEAGE_API_URL:        http://shuttle:8080
     ports:
       - "13000:3000"
@@ -86,7 +86,7 @@ services:
       shuttle:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
