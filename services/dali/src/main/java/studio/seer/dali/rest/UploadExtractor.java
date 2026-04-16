@@ -1,6 +1,7 @@
 package studio.seer.dali.rest;
 
 import com.github.junrar.Archive;
+import com.github.junrar.exception.UnsupportedRarV5Exception;
 import com.github.junrar.rarfile.FileHeader;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
@@ -14,9 +15,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Utility for extracting uploaded ZIP and RAR archives into a target directory.
+ * Utility for extracting uploaded ZIP and RAR4 archives into a target directory.
  *
- * <p>Safeguards (applied to both formats):
+ * <p>RAR5 (WinRAR 5+) is not supported by junrar — a 400 error is returned with
+ * instructions to re-save as ZIP or RAR4.
+ *
+ * <p>Safeguards (both formats):
  * <ul>
  *   <li>Path traversal — rejects entries with {@code ..} or absolute paths</li>
  *   <li>Bomb protection — rejects archives exceeding {@link #MAX_FILES} entries or
@@ -37,12 +41,6 @@ class UploadExtractor {
 
     // ── ZIP ────────────────────────────────────────────────────────────────────
 
-    /**
-     * Extracts all SQL files from {@code zipFile} into {@code targetDir}.
-     *
-     * @throws WebApplicationException 400 for path traversal / too many files / no SQL files found
-     * @throws WebApplicationException 413 for uncompressed size exceeding the limit
-     */
     static void extractZip(Path zipFile, Path targetDir) throws IOException {
         int  fileCount  = 0;
         long totalBytes = 0;
@@ -81,15 +79,8 @@ class UploadExtractor {
         if (fileCount == 0) throw bad("ZIP contains no SQL files (accepted: " + SQL_EXTENSIONS + ")");
     }
 
-    // ── RAR ────────────────────────────────────────────────────────────────────
+    // ── RAR4 (via junrar) ──────────────────────────────────────────────────────
 
-    /**
-     * Extracts all SQL files from {@code rarFile} into {@code targetDir}.
-     * Supports RAR4 (via junrar) and RAR5 (via commons-compress).
-     *
-     * @throws WebApplicationException 400 for path traversal / too many files / no SQL files found
-     * @throws WebApplicationException 413 for uncompressed size exceeding the limit
-     */
     static void extractRar(Path rarFile, Path targetDir) throws IOException {
         int  fileCount  = 0;
         long totalBytes = 0;
@@ -121,6 +112,10 @@ class UploadExtractor {
                     }
                 }
             }
+        } catch (UnsupportedRarV5Exception e) {
+            throw entity(400,
+                "RAR5 format is not supported (WinRAR 5+ default). " +
+                "Please re-save as ZIP or RAR4: in WinRAR → Add to archive → Archive format: RAR4.");
         } catch (WebApplicationException e) {
             throw e;
         } catch (Exception e) {
