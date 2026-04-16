@@ -16,7 +16,16 @@ RUN npm ci --legacy-peer-deps && \
     cp -rL /app/packages/aida-shared node_modules/aida-shared
 
 COPY frontends/shell/ .
-RUN rm -rf .vite && npx vite build
+
+# Build-time remote entry URLs — CD passes DOMAIN=seidrstudio.pro as build-arg.
+# VITE_VERDANDI_URL / VITE_HEIMDALL_URL can be overridden explicitly if needed.
+ARG DOMAIN=seidrstudio.pro
+ARG VITE_VERDANDI_URL
+ARG VITE_HEIMDALL_URL
+RUN rm -rf .vite && \
+    VITE_VERDANDI_URL="${VITE_VERDANDI_URL:-https://seer.${DOMAIN}/remoteEntry.js}" \
+    VITE_HEIMDALL_URL="${VITE_HEIMDALL_URL:-https://heimdall.${DOMAIN}/remoteEntry.js}" \
+    npx vite build
 
 FROM nginx:alpine AS runner
 COPY --from=builder /app/frontends/shell/dist /usr/share/nginx/html

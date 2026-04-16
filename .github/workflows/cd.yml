@@ -40,6 +40,7 @@ jobs:
           - service: shell
             context: .
             dockerfile: ./frontends/shell/Dockerfile
+            build_args: DOMAIN=${{ secrets.DOMAIN }}
     steps:
       - uses: actions/checkout@v4
 

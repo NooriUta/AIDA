@@ -29,7 +29,9 @@ export default defineConfig({
     exclude: ['react-router-dom'],
   },
   // Module Federation generates top-level await — requires es2022+ target.
-  base: '/heimdall/',
+  // base is '/' (same as verdandi) — assets served from root of heimdall.* subdomain.
+  // The old '/heimdall/' base caused MIME errors: files live at /assets/ in the
+  // container but the browser requested /heimdall/assets/ → SPA fallback → text/html.
   build: {
     target: 'es2022',
     sourcemap: false,
@@ -39,9 +41,18 @@ export default defineConfig({
     host: '0.0.0.0',
     cors: true,
     proxy: {
+      // Auth goes to Chur as-is
       '/auth':     { target: 'http://localhost:3000', changeOrigin: true },
-      '/heimdall': { target: 'http://localhost:3000', changeOrigin: true },
-      '/dali': { target: 'http://localhost:9090', changeOrigin: true, rewrite: (path: string) => path.replace(/^\/dali/, '') },
+      '/prefs':    { target: 'http://localhost:3000', changeOrigin: true },
+      // Heimdall API paths: dev server receives /health, /metrics etc. — rewrite to /heimdall/* on Chur
+      '/health':   { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/metrics':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/control':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/users':    { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/services': { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      // WebSocket event stream — same rewrite
+      '/ws':       { target: 'ws://localhost:3000',   changeOrigin: true, ws: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/dali':     { target: 'http://localhost:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
     },
   },
 });
