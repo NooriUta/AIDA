@@ -42,8 +42,9 @@ dependencies {
     // Validation annotations — required by HeimdallEvent (dali-models uses compileOnly)
     compileOnly 'jakarta.validation:jakarta.validation-api:3.0.2'
 
-    // RAR4 extraction (RAR5 = unsupported by junrar, returns 400 with instructions)
-    implementation 'com.github.junrar:junrar:7.5.5'
+    // RAR extraction — RAR4 + RAR5 via 7-Zip JNI (all-platforms bundles Windows/Linux/macOS natives)
+    implementation 'net.sf.sevenzipjbinding:sevenzipjbinding:16.02-2.01'
+    implementation 'net.sf.sevenzipjbinding:sevenzipjbinding-all-platforms:16.02-2.01'
 
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
