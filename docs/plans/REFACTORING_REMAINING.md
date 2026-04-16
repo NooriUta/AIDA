@@ -94,9 +94,27 @@
 
 | Q | Вопрос | Текущий статус |
 |---|--------|----------------|
-| Q29 | MIMIR через ArcadeDB MCP? | Нет решения. C.2.3 blocked. |
-| Q30 | ANVIL через ArcadeDB 72 алгоритма? | Нет решения. ANVIL spec не написан. |
+| Q29 | MIMIR через ArcadeDB MCP? | Re-eval май 2026. MIMIR_SPEC.md написан. |
+| Q30 | ANVIL через ArcadeDB 72 алгоритма? | Re-eval май 2026. ANVIL_SPEC.md написан. |
 | Q31 | UC2a — batch preview с embedded ArcadeDB? | Отложено post-M3. |
+
+---
+
+## Документация (статус)
+
+| Документ | Статус |
+|----------|--------|
+| `docs/architecture/YGG_SCHEMA_REFERENCE.md` | ✅ Создан 16.04.2026 |
+| `docs/guides/ONBOARDING.md` | ✅ Создан 16.04.2026 |
+| `docs/architecture/hound/HOUND_POSTGRESQL_SPEC.md` | ✅ Создан 16.04.2026 (DRAFT) |
+| `docs/quality-gates/PERFORMANCE_TARGETS.md` | ✅ Создан 16.04.2026 |
+| `docs/research/RAG_VS_PARSE_HYPOTHESIS.md` | ✅ Создан 16.04.2026 |
+| `docs/plans/MIMIR_SPEC.md` | ✅ Создан 16.04.2026 (DRAFT) |
+| `docs/plans/ANVIL_SPEC.md` | ✅ Создан 16.04.2026 (DRAFT) |
+| `docs/plans/SKADI_SPEC.md` | ✅ Создан 16.04.2026 (CONCEPT) |
+| `docs/guides/STARTUP_SEQUENCE.md` | ✅ Создан 15.04.2026 |
+| `docs/guides/DEMO_SCRIPT.md` | ✅ Создан 16.04.2026 |
+| `docs/ABSTRACT_HIGHLOAD_2026.md` | ✅ Создан 16.04.2026 |
 
 ---
 
@@ -105,3 +123,4 @@
 | Дата | Версия | Что |
 |---|---|---|
 | 16.04.2026 | 1.0 | Создан как замена удалённого REFACTORING_PLAN.md. C.0–C.2 статусы зафиксированы. C.3 (Chur scopes), C.4 (VERDANDI views), C.5 (infra) — незакрытые задачи описаны. |
+| 16.04.2026 | 1.1 | Добавлена таблица документации — 11 файлов созданы. Q30/Q29 статусы обновлены. |
