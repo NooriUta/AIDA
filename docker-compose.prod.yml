@@ -80,6 +80,7 @@ services:
       ARCADEDB_USER:          ${ARCADEDB_USER:-root}
       ARCADEDB_PASS:          ${ARCADEDB_ADMIN_PASSWORD:-playwithdata}
       LINEAGE_API_URL:        http://shuttle:8080
+      HEIMDALL_URL:           http://heimdall-backend:9093
     ports:
       - "13000:3000"
     depends_on:
