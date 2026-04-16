@@ -116,6 +116,14 @@ jobs:
       - name: Fix file permissions for scp
         run: chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/
 
+      - name: Ensure deploy dir is writable
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_KEY }}
+          script:   sudo mkdir -p /opt/seer-studio && sudo chown -R ubuntu:ubuntu /opt/seer-studio
+
       - name: Copy prod compose to server
         uses: appleboy/scp-action@v0.1.7
         with:
