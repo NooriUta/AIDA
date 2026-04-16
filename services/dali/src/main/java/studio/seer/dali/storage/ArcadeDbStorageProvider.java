@@ -74,7 +74,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
             "UPSERT RETURN AFTER @rid WHERE id = :id",
             Map.of("id",   status.getId().toString(),
                    "data", json,
-                   "hb",   status.getLastHeartbeat().toString()));
+                   "hb",   status.getLastHeartbeat().toEpochMilli()));
         log.debug("JobRunr: server announced id={}", status.getId());
     }
 
@@ -112,15 +112,17 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public int removeTimedOutBackgroundJobServers(Instant heartbeatOlderThan) {
-        // Count then delete — ArcadeDB does not support RETURN BEFORE in DELETE
+        // Count then delete — ArcadeDB does not support RETURN BEFORE in DELETE.
+        // Compare as epoch-millisecond LONG to avoid DATETIME string parsing issues.
+        long cutoff = heartbeatOlderThan.toEpochMilli();
         List<Map<String, Object>> cnt = frigg.sql(
             "SELECT count(*) as cnt FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
-            Map.of("cutoff", heartbeatOlderThan.toString()));
+            Map.of("cutoff", cutoff));
         int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
                 ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
         if (count > 0) {
             frigg.sql("DELETE FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
-                    Map.of("cutoff", heartbeatOlderThan.toString()));
+                    Map.of("cutoff", cutoff));
         }
         return count;
     }

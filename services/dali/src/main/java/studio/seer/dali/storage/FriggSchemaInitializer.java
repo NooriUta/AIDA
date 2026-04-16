@@ -59,7 +59,7 @@ public class FriggSchemaInitializer {
         { "jobrunr_jobs",           "state",           "STRING"   },
         { "jobrunr_recurring_jobs", "id",              "STRING"   },
         { "jobrunr_servers",        "id",              "STRING"   },
-        { "jobrunr_servers",        "lastHeartbeat",   "DATETIME" },
+        { "jobrunr_servers",        "lastHeartbeat",   "LONG"     },
         { "jobrunr_metadata",       "id",              "STRING"   },
         { "dali_sessions",          "id",              "STRING"   },
         { "dali_sessions",          "startedAt",       "DATETIME" },   // BUG-SS-014: was STRING
@@ -112,8 +112,14 @@ public class FriggSchemaInitializer {
             for (String type : DOCUMENT_TYPES) {
                 if (!createDocumentType(type)) allTypesOk = false;
             }
+            // Migrate lastHeartbeat DATETIME → LONG before ensureProperties recreates it
+            migrateLastHeartbeatToLong();
             ensureProperties();
             createIndexes();
+            // Clear stale server registrations from previous runs so that master
+            // election starts clean and getLongestRunningBackgroundJobServerId()
+            // never returns a phantom UUID from a prior container lifecycle.
+            clearStaleServers();
             if (allTypesOk) {
                 schemaReady = true;
                 log.info("FriggSchemaInitializer: schema ready (5 document types, perf-stat properties indexed)");
@@ -124,6 +130,37 @@ public class FriggSchemaInitializer {
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not initialise FRIGG schema (FRIGG may be unavailable): {}",
                     e.getMessage());
+        }
+    }
+
+    /**
+     * Drops the {@code lastHeartbeat} property if it was previously created as DATETIME
+     * so that {@link #ensureProperties()} can recreate it as LONG.
+     * Epoch-millisecond storage is more reliable than ISO strings for ArcadeDB range queries.
+     */
+    private void migrateLastHeartbeatToLong() {
+        try {
+            frigg.sql("DROP PROPERTY `jobrunr_servers`.`lastHeartbeat` FORCE");
+            log.info("FriggSchemaInitializer: dropped lastHeartbeat (DATETIME) — will recreate as LONG");
+        } catch (Exception e) {
+            // Expected on a fresh install where the property doesn't exist yet
+            log.debug("FriggSchemaInitializer: lastHeartbeat drop skipped ({})", e.getMessage());
+        }
+    }
+
+    /**
+     * Removes all records from {@code jobrunr_servers}.
+     *
+     * <p>Called at startup so that orphaned server registrations from a previous
+     * container lifecycle never cause {@link org.jobrunr.server.ServerZooKeeper}
+     * to elect a phantom master, leaving {@code masterId} null and triggering an NPE.
+     */
+    private void clearStaleServers() {
+        try {
+            frigg.sql("DELETE FROM `jobrunr_servers`");
+            log.info("FriggSchemaInitializer: cleared stale jobrunr_servers");
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not clear jobrunr_servers: {}", e.getMessage());
         }
     }
 
