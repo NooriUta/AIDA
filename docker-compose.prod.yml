@@ -107,7 +107,7 @@ services:
     image: arcadedata/arcadedb:26.3.2
     restart: unless-stopped
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_PASSWORD:-playwithdata}"
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_PASSWORD:-playwithdata} -XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0"
     ports:
       - "2481:2480"
     volumes:
@@ -125,7 +125,7 @@ services:
     image: arcadedata/arcadedb:26.3.2
     restart: unless-stopped
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ADMIN_PASSWORD:-playwithdata}"
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ADMIN_PASSWORD:-playwithdata} -XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0"
     ports:
       - "2480:2480"
     volumes:

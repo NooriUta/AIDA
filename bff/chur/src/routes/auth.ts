@@ -28,11 +28,13 @@ setInterval(() => {
 }, 5 * 60 * 1000).unref();
 
 // ── Cookie config ─────────────────────────────────────────────────────────────
+// COOKIE_SECURE=false lets HTTP deployments work before TLS is configured.
+// Defaults to true in production so HTTPS deployments stay secure by default.
 const COOKIE_OPTS = {
   httpOnly: true,
   path:     '/',
   sameSite: (IS_PROD ? 'strict' : 'lax') as 'strict' | 'lax',
-  secure:   IS_PROD,
+  secure:   IS_PROD && process.env.COOKIE_SECURE !== 'false',
   maxAge:   8 * 60 * 60, // 8 h
 };
 

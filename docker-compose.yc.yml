@@ -37,6 +37,7 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY: edge
       KC_HTTP_ENABLED: "true"       # nginx handles TLS termination
+      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:
@@ -50,6 +51,8 @@ services:
   # ── SHUTTLE ────────────────────────────────────────────────────────────────
   shuttle:
     image: cr.yandex/${YC_REGISTRY_ID}/shuttle:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:
@@ -63,6 +66,10 @@ services:
   # ── Chur (BFF) ─────────────────────────────────────────────────────────────
   chur:
     image: cr.yandex/${YC_REGISTRY_ID}/chur:${IMAGE_TAG:-latest}
+    environment:
+      # Set to "true" once TLS is terminated at the load-balancer / host nginx.
+      # Without HTTPS, Secure cookies are silently dropped by the browser.
+      COOKIE_SECURE: "false"
     <<: *env_file
     deploy:
       resources:
@@ -88,6 +95,8 @@ services:
   # ── Dali ───────────────────────────────────────────────────────────────────
   dali:
     image: cr.yandex/${YC_REGISTRY_ID}/dali:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:
@@ -101,6 +110,8 @@ services:
   # ── Heimdall Backend ────────────────────────────────────────────────────────
   heimdall-backend:
     image: cr.yandex/${YC_REGISTRY_ID}/heimdall-backend:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:
