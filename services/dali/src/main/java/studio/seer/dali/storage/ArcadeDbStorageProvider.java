@@ -107,7 +107,15 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
             "SELECT id FROM `jobrunr_servers` ORDER BY lastHeartbeat ASC LIMIT 1", Map.of());
         if (rows == null || rows.isEmpty()) return null;
         Object id = rows.get(0).get("id");
-        return id != null ? UUID.fromString(id.toString()) : null;
+        if (id == null) return null;
+        try {
+            return UUID.fromString(id.toString());
+        } catch (IllegalArgumentException e) {
+            // Corrupt/test record — purge it and retry
+            log.warn("getLongestRunningBackgroundJobServerId: removing invalid record id='{}': {}", id, e.getMessage());
+            frigg.sql("DELETE FROM `jobrunr_servers` WHERE id = :id", Map.of("id", id.toString()));
+            return getLongestRunningBackgroundJobServerId();
+        }
     }
 
     @Override
