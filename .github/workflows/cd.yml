@@ -188,7 +188,14 @@ jobs:
             docker compose \
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
-              up -d --remove-orphans --force-recreate
+              up -d --remove-orphans --force-recreate || {
+                echo "=== docker compose up failed, dumping logs ==="
+                docker ps -a
+                docker logs seer-studio-chur-1    --tail 60 2>&1 || true
+                docker logs seer-studio-shuttle-1 --tail 40 2>&1 || true
+                docker logs Ygg-1                 --tail 20 2>&1 || true
+                exit 1
+              }
 
             # Health checks with retry loop (K-8: replaces sleep 15)
             echo "Waiting for services..."
