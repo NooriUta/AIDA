@@ -1,7 +1,7 @@
 # AIDA — RBAC & Multi-Tenant Architecture
 
 **Документ:** `RBAC_MULTITENANT`
-**Версия:** 1.2
+**Версия:** 1.3
 **Дата:** 13.04.2026
 **Статус:** PROPOSED — требует подтверждения Q-MT1, Q-MT2, Q-MT3
 **Связанные документы:** `MODULES_TECH_STACK.md`, `DECISIONS_LOG.md`, `K8S_MIGRATION_TASKS.md`
@@ -434,10 +434,38 @@ Phase 2 — Multi-tenant (post-HighLoad):
 | Verdandi R4.8: density/fontSize/fonts через savePrefs | R4.8 |
 | Тесты prefsStore + UserPrefsRepository | R4.x |
 
+---
+
+## 14. SHUTTLE GraphQL Mutations — матрица ролей (C.2.2)
+
+**Реализовано:** sprint Apr 16, 2026 (PR #14)
+
+Все мутации проходят через Chur BFF, который выставляет `X-Seer-Role` из Keycloak JWT.
+SHUTTLE не делает собственной RBAC-проверки — охраняется на уровне Chur.
+
+| Мутация | Минимальная роль | Scope | Статус |
+|---|---|---|---|
+| `startParseSession` | `admin` | `aida:harvest` | ✅ реализована → DaliClient |
+| `cancelSession` | `admin` | `aida:harvest` | ✅ реализована → DaliClient |
+| `resetDemoState` | `admin` | `aida:admin` | ✅ реализована → HEIMDALL /control/reset |
+| `askMimir` | `editor+` | `seer:write` | ⏳ stub (MimirClient C.2.3 pending) |
+| `saveView` | `editor+` | `seer:write` | ⏳ stub (FRIGG view storage pending) |
+| `deleteView` | `editor+` | `seer:write` | ⏳ stub (FRIGG view storage pending) |
+
+**Fallback при недоступном Dali:**
+- `startParseSession` → `SessionInfo { status: "UNAVAILABLE" }` (не ошибка GraphQL)
+- `cancelSession` → `false` (т.к. `CancelResponse.status = "UNAVAILABLE"`)
+- Реализовано через `DaliClientFallback` (`@Fallback` аннотация)
+
+---
+
 ## История изменений
 
 | Дата | Версия | Что |
 |---|---|---|
 | 13.04.2026 | 1.2 | **UsersPage Sprint DONE.** Final storage split: localStorage=кэш, FRIGG=источник истины UI-prefs, Keycloak=identity+lang+notify. 8 ролей во всех слоях. UserPrefsRepository (lazy schema, UPSERT). prefsStore verdandi (debounced). Поток данных задокументирован. Беклог R4.3/R4.8/R4.12. |
 | 13.04.2026 | 1.1 | Keycloak vs FRIGG storage split зафиксирован (из types.ts UsersPage). UI-настройки → Keycloak (shared с verdandi localStorage keys). Operational data → FRIGG. TypeScript: authUser.role = 3 values legacy, UserRole = 8 values. |
+| 16.04.2026 | 1.3 | Раздел 14: SHUTTLE GraphQL Mutations — матрица ролей (C.2.2 PR #14). `startParseSession`, `cancelSession` → admin+. `askMimir`, `saveView`, `deleteView` → editor+ (stubs). DaliClientFallback задокументирован. |
+| 13.04.2026 | 1.2 | UsersPage Sprint DONE. Final storage split. 8 ролей во всех слоях. |
+| 13.04.2026 | 1.1 | Keycloak vs FRIGG storage split. |
 | 13.04.2026 | 1.0 | Initial. 8 ролей × 3 тира × 6 функциональных областей. Keycloak Organizations model. Chur + HEIMDALL реализация. Q-MT1..Q-MT5. |
