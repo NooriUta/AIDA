@@ -184,11 +184,11 @@ jobs:
             # Ensure external volumes exist (idempotent)
             docker volume create hound_databases || true
 
-            # Restart stack (force-recreate so fresh .env.prod is picked up)
+            # Restart stack
             docker compose \
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
-              up -d --remove-orphans --force-recreate || {
+              up -d --remove-orphans || {
                 echo "=== docker compose up failed, dumping logs ==="
                 docker ps -a
                 docker logs seer-studio-chur-1    --tail 60 2>&1 || true
