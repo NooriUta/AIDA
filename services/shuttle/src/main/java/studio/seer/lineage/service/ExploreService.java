@@ -264,9 +264,9 @@ public class ExploreService {
             MATCH (sub)-[:CHILD_OF*0..30]->(root:DaliStatement)
             WHERE coalesce(root.parent_statement, '') = ''
             OPTIONAL MATCH (root)-[:HAS_AFFECTED_COL]->(rootAff:DaliAffectedColumn)
-                WHERE toUpper(coalesce(rootAff.column_name, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
+                WHERE toUpper(last(split(coalesce(rootAff.column_name, ''), '.'))) = toUpper(last(split(coalesce(oc.name, oc.col_key, ''), '.')))
             OPTIONAL MATCH (root)-[:HAS_OUTPUT_COL]->(rootOc:DaliOutputColumn)
-                WHERE toUpper(coalesce(rootOc.name, rootOc.col_key, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
+                WHERE toUpper(last(split(coalesce(rootOc.name, rootOc.col_key, ''), '.'))) = toUpper(last(split(coalesce(oc.name, oc.col_key, ''), '.')))
             RETURN DISTINCT id(srcTbl) AS srcId, srcTbl.table_name AS srcLabel, 'DaliTable' AS srcType,
                    id(root) AS tgtId, coalesce(root.stmt_geoid, root.snippet, '') AS tgtLabel, '' AS tgtScope,
                    'DaliStatement' AS tgtType, 'DATA_FLOW' AS edgeType,
