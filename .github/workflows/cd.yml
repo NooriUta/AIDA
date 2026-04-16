@@ -184,11 +184,11 @@ jobs:
             # Ensure external volumes exist (idempotent)
             docker volume create hound_databases || true
 
-            # Restart stack
+            # Restart stack (force-recreate so fresh .env.prod is picked up)
             docker compose \
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
-              up -d --remove-orphans
+              up -d --remove-orphans --force-recreate
 
             # Health checks with retry loop (K-8: replaces sleep 15)
             echo "Waiting for services..."
