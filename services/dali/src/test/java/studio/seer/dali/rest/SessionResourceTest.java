@@ -119,4 +119,63 @@ class SessionResourceTest {
         .then()
             .statusCode(404);
     }
+
+    @Test
+    void cancel_existingQueuedSession_returns202() {
+        // Create a session in preview=true so it completes quickly without touching YGG
+        String id = given()
+            .contentType(ContentType.JSON)
+            .body("""
+                  { "dialect": "plsql", "source": "%s", "preview": true }
+                  """.formatted(tempSrc()))
+        .when()
+            .post(SESSIONS_URL)
+        .then()
+            .statusCode(202)
+            .extract().path("id");
+
+        given()
+        .when()
+            .post(SESSIONS_URL + "/" + id + "/cancel")
+        .then()
+            .statusCode(202)
+            .body("status", equalTo("CANCELLING"));
+    }
+
+    @Test
+    void cancel_unknownSession_returns404() {
+        given()
+        .when()
+            .post(SESSIONS_URL + "/00000000-0000-0000-0000-000000000000/cancel")
+        .then()
+            .statusCode(404)
+            .body("status", equalTo("NOT_FOUND"));
+    }
+
+    @Test
+    void cancel_alreadyCancelledSession_returns409() {
+        // Create, cancel, then try to cancel again
+        String id = given()
+            .contentType(ContentType.JSON)
+            .body("""
+                  { "dialect": "plsql", "source": "%s", "preview": true }
+                  """.formatted(tempSrc()))
+        .when()
+            .post(SESSIONS_URL)
+        .then()
+            .statusCode(202)
+            .extract().path("id");
+
+        // First cancel — should succeed
+        given().when().post(SESSIONS_URL + "/" + id + "/cancel")
+            .then().statusCode(202);
+
+        // Second cancel — already terminal
+        given()
+        .when()
+            .post(SESSIONS_URL + "/" + id + "/cancel")
+        .then()
+            .statusCode(409)
+            .body("status", equalTo("ALREADY_DONE"));
+    }
 }

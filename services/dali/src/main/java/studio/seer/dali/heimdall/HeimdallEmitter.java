@@ -95,6 +95,12 @@ public class HeimdallEmitter {
                 "files",          files)));
     }
 
+    /** Emitted by SessionService when a session is cancelled by user request. */
+    public void sessionCancelled(String sessionId) {
+        warn(EventType.SESSION_FAILED, sessionId,
+                Map.of("reason", "CANCELLED_BY_USER"));
+    }
+
     /** Emitted by ParseJob when an unrecoverable error aborts the session. */
     public void sessionFailed(String sessionId, String error, long durationMs) {
         emit(build("dali", EventType.SESSION_FAILED, EventLevel.ERROR, sessionId, durationMs, Map.of(

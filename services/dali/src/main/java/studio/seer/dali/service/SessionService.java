@@ -44,7 +44,9 @@ public class SessionService {
     @Inject HeimdallEmitter          emitter;
     @Inject FriggSchemaInitializer   schemaInitializer;   // BUG-SS-012: guard enqueue()
 
-    private final ConcurrentMap<String, Session> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Session> sessions    = new ConcurrentHashMap<>();
+    /** Maps sessionId → JobRunr job UUID for cancel support. Not persisted — rebuilt on restart. */
+    private final ConcurrentMap<String, UUID>    jobRunrIdMap = new ConcurrentHashMap<>();
 
     private volatile boolean friggHealthy = false;
 
@@ -149,7 +151,9 @@ public class SessionService {
         // BUG-SS-011: jobScheduler producer throws IllegalStateException if JobRunr
         // failed to initialise at startup; surface as a meaningful error rather than NPE.
         try {
-            jobScheduler.get().<ParseJob>enqueue(j -> j.execute(sessionId, input));
+            org.jobrunr.jobs.JobId jrJobId =
+                jobScheduler.get().<ParseJob>enqueue(j -> j.execute(sessionId, input));
+            jobRunrIdMap.put(sessionId, UUID.fromString(jrJobId.toString()));
         } catch (Exception e) {
             log.error("Failed to enqueue job for session {}: {}", sessionId, e.getMessage());
             throw new IllegalStateException(
@@ -267,6 +271,57 @@ public class SessionService {
 
     /** Returns true if the last FRIGG operation succeeded. */
     public boolean isFriggHealthy() { return friggHealthy; }
+
+    /**
+     * Cancels a session: removes it from the JobRunr queue (if still QUEUED/ENQUEUED)
+     * and transitions it to CANCELLED state.
+     *
+     * <p>If the job is already RUNNING the cancellation is best-effort — the job
+     * may still complete, but the session is marked CANCELLED immediately.
+     *
+     * @return {@code CancelResult} with status CANCELLING | NOT_FOUND | ALREADY_DONE
+     */
+    public CancelResult cancelSession(String sessionId) {
+        Session session = sessions.get(sessionId);
+        if (session == null) {
+            return new CancelResult("NOT_FOUND", "Session not found: " + sessionId);
+        }
+        if (session.status() == SessionStatus.COMPLETED
+                || session.status() == SessionStatus.FAILED
+                || session.status() == SessionStatus.CANCELLED) {
+            return new CancelResult("ALREADY_DONE",
+                    "Session already in terminal state: " + session.status());
+        }
+
+        // Ask JobRunr to delete the job (no-op if already picked up by a worker)
+        UUID jrId = jobRunrIdMap.remove(sessionId);
+        if (jrId != null) {
+            try {
+                jobScheduler.get().delete(jrId);
+                log.info("[cancelSession] JobRunr job {} deleted for session {}", jrId, sessionId);
+            } catch (Exception e) {
+                log.warn("[cancelSession] JobRunr delete failed for session {} (job {}): {}",
+                        sessionId, jrId, e.getMessage());
+            }
+        } else {
+            log.warn("[cancelSession] No JobRunr ID tracked for session {} — may have restarted", sessionId);
+        }
+
+        // Transition session to CANCELLED and persist
+        sessions.computeIfPresent(sessionId, (k, s) -> new Session(
+                s.id(), SessionStatus.CANCELLED, s.progress(), s.total(), s.batch(),
+                s.clearBeforeWrite(), s.dialect(), s.source(), s.startedAt(), java.time.Instant.now(),
+                s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
+                s.vertexStats(), s.resolutionRate(), s.durationMs(),
+                s.warnings(), List.of("Cancelled by user"), s.fileResults(), false));
+
+        Session cancelled = sessions.get(sessionId);
+        if (cancelled != null) persist(cancelled);
+
+        emitter.sessionCancelled(sessionId);
+        log.info("[cancelSession] Session {} marked CANCELLED", sessionId);
+        return new CancelResult("CANCELLING", "Session marked CANCELLED; JobRunr deletion requested");
+    }
 
     // ── Internal ───────────────────────────────────────────────────────────────
 
