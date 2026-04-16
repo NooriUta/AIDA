@@ -16,7 +16,7 @@ export const prefsRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET /prefs — load server prefs for the current user ─────────────────
   app.get(
-    '/prefs',
+    '/',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const sub = encodeURIComponent(request.user.sub);
@@ -31,7 +31,7 @@ export const prefsRoutes: FastifyPluginAsync = async (app) => {
 
   // ── PUT /prefs — save server prefs for the current user ─────────────────
   app.put(
-    '/prefs',
+    '/',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const sub = encodeURIComponent(request.user.sub);
