@@ -71,6 +71,7 @@ services:
       PORT:                   "3000"
       CORS_ORIGIN:            "https://seidrstudio.pro,https://www.seidrstudio.pro,https://seer.seidrstudio.pro,https://heimdall.seidrstudio.pro"
       COOKIE_DOMAIN:          ".seidrstudio.pro"
+      COOKIE_SECURE:          "true"
       KEYCLOAK_URL:           http://keycloak:8180/kc
       KEYCLOAK_REALM:         seer
       KEYCLOAK_CLIENT_ID:     aida-bff

@@ -72,3 +72,4 @@ docs/internal/
 docs/diagrams/
 docs/ci-cd/
 docs/plan/
+infra/terraform/

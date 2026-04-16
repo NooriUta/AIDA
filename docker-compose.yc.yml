@@ -34,7 +34,7 @@ services:
   keycloak:
     command: start --import-realm
     environment:
-      KC_HOSTNAME: "${DOMAIN:-seidrstudio.pro}"
+      KC_HOSTNAME: "seer.${DOMAIN:-seidrstudio.pro}"
       KC_HOSTNAME_STRICT: "true"
       KC_HTTP_RELATIVE_PATH: "/kc"
       KC_PROXY_HEADERS: "xforwarded" # KC 26: replaces deprecated KC_PROXY=edge

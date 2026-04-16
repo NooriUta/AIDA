@@ -103,7 +103,7 @@ services:
     environment:
       NODE_ENV:              ${NODE_ENV:-development}
       PORT:                  "3000"
-      CORS_ORIGIN:           "http://localhost:15173,https://localhost"
+      CORS_ORIGIN:           "http://localhost:15173,https://localhost,http://localhost:5175,http://localhost:25174"
       # Keycloak (internal network — no port offset)
       KEYCLOAK_URL:          http://keycloak:8180/kc
       KEYCLOAK_REALM:        seer
