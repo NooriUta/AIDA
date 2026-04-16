@@ -40,7 +40,6 @@ jobs:
           - service: shell
             context: .
             dockerfile: ./frontends/shell/Dockerfile
-            build_args: DOMAIN=${{ secrets.DOMAIN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,7 +59,9 @@ jobs:
           context: ${{ matrix.context }}
           file:    ${{ matrix.dockerfile }}
           push: true
-          build-args: ${{ matrix.build_args }}
+          build-args: |
+            ${{ matrix.build_args }}
+            ${{ matrix.service == 'shell' && format('DOMAIN={0}', secrets.DOMAIN) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,scope=${{ matrix.service }},mode=max
           tags: |
