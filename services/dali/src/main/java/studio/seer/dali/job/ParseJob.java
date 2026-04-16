@@ -175,7 +175,7 @@ public class ParseJob {
     private HoundEventListener buildListener(String sessionId, HoundConfig config) {
         HoundEventListener heimdall = heimdallUrl
                 .filter(url -> !url.isBlank())
-                .map(HoundHeimdallListener::new)
+                .<HoundEventListener>map(HoundHeimdallListener::new)
                 .orElse(NoOpHoundEventListener.INSTANCE);
         return new CompositeListener(
                 new DaliHoundListener(sessionId, config.dialect(), emitter),
