@@ -119,21 +119,21 @@ for EDGE_TYPE in HAS_RECORD_FIELD RETURNS_INTO DaliDDLModifiesTable DaliDDLModif
 done
 ```
 
-### Фикс B — постоянный (после demo)
+### Фикс B — постоянный ✅ APPLIED (Apr 16)
 
-Добавить в `HoundSchemaInitializer.java` (или аналог) явное создание этих типов при старте:
+`RemoteSchemaCommands.java` (строки 89–98) уже содержит все 4 типа с `IF NOT EXISTS`:
 
 ```java
-// В методе ensureEdgeTypes() или аналоге:
-List.of(
-    "HAS_RECORD_FIELD", "RETURNS_INTO",
-    "DaliDDLModifiesTable", "DaliDDLModifiesColumn"
-).forEach(name ->
-    arcadeClient.command("hound",
-        "CREATE EDGE TYPE " + name + " IF NOT EXISTS"));
+"CREATE EDGE TYPE HAS_RECORD_FIELD IF NOT EXISTS EXTENDS E",
+"CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS EXTENDS E",
+"CREATE EDGE TYPE DaliDDLModifiesTable IF NOT EXISTS EXTENDS E",
+"CREATE EDGE TYPE DaliDDLModifiesColumn IF NOT EXISTS EXTENDS E",
 ```
 
-**TODO (Sprint 3):** добавить этот вызов в startup-инициализатор → `INV-YGG-01`.
+Эти команды выполняются при каждом старте Dali через `RemoteSchemaCommands.all()` → идемпотентно.
+
+~~**TODO (Sprint 3):** добавить этот вызов в startup-инициализатор → `INV-YGG-01`.~~
+**Закрыто:** постоянный фикс применён в `RemoteSchemaCommands.java`.
 
 ---
 
@@ -238,3 +238,4 @@ docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 | Дата | Версия | Что |
 |---|---|---|
 | 16.04.2026 | 1.0 | Создан по итогам QG-прогона 15.04. Три известных проблемы зафиксированы: FRIGG-Dali порядок, missing edge types Sprint 2, schemaReady deadlock kill+restart sequence. |
+| 16.04.2026 | 1.1 | Фикс B отмечен APPLIED — `RemoteSchemaCommands.java` содержит `IF NOT EXISTS` для всех 4 Sprint 2 edge types. TODO INV-YGG-01 закрыт. |
