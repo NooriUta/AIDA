@@ -141,8 +141,9 @@ runcmd:
   - mkdir -p /opt/seer-studio/infra/scripts
 
   # Install yc CLI
-  - curl -fsSL https://storage.yandexcloud.net/yc-cli/install.sh | bash -s -- --install-dir /usr/local
-  - ln -sf /usr/local/bin/yc /usr/bin/yc
+  - curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- --install-dir /usr/local
+  - ln -sf /usr/local/yandex-cloud/bin/yc /usr/bin/yc
+  - ln -sf /usr/local/yandex-cloud/bin/docker-credential-yc /usr/local/bin/docker-credential-yc
 
   # Set up nginx
   - rm -f /etc/nginx/sites-enabled/default
