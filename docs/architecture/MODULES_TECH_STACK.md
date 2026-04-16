@@ -1236,7 +1236,87 @@ JobRunr из коробки поддерживает PostgreSQL, MySQL, SQLite, 
 
 ---
 
-### 3.11 URD (planned)
+### 3.11 Object Storage — S3 (archives)
+
+**Слой:** 1 — Data Layer
+**Зрелость:** 🔵 PLANNED (cloud deployment)
+**Назначение:** Хранение загружаемых SQL-архивов (ZIP + .sql файлы) для Dali File Upload. Заменяет `java.io.tmpdir` подход из MVP при переходе в облако.
+
+**Технологический стек:**
+
+| Среда | Технология | Port / Endpoint |
+|---|---|---|
+| Dev / Docker Compose | MinIO (`minio/minio:latest`) | `:9000` (S3 API), `:9001` (Console UI) |
+| Prod (YC) | YC Object Storage | `storage.yandexcloud.net` (S3-compatible) |
+
+Обе среды используют **S3-compatible API** — код Dali не меняется при смене бэкенда.
+
+**Lifecycle архивов:**
+
+| Событие | Действие |
+|---|---|
+| Загрузка файла | PUT в `uploads/{sessionId}/{filename}` |
+| ParseJob завершён (COMPLETED / FAILED) | DELETE объекта сразу |
+| Failsafe (ParseJob завис / не стартовал) | S3 lifecycle rule: auto-delete через 7 дней |
+
+**Quota и мониторинг:**
+
+Dali записывает в FRIGG метаданные каждого upload-а (`UploadUsage` vertex):
+
+```
+session_id  | file_name | file_size_bytes | uploaded_at | deleted_at | status
+```
+
+HEIMDALL backend читает из FRIGG и отдаёт:
+- `GET /control/storage/usage` — суммарно + по сессиям
+- `PUT /control/storage/quota` — установить лимит (bytes)
+- `DELETE /control/storage/archives` — принудительная очистка
+
+HEIMDALL frontend — новая вкладка **Storage** на странице Dashboard:
+- Gauge: использовано / квота
+- Таблица: последние N загрузок с размером, статусом, временем
+- Кнопка «Очистить старые»
+
+**Docker Compose (dev):**
+
+```yaml
+minio:
+  image: minio/minio:latest
+  command: server /data --console-address ":9001"
+  ports:
+    - "127.0.0.1:9000:9000"
+    - "127.0.0.1:9001:9001"
+  environment:
+    MINIO_ROOT_USER: ${MINIO_USER:-aida}
+    MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-aidapassword}
+  volumes:
+    - minio_data:/data
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+```
+
+**Dali env:**
+
+```env
+S3_ENDPOINT=http://minio:9000       # prod: https://storage.yandexcloud.net
+S3_BUCKET=dali-uploads
+S3_ACCESS_KEY=aida
+S3_SECRET_KEY=aidapassword
+S3_REGION=us-east-1                 # MinIO: любой; YC: ru-central1
+```
+
+**SDK:** AWS SDK for Java v2 (`software.amazon.awssdk:s3`) — совместим с любым S3 endpoint.
+
+**Зависимости:** FRIGG (запись usage), Dali (клиент S3), HEIMDALL backend (quota API).
+
+**Связанные документы:** `docs/plans/pending/DALI_FILE_UPLOAD_SPEC.md`, решение #22.
+
+---
+
+### 3.12 URD (planned)
 
 **Слой:** 6 — User Applications + парный backend
 **Зрелость:** 🔵 PLANNED (post-HighLoad)
