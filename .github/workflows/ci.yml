@@ -77,7 +77,7 @@ jobs:
         ports:
           - 2481:2480
         options: >-
-          --health-cmd "wget -q --http-user=root --http-password=playwithdata -O /dev/null http://localhost:2480/api/v1/server"
+          --health-cmd "wget -q -O /dev/null http://localhost:2480/api/v1/ready"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
@@ -89,11 +89,14 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
-      - name: Create FRIGG database
+      - name: Create FRIGG 'dali' database
+        # curl runs on the ubuntu runner (not inside the container), so auth works fine.
+        # ArcadeDB sets root password before HTTP starts, so by the time the health
+        # check passes on /api/v1/ready, credentials are already applied.
+        # || true: exit 0 even if DB already exists (ArcadeDB returns 500 in that case).
         run: |
           curl -sf -X POST -u root:playwithdata \
-            http://localhost:2481/api/v1/create/dali \
-            || echo "DB already exists or creation failed — Dali will retry on startup"
+            http://localhost:2481/api/v1/create/dali || true
       - run: chmod +x gradlew
       - run: ./gradlew :services:dali:test --no-daemon --build-cache          # K-4
       - run: ./gradlew :services:dali:build -x test --no-daemon --build-cache
