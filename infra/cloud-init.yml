@@ -99,6 +99,29 @@ write_files:
         -f docker-compose.yc.yml \
         up -d --remove-orphans --pull always
 
+  - path: /etc/systemd/system/aida-compose.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=AIDA Docker Compose Stack
+      Requires=docker.service
+      After=docker.service network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/seer-studio
+      EnvironmentFile=/opt/seer-studio/.env.prod
+      ExecStart=/opt/seer-studio/docker-compose-start.sh
+      ExecStop=/usr/bin/docker compose \
+        -f docker-compose.prod.yml \
+        -f docker-compose.yc.yml down
+      TimeoutStartSec=300
+
+      [Install]
+      WantedBy=multi-user.target
+
 runcmd:
   # Enable docker
   - systemctl enable --now docker
@@ -122,13 +145,23 @@ runcmd:
       > /etc/cron.d/aida-backup
     chmod 644 /etc/cron.d/aida-backup
 
-  # After provisioning: run TLS setup manually once DNS is pointing:
-  # certbot --nginx -d <domain> --non-interactive --agree-tos -m admin@<domain>
+  # Register systemd service (enable autostart on reboot)
+  - systemctl daemon-reload
+  - systemctl enable aida-compose
+
+  # TLS certificate — attempt non-interactive certbot
+  # Note: succeeds only after DNS A record propagates to this VM's IP.
+  # If DNS is not ready yet, this will fail gracefully; run manually (step 1.6).
+  - |
+    certbot --nginx -d ${domain} \
+      --non-interactive --agree-tos \
+      -m admin@${domain} || \
+      echo "[certbot] DNS not ready — run manually after DNS propagation"
 
 final_message: |
   AIDA VM bootstrap complete.
-  Next manual steps:
-    1. Point DNS A record to this VM's external IP
-    2. Run: certbot --nginx -d <domain> --non-interactive --agree-tos -m admin@<domain>
-    3. Clone repo to /opt/seer-studio
-    4. Run: /opt/seer-studio/docker-compose-start.sh
+  Manual steps remaining:
+    1. Point DNS A record to this VM's external IP (if not done via Terraform)
+    2. If certbot failed above: ssh ubuntu@<ip> && sudo certbot --nginx -d ${domain} --non-interactive --agree-tos -m admin@${domain}
+    3. Clone repo: git clone https://github.com/NooriUta/AIDA /opt/seer-studio
+    4. Start stack: sudo systemctl start aida-compose
