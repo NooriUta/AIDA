@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate }         from 'react-router-dom';
+import { useTranslation }      from 'react-i18next';
 import { HEIMDALL_API }        from '../api';
 
 interface ServiceStatus {
@@ -28,6 +29,7 @@ function dotColor(status: string): string {
 }
 
 export function ServiceHealthStrip() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [services, setServices] = useState<ServiceStatus[]>([]);
 
@@ -57,7 +59,7 @@ export function ServiceHealthStrip() {
   return (
     <div
       onClick={() => navigate('/services')}
-      title="Click to open Services"
+      title={t('services.healthTitle')}
       style={{
         display:      'flex',
         alignItems:   'center',
@@ -70,7 +72,7 @@ export function ServiceHealthStrip() {
       }}
     >
       <span style={{ fontSize: '10px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
-        Services
+        {t('services.healthLabel')}
       </span>
       {services.map(svc => (
         <div key={svc.name} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

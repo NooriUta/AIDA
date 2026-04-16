@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation }                            from 'react-i18next';
 import { type DaliSession, type YggStats, getDaliHealth, getSessions, getSessionsArchive, getYggStats } from '../api/dali';
-import { ParseForm } from '../components/dali/ParseForm';
-import { SessionList } from '../components/dali/SessionList';
+import { usePageTitle } from '../hooks/usePageTitle';
+import { ParseForm }    from '../components/dali/ParseForm';
+import { SessionList }  from '../components/dali/SessionList';
 import css from '../components/dali/dali.module.css';
 
 // ── Dali health ───────────────────────────────────────────────────────────────
@@ -32,6 +34,7 @@ function Sep() {
 
 // ── DaliPage ─────────────────────────────────────────────────────────────────
 export default function DaliPage() {
+  const { t } = useTranslation();
   const [sessions,      setSessions]      = useState<DaliSession[]>([]);
   const [archive,       setArchive]       = useState<DaliSession[]>([]);
   const [archiveOpen,   setArchiveOpen]   = useState(false);
@@ -99,6 +102,8 @@ export default function DaliPage() {
     return () => { if (yggPollRef.current) clearInterval(yggPollRef.current); };
   }, []);
 
+  usePageTitle('Ðali');
+
   // Footer clock
   useEffect(() => {
     const tick = () => setClock(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -111,31 +116,31 @@ export default function DaliPage() {
   addToastRef.current = (msg: string, type: Toast['type']) => {
     const id = ++_toastId;
     setToasts(prev => [...prev, { id, msg, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200);
+    setTimeout(() => setToasts(prev => prev.filter(toast => toast.id !== id)), 3200);
   };
 
   function handleSessionCreated(s: DaliSession) {
     setSessions(prev => [s, ...prev]);
-    addToastRef.current(`Session ${s.id.slice(0, 8)} queued`, 'inf');
+    addToastRef.current(t('dali.page.toastQueued', { id: s.id.slice(0, 8) }), 'inf');
   }
 
   const handleSessionUpdate = useCallback((updated: DaliSession) => {
     setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
     if (updated.status === 'COMPLETED') {
       addToastRef.current(
-        `Session ${updated.id.slice(0, 8)} completed · ${(updated.atomCount ?? 0).toLocaleString()} atoms`,
+        t('dali.page.toastCompleted', { id: updated.id.slice(0, 8), atoms: (updated.atomCount ?? 0).toLocaleString() }),
         'suc',
       );
     } else if (updated.status === 'FAILED') {
-      addToastRef.current(`Session ${updated.id.slice(0, 8)}: parse failed`, 'err');
+      addToastRef.current(t('dali.page.toastFailed', { id: updated.id.slice(0, 8) }), 'err');
     }
-  }, []);
+  }, [t]);
 
   function loadArchive() {
     setArchiveLoading(true);
     getSessionsArchive(200)
       .then(data => { setArchive(data); setArchiveLoaded(true); })
-      .catch(() => addToastRef.current('FRIGG archive unavailable', 'err'))
+      .catch(() => addToastRef.current(t('dali.page.toastArchiveErr'), 'err'))
       .finally(() => setArchiveLoading(false));
   }
 
@@ -164,11 +169,11 @@ export default function DaliPage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 3 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)' }}>Parse engine</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)' }}>{t('dali.page.title')}</span>
               <span className="comp comp-dali">DALI :9090</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--t3)' }}>
-              Запуск парсинга SQL-источников · мониторинг JobRunr · lineage → YGG
+              {t('dali.page.description')}
             </div>
           </div>
           <button
@@ -179,38 +184,38 @@ export default function DaliPage() {
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
-            Refresh
+            {t('dali.page.refreshBtn')}
           </button>
         </div>
 
         {/* Stats strip — in-memory session counters */}
         <div className={css.statsStrip}>
           <div className={css.statCard}>
-            <div className={css.statLabel}>Total sessions</div>
+            <div className={css.statLabel}>{t('dali.page.statTotal')}</div>
             <div className={css.statVal} style={{ color: 'var(--t2)' }}>{sessions.length}</div>
-            <div className={css.statSub}>all time</div>
+            <div className={css.statSub}>{t('dali.page.statTotalSub')}</div>
           </div>
           <div className={css.statCard}>
-            <div className={css.statLabel}>Running</div>
+            <div className={css.statLabel}>{t('dali.page.statRunning')}</div>
             <div className={css.statVal} style={{ color: 'var(--inf)' }}>{running}</div>
-            <div className={css.statSub}>active</div>
+            <div className={css.statSub}>{t('dali.page.statRunningSub')}</div>
           </div>
           <div className={css.statCard}>
-            <div className={css.statLabel}>Completed</div>
+            <div className={css.statLabel}>{t('dali.page.statCompleted')}</div>
             <div className={css.statVal} style={{ color: 'var(--suc)' }}>{completed.length}</div>
-            <div className={css.statSub}>since startup</div>
+            <div className={css.statSub}>{t('dali.page.statCompletedSub')}</div>
           </div>
           <div className={css.statCard}>
-            <div className={css.statLabel}>Atoms parsed</div>
+            <div className={css.statLabel}>{t('dali.page.statAtoms')}</div>
             <div className={css.statVal} style={{ color: 'var(--acc)' }}>{totalAtoms.toLocaleString()}</div>
-            <div className={css.statSub}>total extracted</div>
+            <div className={css.statSub}>{t('dali.page.statAtomsSub')}</div>
           </div>
           <div className={css.statCard}>
-            <div className={css.statLabel}>Avg resolution</div>
+            <div className={css.statLabel}>{t('dali.page.statAvgRes')}</div>
             <div className={css.statVal} style={{ color: 'var(--wrn)' }}>
               {avgRate != null ? `${(avgRate * 100).toFixed(1)}%` : '—'}
             </div>
-            <div className={css.statSub}>column-level</div>
+            <div className={css.statSub}>{t('dali.page.statAvgResSub')}</div>
           </div>
         </div>
 
@@ -224,34 +229,34 @@ export default function DaliPage() {
         }}>
           <span style={{ color: 'var(--t4)', marginRight: 4, fontSize: 10, letterSpacing: '0.04em' }}>YGG</span>
           {yggStats == null ? (
-            <span style={{ color: 'var(--t4)' }}>загрузка…</span>
+            <span style={{ color: 'var(--t4)' }}>{t('dali.page.yggLoading')}</span>
           ) : (
             <>
-              <YggMetric label="tables"  value={yggStats.tables}     color="var(--t2)" />
+              <YggMetric label={t('dali.page.yggTables')}   value={yggStats.tables}     color="var(--t2)" />
               <Sep />
-              <YggMetric label="columns" value={yggStats.columns}    color="var(--t2)" />
+              <YggMetric label={t('dali.page.yggColumns')}  value={yggStats.columns}    color="var(--t2)" />
               <Sep />
-              <YggMetric label="stmts"   value={yggStats.statements} color="var(--t2)" />
+              <YggMetric label={t('dali.page.yggStmts')}    value={yggStats.statements} color="var(--t2)" />
               <Sep />
-              <YggMetric label="routines" value={yggStats.routines}  color="var(--t2)" />
+              <YggMetric label={t('dali.page.yggRoutines')} value={yggStats.routines}   color="var(--t2)" />
               <Sep />
-              <YggMetric label="atoms"   value={yggStats.atomsTotal} color="var(--acc)" />
+              <YggMetric label={t('dali.page.yggAtoms')}    value={yggStats.atomsTotal} color="var(--acc)" />
               <span style={{ margin: '0 4px', color: 'var(--bd)' }}>·</span>
               <span style={{ color: 'var(--suc)' }}>
                 {yggStats.atomsTotal > 0
-                  ? `${((yggStats.atomsResolved / yggStats.atomsTotal) * 100).toFixed(1)}% resolved`
+                  ? t('dali.page.yggResolved', { pct: ((yggStats.atomsResolved / yggStats.atomsTotal) * 100).toFixed(1) })
                   : '—'}
               </span>
               {yggStats.atomsUnresolved > 0 && (
                 <>
                   <span style={{ margin: '0 4px', color: 'var(--bd)' }}>·</span>
-                  <span style={{ color: 'var(--wrn)' }}>{yggStats.atomsUnresolved} unresolved</span>
+                  <span style={{ color: 'var(--wrn)' }}>{t('dali.page.yggUnresolved', { count: yggStats.atomsUnresolved })}</span>
                 </>
               )}
               {yggStats.atomsPending > 0 && (
                 <>
                   <span style={{ margin: '0 4px', color: 'var(--bd)' }}>·</span>
-                  <span style={{ color: 'var(--inf)' }}>{yggStats.atomsPending} pending</span>
+                  <span style={{ color: 'var(--inf)' }}>{t('dali.page.yggPending', { count: yggStats.atomsPending })}</span>
                 </>
               )}
             </>
@@ -262,7 +267,7 @@ export default function DaliPage() {
               marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--t4)', padding: '2px 4px', borderRadius: 3,
             }}
-            title="Refresh YGG stats"
+            title={t('dali.page.yggRefreshTitle')}
           >
             ↻
           </button>
@@ -287,15 +292,15 @@ export default function DaliPage() {
             )}
             <span style={{ fontSize: 12, color: daliState === 'connecting' ? 'var(--inf)' : 'var(--danger)', fontFamily: 'var(--mono)' }}>
               {daliState === 'connecting'
-                ? 'Подключение к Dali :9090…'
-                : `Dali :9090 недоступен — повтор через ${RETRY_MS / 1000}с`}
+                ? t('dali.page.connecting')
+                : t('dali.page.offline', { retryS: RETRY_MS / 1000 })}
             </span>
             <button
               className="btn btn-secondary btn-sm"
               style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 11 }}
               onClick={loadSessions}
             >
-              Retry
+              {t('dali.page.retryBtn')}
             </button>
           </div>
         )}
@@ -325,15 +330,15 @@ export default function DaliPage() {
             >
               <polyline points="6 9 12 15 18 9"/>
             </svg>
-            <span>Архив сессий (FRIGG)</span>
+            <span>{t('dali.page.archiveTitle')}</span>
             {archiveLoaded && (
               <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)', marginLeft: 4 }}>
-                {archive.length} записей
+                {t('dali.page.archiveRecords', { count: archive.length })}
               </span>
             )}
             {archiveLoading && (
               <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--acc)', marginLeft: 4 }}>
-                загрузка…
+                {t('dali.page.archiveLoading')}
               </span>
             )}
             <div style={{
@@ -365,7 +370,9 @@ export default function DaliPage() {
         </div>
         <div className={css.footerSep}/>
         <div className={css.footerItem}>
-          {sessions.length > 0 ? `${sessions.length} jobs tracked` : 'jobrunr ready'}
+          {sessions.length > 0
+            ? t('dali.page.footerJobsTracked', { count: sessions.length })
+            : t('dali.page.footerReady')}
         </div>
         <div className={css.footerSep}/>
         <div className={css.footerItem}>
@@ -382,9 +389,9 @@ export default function DaliPage() {
 
       {/* Toast stack */}
       <div className={css.toastStack}>
-        {toasts.map(t => (
-          <div key={t.id} className={`${css.toastItem} ${css[t.type as keyof typeof css] ?? ''}`}>
-            {t.msg}
+        {toasts.map(toast => (
+          <div key={toast.id} className={`${css.toastItem} ${css[toast.type as keyof typeof css] ?? ''}`}>
+            {toast.msg}
           </div>
         ))}
       </div>

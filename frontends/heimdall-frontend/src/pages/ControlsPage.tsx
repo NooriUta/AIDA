@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation }              from 'react-i18next';
+import { usePageTitle }                from '../hooks/usePageTitle';
 import { useControl }                  from '../hooks/useControl';
 import type { SnapshotInfo }           from 'aida-shared';
 
@@ -72,6 +73,7 @@ function Input({ value, onChange, placeholder }: {
 
 export default function ControlsPage() {
   const { t } = useTranslation();
+  usePageTitle(t('nav.demodebug'));
   const { loading, error, resetBuffer, saveSnapshot, listSnapshots, deleteSnapshot } = useControl();
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshots, setSnapshots]       = useState<SnapshotInfo[]>([]);

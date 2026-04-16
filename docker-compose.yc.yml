@@ -147,8 +147,8 @@ services:
           memory: 192M
     logging: *default_logging
 
-  # ── HoundArcade (ArcadeDB lineage graph) ───────────────────────────────────
-  houndarcade:
+  # ── Ygg (ArcadeDB lineage graph) ───────────────────────────────────
+  ygg:
     <<: *env_file
     deploy:
       resources:

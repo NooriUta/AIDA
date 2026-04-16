@@ -57,11 +57,32 @@ export interface DaliSession {
   errors: string[];
   fileResults: FileResult[];
   friggPersisted: boolean;
+  /** Dali instance tag — null/undefined for untagged (single-instance) sessions. */
+  instanceId: string | null;
 }
 
 export interface DaliHealth {
   frigg: 'ok' | 'error';
   sessions: number;
+}
+
+export async function uploadAndParse(
+  file: File,
+  dialect: DaliDialect,
+  preview: boolean,
+  clearBeforeWrite: boolean,
+): Promise<DaliSession> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('dialect', dialect);
+  form.append('preview', String(preview));
+  form.append('clearBeforeWrite', String(clearBeforeWrite));
+  const res = await fetch(`${BASE}/api/sessions/upload`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function postSession(input: ParseSessionInput): Promise<DaliSession> {

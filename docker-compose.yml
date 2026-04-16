@@ -1,7 +1,7 @@
 ###############################################################################
 # AIDA — Full-stack Docker Compose
 # Services: Keycloak · SHUTTLE · Chur · verdandi
-# ArcadeDB — external container (HoundArcade), joined via shared network
+# ArcadeDB — external container (Ygg), joined via shared network
 #
 # Host ports offset +10000 from dev to avoid conflicts:
 #   Keycloak  18180    SHUTTLE  18080    Chur  13000    verdandi  15173
@@ -38,7 +38,7 @@ services:
       context: ./services/shuttle
       dockerfile: Dockerfile
     environment:
-      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://HoundArcade:2480}
+      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://ygg:2480}
       ARCADE_DB:       ${ARCADEDB_DB:-hound}
       ARCADE_USER:     ${ARCADEDB_USER:-root}
       ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
@@ -48,7 +48,7 @@ services:
     ports:
       - "18080:8080"
     depends_on:
-      houndarcade:
+      ygg:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/graphql/schema.graphql || exit 1"]
@@ -73,7 +73,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
       COOKIE_SECRET:         ${COOKIE_SECRET:-dev-cookie-secret}
       # ArcadeDB (external container)
-      ARCADEDB_URL:          ${ARCADEDB_URL:-http://HoundArcade:2480}
+      ARCADEDB_URL:          ${ARCADEDB_URL:-http://ygg:2480}
       ARCADEDB_DB:           ${ARCADEDB_DB:-hound}
       ARCADEDB_USER:         ${ARCADEDB_USER:-root}
       ARCADEDB_PASS:         ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
@@ -91,7 +91,7 @@ services:
         condition: service_healthy
       shuttle:
         condition: service_started
-      houndarcade:
+      ygg:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/health || exit 1"]
@@ -176,10 +176,18 @@ services:
       FRIGG_USER:     root
       FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
       HEIMDALL_URL:   http://heimdall-backend:9093
-      YGG_URL:        http://HoundArcade:2480
+      YGG_URL:        http://ygg:2480
       COMPOSE_PROJECT_NAME: aida-root
+      # Session retention (days). Default = 30. Override: DALI_SESSION_RETENTION_DAYS=90
+      DALI_SESSION_RETENTION_DAYS: ${DALI_SESSION_RETENTION_DAYS:-30}
+      # Instance isolation: set to a unique tag when running multiple Dali instances
+      # against the same FRIGG. Empty = single-instance / untagged (default for dev).
+      # Example for second instance: DALI_INSTANCE_ID: dali-2
+      DALI_INSTANCE_ID: ${DALI_INSTANCE_ID:-}
     depends_on:
       frigg:
+        condition: service_healthy
+      ygg:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/q/health || exit 1"]
@@ -189,10 +197,10 @@ services:
       start_period: 60s
 
   # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────
-  # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с HoundArcade.
+  # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с Ygg.
   # ArcadeDB всегда слушает :2480 внутри контейнера.
   # Маппинг: host :2481 → container :2480  (dev: localhost:2481 → FRIGG)
-  # Docker-сеть: frigg:2480  |  HoundArcade:2480 — разные контейнеры, нет конфликта
+  # Docker-сеть: frigg:2480  |  ygg:2480 — разные контейнеры, нет конфликта
   frigg:
     image: arcadedata/arcadedb:26.3.2
     environment:
@@ -208,8 +216,9 @@ services:
       retries: 10
       start_period: 30s
 
-  # ── HoundArcade (ArcadeDB — Hound lineage database) ───────────────────────
-  houndarcade:
+  # ── Ygg (ArcadeDB — lineage graph, база hound) ────────────────────────────────
+  ygg:
+    container_name: Ygg-1
     image: arcadedata/arcadedb:26.3.2
     environment:
       JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:-playwithdata}"

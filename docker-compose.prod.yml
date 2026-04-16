@@ -4,7 +4,7 @@
 # Deploy: docker compose -f docker-compose.prod.yml up -d
 #
 # Required env vars (export or .env file):
-#   ARCADEDB_URL            — http://HoundArcade:2480 (external network)
+#   ARCADEDB_URL            — http://ygg:2480 (external network)
 #   ARCADEDB_DB             — hound
 #   ARCADEDB_USER           — root
 #   ARCADEDB_ROOT_PASSWORD  — (secret)
@@ -43,7 +43,7 @@ services:
     image: ghcr.io/nooriuta/verdandi/shuttle:latest
     restart: unless-stopped
     environment:
-      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://HoundArcade:2480}
+      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://ygg:2480}
       ARCADE_DB:       ${ARCADEDB_DB:-hound}
       ARCADE_USER:     ${ARCADEDB_USER:-root}
       ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
@@ -70,7 +70,7 @@ services:
       KEYCLOAK_CLIENT_ID:     verdandi-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-verdandi-bff-secret-dev}
       COOKIE_SECRET:          ${COOKIE_SECRET:-dev-cookie-secret}
-      ARCADEDB_URL:           ${ARCADEDB_URL:-http://HoundArcade:2480}
+      ARCADEDB_URL:           ${ARCADEDB_URL:-http://ygg:2480}
       ARCADEDB_DB:            ${ARCADEDB_DB:-hound}
       ARCADEDB_USER:          ${ARCADEDB_USER:-root}
       ARCADEDB_PASS:          ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
@@ -104,7 +104,7 @@ services:
     image: arcadedata/arcadedb:26.3.2
     restart: unless-stopped
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_ROOT_PASSWORD:-playwithdata}"
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_PASSWORD:-playwithdata}"
     ports:
       - "2481:2480"
     volumes:
@@ -116,8 +116,9 @@ services:
       retries: 15
       start_period: 30s
 
-  # ── HoundArcade (ArcadeDB — lineage graph) ────────────────────────────────
-  houndarcade:
+  # ── Ygg (ArcadeDB — lineage graph) ────────────────────────────────
+  ygg:
+    container_name: Ygg-1
     image: arcadedata/arcadedb:26.3.2
     restart: unless-stopped
     environment:
@@ -146,11 +147,15 @@ services:
       FRIGG_USER:     root
       FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
       HEIMDALL_URL:   http://heimdall-backend:9093
-      YGG_URL:        http://houndarcade:2480
+      YGG_URL:        http://ygg:2480
+      DALI_SESSION_RETENTION_DAYS: ${DALI_SESSION_RETENTION_DAYS:-30}
+      DALI_INSTANCE_ID: ${DALI_INSTANCE_ID:-}
     ports:
       - "19090:9090"
     depends_on:
       frigg:
+        condition: service_healthy
+      ygg:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/q/health || exit 1"]

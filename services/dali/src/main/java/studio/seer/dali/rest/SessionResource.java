@@ -34,18 +34,25 @@ public class SessionResource {
     }
 
     @POST
-    public Response create(ParseSessionInput input) {
-        if (input == null || input.dialect() == null || input.source() == null) {
+    public Response create(SessionRequest body) {
+        if (body == null || body.dialect() == null || body.source() == null) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("{\"error\":\"dialect and source are required\"}")
                     .build();
         }
         try {
-            return Response.accepted(sessionService.enqueue(input)).build();
+            return Response.accepted(sessionService.enqueue(body.toInput())).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.CONFLICT)
                     .entity("{\"error\":\"" + e.getMessage() + "\"}")
                     .build();
+        }
+    }
+
+    /** JSON body for POST /api/sessions — does not expose the internal {@code uploaded} flag. */
+    private record SessionRequest(String dialect, String source, boolean preview, boolean clearBeforeWrite) {
+        ParseSessionInput toInput() {
+            return new ParseSessionInput(dialect, source, preview, clearBeforeWrite, false);
         }
     }
 

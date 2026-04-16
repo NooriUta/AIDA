@@ -105,6 +105,10 @@ public class ParseJob {
             sessionService.failSession(sessionId, errorMsg);
             emitter.sessionFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs);
             throw new RuntimeException("ParseJob failed for session " + sessionId, e);
+        } finally {
+            if (input.uploaded()) {
+                deleteTempDir(Path.of(src));
+            }
         }
     }
 
@@ -226,6 +230,19 @@ public class ParseJob {
         }
         if (seen.isEmpty()) return t.getClass().getSimpleName();
         return String.join(" → ", seen);
+    }
+
+    private static void deleteTempDir(Path dir) {
+        if (!Files.exists(dir)) return;
+        try (Stream<Path> walk = Files.walk(dir)) {
+            walk.sorted(java.util.Comparator.reverseOrder())
+                .forEach(p -> {
+                    try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                });
+            log.debug("Deleted temp upload dir: {}", dir);
+        } catch (IOException e) {
+            log.warn("Failed to delete temp upload dir {}: {}", dir, e.getMessage());
+        }
     }
 
     private static ParseResult merge(String source, List<FileResult> results) {

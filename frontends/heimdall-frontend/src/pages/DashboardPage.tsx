@@ -1,5 +1,6 @@
 import { useEffect }             from 'react';
 import { useTranslation }       from 'react-i18next';
+import { usePageTitle }         from '../hooks/usePageTitle';
 import { MetricsBar }           from '../components/MetricsBar';
 import { ThroughputChart }      from '../components/ThroughputChart';
 import { ResolutionGauge }      from '../components/ResolutionGauge';
@@ -16,6 +17,7 @@ const PREVIEW_COUNT = 50;
 // ── DashboardPage ─────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { t } = useTranslation();
+  usePageTitle(t('nav.dashboard'));
   const { metrics }        = useMetrics();
   const { events, status } = useEventStream();
   const setEvents          = useDashboardStore(s => s.setEvents);

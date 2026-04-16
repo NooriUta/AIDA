@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation }              from 'react-i18next';
 import { type DaliSession, type FileResult } from '../../api/dali';
 import { useDaliSession } from '../../hooks/useDaliSession';
 import css from './dali.module.css';
@@ -13,7 +14,29 @@ const DIALECT_LABEL: Record<string, string> = {
 
 function fmtDuration(ms: number | null | undefined): string {
   if (ms == null) return '—';
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  return `${m}m ${s}s`;
+}
+
+function fmtDatetime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString(undefined, {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+}
+
+function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 function truncSource(path: string | null, max = 40): string {
@@ -181,6 +204,7 @@ function RowMetrics({ session: s }: { session: DaliSession }) {
 
 // ── Duration timeline (parse order) ──────────────────────────────────────────
 function DurationTimeline({ files }: { files: FileResult[] }) {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState<number | null>(null);
   const withDur = files.filter(f => f.durationMs > 0);
   if (withDur.length < 3) return null;
@@ -205,7 +229,7 @@ function DurationTimeline({ files }: { files: FileResult[] }) {
         textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
         display: 'flex', justifyContent: 'space-between',
       }}>
-        <span>Parse timeline ({n} files)</span>
+        <span>{t('dali.sessions.parseTimeline', { count: n })}</span>
         {hov && (
           <span style={{ color: hov.success ? 'var(--t2)' : 'var(--danger)', maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {hovFilename} · {fmtDuration(hov.durationMs)}
@@ -263,6 +287,7 @@ function DurationTimeline({ files }: { files: FileResult[] }) {
 
 // ── Duration bar chart for batch detail ──────────────────────────────────────
 function DurationChart({ files }: { files: FileResult[] }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const withDur = files.filter(f => f.durationMs > 0);
   if (withDur.length < 2) return null;
@@ -283,9 +308,13 @@ function DurationChart({ files }: { files: FileResult[] }) {
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ fontSize: 8, opacity: 0.6 }}>{open ? '▼' : '▶'}</span>
-          Duration by file{withDur.length > 25 ? ' (top 25)' : ''}
+          {withDur.length > 25
+            ? t('dali.sessions.fileBreakdownTitleTop')
+            : t('dali.sessions.fileBreakdownTitle')}
         </span>
-        <span style={{ color: 'var(--t3)' }}>total {fmtDuration(totalMs)}</span>
+        <span style={{ color: 'var(--t3)' }}>
+          {t('dali.sessions.fileBreakdownTotal', { dur: fmtDuration(totalMs) })}
+        </span>
       </div>
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -408,6 +437,7 @@ function FileRow({ fr, index }: { fr: FileResult; index: number }) {
 
 // ── Detail expand row ─────────────────────────────────────────────────────────
 function DetailRow({ session }: { session: DaliSession }) {
+  const { t } = useTranslation();
   const [warningsOpen, setWarningsOpen] = useState(false);
   const [errorsOpen,   setErrorsOpen]   = useState(true);   // errors open by default
   const [vertexOpen,   setVertexOpen]   = useState(false);
@@ -437,7 +467,7 @@ function DetailRow({ session }: { session: DaliSession }) {
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                {es.length} error{es.length !== 1 ? 's' : ''}
+                {t('dali.sessions.errorsBtn', { count: es.length })}
                 <svg
                   width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -459,50 +489,92 @@ function DetailRow({ session }: { session: DaliSession }) {
           {/* Aggregate stats strip */}
           <div className={css.detailGrid}>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Atoms</div>
+              <div className={css.dstatLabel}>{t('dali.sessions.statAtoms')}</div>
               <div className={css.dstatVal} style={{ color: 'var(--acc)' }}>
                 {(displayAtoms ?? 0).toLocaleString()}
               </div>
-              <div className={css.dstatSub}>{isFailed && partialAtoms != null ? 'partial' : 'in YGG'}</div>
+              <div className={css.dstatSub}>
+                {isFailed && partialAtoms != null
+                  ? t('dali.sessions.statSubPartial')
+                  : t('dali.sessions.statSubInYgg')}
+              </div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Vertices</div>
+              <div className={css.dstatLabel}>{t('dali.sessions.statVertices')}</div>
               <div className={css.dstatVal} style={{ color: 'var(--t2)' }}>
                 {(displayVertices ?? 0).toLocaleString()}
               </div>
-              <div className={css.dstatSub}>{isFailed && partialVertices != null ? 'partial' : 'inserted'}</div>
+              <div className={css.dstatSub}>
+                {isFailed && partialVertices != null
+                  ? t('dali.sessions.statSubPartial')
+                  : t('dali.sessions.statSubInserted')}
+              </div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Edges</div>
+              <div className={css.dstatLabel}>{t('dali.sessions.statEdges')}</div>
               <div className={css.dstatVal} style={{ color: 'var(--t2)' }}>
                 {displayEdges.toLocaleString()}
               </div>
               <div className={css.dstatSub}>
                 {displayDropped > 0
-                  ? <span style={{ color: 'var(--wrn)' }}>↓{displayDropped.toLocaleString()} dropped</span>
-                  : 'lineage links'}
+                  ? <span style={{ color: 'var(--wrn)' }}>{t('dali.sessions.statSubDropped', { n: displayDropped.toLocaleString() })}</span>
+                  : t('dali.sessions.statSubLineage')}
               </div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Resolution</div>
+              <div className={css.dstatLabel}>{t('dali.sessions.statResolution')}</div>
               <div className={css.dstatVal} style={{ color: rateColor(session.resolutionRate) }}>
                 {session.resolutionRate != null
                   ? `${(session.resolutionRate * 100).toFixed(1)}%`
                   : '—'}
               </div>
-              <div className={css.dstatSub}>column-level</div>
+              <div className={css.dstatSub}>{t('dali.sessions.statSubColumnLevel')}</div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Progress</div>
+              <div className={css.dstatLabel}>{t('dali.sessions.statDuration')}</div>
               <div className={css.dstatVal} style={{ color: isFailed ? 'var(--danger)' : 'var(--t2)' }}>
-                {session.batch && session.total > 0
+                {session.batch && session.total > 0 && session.durationMs == null
                   ? `${session.progress}/${session.total}`
                   : fmtDuration(session.durationMs)}
               </div>
               <div className={css.dstatSub}>
-                {session.batch && session.total > 0 ? 'files done' : 'wall time'}
+                {session.batch && session.total > 0 && session.durationMs == null
+                  ? t('dali.sessions.statSubFilesDone')
+                  : t('dali.sessions.statSubWallTime')}
               </div>
             </div>
+          </div>
+
+          {/* Timing row — start / finish timestamps */}
+          <div style={{
+            display: 'flex', gap: 24, marginTop: 10, marginBottom: 2,
+            fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t3)',
+            borderTop: '1px solid var(--bd)', paddingTop: 8,
+          }}>
+            <div>
+              <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 6 }}>{t('dali.sessions.timingStarted')}</span>
+              <span title={session.startedAt} style={{ color: 'var(--t2)' }}>
+                {fmtDatetime(session.startedAt)}
+              </span>
+            </div>
+            {(session.status === 'COMPLETED' || session.status === 'FAILED' || session.status === 'CANCELLED') && (
+              <div>
+                <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 6 }}>
+                  {session.status === 'COMPLETED' ? t('dali.sessions.timingFinished')
+                    : session.status === 'FAILED' ? t('dali.sessions.timingFailed')
+                    : t('dali.sessions.timingCancelled')}
+                </span>
+                <span title={session.updatedAt} style={{ color: session.status === 'COMPLETED' ? 'var(--suc)' : session.status === 'FAILED' ? 'var(--danger)' : 'var(--t3)' }}>
+                  {fmtDatetime(session.updatedAt)}
+                </span>
+              </div>
+            )}
+            {session.durationMs != null && session.durationMs >= 60_000 && (
+              <div>
+                <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 6 }}>{t('dali.sessions.timingTotal')}</span>
+                <span style={{ color: 'var(--t2)' }}>{fmtDuration(session.durationMs)}</span>
+              </div>
+            )}
           </div>
 
           {/* Per-type vertex breakdown */}
@@ -519,14 +591,14 @@ function DetailRow({ session }: { session: DaliSession }) {
                 }}
               >
                 <span style={{ fontSize: 8, opacity: 0.6 }}>{vertexOpen ? '▼' : '▶'}</span>
-                Vertex breakdown
-                <span style={{ opacity: 0.5 }}>({session.vertexStats.reduce((a, s) => a + s.inserted + s.duplicate, 0).toLocaleString()} total)</span>
+                {t('dali.sessions.vertexBreakdown')}
+                <span style={{ opacity: 0.5 }}>({session.vertexStats.reduce((a, s) => a + s.inserted + s.duplicate, 0).toLocaleString()} {t('dali.sessions.vertexTotal').toLowerCase()})</span>
               </div>
               {vertexOpen && <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: 'var(--bg2)' }}>
-                    {['Type', 'Inserted', 'Duplicate', 'Total'].map(h => (
-                      <th key={h} style={{ padding: '4px 8px', textAlign: h === 'Type' ? 'left' : 'right', fontWeight: 600, color: 'var(--t2)', borderBottom: '1px solid var(--bd)' }}>{h}</th>
+                    {[t('dali.sessions.colType'), t('dali.sessions.colInserted'), t('dali.sessions.colDuplicate'), t('dali.sessions.colTotal')].map(h => (
+                      <th key={h} style={{ padding: '4px 8px', textAlign: h === t('dali.sessions.colType') ? 'left' : 'right', fontWeight: 600, color: 'var(--t2)', borderBottom: '1px solid var(--bd)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -551,7 +623,7 @@ function DetailRow({ session }: { session: DaliSession }) {
                     );
                   })}
                   <tr style={{ background: 'var(--bg2)', fontWeight: 600 }}>
-                    <td style={{ padding: '4px 8px', color: 'var(--t2)' }}>Total</td>
+                    <td style={{ padding: '4px 8px', color: 'var(--t2)' }}>{t('dali.sessions.vertexTotal')}</td>
                     <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--suc)' }}>
                       {session.vertexStats.reduce((a, s) => a + s.inserted, 0).toLocaleString()}
                     </td>
@@ -575,7 +647,7 @@ function DetailRow({ session }: { session: DaliSession }) {
                   <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
-                {ws.length} warning{ws.length !== 1 ? 's' : ''} total
+                {t('dali.sessions.warningsBtn', { count: ws.length })}
                 <svg
                   width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -601,7 +673,9 @@ function DetailRow({ session }: { session: DaliSession }) {
                 textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
                 marginTop: 14,
               }}>
-                Files ({session.fileResults.length}{isFailed ? ` of ${session.total}` : ''})
+                {isFailed
+                  ? t('dali.sessions.filesHeaderPartial', { done: session.fileResults.length, total: session.total })
+                  : t('dali.sessions.filesHeader', { count: session.fileResults.length })}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -638,13 +712,12 @@ interface SessionRowProps {
 }
 
 function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) {
+  const { t } = useTranslation();
   const isTerminal = TERMINAL.has(session.status);
   const live = useDaliSession(session.id, !isTerminal);
   // Track last updatedAt we propagated so we don't depend on the session prop
-  // (which would cause: onUpdate→setSessions→session.updatedAt changes→effect re-runs→loop)
   const reportedAtRef = useRef('');
-  // Stable ref for onUpdate so the effect doesn't re-run when the parent re-renders
-  // without useCallback (which would create a new function identity on every render).
+  // Stable ref for onUpdate so the effect doesn't re-run on every parent render
   const onUpdateRef = useRef(onUpdate);
   useEffect(() => { onUpdateRef.current = onUpdate; });
 
@@ -676,7 +749,7 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
               {s.id.slice(0, 8)}
             </span>
             <span
-              title={s.friggPersisted ? 'Saved to FRIGG' : 'Not yet saved to FRIGG'}
+              title={s.friggPersisted ? t('dali.sessions.friggSaved') : t('dali.sessions.friggPending')}
               style={{
                 fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
                 padding: '1px 4px', borderRadius: 3,
@@ -692,6 +765,21 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
             >
               {s.friggPersisted ? 'F✓' : 'F?'}
             </span>
+            {s.instanceId && (
+              <span
+                title={t('dali.sessions.instanceTitle', { id: s.instanceId })}
+                style={{
+                  fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
+                  padding: '1px 5px', borderRadius: 3,
+                  background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
+                  color: 'var(--acc)',
+                  border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
+                  lineHeight: '1.2', whiteSpace: 'nowrap',
+                }}
+              >
+                {s.instanceId}
+              </span>
+            )}
           </div>
         </td>
         <td><StatusBadge status={s.status} /></td>
@@ -706,9 +794,15 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
           <RowMetrics session={s} />
         </td>
         <td>
-          <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 11 }}>
-            {s.status === 'COMPLETED' ? fmtDuration(s.durationMs) : '—'}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 11 }}>
+              {fmtDuration(s.durationMs)}
+            </span>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 9, opacity: 0.7 }}
+                  title={s.startedAt}>
+              {fmtDateShort(s.startedAt)}
+            </span>
+          </div>
         </td>
         <td style={{ textAlign: 'center' }}>
           <svg
@@ -733,6 +827,7 @@ interface SessionListProps {
 }
 
 export function SessionList({ sessions, onSessionUpdate }: SessionListProps) {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function toggleExpand(id: string) {
@@ -748,10 +843,10 @@ export function SessionList({ sessions, onSessionUpdate }: SessionListProps) {
             <line x1="3" y1="9" x2="21" y2="9"/>
             <line x1="9" y1="21" x2="9" y2="9"/>
           </svg>
-          Sessions
+          {t('dali.sessions.panelTitle')}
         </span>
         <span style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
-          {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+          {t('dali.sessions.sessionCount', { count: sessions.length })}
         </span>
       </div>
 
@@ -762,22 +857,23 @@ export function SessionList({ sessions, onSessionUpdate }: SessionListProps) {
             <line x1="3" y1="9" x2="21" y2="9"/>
             <line x1="9" y1="21" x2="9" y2="9"/>
           </svg>
-          <div className={css.emptyTitle}>No sessions yet</div>
+          <div className={css.emptyTitle}>{t('dali.sessions.emptyTitle')}</div>
           <div className={css.emptySub}>
-            Start a parse session using the form above<br/>
-            or press Enter after filling the source path
+            {t('dali.sessions.emptySub').split('\n').map((line, i) => (
+              <span key={i}>{line}{i === 0 ? <br/> : null}</span>
+            ))}
           </div>
         </div>
       ) : (
         <table className={css.sessionTable}>
           <thead>
             <tr>
-              <th style={{ width: 90  }}>Session ID</th>
-              <th style={{ width: 120 }}>Status</th>
-              <th style={{ width: 100 }}>Dialect</th>
-              <th>Source</th>
-              <th style={{ width: 130 }}>Progress</th>
-              <th style={{ width: 72  }}>Duration</th>
+              <th style={{ width: 90  }}>{t('dali.sessions.colSessionId')}</th>
+              <th style={{ width: 120 }}>{t('dali.sessions.colStatus')}</th>
+              <th style={{ width: 100 }}>{t('dali.sessions.colDialect')}</th>
+              <th>{t('dali.sessions.colSource')}</th>
+              <th style={{ width: 130 }}>{t('dali.sessions.colProgress')}</th>
+              <th style={{ width: 72  }}>{t('dali.sessions.colDuration')}</th>
               <th style={{ width: 36  }}></th>
             </tr>
           </thead>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link }                      from 'react-router-dom';
+import { usePageTitle }                                      from '../hooks/usePageTitle';
 import { marked }                                            from 'marked';
 import mermaid                                               from 'mermaid';
 import { HEIMDALL_API }                                      from '../api';
@@ -117,6 +118,7 @@ function ensureDocsStyles() {
 
 // ── DocsPage ──────────────────────────────────────────────────────────────────
 export default function DocsPage() {
+  usePageTitle('Docs');
   const { '*': splat } = useParams<{ '*': string }>();
   const navigate        = useNavigate();
   const filePath        = splat ?? '';

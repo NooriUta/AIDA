@@ -26,6 +26,9 @@ dependencies {
     implementation 'io.quarkus:quarkus-smallrye-health'
     implementation 'io.quarkus:quarkus-micrometer'
 
+    // Scheduler — daily session retention purge
+    implementation 'io.quarkus:quarkus-scheduler'
+
     // REST Client — FRIGG (ArcadeDB :2481)
     implementation 'io.quarkus:quarkus-rest-client'
     implementation 'io.quarkus:quarkus-rest-client-jackson'
@@ -41,6 +44,10 @@ dependencies {
 
     // Validation annotations — required by HeimdallEvent (dali-models uses compileOnly)
     compileOnly 'jakarta.validation:jakarta.validation-api:3.0.2'
+
+    // RAR extraction — RAR4 + RAR5 via 7-Zip JNI (all-platforms bundles Windows/Linux/macOS natives)
+    implementation 'net.sf.sevenzipjbinding:sevenzipjbinding:16.02-2.01'
+    implementation 'net.sf.sevenzipjbinding:sevenzipjbinding-all-platforms:16.02-2.01'
 
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'

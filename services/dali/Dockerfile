@@ -29,6 +29,8 @@ RUN gradle :services:dali:build -x test --no-daemon \
     -Dquarkus.package.jar.type=uber-jar
 
 FROM eclipse-temurin:21-jre-alpine AS runner
+# gcompat — glibc compatibility layer required by sevenzipjbinding native libs (RAR5 support)
+RUN apk add --no-cache gcompat
 WORKDIR /app
 COPY --from=builder /app/services/dali/build/*-runner.jar app.jar
 EXPOSE 9090

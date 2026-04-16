@@ -29,6 +29,9 @@ import java.util.ArrayList;
  * @param fileResults    Per-file breakdown for batch sessions — empty for single-file
  * @param friggPersisted True when this session record has been successfully written to FRIGG.
  *                       False if FRIGG was unavailable or the save has not been attempted yet.
+ * @param instanceId     Dali instance tag (from {@code dali.instance.id} config).
+ *                       Null for untagged sessions (pre-multi-instance, backward-compat).
+ *                       Used to isolate sessions when multiple Dali instances share one FRIGG.
  */
 public record Session(
         String         id,
@@ -51,5 +54,6 @@ public record Session(
         List<String>         warnings,
         List<String>         errors,
         List<FileResult>     fileResults,
-        boolean              friggPersisted   // true = record confirmed written to FRIGG
+        boolean              friggPersisted,  // true = record confirmed written to FRIGG
+        String               instanceId       // Dali instance tag — null = untagged
 ) {}

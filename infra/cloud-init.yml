@@ -2,13 +2,13 @@
 # AIDA VM bootstrap — Ubuntu 22.04 LTS
 # Applied once on first boot via Terraform metadata.user-data
 #
-# After boot:
-#   1. Docker + Compose plugin installed
-#   2. nginx + certbot installed
-#   3. yc CLI installed
-#   4. /opt/seer-studio created
-#   5. Lockbox secrets synced to .env.prod
-#   6. Backup cron configured
+# Template variables (injected by Terraform templatefile()):
+#   ssh_public_key    — public key for ubuntu user
+#   domain            — public domain (e.g. aida.example.com)
+#   lockbox_secret_id — Lockbox secret ID for lockbox-sync.sh
+#
+# NOTE: bash ${VAR} inside write_files content blocks are escaped as $${VAR}
+# so Terraform templatefile() does not try to interpolate them.
 
 package_update: true
 package_upgrade: true
@@ -30,6 +30,8 @@ users:
   - name: ubuntu
     groups: docker
     shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
 
 write_files:
   - path: /opt/seer-studio/infra/scripts/lockbox-sync.sh
@@ -37,45 +39,53 @@ write_files:
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-      # Pulled from Lockbox → /opt/seer-studio/.env.prod
-      yc lockbox payload get --name aida-prod \
+      # Lockbox secret ID is baked in at VM creation time by Terraform cloud-init.
+      # Auth: VM service account via instance metadata (no credentials on disk).
+      LOCKBOX_SECRET_ID="${lockbox_secret_id}"
+      yc lockbox payload get --id "$${LOCKBOX_SECRET_ID}" \
         --format json | jq -r '.entries[] | "\(.key)=\(.value)"' \
         > /opt/seer-studio/.env.prod
       chmod 600 /opt/seer-studio/.env.prod
-      echo "[lockbox-sync] secrets written to .env.prod"
+      echo "[lockbox-sync] secrets written to .env.prod ($$(wc -l < /opt/seer-studio/.env.prod) keys)"
 
   - path: /opt/seer-studio/infra/scripts/backup-arcadedb.sh
     permissions: '0750'
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-      DATE=$(date +%Y%m%d-%H%M%S)
+      DATE=$$(date +%Y%m%d-%H%M%S)
       BUCKET="s3://aida-arcadedb-backups"
       source /opt/seer-studio/.env.prod
 
       echo "[backup] triggering ArcadeDB backup API..."
-      curl -su "root:${ARCADEDB_ADMIN_PASSWORD}" \
+      curl -su "root:$${ARCADEDB_ADMIN_PASSWORD}" \
         -X POST http://localhost:2480/api/v1/server \
         -H 'Content-Type: application/json' \
         -d '{"command":"backup database hound"}' \
         --fail --silent --show-error
 
       echo "[backup] uploading to Object Storage..."
+      AWS_ACCESS_KEY_ID="$${AWS_ACCESS_KEY_ID}" \
+      AWS_SECRET_ACCESS_KEY="$${AWS_SECRET_ACCESS_KEY}" \
       aws s3 sync /var/lib/arcadedb/backup \
-        "${BUCKET}/${DATE}/" \
+        "$${BUCKET}/$${DATE}/" \
         --endpoint-url https://storage.yandexcloud.net
 
       echo "[backup] pruning old backups (keep last 30)..."
-      KEYS=$(aws s3 ls "${BUCKET}/" \
-        --endpoint-url https://storage.yandexcloud.net \
-        | awk '{print $2}' | sort | head -n -30)
-      for key in $KEYS; do
-        aws s3 rm "${BUCKET}/${key}" \
+      KEYS=$$(AWS_ACCESS_KEY_ID="$${AWS_ACCESS_KEY_ID}" \
+              AWS_SECRET_ACCESS_KEY="$${AWS_SECRET_ACCESS_KEY}" \
+              aws s3 ls "$${BUCKET}/" \
+              --endpoint-url https://storage.yandexcloud.net \
+              | awk '{print $2}' | sort | head -n -30)
+      for key in $${KEYS}; do
+        AWS_ACCESS_KEY_ID="$${AWS_ACCESS_KEY_ID}" \
+        AWS_SECRET_ACCESS_KEY="$${AWS_SECRET_ACCESS_KEY}" \
+        aws s3 rm "$${BUCKET}/$${key}" \
           --recursive \
           --endpoint-url https://storage.yandexcloud.net
       done
 
-      echo "[backup] done — ${DATE}"
+      echo "[backup] done — $${DATE}"
 
   - path: /etc/nginx/sites-available/aida
     permissions: '0644'
@@ -128,7 +138,7 @@ runcmd:
   - usermod -aG docker ubuntu
 
   # Create app directory
-  - mkdir -p /opt/seer-studio
+  - mkdir -p /opt/seer-studio/infra/scripts
 
   # Install yc CLI
   - curl -fsSL https://storage.yandexcloud.net/yc-cli/install.sh | bash -s -- --install-dir /usr/local
@@ -151,7 +161,7 @@ runcmd:
 
   # TLS certificate — attempt non-interactive certbot
   # Note: succeeds only after DNS A record propagates to this VM's IP.
-  # If DNS is not ready yet, this will fail gracefully; run manually (step 1.6).
+  # If DNS is not ready yet, this will fail gracefully; run manually later.
   - |
     certbot --nginx -d ${domain} \
       --non-interactive --agree-tos \
@@ -161,7 +171,6 @@ runcmd:
 final_message: |
   AIDA VM bootstrap complete.
   Manual steps remaining:
-    1. Point DNS A record to this VM's external IP (if not done via Terraform)
-    2. If certbot failed above: ssh ubuntu@<ip> && sudo certbot --nginx -d ${domain} --non-interactive --agree-tos -m admin@${domain}
-    3. Clone repo: git clone https://github.com/NooriUta/AIDA /opt/seer-studio
-    4. Start stack: sudo systemctl start aida-compose
+    1. If certbot failed: ssh ubuntu@<ip> 'sudo certbot --nginx -d ${domain} --non-interactive --agree-tos -m admin@${domain}'
+    2. Ensure Lockbox is filled (run set-github-secrets.sh output command)
+    3. Merge PR: sprint/dali-file-upload-apr16 → master  →  CD auto-deploys
