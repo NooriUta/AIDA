@@ -166,7 +166,9 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
 
       upstream.on('message', (data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(data as unknown as string);
+          // Convert Buffer → string so the browser receives a text frame, not binary.
+          // JSON.parse(msg.data) in useEventStream requires a string, not a Blob.
+          ws.send(data.toString());
         }
       });
 

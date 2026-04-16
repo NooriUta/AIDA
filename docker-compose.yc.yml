@@ -34,11 +34,11 @@ services:
   keycloak:
     command: start --import-realm
     environment:
-      KC_HOSTNAME: "https://${DOMAIN}"
+      KC_HOSTNAME: "${DOMAIN}"
       KC_HOSTNAME_STRICT: "true"
       KC_HTTP_RELATIVE_PATH: "/kc"
-      KC_PROXY: edge
-      KC_HTTP_ENABLED: "true"       # nginx handles TLS termination
+      KC_PROXY_HEADERS: "xforwarded" # KC 26: replaces deprecated KC_PROXY=edge
+      KC_HTTP_ENABLED: "true"        # nginx handles TLS termination
       JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
