@@ -34,7 +34,7 @@ services:
   keycloak:
     command: start --import-realm
     environment:
-      KC_HOSTNAME: ${DOMAIN}
+      KC_HOSTNAME_STRICT: "false"
       KC_PROXY: edge
       KC_HTTP_ENABLED: "true"       # nginx handles TLS termination
     <<: *env_file

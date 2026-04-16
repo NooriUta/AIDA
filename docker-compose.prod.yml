@@ -70,8 +70,8 @@ services:
       CORS_ORIGIN:            "http://localhost:15173"
       KEYCLOAK_URL:           http://keycloak:8180
       KEYCLOAK_REALM:         seer
-      KEYCLOAK_CLIENT_ID:     verdandi-bff
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-verdandi-bff-secret-dev}
+      KEYCLOAK_CLIENT_ID:     aida-bff
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
       COOKIE_SECRET:          ${COOKIE_SECRET:-dev-cookie-secret}
       ARCADEDB_URL:           ${ARCADEDB_URL:-http://ygg:2480}
       ARCADEDB_DB:            ${ARCADEDB_DB:-hound}
