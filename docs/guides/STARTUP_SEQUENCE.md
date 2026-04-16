@@ -1,7 +1,7 @@
 # AIDA — Startup Sequence & Known Issues
 
 **Документ:** `STARTUP_SEQUENCE`
-**Версия:** 1.0
+**Версия:** 1.1
 **Дата:** 16.04.2026
 **Статус:** ✅ ACTIVE — критично для demo-rehearsal
 **Источник:** QG прогон 15.04.2026
