@@ -1,8 +1,12 @@
 package studio.seer.dali.job;
 
 import com.hound.api.ArcadeWriteMode;
+import com.hound.api.CompositeListener;
 import com.hound.api.HoundConfig;
+import com.hound.api.HoundEventListener;
+import com.hound.api.HoundHeimdallListener;
 import com.hound.api.HoundParser;
+import com.hound.api.NoOpHoundEventListener;
 import com.hound.api.ParseResult;
 import io.quarkus.arc.Unremovable;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -60,6 +64,7 @@ public class ParseJob {
     @ConfigProperty(name = "ygg.db")       String yggDb;
     @ConfigProperty(name = "ygg.user")     String yggUser;
     @ConfigProperty(name = "ygg.password") String yggPassword;
+    @ConfigProperty(name = "heimdall.url", defaultValue = "") String heimdallUrl;
 
     @Job(name = "Parse SQL files", retries = 3)
     public void execute(String sessionId, ParseSessionInput input) {
@@ -120,7 +125,7 @@ public class ParseJob {
     private void runSingle(String sessionId, Path file, HoundConfig config) {
         sessionService.startSession(sessionId, false, 1);
 
-        DaliHoundListener listener = new DaliHoundListener(sessionId, config.dialect(), emitter);
+        HoundEventListener listener = buildListener(sessionId, config);
         ParseResult result = houndParser.parse(file, config, listener);
 
         FileResult fr = toFileResult(result);
@@ -145,7 +150,7 @@ public class ParseJob {
 
         // Parse file-by-file so we can update progress after each one
         for (Path file : files) {
-            DaliHoundListener listener = new DaliHoundListener(sessionId, config.dialect(), emitter);
+            HoundEventListener listener = buildListener(sessionId, config);
             ParseResult result = houndParser.parse(file, config, listener);
             FileResult fr = toFileResult(result);
             fileResults.add(fr);
@@ -161,6 +166,17 @@ public class ParseJob {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    /** Builds the effective listener: DaliHoundListener (persistence) + HoundHeimdallListener
+     *  (observability) via CompositeListener. Falls back to NoOp if HEIMDALL_URL is not set. */
+    private HoundEventListener buildListener(String sessionId, HoundConfig config) {
+        HoundEventListener heimdall = heimdallUrl.isBlank()
+                ? NoOpHoundEventListener.INSTANCE
+                : new HoundHeimdallListener(heimdallUrl);
+        return new CompositeListener(
+                new DaliHoundListener(sessionId, config.dialect(), emitter),
+                heimdall);
+    }
 
     private List<Path> collectSqlFiles(Path dir) throws IOException {
         try (Stream<Path> walk = Files.walk(dir)) {
