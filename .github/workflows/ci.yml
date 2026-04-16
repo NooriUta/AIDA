@@ -93,10 +93,30 @@ jobs:
         # curl runs on the ubuntu runner (not inside the container), so auth works fine.
         # ArcadeDB sets root password before HTTP starts, so by the time the health
         # check passes on /api/v1/ready, credentials are already applied.
-        # || true: exit 0 even if DB already exists (ArcadeDB returns 500 in that case).
+        # We retry creation (ArcadeDB may need a moment after /api/v1/ready before
+        # accepting authenticated requests), then verify with a SELECT 1.
         run: |
-          curl -sf -X POST -u root:playwithdata \
-            http://localhost:2481/api/v1/create/dali || true
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+                   -X POST -u root:playwithdata \
+                   http://localhost:2481/api/v1/create/dali)
+            echo "Create attempt $i: HTTP $CODE"
+            case "$CODE" in
+              200|204) echo "Database created"; break ;;
+              500)     echo "DB may already exist (HTTP 500)"; break ;;
+            esac
+            sleep 5
+          done
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+                   -X POST -u root:playwithdata \
+                   -H 'Content-Type: application/json' \
+                   -d '{"language":"sql","command":"SELECT 1"}' \
+                   http://localhost:2481/api/v1/command/dali)
+            echo "Verify attempt $i: HTTP $CODE"
+            [ "$CODE" = "200" ] && echo "Database ready" && break
+            sleep 5
+          done
       - run: chmod +x gradlew
       - run: ./gradlew :services:dali:test --no-daemon --build-cache          # K-4
       - run: ./gradlew :services:dali:build -x test --no-daemon --build-cache

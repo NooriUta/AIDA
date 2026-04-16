@@ -77,7 +77,25 @@ public class FriggSchemaInitializer {
     void onStart(@Observes StartupEvent ev) {
         log.info("FriggSchemaInitializer: initialising JobRunr schema in FRIGG...");
         try {
-            frigg.ensureDatabase();
+            // Retry until the database is ready — FRIGG may need a moment after its
+            // health check passes (race condition observed with ArcadeDB 26.3.2 in CI).
+            boolean dbReady = false;
+            for (int attempt = 1; attempt <= 12 && !dbReady; attempt++) {
+                dbReady = frigg.ensureDatabase();
+                if (dbReady) {
+                    log.info("FriggSchemaInitializer: FRIGG database ready (attempt {})", attempt);
+                } else {
+                    log.warn("FriggSchemaInitializer: FRIGG not ready on attempt {}/12, retrying in 3 s…",
+                             attempt);
+                    try { Thread.sleep(3_000); } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw ie;
+                    }
+                }
+            }
+            if (!dbReady) {
+                log.warn("FriggSchemaInitializer: database still unavailable after 12 attempts — schema init may fail");
+            }
             boolean allTypesOk = true;
             for (String type : DOCUMENT_TYPES) {
                 if (!createDocumentType(type)) allTypesOk = false;
