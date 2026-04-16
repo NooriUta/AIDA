@@ -151,7 +151,12 @@ jobs:
             sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
-            sudo nginx -t && sudo systemctl reload nginx
+            # Only validate + reload if TLS cert exists (skip until certbot is run)
+            if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+              sudo nginx -t && sudo systemctl reload nginx
+            else
+              echo "TLS cert not found for ${DOMAIN} — skipping nginx reload (run certbot first)"
+            fi
 
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
