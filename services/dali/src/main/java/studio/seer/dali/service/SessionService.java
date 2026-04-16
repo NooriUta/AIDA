@@ -29,9 +29,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-// BUG-SS-017: @Priority(20) guarantees this bean's StartupEvent observer fires AFTER
-// FriggSchemaInitializer (@Priority(10)) and JobRunrLifecycle (@Priority(15)),
-// so the schema is ready before we attempt repository.findAll().
+// Quarkus fires lower @Priority values first. @Priority(20) fires last — after
+// FriggSchemaInitializer(5) sets up the schema and JobRunrLifecycle(10) starts JobRunr.
 @ApplicationScoped
 @Priority(20)
 public class SessionService {
@@ -66,8 +65,8 @@ public class SessionService {
 
     /**
      * Loads persisted sessions from FRIGG into the in-memory cache on startup.
-     * Guaranteed to run after {@link FriggSchemaInitializer} ({@code @Priority(10)}) and
-     * {@code JobRunrLifecycle} ({@code @Priority(15)}) due to {@code @Priority(20)} on this bean.
+     * Guaranteed to run after {@link FriggSchemaInitializer} ({@code @Priority(5)}) and
+     * {@code JobRunrLifecycle} ({@code @Priority(10)}) due to {@code @Priority(20)} on this bean.
      *
      * <p>Instance isolation: if {@code dali.instance.id} is set, only sessions whose
      * {@code instanceId} matches (or is null for backward-compat untagged sessions) are loaded.

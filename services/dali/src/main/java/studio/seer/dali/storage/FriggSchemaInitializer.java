@@ -30,13 +30,13 @@ import org.slf4j.LoggerFactory;
  * Create it manually via the ArcadeDB console or use the {@link FriggGateway#ensureDatabase()}
  * call (enabled by default here).
  *
- * <p><b>Observer priority:</b> {@code @Priority(10)} ensures this bean's {@code StartupEvent}
- * observer fires before {@code SessionService} ({@code @Priority(20)}) and
- * {@code JobRunrLifecycle} ({@code @Priority(15)}), so the schema is ready before
- * either of them tries to use FRIGG.
+ * <p><b>Observer priority:</b> {@code @Priority(5)} — Quarkus fires lower numbers first, so
+ * this fires before {@code JobRunrLifecycle} ({@code @Priority(10)}) and
+ * {@code SessionService} ({@code @Priority(20)}), ensuring schema and server-table cleanup
+ * happen before the BackgroundJobServer starts.
  */
 @ApplicationScoped
-@Priority(10)
+@Priority(5)
 public class FriggSchemaInitializer {
 
     private static final Logger log = LoggerFactory.getLogger(FriggSchemaInitializer.class);
@@ -59,7 +59,7 @@ public class FriggSchemaInitializer {
         { "jobrunr_jobs",           "state",           "STRING"   },
         { "jobrunr_recurring_jobs", "id",              "STRING"   },
         { "jobrunr_servers",        "id",              "STRING"   },
-        { "jobrunr_servers",        "lastHeartbeat",   "DATETIME" },
+        { "jobrunr_servers",        "lastHeartbeat",   "LONG"     },
         { "jobrunr_metadata",       "id",              "STRING"   },
         { "dali_sessions",          "id",              "STRING"   },
         { "dali_sessions",          "startedAt",       "DATETIME" },   // BUG-SS-014: was STRING
@@ -112,8 +112,14 @@ public class FriggSchemaInitializer {
             for (String type : DOCUMENT_TYPES) {
                 if (!createDocumentType(type)) allTypesOk = false;
             }
+            // Migrate lastHeartbeat DATETIME → LONG before ensureProperties recreates it
+            migrateLastHeartbeatToLong();
             ensureProperties();
             createIndexes();
+            // Clear stale server registrations from previous runs so that master
+            // election starts clean and getLongestRunningBackgroundJobServerId()
+            // never returns a phantom UUID from a prior container lifecycle.
+            clearStaleServers();
             if (allTypesOk) {
                 schemaReady = true;
                 log.info("FriggSchemaInitializer: schema ready (5 document types, perf-stat properties indexed)");
@@ -124,6 +130,51 @@ public class FriggSchemaInitializer {
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not initialise FRIGG schema (FRIGG may be unavailable): {}",
                     e.getMessage());
+        }
+    }
+
+    /**
+     * Migrates {@code lastHeartbeat} from DATETIME to LONG so that epoch-ms comparisons
+     * in {@link ArcadeDbStorageProvider#removeTimedOutBackgroundJobServers} work correctly.
+     *
+     * <p>ArcadeDB 26.3.2 refuses {@code DROP PROPERTY FORCE} when the property has an index
+     * (returns HTTP 500). The workaround is to drop the index first, then the property.
+     * Both steps are wrapped independently — they are no-ops on a fresh install.
+     * {@link #ensureProperties()} recreates the property as LONG, and {@link #createIndexes()}
+     * recreates the NOTUNIQUE index.
+     */
+    private void migrateLastHeartbeatToLong() {
+        // Step 1: drop the index (ArcadeDB won't drop an indexed property, even with FORCE)
+        try {
+            frigg.sql("DROP INDEX `jobrunr_servers[lastHeartbeat]`");
+            log.info("FriggSchemaInitializer: dropped index jobrunr_servers[lastHeartbeat]");
+        } catch (Exception e) {
+            // No-op on fresh install (index not yet created) or already dropped.
+            log.debug("FriggSchemaInitializer: index drop skipped ({})", e.getMessage());
+        }
+        // Step 2: drop the property — FORCE not needed once the index is gone
+        try {
+            frigg.sql("DROP PROPERTY `jobrunr_servers`.`lastHeartbeat`");
+            log.info("FriggSchemaInitializer: dropped lastHeartbeat property — will recreate as LONG");
+        } catch (Exception e) {
+            // No-op on fresh install.
+            log.debug("FriggSchemaInitializer: property drop skipped ({})", e.getMessage());
+        }
+    }
+
+    /**
+     * Removes all records from {@code jobrunr_servers}.
+     *
+     * <p>Called at startup so that orphaned server registrations from a previous
+     * container lifecycle never cause {@link org.jobrunr.server.ServerZooKeeper}
+     * to elect a phantom master, leaving {@code masterId} null and triggering an NPE.
+     */
+    private void clearStaleServers() {
+        try {
+            frigg.sql("DELETE FROM `jobrunr_servers`");
+            log.info("FriggSchemaInitializer: cleared stale jobrunr_servers");
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not clear jobrunr_servers: {}", e.getMessage());
         }
     }
 

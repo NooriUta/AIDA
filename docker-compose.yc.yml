@@ -34,9 +34,12 @@ services:
   keycloak:
     command: start --import-realm
     environment:
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY: edge
-      KC_HTTP_ENABLED: "true"       # nginx handles TLS termination
+      KC_HOSTNAME: "${DOMAIN}"
+      KC_HOSTNAME_STRICT: "true"
+      KC_HTTP_RELATIVE_PATH: "/kc"
+      KC_PROXY_HEADERS: "xforwarded" # KC 26: replaces deprecated KC_PROXY=edge
+      KC_HTTP_ENABLED: "true"        # nginx handles TLS termination
+      JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:
@@ -50,6 +53,8 @@ services:
   # ── SHUTTLE ────────────────────────────────────────────────────────────────
   shuttle:
     image: cr.yandex/${YC_REGISTRY_ID}/shuttle:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:
@@ -63,6 +68,9 @@ services:
   # ── Chur (BFF) ─────────────────────────────────────────────────────────────
   chur:
     image: cr.yandex/${YC_REGISTRY_ID}/chur:${IMAGE_TAG:-latest}
+    environment:
+      COOKIE_SECURE: "true"
+      CORS_ORIGIN: "https://${DOMAIN}"
     <<: *env_file
     deploy:
       resources:
@@ -88,6 +96,9 @@ services:
   # ── Dali ───────────────────────────────────────────────────────────────────
   dali:
     image: cr.yandex/${YC_REGISTRY_ID}/dali:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
+      CORS_ORIGINS: "https://${DOMAIN}"
     <<: *env_file
     deploy:
       resources:
@@ -101,6 +112,8 @@ services:
   # ── Heimdall Backend ────────────────────────────────────────────────────────
   heimdall-backend:
     image: cr.yandex/${YC_REGISTRY_ID}/heimdall-backend:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:

@@ -34,10 +34,10 @@ import studio.seer.dali.storage.ArcadeDbStorageProvider;
  * {@code @Inject} fields in {@link studio.seer.dali.job.ParseJob} work at
  * execution time.
  */
-// BUG-SS-017: @Priority(15) fires after FriggSchemaInitializer (@Priority(10))
-// but before SessionService (@Priority(20)) so JobRunr is up before sessions reload.
+// Quarkus fires lower @Priority values first. Order: FriggSchemaInitializer(5) → here(10) → SessionService(20).
+// This guarantees FRIGG schema and stale-server cleanup finish before the BackgroundJobServer starts.
 @ApplicationScoped
-@Priority(15)
+@Priority(10)
 public class JobRunrLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(JobRunrLifecycle.class);

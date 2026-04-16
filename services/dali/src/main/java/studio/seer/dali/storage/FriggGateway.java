@@ -103,9 +103,9 @@ public class FriggGateway {
             return true;
         } catch (WebApplicationException e) {
             int status = e.getResponse().getStatus();
-            if (status == 500) {
-                // ArcadeDB returns 500 when the database already exists — treat as success
-                log.info("[FRIGG] database '{}' already exists (HTTP 500 from /server)", db);
+            if (status == 500 || status == 400) {
+                // ArcadeDB returns 500 or 400 when the database already exists — treat as success
+                log.info("[FRIGG] database '{}' already exists (HTTP {} from /server)", db, status);
                 return true;
             }
             log.warn("[FRIGG] ensureDatabase failed — HTTP {}: {}", status, e.getMessage());

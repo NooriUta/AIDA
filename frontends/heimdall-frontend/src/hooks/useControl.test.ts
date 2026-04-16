@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useControl } from './useControl';
 
-const HEIMDALL_API = 'http://localhost:9093';
+// HEIMDALL_API defaults to '' in Docker (VITE_HEIMDALL_API=/heimdall baked at build time,
+// but in tests import.meta.env is empty so api.ts returns '').
+const HEIMDALL_API = '';
 
 function mockFetch(status: number, body: unknown) {
   return vi.fn().mockResolvedValue({

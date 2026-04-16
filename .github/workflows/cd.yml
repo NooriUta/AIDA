@@ -115,7 +115,7 @@ jobs:
 
       - name: Fix file permissions for scp
         run: |
-          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/
+          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/ infra/nginx/
           chmod a+x infra/scripts/*.sh
 
       - name: Ensure deploy dir is writable
@@ -124,7 +124,9 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          script:   sudo mkdir -p /opt/seer-studio/infra/scripts && sudo chown -R ubuntu:ubuntu /opt/seer-studio
+          script: |
+            sudo mkdir -p /opt/seer-studio/infra/scripts /opt/seer-studio/infra/nginx
+            sudo chown -R ubuntu:ubuntu /opt/seer-studio
 
       - name: Copy prod compose to server
         uses: appleboy/scp-action@v0.1.7
@@ -132,8 +134,24 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/
+          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/,infra/nginx/
           target:   /opt/seer-studio/
+
+      - name: Install nginx config on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_KEY }}
+          script: |
+            set -e
+            DOMAIN=${{ secrets.DOMAIN }}
+            CONF=/opt/seer-studio/infra/nginx/nginx.conf
+            # Substitute ${DOMAIN} placeholder and install to nginx sites
+            sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g' ${CONF} \
+              > /etc/nginx/sites-available/aida"
+            sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
+            sudo nginx -t && sudo systemctl reload nginx
 
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3

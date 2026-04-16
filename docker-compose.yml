@@ -12,6 +12,40 @@ networks:
     name: aida_net
 
 services:
+  # ── nginx (TLS termination — local HTTPS) ──────────────────────────────────
+  # Self-signed cert auto-generated into named volume nginx_certs on first start.
+  # Access: https://localhost/       → Verdandi
+  #         https://localhost/heimdall → Heimdall UI
+  #         https://localhost/kc/    → Keycloak admin
+  nginx:
+    image: nginx:1.27-alpine
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache openssl >/dev/null 2>&1
+        mkdir -p /etc/nginx/certs
+        if [ ! -f /etc/nginx/certs/local.crt ]; then
+          openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+            -keyout /etc/nginx/certs/local.key \
+            -out    /etc/nginx/certs/local.crt \
+            -subj   '/CN=localhost/O=AIDA' \
+            -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            2>/dev/null && echo '[nginx] self-signed cert generated'
+        fi
+        exec nginx -g 'daemon off;'
+    volumes:
+      - ./infra/nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - nginx_certs:/etc/nginx/certs
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - chur
+      - verdandi
+      - heimdall-frontend
+      - keycloak
+
   # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
@@ -20,13 +54,17 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HTTP_PORT: "8180"
+      KC_HTTP_RELATIVE_PATH: "/kc"
       KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: "xforwarded"   # KC 26: replaces deprecated KC_PROXY=edge
+      KC_HOSTNAME: "localhost"
+      KC_HOSTNAME_STRICT: "false"
     ports:
       - "127.0.0.1:18180:8180"
     volumes:
       - ./infra/keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /kc/health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -65,13 +103,14 @@ services:
     environment:
       NODE_ENV:              ${NODE_ENV:-development}
       PORT:                  "3000"
-      CORS_ORIGIN:           "http://localhost:15173"
+      CORS_ORIGIN:           "http://localhost:15173,https://localhost"
       # Keycloak (internal network — no port offset)
-      KEYCLOAK_URL:          http://keycloak:8180
+      KEYCLOAK_URL:          http://keycloak:8180/kc
       KEYCLOAK_REALM:        seer
       KEYCLOAK_CLIENT_ID:    aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
       COOKIE_SECRET:         ${COOKIE_SECRET:-dev-cookie-secret}
+      COOKIE_SECURE:         "true"
       # ArcadeDB (external container)
       ARCADEDB_URL:          ${ARCADEDB_URL:-http://ygg:2480}
       ARCADEDB_DB:           ${ARCADEDB_DB:-hound}
@@ -122,6 +161,8 @@ services:
     build:
       context: .
       dockerfile: frontends/heimdall-frontend/Dockerfile
+      args:
+        VITE_HEIMDALL_API: "/heimdall"
     ports:
       - "25174:5174"
     depends_on:
@@ -171,6 +212,7 @@ services:
       - "19090:9090"
     environment:
       QUARKUS_HTTP_PORT: "9090"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:13000,http://localhost:5174,http://localhost:5175,http://localhost:25174,https://localhost"
       FRIGG_URL:      http://frigg:2480
       FRIGG_DB:       dali
       FRIGG_USER:     root
@@ -268,6 +310,7 @@ services:
       start_period: 30s
 
 volumes:
+  nginx_certs:
   frigg_data:
   hound_databases:
     external: true

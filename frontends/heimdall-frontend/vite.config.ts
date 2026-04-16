@@ -29,6 +29,7 @@ export default defineConfig({
     exclude: ['react-router-dom'],
   },
   // Module Federation generates top-level await — requires es2022+ target.
+  base: '/heimdall/',
   build: {
     target: 'es2022',
     sourcemap: false,
