@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useRef, useState }   from 'react';
+import { useTranslation }      from 'react-i18next';
 import { type DaliDialect, type DaliSession, postSession, uploadAndParse } from '../../api/dali';
-import { UI } from '../../i18n';
 import css from './dali.module.css';
 
 interface ParseFormProps {
@@ -16,6 +16,7 @@ const DIALECTS: { value: DaliDialect; label: string }[] = [
 type Mode = 'path' | 'upload';
 
 export function ParseForm({ onSessionCreated }: ParseFormProps) {
+  const { t } = useTranslation();
   const [mode,             setMode]             = useState<Mode>('path');
   const [dialect,          setDialect]          = useState<DaliDialect>('plsql');
   const [source,           setSource]           = useState('');
@@ -40,13 +41,13 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
     try {
       let session: DaliSession;
       if (mode === 'upload') {
-        if (!file) { setError(UI.dali.form.errSelectFile); return; }
+        if (!file) { setError(t('dali.form.errSelectFile')); return; }
         session = await uploadAndParse(file, dialect, preview, clearBeforeWrite);
         setFile(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
       } else {
         const src = source.trim().replace(/[\t\r\n\u00a0\ufeff]+/g, '');
-        if (!src) { setError(UI.dali.form.errSourceRequired); return; }
+        if (!src) { setError(t('dali.form.errSourceRequired')); return; }
         session = await postSession({ dialect, source: src, preview, clearBeforeWrite });
         setSource('');
       }
@@ -54,7 +55,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
     } catch (err: unknown) {
       const msg = (err as Error).message ?? 'request failed';
       if (msg.includes('clearBeforeWrite') || msg.includes('active')) {
-        setError(UI.dali.form.errAnotherActive);
+        setError(t('dali.form.errAnotherActive'));
       } else {
         setError(msg);
       }
@@ -81,18 +82,18 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          {UI.dali.form.title}
+          {t('dali.form.title')}
         </span>
         {/* Mode toggle */}
         <div className={css.modeToggle}>
           <button
             className={mode === 'path' ? css.modeBtnActive : css.modeBtn}
             onClick={() => switchMode('path')}
-          >{UI.dali.form.modePathBtn}</button>
+          >{t('dali.form.modePathBtn')}</button>
           <button
             className={mode === 'upload' ? css.modeBtnActive : css.modeBtn}
             onClick={() => switchMode('upload')}
-          >{UI.dali.form.modeUploadBtn}</button>
+          >{t('dali.form.modeUploadBtn')}</button>
         </div>
       </div>
 
@@ -100,7 +101,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
         {/* Row 1: Dialect + Source / Upload area */}
         <div className={css.formRowTop}>
           <div className={css.fieldGroup}>
-            <label className={css.fieldLabel}>{UI.dali.form.dialectLabel}</label>
+            <label className={css.fieldLabel}>{t('dali.form.dialectLabel')}</label>
             <select
               className="field-input"
               value={dialect}
@@ -115,7 +116,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
 
           {mode === 'path' ? (
             <div className={css.fieldGroup} style={{ flex: 1 }}>
-              <label className={css.fieldLabel}>{UI.dali.form.sourceLabel}</label>
+              <label className={css.fieldLabel}>{t('dali.form.sourceLabel')}</label>
               <input
                 className="field-input"
                 style={{ fontFamily: 'var(--mono)', fontSize: '13px', padding: '6px 10px' }}
@@ -123,13 +124,13 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
                 value={source}
                 onChange={e => { setSource(e.target.value.replace(/[\t\r\n]+/g, '')); if (error) setError(''); }}
                 onKeyDown={handleKeyDown}
-                placeholder={UI.dali.form.sourcePlaceholder}
+                placeholder={t('dali.form.sourcePlaceholder')}
               />
               <div className={css.fieldError}>{error}</div>
             </div>
           ) : (
             <div className={css.fieldGroup} style={{ flex: 1 }}>
-              <label className={css.fieldLabel}>{UI.dali.form.fileLabel}</label>
+              <label className={css.fieldLabel}>{t('dali.form.fileLabel')}</label>
               <div
                 className={`${css.uploadArea} ${dragOver ? css.uploadAreaOver : ''} ${file ? css.uploadAreaFilled : ''}`}
                 onClick={() => fileInputRef.current?.click()}
@@ -140,7 +141,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
                 {file ? (
                   <span className={css.uploadFileName}>{file.name}</span>
                 ) : (
-                  <span className={css.uploadPlaceholder}>{UI.dali.form.dropPlaceholder}</span>
+                  <span className={css.uploadPlaceholder}>{t('dali.form.dropPlaceholder')}</span>
                 )}
               </div>
               <input
@@ -169,7 +170,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
                 checked={preview}
                 onChange={e => setPreview(e.target.checked)}
               />
-              <label htmlFor="dali-preview">{UI.dali.form.previewLabel}</label>
+              <label htmlFor="dali-preview">{t('dali.form.previewLabel')}</label>
             </div>
             <div className={css.previewRow} style={{ opacity: preview ? 0.4 : 1 }}>
               <input
@@ -179,7 +180,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
                 disabled={preview}
                 onChange={e => setClearBeforeWrite(e.target.checked)}
               />
-              <label htmlFor="dali-clear">{UI.dali.form.clearLabel}</label>
+              <label htmlFor="dali-clear">{t('dali.form.clearLabel')}</label>
             </div>
           </div>
 
@@ -189,12 +190,12 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? UI.dali.form.submitting : (
+            {loading ? t('dali.form.submitting') : (
               <>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
-                {mode === 'upload' ? UI.dali.form.submitUpload : UI.dali.form.submitParse}
+                {mode === 'upload' ? t('dali.form.submitUpload') : t('dali.form.submitParse')}
               </>
             )}
           </button>
