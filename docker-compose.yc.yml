@@ -34,7 +34,8 @@ services:
   keycloak:
     command: start --import-realm
     environment:
-      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME: "https://${DOMAIN}"
+      KC_HOSTNAME_STRICT: "true"
       KC_PROXY: edge
       KC_HTTP_ENABLED: "true"       # nginx handles TLS termination
       JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
@@ -67,9 +68,8 @@ services:
   chur:
     image: cr.yandex/${YC_REGISTRY_ID}/chur:${IMAGE_TAG:-latest}
     environment:
-      # Set to "true" once TLS is terminated at the load-balancer / host nginx.
-      # Without HTTPS, Secure cookies are silently dropped by the browser.
-      COOKIE_SECURE: "false"
+      COOKIE_SECURE: "true"
+      CORS_ORIGIN: "https://${DOMAIN}"
     <<: *env_file
     deploy:
       resources:

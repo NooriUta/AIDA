@@ -34,7 +34,7 @@ const COOKIE_OPTS = {
   httpOnly: true,
   path:     '/',
   sameSite: (IS_PROD ? 'strict' : 'lax') as 'strict' | 'lax',
-  secure:   IS_PROD && process.env.COOKIE_SECURE !== 'false',
+  secure:   process.env.COOKIE_SECURE === 'true' || (IS_PROD && process.env.COOKIE_SECURE !== 'false'),
   maxAge:   8 * 60 * 60, // 8 h
 };
 
