@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate }         from 'react-router-dom';
 import { HEIMDALL_API }        from '../api';
+import { UI }                  from '../i18n';
 
 interface ServiceStatus {
   name:      string;
@@ -57,7 +58,7 @@ export function ServiceHealthStrip() {
   return (
     <div
       onClick={() => navigate('/services')}
-      title="Click to open Services"
+      title={UI.services.healthTitle}
       style={{
         display:      'flex',
         alignItems:   'center',
@@ -70,7 +71,7 @@ export function ServiceHealthStrip() {
       }}
     >
       <span style={{ fontSize: '10px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
-        Services
+        {UI.services.healthLabel}
       </span>
       {services.map(svc => (
         <div key={svc.name} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

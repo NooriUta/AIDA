@@ -92,6 +92,63 @@ export const UI = {
       errorsBtn:      (n: number) => `${n} error${n !== 1 ? 's' : ''}`,
       warningsBtn:    (n: number) => `${n} warning${n !== 1 ? 's' : ''} total`,
     },
+
+    // ── Dali: DaliPage ─────────────────────────────────────────────────────────
+    page: {
+      title:          'Parse engine',
+      description:    'SQL parsing engine · JobRunr monitoring · lineage → YGG',
+      refreshBtn:     'Refresh',
+      retryBtn:       'Retry',
+
+      // Stat cards
+      statTotal:      'Total sessions',
+      statTotalSub:   'all time',
+      statRunning:    'Running',
+      statRunningSub: 'active',
+      statCompleted:  'Completed',
+      statCompletedSub: 'since startup',
+      statAtoms:      'Atoms parsed',
+      statAtomsSub:   'total extracted',
+      statAvgRes:     'Avg resolution',
+      statAvgResSub:  'column-level',
+
+      // YGG strip
+      yggLoading:       'loading…',
+      yggTables:        'tables',
+      yggColumns:       'columns',
+      yggStmts:         'stmts',
+      yggRoutines:      'routines',
+      yggAtoms:         'atoms',
+      yggResolved:      (pct: string) => `${pct}% resolved`,
+      yggUnresolved:    (n: number) => `${n} unresolved`,
+      yggPending:       (n: number) => `${n} pending`,
+      yggRefreshTitle:  'Refresh YGG stats',
+
+      // Availability banner
+      connecting:     'Connecting to Dali :9090…',
+      offline:        (retryS: number) => `Dali :9090 unavailable — retrying in ${retryS}s`,
+
+      // Archive section
+      archiveTitle:   'Session archive (FRIGG)',
+      archiveRecords: (n: number) => `${n} records`,
+      archiveLoading: 'loading…',
+
+      // Toast messages
+      toastQueued:    (id: string) => `Session ${id} queued`,
+      toastCompleted: (id: string, atoms: string) => `Session ${id} completed · ${atoms} atoms`,
+      toastFailed:    (id: string) => `Session ${id}: parse failed`,
+      toastArchiveErr: 'FRIGG archive unavailable',
+
+      // Footer
+      footerJobsTracked: (n: number) => `${n} jobs tracked`,
+      footerReady:       'jobrunr ready',
+    },
+  },
+
+  // ── Services ──────────────────────────────────────────────────────────────────
+  services: {
+    healthTitle:  'Click to open Services',
+    healthLabel:  'Services',
   },
 
   // ── Auth ─────────────────────────────────────────────────────────────────────

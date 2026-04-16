@@ -55,13 +55,24 @@ public class FriggSchemaInitializer {
      * Format: { typeName, propertyName, arcadeDbType }
      */
     private static final String[][] INDEXED_PROPERTIES = {
-        { "jobrunr_jobs",           "id",        "STRING"   },
-        { "jobrunr_jobs",           "state",     "STRING"   },
-        { "jobrunr_recurring_jobs", "id",        "STRING"   },
-        { "jobrunr_servers",        "id",        "STRING"   },
-        { "jobrunr_metadata",       "id",        "STRING"   },
-        { "dali_sessions",          "id",        "STRING"   },
-        { "dali_sessions",          "startedAt", "DATETIME" },   // BUG-SS-014: was STRING
+        { "jobrunr_jobs",           "id",              "STRING"   },
+        { "jobrunr_jobs",           "state",           "STRING"   },
+        { "jobrunr_recurring_jobs", "id",              "STRING"   },
+        { "jobrunr_servers",        "id",              "STRING"   },
+        { "jobrunr_metadata",       "id",              "STRING"   },
+        { "dali_sessions",          "id",              "STRING"   },
+        { "dali_sessions",          "startedAt",       "DATETIME" },   // BUG-SS-014: was STRING
+        // ── Perf-analysis properties (queryable top-level, mirrors sessionJson content) ─
+        { "dali_sessions",          "finishedAt",      "DATETIME" },
+        { "dali_sessions",          "status",          "STRING"   },
+        { "dali_sessions",          "dialect",         "STRING"   },
+        { "dali_sessions",          "instanceId",      "STRING"   },
+        { "dali_sessions",          "durationMs",      "LONG"     },
+        { "dali_sessions",          "atomCount",       "INTEGER"  },
+        { "dali_sessions",          "vertexCount",     "INTEGER"  },
+        { "dali_sessions",          "edgeCount",       "INTEGER"  },
+        { "dali_sessions",          "droppedEdgeCount","INTEGER"  },
+        { "dali_sessions",          "resolutionRate",  "DOUBLE"   },
     };
 
     @Inject FriggGateway frigg;
@@ -104,7 +115,7 @@ public class FriggSchemaInitializer {
             createIndexes();
             if (allTypesOk) {
                 schemaReady = true;
-                log.info("FriggSchemaInitializer: schema ready (5 document types)");
+                log.info("FriggSchemaInitializer: schema ready (5 document types, perf-stat properties indexed)");
             } else {
                 log.warn("FriggSchemaInitializer: schema partially initialised — one or more document " +
                          "types could not be created. Session enqueueing will be refused until Dali restarts.");
@@ -149,8 +160,12 @@ public class FriggSchemaInitializer {
         createIndex("jobrunr_recurring_jobs", "id",        true);
         createIndex("jobrunr_servers",        "id",        true);
         createIndex("jobrunr_metadata",       "id",        true);
-        createIndex("dali_sessions",          "id",        true);
-        createIndex("dali_sessions",          "startedAt", false);
+        createIndex("dali_sessions",          "id",         true);
+        createIndex("dali_sessions",          "startedAt",  false);
+        createIndex("dali_sessions",          "finishedAt", false);
+        createIndex("dali_sessions",          "status",     false);
+        createIndex("dali_sessions",          "dialect",    false);
+        createIndex("dali_sessions",          "instanceId", false);
     }
 
     private void createIndex(String type, String property, boolean unique) {
