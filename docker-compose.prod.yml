@@ -180,6 +180,7 @@ services:
       FRIGG_DB:       heimdall
       FRIGG_USER:     root
       FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
+      CORS_ORIGINS:   "https://seidrstudio.pro,https://www.seidrstudio.pro,http://localhost:13000,http://localhost:5174"
     ports:
       - "19093:9093"
     depends_on:
