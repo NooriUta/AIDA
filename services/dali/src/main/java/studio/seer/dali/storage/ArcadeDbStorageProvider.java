@@ -2,7 +2,6 @@ package studio.seer.dali.storage;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import org.jobrunr.jobs.Job;
 import org.jobrunr.jobs.RecurringJob;
 import org.jobrunr.jobs.mappers.JobMapper;
@@ -30,7 +29,7 @@ import java.util.stream.Collectors;
  * ({@link BackgroundJobServerStatus}).
  *
  */
-@Singleton
+@ApplicationScoped
 public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     private static final Logger log = LoggerFactory.getLogger(ArcadeDbStorageProvider.class);
