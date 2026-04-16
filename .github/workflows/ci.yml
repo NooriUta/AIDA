@@ -120,7 +120,7 @@ jobs:
             sleep 5
           done
       - run: chmod +x gradlew
-      - run: ./gradlew :services:dali:test --no-daemon --build-cache          # K-4
+      - run: ./gradlew :services:dali:test --no-daemon --build-cache --info --stacktrace 2>&1 | tee /tmp/dali-test.log; tail -200 /tmp/dali-test.log; exit ${PIPESTATUS[0]}  # DEBUG: full output
       - run: ./gradlew :services:dali:build -x test --no-daemon --build-cache
 
   # ── BFF: Chur (Fastify + Vitest) ────────────────────────────────────────────
