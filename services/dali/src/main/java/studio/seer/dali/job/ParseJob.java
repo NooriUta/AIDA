@@ -27,6 +27,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -64,7 +65,9 @@ public class ParseJob {
     @ConfigProperty(name = "ygg.db")       String yggDb;
     @ConfigProperty(name = "ygg.user")     String yggUser;
     @ConfigProperty(name = "ygg.password") String yggPassword;
-    @ConfigProperty(name = "heimdall.url", defaultValue = "") String heimdallUrl;
+    // Optional — absent when HEIMDALL_URL env var is not set (e.g. CI, local dev without Heimdall).
+    // SmallRye Config treats empty string "" as null; Optional maps null → empty without throwing.
+    @ConfigProperty(name = "heimdall.url") Optional<String> heimdallUrl;
 
     @Job(name = "Parse SQL files", retries = 3)
     public void execute(String sessionId, ParseSessionInput input) {
@@ -170,9 +173,10 @@ public class ParseJob {
     /** Builds the effective listener: DaliHoundListener (persistence) + HoundHeimdallListener
      *  (observability) via CompositeListener. Falls back to NoOp if HEIMDALL_URL is not set. */
     private HoundEventListener buildListener(String sessionId, HoundConfig config) {
-        HoundEventListener heimdall = heimdallUrl.isBlank()
-                ? NoOpHoundEventListener.INSTANCE
-                : new HoundHeimdallListener(heimdallUrl);
+        HoundEventListener heimdall = heimdallUrl
+                .filter(url -> !url.isBlank())
+                .<HoundEventListener>map(HoundHeimdallListener::new)
+                .orElse(NoOpHoundEventListener.INSTANCE);
         return new CompositeListener(
                 new DaliHoundListener(sessionId, config.dialect(), emitter),
                 heimdall);
