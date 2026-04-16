@@ -143,9 +143,9 @@ public class LineageService {
             MATCH (sub)-[:HAS_OUTPUT_COL]->(oc:DaliOutputColumn)<-[:DATA_FLOW]-(srcCol:DaliColumn)
             MATCH (srcTbl:DaliTable)-[:HAS_COLUMN]->(srcCol)
             OPTIONAL MATCH (root)-[:HAS_AFFECTED_COL]->(rootAff:DaliAffectedColumn)
-                WHERE toUpper(coalesce(rootAff.column_name, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
+                WHERE toUpper(last(split(coalesce(rootAff.column_name, ''), '.'))) = toUpper(last(split(coalesce(oc.name, oc.col_key, ''), '.')))
             OPTIONAL MATCH (root)-[:HAS_OUTPUT_COL]->(rootOc:DaliOutputColumn)
-                WHERE toUpper(coalesce(rootOc.name, rootOc.col_key, '')) = toUpper(coalesce(oc.name, oc.col_key, ''))
+                WHERE toUpper(last(split(coalesce(rootOc.name, rootOc.col_key, ''), '.'))) = toUpper(last(split(coalesce(oc.name, oc.col_key, ''), '.')))
             RETURN id(srcTbl) AS srcId, 'DaliTable' AS srcType,
                    coalesce(srcTbl.table_name, '') AS srcLabel,
                    id(root) AS tgtId, 'DaliStatement' AS tgtType,

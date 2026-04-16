@@ -1,7 +1,7 @@
 # AIDA — Startup Sequence & Known Issues
 
 **Документ:** `STARTUP_SEQUENCE`
-**Версия:** 1.0
+**Версия:** 1.2
 **Дата:** 16.04.2026
 **Статус:** ✅ ACTIVE — критично для demo-rehearsal
 **Источник:** QG прогон 15.04.2026
@@ -119,21 +119,21 @@ for EDGE_TYPE in HAS_RECORD_FIELD RETURNS_INTO DaliDDLModifiesTable DaliDDLModif
 done
 ```
 
-### Фикс B — постоянный (после demo)
+### Фикс B — постоянный ✅ APPLIED (Apr 16)
 
-Добавить в `HoundSchemaInitializer.java` (или аналог) явное создание этих типов при старте:
+`RemoteSchemaCommands.java` (строки 89–98) уже содержит все 4 типа с `IF NOT EXISTS`:
 
 ```java
-// В методе ensureEdgeTypes() или аналоге:
-List.of(
-    "HAS_RECORD_FIELD", "RETURNS_INTO",
-    "DaliDDLModifiesTable", "DaliDDLModifiesColumn"
-).forEach(name ->
-    arcadeClient.command("hound",
-        "CREATE EDGE TYPE " + name + " IF NOT EXISTS"));
+"CREATE EDGE TYPE HAS_RECORD_FIELD IF NOT EXISTS EXTENDS E",
+"CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS EXTENDS E",
+"CREATE EDGE TYPE DaliDDLModifiesTable IF NOT EXISTS EXTENDS E",
+"CREATE EDGE TYPE DaliDDLModifiesColumn IF NOT EXISTS EXTENDS E",
 ```
 
-**TODO (Sprint 3):** добавить этот вызов в startup-инициализатор → `INV-YGG-01`.
+Эти команды выполняются при каждом старте Dali через `RemoteSchemaCommands.all()` → идемпотентно.
+
+~~**TODO (Sprint 3):** добавить этот вызов в startup-инициализатор → `INV-YGG-01`.~~
+**Закрыто:** постоянный фикс применён в `RemoteSchemaCommands.java`.
 
 ---
 
@@ -233,8 +233,56 @@ docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 
 ---
 
+## 6. Dev Mode — типичные ловушки
+
+### Ловушка 1: SRCFG00040 при `@ConfigProperty(defaultValue = "")`
+
+**Симптом:**
+```
+SRCFG00040: The config property heimdall.url is defined as the empty String ("")
+which the following Converter considered to be null: io.smallrye.config.Converters$BuiltInConverter
+```
+
+**Причина:** SmallRye Config `BuiltInConverter` трактует `""` как `null`. Поле типа `String` не может быть null
+(Quarkus бросает исключение при старте). Это происходит когда `HEIMDALL_URL` не задан в окружении.
+
+**Решение — использовать `Optional<String>` вместо `String`:**
+```java
+// НЕПРАВИЛЬНО:
+@ConfigProperty(name = "heimdall.url", defaultValue = "") String heimdallUrl;
+
+// ПРАВИЛЬНО:
+@ConfigProperty(name = "heimdall.url") Optional<String> heimdallUrl;
+// Если HEIMDALL_URL не задан → Optional.empty() (без исключений)
+// Если HEIMDALL_URL задан → Optional.of("http://heimdall-backend:9093")
+```
+
+`Optional<String>` без `defaultValue` и без записи в `application.properties` — SmallRye Config
+автоматически возвращает `Optional.empty()` при отсутствии ключа.
+
+### Ловушка 2: "Port already bound: 8080" при падении Dali в Dev Mode
+
+**Симптом:** После ошибки конфигурации (вроде SRCFG00040) Quarkus пишет в лог:
+```
+ERROR [io.qua.dep.dev.IsolatedDevModeMain] Failed to start quarkus
+WARN  [io.qua.dep.dev.IsolatedDevModeMain] Attempting to bind recovery HTTP server on port 8080
+ERROR [io.qua.dep.dev.IsolatedDevModeMain] Port already bound: 8080
+```
+
+**Причина:** Когда приложение падает при старте, Quarkus Dev Mode пытается запустить «recovery server»
+на дефолтном порту `8080` (не на порту Dali `9090`). Если в это время запущен Shuttle (`18080→8080`),
+порт занят → второй сбой.
+
+**Это не баг Shuttle.** Shuttle работает на порту 8080 правильно. Проблема — в Dali, который не смог стартовать.
+
+**Решение:** Исправить корневую ошибку конфигурации (SRCFG00040 → `Optional<String>`), а не освобождать порт 8080.
+
+---
+
 ## История изменений
 
 | Дата | Версия | Что |
 |---|---|---|
 | 16.04.2026 | 1.0 | Создан по итогам QG-прогона 15.04. Три известных проблемы зафиксированы: FRIGG-Dali порядок, missing edge types Sprint 2, schemaReady deadlock kill+restart sequence. |
+| 16.04.2026 | 1.1 | Фикс B отмечен APPLIED — `RemoteSchemaCommands.java` содержит `IF NOT EXISTS` для всех 4 Sprint 2 edge types. TODO INV-YGG-01 закрыт. |
+| 16.04.2026 | 1.2 | Добавлен §6 Dev Mode ловушки: SRCFG00040 + `Optional<String>` паттерн; Quarkus recovery server конфликт с портом 8080. |

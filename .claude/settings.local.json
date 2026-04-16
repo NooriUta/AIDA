@@ -129,7 +129,19 @@
       "Bash(mv DALI_TASK_EXECUTION.md architecture/)",
       "Bash(mv hound/HOUND_CREATE_TABLE_ALGORITHM.md architecture/hound/)",
       "Bash(mv hound/HOUND_GEOID_SPEC.md architecture/hound/)",
-      "Bash(curl -s -o/dev/null -w '%{http_code}' -X POST http://localhost:18180/realms/master/protocol/openid-connect/token -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' --connect-timeout 3)"
+      "Bash(curl -s -o/dev/null -w '%{http_code}' -X POST http://localhost:18180/realms/master/protocol/openid-connect/token -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' --connect-timeout 3)",
+      "Bash(gh pr create --title 'fix\\(ci\\): CI fixes + docs restructuring + QG alignment + performance skill' --body ':*)",
+      "Bash(cd C:/AIDA/aida-root echo \"=== QG-DALI-ygg-write: INV-1/2 buildConfig ArcadeWriteMode ===\" grep -rn \"buildConfig\\\\|ArcadeWriteMode\" services/dali/src/main/java/)",
+      "Bash(cd C:/AIDA/aida-root echo \"=== QG-DALI-persistence: INV-1 ===\" grep -rn \"InMemoryStorageProvider\" services/dali/src/main/java/)",
+      "Bash(cd C:/AIDA/aida-root echo \"=== QG-SECURITY: INV-1/2/3 ports ===\" grep -n \"18180\\\\|2480\\\\|2481\" docker-compose.yml)",
+      "Bash(cd C:/AIDA/aida-root echo \"=== QG-VERDANDI-prefs-sync: INV-1 catch without throw ===\" grep -A 5 \"catch\" frontends/verdandi/src/stores/prefsStore.ts)",
+      "Bash(cd C:/AIDA/aida-root echo \"=== QG-HEIMDALL-backend: INV-1 @Valid ===\" grep -rn \"@Valid\" services/heimdall-backend/src/main/java/)",
+      "Bash(cd C:/AIDA/aida-root echo \"=== QG-HEIMDALL-frontend-ws: INV-1 reconnect ===\" grep -n \"onclose\\\\|reconnect\\\\|setTimeout.*connect\" frontends/heimdall-frontend/src/hooks/useEventStream.ts)",
+      "Bash(grep 'quarkusPlatformVersion\\\\|quarkusPlatformGroupId' settings.gradle buildSrc/src/main/groovy/*.gradle gradle.properties build.gradle)",
+      "Bash(git fetch:*)",
+      "Bash(git rev-list:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
     ]
   }
 }

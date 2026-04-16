@@ -63,10 +63,7 @@ public class EventResource {
 
     @POST
     @Path("/batch")
-    public Response ingestBatch(List<HeimdallEvent> events) {
-        if (events == null) {
-            return Response.status(400).entity("{\"error\":\"events array is required\"}").build();
-        }
+    public Response ingestBatch(@NotNull @Valid List<@Valid HeimdallEvent> events) {
 
         long count = events.stream()
                 .filter(e -> e != null && e.sourceComponent() != null && e.eventType() != null)
