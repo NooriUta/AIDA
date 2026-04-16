@@ -80,6 +80,7 @@ public class SessionResource {
      */
     @POST
     @Path("/{id}/cancel")
+    @Consumes(MediaType.WILDCARD)   // no request body — accept any (or missing) Content-Type
     public Response cancel(@PathParam("id") String id) {
         CancelResult result = sessionService.cancelSession(id);
         return switch (result.status()) {
