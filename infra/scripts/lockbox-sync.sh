@@ -27,7 +27,7 @@ echo "[lockbox-sync] fetching secret (${LOOKUP})..."
 yc lockbox payload get \
   ${LOOKUP} \
   --format json \
-  | jq -r '.entries[] | "\(.key)=\(.value)"' \
+  | jq -r '.entries[] | "\(.key)=\(.textValue)"' \
   > "${DEST}"
 
 chmod 600 "${DEST}"

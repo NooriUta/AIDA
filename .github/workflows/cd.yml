@@ -114,7 +114,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Fix file permissions for scp
-        run: chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/
+        run: |
+          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/
+          chmod a+x infra/scripts/*.sh
 
       - name: Ensure deploy dir is writable
         uses: appleboy/ssh-action@v1.0.3
@@ -122,7 +124,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          script:   sudo mkdir -p /opt/seer-studio && sudo chown -R ubuntu:ubuntu /opt/seer-studio
+          script:   sudo mkdir -p /opt/seer-studio/infra/scripts && sudo chown -R ubuntu:ubuntu /opt/seer-studio
 
       - name: Copy prod compose to server
         uses: appleboy/scp-action@v0.1.7
@@ -130,7 +132,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/
+          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/
           target:   /opt/seer-studio/
 
       - name: Deploy
