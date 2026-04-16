@@ -54,6 +54,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HTTP_PORT: "8180"
+      KC_HTTP_RELATIVE_PATH: "/kc"
       KC_HEALTH_ENABLED: "true"
       KC_PROXY: "edge"
       KC_HOSTNAME_STRICT: "false"
@@ -62,7 +63,7 @@ services:
     volumes:
       - ./infra/keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /kc/health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -103,7 +104,7 @@ services:
       PORT:                  "3000"
       CORS_ORIGIN:           "http://localhost:15173,https://localhost"
       # Keycloak (internal network — no port offset)
-      KEYCLOAK_URL:          http://keycloak:8180
+      KEYCLOAK_URL:          http://keycloak:8180/kc
       KEYCLOAK_REALM:        seer
       KEYCLOAK_CLIENT_ID:    aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
@@ -159,6 +160,8 @@ services:
     build:
       context: .
       dockerfile: frontends/heimdall-frontend/Dockerfile
+      args:
+        VITE_HEIMDALL_API: "/heimdall"
     ports:
       - "25174:5174"
     depends_on:
@@ -208,6 +211,7 @@ services:
       - "19090:9090"
     environment:
       QUARKUS_HTTP_PORT: "9090"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:13000,http://localhost:5174,http://localhost:5175,http://localhost:25174,https://localhost"
       FRIGG_URL:      http://frigg:2480
       FRIGG_DB:       dali
       FRIGG_USER:     root

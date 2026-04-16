@@ -34,7 +34,7 @@ export function useServices(): ServiceHealth[] {
     const fetchHealth = async () => {
       const start = Date.now();
       try {
-        const res  = await fetch(`${HEIMDALL_API}/q/health`);
+        const res  = await fetch(`${HEIMDALL_API}/health`);
         const data = await res.json() as { status: string };
         const rt   = Date.now() - start;
         const status: ServiceStatus = data.status === 'UP' ? 'UP' : 'DOWN';
