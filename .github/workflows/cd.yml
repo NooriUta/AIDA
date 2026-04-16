@@ -147,7 +147,7 @@ jobs:
             /opt/seer-studio/infra/scripts/lockbox-sync.sh
 
             # Login to YCR via VM service account (metadata service — no key needed)
-            yc container registry configure-docker --force
+            yc container registry configure-docker
 
             # Pull new images from YCR (faster in YC region)
             export IMAGE_TAG=${{ github.sha }}
