@@ -21,10 +21,25 @@ jobs:
         include:
           - service: verdandi
             context: ./frontends/verdandi
+            dockerfile: ./frontends/verdandi/Dockerfile
           - service: chur
             context: ./bff/chur
+            dockerfile: ./bff/chur/Dockerfile
           - service: shuttle
             context: ./services/shuttle
+            dockerfile: ./services/shuttle/Dockerfile
+          - service: dali
+            context: .
+            dockerfile: ./services/dali/Dockerfile
+          - service: heimdall-backend
+            context: .
+            dockerfile: ./services/heimdall-backend/Dockerfile
+          - service: heimdall-frontend
+            context: .
+            dockerfile: ./frontends/heimdall-frontend/Dockerfile
+          - service: shell
+            context: .
+            dockerfile: ./frontends/shell/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +54,7 @@ jobs:
       - uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
+          file:    ${{ matrix.dockerfile }}
           push: true
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,scope=${{ matrix.service }},mode=max
@@ -56,7 +72,7 @@ jobs:
       packages: read
     strategy:
       matrix:
-        service: [verdandi, chur, shuttle]
+        service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend, shell]
     steps:
       - uses: docker/login-action@v3
         with:
@@ -124,11 +140,19 @@ jobs:
             docker pull ${REPO}/verdandi:${IMAGE_TAG}
             docker pull ${REPO}/chur:${IMAGE_TAG}
             docker pull ${REPO}/shuttle:${IMAGE_TAG}
+            docker pull ${REPO}/dali:${IMAGE_TAG}
+            docker pull ${REPO}/heimdall-backend:${IMAGE_TAG}
+            docker pull ${REPO}/heimdall-frontend:${IMAGE_TAG}
+            docker pull ${REPO}/shell:${IMAGE_TAG}
 
             # Tag as latest locally
-            docker tag ${REPO}/verdandi:${IMAGE_TAG} ${REPO}/verdandi:latest
-            docker tag ${REPO}/chur:${IMAGE_TAG}     ${REPO}/chur:latest
-            docker tag ${REPO}/shuttle:${IMAGE_TAG}  ${REPO}/shuttle:latest
+            docker tag ${REPO}/verdandi:${IMAGE_TAG}          ${REPO}/verdandi:latest
+            docker tag ${REPO}/chur:${IMAGE_TAG}              ${REPO}/chur:latest
+            docker tag ${REPO}/shuttle:${IMAGE_TAG}           ${REPO}/shuttle:latest
+            docker tag ${REPO}/dali:${IMAGE_TAG}              ${REPO}/dali:latest
+            docker tag ${REPO}/heimdall-backend:${IMAGE_TAG}  ${REPO}/heimdall-backend:latest
+            docker tag ${REPO}/heimdall-frontend:${IMAGE_TAG} ${REPO}/heimdall-frontend:latest
+            docker tag ${REPO}/shell:${IMAGE_TAG}             ${REPO}/shell:latest
 
             # Restart stack
             docker compose \
