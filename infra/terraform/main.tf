@@ -103,6 +103,7 @@ resource "yandex_compute_instance" "aida_vm" {
   metadata = {
     user-data = templatefile("${path.module}/../cloud-init.yml", {
       ssh_public_key = file(var.ssh_public_key_path)
+      domain         = var.domain
     })
   }
 

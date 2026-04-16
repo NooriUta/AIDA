@@ -169,6 +169,16 @@ Hound поддерживает **три режима записи** в YGG, уп
 |---|---|---|---|---|---|---|---|
 | I35 | All backend services | Keycloak | C | HTTP GET /certs | standard OIDC | ✅ | JWT validation через public keys |
 
+### 2.14 Object Storage — S3 (archives)
+
+| # | From | To | Type | Protocol | Tech | Status | Смысл |
+|---|---|---|---|---|---|---|---|
+| I39 | Dali | S3 (MinIO / YC Object Storage) | W | S3 API (PUT) | AWS SDK v2 `s3` | 🔵 | Upload SQL archive при `POST /api/sessions/upload` → `uploads/{sessionId}/{filename}` |
+| I40 | Dali | S3 (MinIO / YC Object Storage) | R | S3 API (GET) | AWS SDK v2 `s3` | 🔵 | Download archive перед парсингом (cloud mode); tmpdir mode для single-node MVP |
+| I41 | Dali | FRIGG (ArcadeDB :2481) | W | ArcadeDB HTTP REST | Quarkus REST client | 🔵 | Записать `UploadUsage` vertex: session_id, file_name, size_bytes, uploaded_at, status |
+| I42 | HEIMDALL backend | FRIGG (ArcadeDB :2481) | R | ArcadeDB HTTP REST | Quarkus REST client | 🔵 | Читать `UploadUsage` для `/control/storage/usage` — суммарное использование + история |
+| I43 | HEIMDALL backend | S3 (MinIO / YC Object Storage) | C | S3 API (DELETE) | AWS SDK v2 `s3` | 🔵 | Принудительная очистка архивов через `/control/storage/archives` (admin action) |
+
 ---
 
 ## 3. Use case timelines
@@ -255,4 +265,5 @@ Hound поддерживает **три режима записи** в YGG, уп
 | Дата | Версия | Что изменилось |
 |---|---|---|
 | 11.04.2026 | 1.0 | Initial draft матрицы. 35 known интеграций. I11 зафиксирован как HTTP REST с shared Gradle module. I14 зафиксирован как in-JVM call. I17a/b/c разделён на три моды. I18 новая интеграция для FRIGG как JobRunr persistence. Arrow Flight — strategic note в §8 архитектурного документа, не прорабатывается для October. |
+| 16.04.2026 | 1.3 | S3 Object Storage (решение #22): §2.14 добавлен. I39 (Dali→S3 PUT), I40 (Dali→S3 GET), I41 (Dali→FRIGG UploadUsage), I42 (HEIMDALL→FRIGG usage read), I43 (HEIMDALL→S3 DELETE). Dev: MinIO. Prod: YC Object Storage. |
 | 15.04.2026 | 1.2 | Актуализация по кодовой базе: I0 добавлен (Shell MF host). I3/I4/I5 → ✅ (HEIMDALL frontend работает). I7 → ✅ (Chur HEIMDALL proxy routes: health/metrics/control/ws). I30 → ✅ (SHUTTLE HeimdallEmitter HTTP POST + BroadcastProcessor). I33 → ✅ (HeimdallEventBus in-process → SHUTTLE subscriptions). I34 → ✅ (ws://:9093/ws/events native WebSocket, cold replay 200 + live + filter). I36 NEW (HEIMDALL→FRIGG ArcadeDB snapshots). I37 NEW (DocsResource). I38 NEW (Chur→Keycloak Admin API). Q24 CLOSED, Q25 CLOSED (internal). |
