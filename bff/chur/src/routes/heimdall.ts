@@ -133,6 +133,45 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // ── GET /heimdall/services/health — all-services health poll ────────────────
+  // ServicesPage polls this every 10 s. Admin-only.
+  app.get(
+    '/heimdall/services/health',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      try {
+        const res = await fetch(`${HEIMDALL_ORIGIN}/services/health`, {
+          headers: { 'X-Seer-Role': request.user.role },
+        });
+        return reply.status(res.status).send(await res.json());
+      } catch {
+        return reply.status(503).send({ error: 'HEIMDALL_UNREACHABLE' });
+      }
+    },
+  );
+
+  // ── POST /heimdall/services/:name/restart — restart a service ────────────
+  // Admin-only. Delegates to heimdall-backend which shells out to docker.
+  app.post(
+    '/heimdall/services/:name/restart',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { name } = request.params as { name: string };
+      const query    = (request.query as Record<string, string>).mode
+        ? `?mode=${(request.query as Record<string, string>).mode}`
+        : '';
+      try {
+        const res = await fetch(`${HEIMDALL_ORIGIN}/services/${name}/restart${query}`, {
+          method: 'POST',
+          headers: { 'X-Seer-Role': request.user.role },
+        });
+        return reply.status(res.status).send(await res.json());
+      } catch {
+        return reply.status(503).send({ error: 'HEIMDALL_UNREACHABLE' });
+      }
+    },
+  );
+
   // ── GET /heimdall/ws/events — WebSocket proxy (T3.2) ─────────────────────
   // Authenticates via session cookie, then proxies to HEIMDALL native WS.
   // Forwards ?filter= query param if present.

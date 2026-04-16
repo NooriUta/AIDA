@@ -149,7 +149,7 @@ services:
     restart: unless-stopped
     environment:
       QUARKUS_HTTP_PORT: "9090"
-      CORS_ORIGINS:   "https://seidrstudio.pro,https://www.seidrstudio.pro"
+      CORS_ORIGINS:   "https://seidrstudio.pro,https://www.seidrstudio.pro,https://seer.seidrstudio.pro"
       FRIGG_URL:      http://frigg:2480
       FRIGG_DB:       dali
       FRIGG_USER:     root
