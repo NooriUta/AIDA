@@ -137,6 +137,30 @@ public class SessionRepository {
     }
 
     /**
+     * Deletes sessions older than {@code cutoff} (by {@code startedAt}).
+     * Returns the number of records deleted.
+     */
+    public int deleteOlderThan(java.time.Instant cutoff) {
+        try {
+            String cutoffStr = cutoff.toString();
+            List<Map<String, Object>> cnt = frigg.sql(
+                    "SELECT count(*) as cnt FROM dali_sessions WHERE startedAt < :cutoff",
+                    Map.of("cutoff", cutoffStr));
+            int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
+                    ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
+            if (count > 0) {
+                frigg.sql("DELETE FROM dali_sessions WHERE startedAt < :cutoff",
+                        Map.of("cutoff", cutoffStr));
+            }
+            log.debug("[SessionRepository] deleteOlderThan {}: removed {} records", cutoff, count);
+            return count;
+        } catch (Exception e) {
+            log.warn("[SessionRepository] deleteOlderThan failed: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
      * Deletes all session records from FRIGG.
      * Intended for use in tests ({@code @AfterEach}) to prevent cross-run accumulation.
      */

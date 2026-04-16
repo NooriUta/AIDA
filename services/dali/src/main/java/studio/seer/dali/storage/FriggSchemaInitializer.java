@@ -59,6 +59,7 @@ public class FriggSchemaInitializer {
         { "jobrunr_jobs",           "state",           "STRING"   },
         { "jobrunr_recurring_jobs", "id",              "STRING"   },
         { "jobrunr_servers",        "id",              "STRING"   },
+        { "jobrunr_servers",        "lastHeartbeat",   "DATETIME" },
         { "jobrunr_metadata",       "id",              "STRING"   },
         { "dali_sessions",          "id",              "STRING"   },
         { "dali_sessions",          "startedAt",       "DATETIME" },   // BUG-SS-014: was STRING
@@ -158,7 +159,8 @@ public class FriggSchemaInitializer {
         createIndex("jobrunr_jobs",           "id",        true);
         createIndex("jobrunr_jobs",           "state",     false);
         createIndex("jobrunr_recurring_jobs", "id",        true);
-        createIndex("jobrunr_servers",        "id",        true);
+        createIndex("jobrunr_servers",        "id",              true);
+        createIndex("jobrunr_servers",        "lastHeartbeat",   false);
         createIndex("jobrunr_metadata",       "id",        true);
         createIndex("dali_sessions",          "id",         true);
         createIndex("dali_sessions",          "startedAt",  false);

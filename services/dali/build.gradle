@@ -26,6 +26,9 @@ dependencies {
     implementation 'io.quarkus:quarkus-smallrye-health'
     implementation 'io.quarkus:quarkus-micrometer'
 
+    // Scheduler — daily session retention purge
+    implementation 'io.quarkus:quarkus-scheduler'
+
     // REST Client — FRIGG (ArcadeDB :2481)
     implementation 'io.quarkus:quarkus-rest-client'
     implementation 'io.quarkus:quarkus-rest-client-jackson'

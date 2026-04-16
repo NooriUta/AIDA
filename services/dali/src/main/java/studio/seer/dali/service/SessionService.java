@@ -296,6 +296,28 @@ public class SessionService {
     public boolean isFriggHealthy() { return friggHealthy; }
 
     /**
+     * Purges terminal sessions older than {@code cutoff} from in-memory cache and FRIGG.
+     * Active (QUEUED/RUNNING) sessions are never evicted regardless of age.
+     */
+    public void purgeExpired(java.time.Instant cutoff) {
+        // Evict from in-memory cache — skip active sessions
+        int evicted = 0;
+        for (var it = sessions.entrySet().iterator(); it.hasNext(); ) {
+            Session s = it.next().getValue();
+            if (s.startedAt().isBefore(cutoff)
+                    && s.status() != SessionStatus.QUEUED
+                    && s.status() != SessionStatus.RUNNING) {
+                it.remove();
+                evicted++;
+            }
+        }
+        // Delete from FRIGG
+        int deleted = repository.deleteOlderThan(cutoff);
+        log.info("SessionRetention: evicted {} from memory, deleted {} from FRIGG (older than {})",
+                evicted, deleted, cutoff);
+    }
+
+    /**
      * Cancels a session: removes it from the JobRunr queue (if still QUEUED/ENQUEUED)
      * and transitions it to CANCELLED state.
      *

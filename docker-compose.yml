@@ -178,6 +178,12 @@ services:
       HEIMDALL_URL:   http://heimdall-backend:9093
       YGG_URL:        http://ygg:2480
       COMPOSE_PROJECT_NAME: aida-root
+      # Session retention (days). Default = 30. Override: DALI_SESSION_RETENTION_DAYS=90
+      DALI_SESSION_RETENTION_DAYS: ${DALI_SESSION_RETENTION_DAYS:-30}
+      # Instance isolation: set to a unique tag when running multiple Dali instances
+      # against the same FRIGG. Empty = single-instance / untagged (default for dev).
+      # Example for second instance: DALI_INSTANCE_ID: dali-2
+      DALI_INSTANCE_ID: ${DALI_INSTANCE_ID:-}
     depends_on:
       frigg:
         condition: service_healthy
