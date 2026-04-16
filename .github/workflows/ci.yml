@@ -90,16 +90,18 @@ jobs:
           java-version: 21
           cache: gradle
       - name: Create FRIGG 'dali' database
-        # curl runs on the ubuntu runner (not inside the container), so auth works fine.
-        # ArcadeDB sets root password before HTTP starts, so by the time the health
-        # check passes on /api/v1/ready, credentials are already applied.
-        # We retry creation (ArcadeDB may need a moment after /api/v1/ready before
-        # accepting authenticated requests), then verify with a SELECT 1.
+        # ArcadeDB 26.x: POST /api/v1/server with {"command":"create database <name>"}
+        # (The old /api/v1/create/{db} endpoint was removed in 26.x.)
+        # curl runs on the ubuntu runner (not inside the container).
+        # Retry until the database is queryable — ArcadeDB may need a moment after
+        # /api/v1/ready before accepting server-level commands.
         run: |
           for i in $(seq 1 12); do
             CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
                    -X POST -u root:playwithdata \
-                   http://localhost:2481/api/v1/create/dali)
+                   -H 'Content-Type: application/json' \
+                   -d '{"command":"create database dali"}' \
+                   http://localhost:2481/api/v1/server)
             echo "Create attempt $i: HTTP $CODE"
             case "$CODE" in
               200|204) echo "Database created"; break ;;
