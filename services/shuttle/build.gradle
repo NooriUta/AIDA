@@ -39,6 +39,9 @@ dependencies {
     // Fault tolerance — @Timeout, @Retry, @Fallback for DaliClient
     implementation 'io.quarkus:quarkus-smallrye-fault-tolerance'
 
+    // Health checks — /q/health/live and /q/health/ready
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.quarkus:quarkus-junit5-mockito'
 }
