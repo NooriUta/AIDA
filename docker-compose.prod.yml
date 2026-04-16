@@ -27,12 +27,14 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HTTP_PORT: "8180"
       KC_HEALTH_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: "/kc"
+      KC_PROXY_HEADERS: "xforwarded"
     ports:
       - "18180:8180"
     volumes:
       - ./infra/keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /kc/health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -67,8 +69,8 @@ services:
     environment:
       NODE_ENV:               production
       PORT:                   "3000"
-      CORS_ORIGIN:            "http://localhost:15173"
-      KEYCLOAK_URL:           http://keycloak:8180
+      CORS_ORIGIN:            "https://seidrstudio.pro,https://www.seidrstudio.pro"
+      KEYCLOAK_URL:           http://keycloak:8180/kc
       KEYCLOAK_REALM:         seer
       KEYCLOAK_CLIENT_ID:     aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
