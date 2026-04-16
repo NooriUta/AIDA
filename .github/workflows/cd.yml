@@ -146,6 +146,10 @@ jobs:
             # Sync secrets from Lockbox → .env.prod
             /opt/seer-studio/infra/scripts/lockbox-sync.sh
 
+            # Remove yc credential helper for cr.yandex (conflicts with docker login)
+            jq 'del(.credHelpers["cr.yandex"])' ~/.docker/config.json \
+              > /tmp/dc.json && mv /tmp/dc.json ~/.docker/config.json
+
             # Login to YCR via VM service account IAM token (metadata service)
             IAM_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
               http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token \
