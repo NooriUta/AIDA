@@ -135,10 +135,13 @@ jobs:
 
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
+          envs:     YC_SA_KEY
           script: |
             set -e
             cd /opt/seer-studio
@@ -146,9 +149,8 @@ jobs:
             # Sync secrets from Lockbox → .env.prod
             /opt/seer-studio/infra/scripts/lockbox-sync.sh
 
-            # Login to YCR on server
-            echo '${{ secrets.YC_SA_KEY }}' | \
-              docker login cr.yandex -u json_key --password-stdin
+            # Login to YCR on server (use env var to avoid bash quoting issues)
+            printenv YC_SA_KEY | docker login cr.yandex -u json_key --password-stdin
 
             # Pull new images from YCR (faster in YC region)
             export IMAGE_TAG=${{ github.sha }}
