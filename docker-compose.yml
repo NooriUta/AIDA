@@ -44,6 +44,7 @@ services:
       ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
       QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
       HEIMDALL_URL:    http://heimdall-backend:9093
+      DALI_URL:        http://dali:9090
     ports:
       - "18080:8080"
     depends_on:

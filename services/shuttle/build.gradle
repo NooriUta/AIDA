@@ -36,6 +36,9 @@ dependencies {
     // Vert.x (RoutingContext for header injection)
     implementation 'io.quarkus:quarkus-vertx'
 
+    // Fault tolerance — @Timeout, @Retry, @Fallback for DaliClient
+    implementation 'io.quarkus:quarkus-smallrye-fault-tolerance'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.quarkus:quarkus-junit5-mockito'
 }

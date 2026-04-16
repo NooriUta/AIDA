@@ -4,6 +4,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import studio.seer.dali.service.CancelResult;
 import studio.seer.dali.service.SessionService;
 import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.ParseSessionInput;
@@ -66,6 +67,27 @@ public class SessionResource {
     @Path("/archive")
     public Response archive(@QueryParam("limit") @DefaultValue("200") int limit) {
         return Response.ok(sessionRepository.findAll(limit)).build();
+    }
+
+    /**
+     * Cancel a session.
+     *
+     * <pre>
+     * 202 Accepted  — cancellation requested (status = CANCELLING)
+     * 404 Not Found — session not found
+     * 409 Conflict  — session already in terminal state
+     * </pre>
+     */
+    @POST
+    @Path("/{id}/cancel")
+    @Consumes(MediaType.WILDCARD)   // no request body — accept any (or missing) Content-Type
+    public Response cancel(@PathParam("id") String id) {
+        CancelResult result = sessionService.cancelSession(id);
+        return switch (result.status()) {
+            case "NOT_FOUND"    -> Response.status(Response.Status.NOT_FOUND).entity(result).build();
+            case "ALREADY_DONE" -> Response.status(Response.Status.CONFLICT).entity(result).build();
+            default             -> Response.accepted(result).build();
+        };
     }
 
     @GET
