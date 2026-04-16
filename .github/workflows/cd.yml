@@ -109,7 +109,7 @@ jobs:
     name: Deploy to production
     needs: mirror-to-ycr
     runs-on: ubuntu-latest
-    environment: production
+    # NOTE: no 'environment: production' — requires paid GitHub plan for private repos
     steps:
       - uses: actions/checkout@v4
 
@@ -137,6 +137,21 @@ jobs:
           source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/,infra/nginx/
           target:   /opt/seer-studio/
 
+      - name: Write compose .env on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_KEY }}
+          script: |
+            # .env is auto-loaded by Docker Compose for ${VAR} interpolation in compose files
+            # (different from .env.prod which is loaded into container environments)
+            cat > /opt/seer-studio/.env << 'ENVEOF'
+            DOMAIN=${{ secrets.DOMAIN }}
+            YC_REGISTRY_ID=${{ secrets.YC_REGISTRY_ID }}
+            IMAGE_TAG=${{ github.sha }}
+            ENVEOF
+
       - name: Install nginx config on VM
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -147,15 +162,13 @@ jobs:
             set -e
             DOMAIN=${{ secrets.DOMAIN }}
             CONF=/opt/seer-studio/infra/nginx/nginx.conf
-            # Substitute ${DOMAIN} placeholder and install to nginx sites
             sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
-            # Only validate + reload if TLS cert exists (skip until certbot is run)
             if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
               sudo nginx -t && sudo systemctl reload nginx
             else
-              echo "TLS cert not found for ${DOMAIN} — skipping nginx reload (run certbot first)"
+              echo "TLS cert not found for ${DOMAIN} — skipping nginx reload"
             fi
 
       - name: Deploy
@@ -168,12 +181,16 @@ jobs:
             set -e
             cd /opt/seer-studio
 
-            # Sync secrets from Lockbox → .env.prod
-            /opt/seer-studio/infra/scripts/lockbox-sync.sh
+            # Sync secrets from Lockbox → .env.prod (if Lockbox is configured)
+            if [ -f infra/scripts/lockbox-sync.sh ]; then
+              infra/scripts/lockbox-sync.sh || echo "Lockbox sync skipped (not configured)"
+            fi
 
             # Remove yc credential helper for cr.yandex (conflicts with docker login)
-            jq 'del(.credHelpers["cr.yandex"])' ~/.docker/config.json \
-              > /tmp/dc.json && mv /tmp/dc.json ~/.docker/config.json
+            if [ -f ~/.docker/config.json ]; then
+              jq 'del(.credHelpers["cr.yandex"])' ~/.docker/config.json \
+                > /tmp/dc.json && mv /tmp/dc.json ~/.docker/config.json
+            fi
 
             # Login to YCR via VM service account IAM token (metadata service)
             IAM_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
@@ -181,30 +198,19 @@ jobs:
               | jq -r .access_token)
             echo "$IAM_TOKEN" | docker login cr.yandex -u iam --password-stdin
 
-            # Pull new images from YCR (faster in YC region)
+            # Load compose env vars
             export IMAGE_TAG=${{ github.sha }}
-            export REPO=cr.yandex/${{ secrets.YC_REGISTRY_ID }}
             export YC_REGISTRY_ID=${{ secrets.YC_REGISTRY_ID }}
             export DOMAIN=${{ secrets.DOMAIN }}
+            export REPO=cr.yandex/${YC_REGISTRY_ID}
 
-            docker pull ${REPO}/verdandi:${IMAGE_TAG}
-            docker pull ${REPO}/chur:${IMAGE_TAG}
-            docker pull ${REPO}/shuttle:${IMAGE_TAG}
-            docker pull ${REPO}/dali:${IMAGE_TAG}
-            docker pull ${REPO}/heimdall-backend:${IMAGE_TAG}
-            docker pull ${REPO}/heimdall-frontend:${IMAGE_TAG}
-            docker pull ${REPO}/shell:${IMAGE_TAG}
+            # Pull new images from YCR
+            for svc in verdandi chur shuttle dali heimdall-backend heimdall-frontend shell; do
+              docker pull ${REPO}/${svc}:${IMAGE_TAG}
+              docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
+            done
 
-            # Tag as latest locally
-            docker tag ${REPO}/verdandi:${IMAGE_TAG}          ${REPO}/verdandi:latest
-            docker tag ${REPO}/chur:${IMAGE_TAG}              ${REPO}/chur:latest
-            docker tag ${REPO}/shuttle:${IMAGE_TAG}           ${REPO}/shuttle:latest
-            docker tag ${REPO}/dali:${IMAGE_TAG}              ${REPO}/dali:latest
-            docker tag ${REPO}/heimdall-backend:${IMAGE_TAG}  ${REPO}/heimdall-backend:latest
-            docker tag ${REPO}/heimdall-frontend:${IMAGE_TAG} ${REPO}/heimdall-frontend:latest
-            docker tag ${REPO}/shell:${IMAGE_TAG}             ${REPO}/shell:latest
-
-            # Ensure external volumes exist (idempotent)
+            # Ensure external volumes exist
             docker volume create hound_databases || true
 
             # Restart stack
@@ -212,25 +218,23 @@ jobs:
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
               up -d --remove-orphans || {
-                echo "=== docker compose up failed, dumping logs ==="
+                echo "=== docker compose up failed ==="
                 docker ps -a
                 docker logs seer-studio-chur-1    --tail 60 2>&1 || true
-                docker logs seer-studio-shuttle-1 --tail 40 2>&1 || true
-                docker logs Ygg-1                 --tail 20 2>&1 || true
+                docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
                 exit 1
               }
 
-            # Health checks with retry loop (K-8: replaces sleep 15)
+            # Health checks
             echo "Waiting for services..."
             for svc in \
               "http://localhost:13000/health:Chur" \
               "http://localhost:18080/q/health:SHUTTLE" \
-              "http://localhost:15173/:verdandi"; do
-              url="${svc%%:*}"
-              name="${svc##*:}"
-              for i in $(seq 1 10); do
+              "http://localhost:15173/:Verdandi"; do
+              url="${svc%%:*}"; name="${svc##*:}"
+              for i in $(seq 1 12); do
                 curl -sf "${url}" && break
-                echo "  [${name}] retry ${i}/10..." ; sleep 5
+                echo "  [${name}] retry ${i}/12..."; sleep 5
               done || { echo "${name} health check FAILED"; exit 1; }
               echo "  [${name}] OK"
             done
