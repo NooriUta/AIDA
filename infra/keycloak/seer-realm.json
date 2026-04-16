@@ -63,12 +63,16 @@
       "redirectUris": [
         "http://localhost:3000/*",
         "https://seidrstudio.pro/*",
-        "https://www.seidrstudio.pro/*"
+        "https://www.seidrstudio.pro/*",
+        "https://seer.seidrstudio.pro/*",
+        "https://heimdall.seidrstudio.pro/*"
       ],
       "webOrigins": [
         "http://localhost:3000",
         "https://seidrstudio.pro",
-        "https://www.seidrstudio.pro"
+        "https://www.seidrstudio.pro",
+        "https://seer.seidrstudio.pro",
+        "https://heimdall.seidrstudio.pro"
       ],
       "protocol": "openid-connect",
       "defaultClientScopes": [
