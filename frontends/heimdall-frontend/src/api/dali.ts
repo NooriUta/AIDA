@@ -57,6 +57,8 @@ export interface DaliSession {
   errors: string[];
   fileResults: FileResult[];
   friggPersisted: boolean;
+  /** Dali instance tag — null/undefined for untagged (single-instance) sessions. */
+  instanceId: string | null;
 }
 
 export interface DaliHealth {

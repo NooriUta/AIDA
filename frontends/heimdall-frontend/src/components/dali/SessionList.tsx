@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { type DaliSession, type FileResult } from '../../api/dali';
 import { useDaliSession } from '../../hooks/useDaliSession';
+import { UI } from '../../i18n';
 import css from './dali.module.css';
 
 const TERMINAL = new Set<string>(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -13,7 +14,29 @@ const DIALECT_LABEL: Record<string, string> = {
 
 function fmtDuration(ms: number | null | undefined): string {
   if (ms == null) return '—';
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  return `${m}m ${s}s`;
+}
+
+function fmtDatetime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString(undefined, {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+}
+
+function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 function truncSource(path: string | null, max = 40): string {
@@ -459,21 +482,21 @@ function DetailRow({ session }: { session: DaliSession }) {
           {/* Aggregate stats strip */}
           <div className={css.detailGrid}>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Atoms</div>
+              <div className={css.dstatLabel}>{UI.dali.sessions.statAtoms}</div>
               <div className={css.dstatVal} style={{ color: 'var(--acc)' }}>
                 {(displayAtoms ?? 0).toLocaleString()}
               </div>
               <div className={css.dstatSub}>{isFailed && partialAtoms != null ? 'partial' : 'in YGG'}</div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Vertices</div>
+              <div className={css.dstatLabel}>{UI.dali.sessions.statVertices}</div>
               <div className={css.dstatVal} style={{ color: 'var(--t2)' }}>
                 {(displayVertices ?? 0).toLocaleString()}
               </div>
               <div className={css.dstatSub}>{isFailed && partialVertices != null ? 'partial' : 'inserted'}</div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Edges</div>
+              <div className={css.dstatLabel}>{UI.dali.sessions.statEdges}</div>
               <div className={css.dstatVal} style={{ color: 'var(--t2)' }}>
                 {displayEdges.toLocaleString()}
               </div>
@@ -484,7 +507,7 @@ function DetailRow({ session }: { session: DaliSession }) {
               </div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Resolution</div>
+              <div className={css.dstatLabel}>{UI.dali.sessions.statResolution}</div>
               <div className={css.dstatVal} style={{ color: rateColor(session.resolutionRate) }}>
                 {session.resolutionRate != null
                   ? `${(session.resolutionRate * 100).toFixed(1)}%`
@@ -493,16 +516,48 @@ function DetailRow({ session }: { session: DaliSession }) {
               <div className={css.dstatSub}>column-level</div>
             </div>
             <div className={css.dstat}>
-              <div className={css.dstatLabel}>Progress</div>
+              <div className={css.dstatLabel}>{UI.dali.sessions.statDuration}</div>
               <div className={css.dstatVal} style={{ color: isFailed ? 'var(--danger)' : 'var(--t2)' }}>
-                {session.batch && session.total > 0
+                {session.batch && session.total > 0 && session.durationMs == null
                   ? `${session.progress}/${session.total}`
                   : fmtDuration(session.durationMs)}
               </div>
               <div className={css.dstatSub}>
-                {session.batch && session.total > 0 ? 'files done' : 'wall time'}
+                {session.batch && session.total > 0 && session.durationMs == null ? 'files done' : 'wall time'}
               </div>
             </div>
+          </div>
+
+          {/* Timing row — start / finish timestamps */}
+          <div style={{
+            display: 'flex', gap: 24, marginTop: 10, marginBottom: 2,
+            fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t3)',
+            borderTop: '1px solid var(--bd)', paddingTop: 8,
+          }}>
+            <div>
+              <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 6 }}>{UI.dali.sessions.timingStarted}</span>
+              <span title={session.startedAt} style={{ color: 'var(--t2)' }}>
+                {fmtDatetime(session.startedAt)}
+              </span>
+            </div>
+            {(session.status === 'COMPLETED' || session.status === 'FAILED' || session.status === 'CANCELLED') && (
+              <div>
+                <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 6 }}>
+                  {session.status === 'COMPLETED' ? UI.dali.sessions.timingFinished
+                    : session.status === 'FAILED' ? UI.dali.sessions.timingFailed
+                    : UI.dali.sessions.timingCancelled}
+                </span>
+                <span title={session.updatedAt} style={{ color: session.status === 'COMPLETED' ? 'var(--suc)' : session.status === 'FAILED' ? 'var(--danger)' : 'var(--t3)' }}>
+                  {fmtDatetime(session.updatedAt)}
+                </span>
+              </div>
+            )}
+            {session.durationMs != null && session.durationMs >= 60_000 && (
+              <div>
+                <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 6 }}>{UI.dali.sessions.timingTotal}</span>
+                <span style={{ color: 'var(--t2)' }}>{fmtDuration(session.durationMs)}</span>
+              </div>
+            )}
           </div>
 
           {/* Per-type vertex breakdown */}
@@ -692,6 +747,21 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
             >
               {s.friggPersisted ? 'F✓' : 'F?'}
             </span>
+            {s.instanceId && (
+              <span
+                title={UI.dali.sessions.instanceTitle(s.instanceId!)}
+                style={{
+                  fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
+                  padding: '1px 5px', borderRadius: 3,
+                  background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
+                  color: 'var(--acc)',
+                  border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
+                  lineHeight: '1.2', whiteSpace: 'nowrap',
+                }}
+              >
+                {s.instanceId}
+              </span>
+            )}
           </div>
         </td>
         <td><StatusBadge status={s.status} /></td>
@@ -706,9 +776,15 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
           <RowMetrics session={s} />
         </td>
         <td>
-          <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 11 }}>
-            {s.status === 'COMPLETED' ? fmtDuration(s.durationMs) : '—'}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 11 }}>
+              {fmtDuration(s.durationMs)}
+            </span>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 9, opacity: 0.7 }}
+                  title={s.startedAt}>
+              {fmtDateShort(s.startedAt)}
+            </span>
+          </div>
         </td>
         <td style={{ textAlign: 'center' }}>
           <svg
@@ -748,10 +824,10 @@ export function SessionList({ sessions, onSessionUpdate }: SessionListProps) {
             <line x1="3" y1="9" x2="21" y2="9"/>
             <line x1="9" y1="21" x2="9" y2="9"/>
           </svg>
-          Sessions
+          {UI.dali.sessions.panelTitle}
         </span>
         <span style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
-          {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+          {UI.dali.sessions.sessionCount(sessions.length)}
         </span>
       </div>
 
@@ -762,22 +838,23 @@ export function SessionList({ sessions, onSessionUpdate }: SessionListProps) {
             <line x1="3" y1="9" x2="21" y2="9"/>
             <line x1="9" y1="21" x2="9" y2="9"/>
           </svg>
-          <div className={css.emptyTitle}>No sessions yet</div>
+          <div className={css.emptyTitle}>{UI.dali.sessions.emptyTitle}</div>
           <div className={css.emptySub}>
-            Start a parse session using the form above<br/>
-            or press Enter after filling the source path
+            {UI.dali.sessions.emptySub.split('\n').map((line, i) => (
+              <span key={i}>{line}{i === 0 ? <br/> : null}</span>
+            ))}
           </div>
         </div>
       ) : (
         <table className={css.sessionTable}>
           <thead>
             <tr>
-              <th style={{ width: 90  }}>Session ID</th>
-              <th style={{ width: 120 }}>Status</th>
-              <th style={{ width: 100 }}>Dialect</th>
-              <th>Source</th>
-              <th style={{ width: 130 }}>Progress</th>
-              <th style={{ width: 72  }}>Duration</th>
+              <th style={{ width: 90  }}>{UI.dali.sessions.colSessionId}</th>
+              <th style={{ width: 120 }}>{UI.dali.sessions.colStatus}</th>
+              <th style={{ width: 100 }}>{UI.dali.sessions.colDialect}</th>
+              <th>{UI.dali.sessions.colSource}</th>
+              <th style={{ width: 130 }}>{UI.dali.sessions.colProgress}</th>
+              <th style={{ width: 72  }}>{UI.dali.sessions.colDuration}</th>
               <th style={{ width: 36  }}></th>
             </tr>
           </thead>

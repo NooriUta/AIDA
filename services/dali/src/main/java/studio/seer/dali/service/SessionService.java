@@ -7,6 +7,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jobrunr.scheduling.JobScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,22 +45,44 @@ public class SessionService {
     @Inject HeimdallEmitter          emitter;
     @Inject FriggSchemaInitializer   schemaInitializer;   // BUG-SS-012: guard enqueue()
 
+    /**
+     * Dali instance identifier — set via {@code dali.instance.id} / {@code DALI_INSTANCE_ID} env.
+     * Absent / empty = "untagged" / single-instance mode (backward-compat).
+     * Present non-empty = used to isolate sessions when multiple Dali instances share one FRIGG.
+     */
+    @ConfigProperty(name = "dali.instance.id")
+    Optional<String> instanceId;
+
     private final ConcurrentMap<String, Session> sessions    = new ConcurrentHashMap<>();
     /** Maps sessionId → JobRunr job UUID for cancel support. Not persisted — rebuilt on restart. */
     private final ConcurrentMap<String, UUID>    jobRunrIdMap = new ConcurrentHashMap<>();
 
     private volatile boolean friggHealthy = false;
 
+    /** Effective instance tag: null when absent or blank (untagged/backward-compat). */
+    private String myInstanceId() {
+        return instanceId.filter(s -> !s.isBlank()).map(String::trim).orElse(null);
+    }
+
     /**
      * Loads persisted sessions from FRIGG into the in-memory cache on startup.
      * Guaranteed to run after {@link FriggSchemaInitializer} ({@code @Priority(10)}) and
      * {@code JobRunrLifecycle} ({@code @Priority(15)}) due to {@code @Priority(20)} on this bean.
+     *
+     * <p>Instance isolation: if {@code dali.instance.id} is set, only sessions whose
+     * {@code instanceId} matches (or is null for backward-compat untagged sessions) are loaded.
      */
     void onStart(@Observes StartupEvent ev) {
         try {
             List<Session> persisted = repository.findAll(500);
-            int loaded = 0, reset = 0;
+            String myId = myInstanceId();
+            int loaded = 0, reset = 0, skipped = 0;
             for (Session s : persisted) {
+                // Instance isolation: skip sessions belonging to other instances
+                if (myId != null && s.instanceId() != null && !myId.equals(s.instanceId())) {
+                    skipped++;
+                    continue;
+                }
                 // JobRunr jobs survived the restart (ArcadeDB-backed), but sessions in
                 // QUEUED or RUNNING state may have been interrupted mid-execution.
                 // Mark them FAILED so they don't get stuck forever.
@@ -67,7 +90,7 @@ public class SessionService {
                     Session failed = new Session(
                             s.id(), SessionStatus.FAILED,
                             s.progress(), s.total(), s.batch(),
-                            s.clearBeforeWrite(),    // preserve from loaded session
+                            s.clearBeforeWrite(),
                             s.dialect(), s.source(), s.startedAt(), Instant.now(),
                             s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                             s.vertexStats(),
@@ -75,7 +98,7 @@ public class SessionService {
                             s.warnings(),
                             List.of("Server restarted — session was QUEUED/RUNNING and could not be recovered"),
                             s.fileResults(),
-                            false); // will be set true after persist()
+                            false, s.instanceId());
                     sessions.put(failed.id(), failed);
                     persist(failed);
                     reset++;
@@ -87,14 +110,14 @@ public class SessionService {
                             s.startedAt(), s.updatedAt(),
                             s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                             s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                            s.warnings(), s.errors(), s.fileResults(), true);
+                            s.warnings(), s.errors(), s.fileResults(), true, s.instanceId());
                     sessions.put(withFrigg.id(), withFrigg);
                     loaded++;
                 }
             }
             friggHealthy = true;
-            log.info("SessionService: loaded {} session(s) from FRIGG, reset {} stale QUEUED/RUNNING → FAILED",
-                    loaded, reset);
+            log.info("SessionService: loaded {} session(s) from FRIGG, reset {} stale QUEUED/RUNNING → FAILED, skipped {} (other instances)",
+                    loaded, reset, skipped);
         } catch (Exception e) {
             friggHealthy = false;
             log.warn("SessionService: could not load sessions from FRIGG (FRIGG may be unavailable): {}",
@@ -144,7 +167,7 @@ public class SessionService {
                 input.dialect(), input.source(),
                 now, now,
                 null, null, null, null, List.of(), null, null,
-                List.of(), List.of(), List.of(), false);
+                List.of(), List.of(), List.of(), false, myInstanceId());
         sessions.put(sessionId, session);
         persist(session);
         emitter.jobEnqueued(sessionId, input.source(), input.dialect());
@@ -159,7 +182,7 @@ public class SessionService {
             throw new IllegalStateException(
                 "Job scheduling unavailable (JobRunr did not initialise — check startup logs): " + e.getMessage(), e);
         }
-        log.info("Session enqueued: id={} dialect={} source={}", sessionId, input.dialect(), input.source());
+        log.info("Session enqueued: id={} dialect={} source={} instance={}", sessionId, input.dialect(), input.source(), myInstanceId());
         return session;
     }
 
@@ -173,10 +196,10 @@ public class SessionService {
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
                 s.id(), SessionStatus.RUNNING,
                 0, total, batch,
-                s.clearBeforeWrite(),   // preserve
+                s.clearBeforeWrite(),
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
                 null, null, null, null, List.of(), null, null,
-                List.of(), List.of(), List.of(), false));
+                List.of(), List.of(), List.of(), false, s.instanceId()));
         if (updated != null) persist(updated);
         log.debug("Session started: id={} batch={} total={}", id, batch, total);
     }
@@ -189,12 +212,12 @@ public class SessionService {
             return new Session(
                     s.id(), s.status(),
                     s.progress() + 1, s.total(), s.batch(),
-                    s.clearBeforeWrite(),   // preserve
+                    s.clearBeforeWrite(),
                     s.dialect(), s.source(), s.startedAt(), Instant.now(),
                     s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                     s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), s.errors(), List.copyOf(list), false);
+                    s.warnings(), s.errors(), List.copyOf(list), false, s.instanceId());
         });
         if (updated != null) persist(updated);
     }
@@ -203,12 +226,12 @@ public class SessionService {
     public void updateStatus(String id, SessionStatus status) {
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
                 s.id(), status, s.progress(), s.total(), s.batch(),
-                s.clearBeforeWrite(),   // preserve
+                s.clearBeforeWrite(),
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
                 s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                 s.vertexStats(),
                 s.resolutionRate(), s.durationMs(),
-                s.warnings(), s.errors(), s.fileResults(), false));
+                s.warnings(), s.errors(), s.fileResults(), false, s.instanceId()));
         if (updated != null) persist(updated);
         log.debug("Session status updated: id={} status={}", id, status);
     }
@@ -225,12 +248,12 @@ public class SessionService {
             }
             return new Session(
                     s.id(), SessionStatus.FAILED, s.progress(), s.total(), s.batch(),
-                    s.clearBeforeWrite(),   // preserve
+                    s.clearBeforeWrite(),
                     s.dialect(), s.source(), s.startedAt(), Instant.now(),
                     s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                     s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), List.copyOf(errors), s.fileResults(), false);
+                    s.warnings(), List.copyOf(errors), s.fileResults(), false, s.instanceId());
         });
         if (updated != null) persist(updated);
         log.debug("Session failed: id={} error={}", id, errorMessage);
@@ -244,7 +267,7 @@ public class SessionService {
                 s.total() > 0 ? s.total() : 1,
                 s.total() > 0 ? s.total() : 1,
                 s.batch(),
-                s.clearBeforeWrite(),   // preserve
+                s.clearBeforeWrite(),
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
                 result.atomCount(),
                 result.vertexCount(),
@@ -255,7 +278,7 @@ public class SessionService {
                 result.durationMs(),
                 result.warnings() != null ? result.warnings() : List.of(),
                 result.errors()   != null ? result.errors()   : List.of(),
-                fileResults, false));
+                fileResults, false, s.instanceId()));
         if (updated != null) persist(updated);
         log.info("Session completed: id={} atoms={} files={} duration={}ms",
                 id, result.atomCount(), fileResults.size(), result.durationMs());
@@ -313,7 +336,7 @@ public class SessionService {
                 s.clearBeforeWrite(), s.dialect(), s.source(), s.startedAt(), java.time.Instant.now(),
                 s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                 s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                s.warnings(), List.of("Cancelled by user"), s.fileResults(), false));
+                s.warnings(), List.of("Cancelled by user"), s.fileResults(), false, s.instanceId()));
 
         Session cancelled = sessions.get(sessionId);
         if (cancelled != null) persist(cancelled);
@@ -345,7 +368,7 @@ public class SessionService {
                         s.startedAt(), s.updatedAt(),
                         s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                         s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                        s.warnings(), s.errors(), s.fileResults(), true));
+                        s.warnings(), s.errors(), s.fileResults(), true, s.instanceId()));
             }
         } catch (Exception e) {
             friggHealthy = false;
