@@ -28,8 +28,8 @@ async function getElk(): Promise<ElkApi> {
   (self as any).Worker = undefined;
 
   // Dynamic import — Vite transforms CJS → ESM at request time.
-  // @ts-expect-error — elkjs doesn't ship proper ESM types for elk.bundled
-  const mod = await import('elkjs/lib/elk.bundled.js');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mod = await import('elkjs/lib/elk.bundled.js' as any);
   const ELK = (mod.default ?? mod) as unknown as new () => ElkApi;
   elkInstance = new ELK();
   return elkInstance;

@@ -25,8 +25,6 @@ function edge(source: string, target: string, edgeType: string): any {
   return { id: `${source}->${target}`, source, target, data: { edgeType } };
 }
 
-const EMPTY: Graph = { nodes: [], edges: [] };
-
 // ── COLUMN_EDGE_TYPES ─────────────────────────────────────────────────────────
 
 describe('COLUMN_EDGE_TYPES', () => {

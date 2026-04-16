@@ -49,9 +49,11 @@ export function hydratePersistedState(): Partial<LoomStore> {
         tableLevelView:   saved.filter?.tableLevelView   ?? false,
         showCfEdges:      saved.filter?.showCfEdges      ?? true,
         // Not persisted — will be populated from API
-        tableFilter:  null,
-        stmtFilter:   null,
-        fieldFilter:  null,
+        tableFilter:      null,
+        stmtFilter:       null,
+        fieldFilter:      null,
+        includeExternal:  false,
+        routineAggregate: true,
       },
     };
   } catch {

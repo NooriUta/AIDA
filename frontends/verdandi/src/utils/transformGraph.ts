@@ -14,7 +14,7 @@ export { transformGqlOverview } from './transformOverview';
 
 // ─── Legacy: ApiGraphResponse → RF nodes (unused, kept for reference) ────────
 import type { ApiGraphResponse } from '../types/api';
-import type { DaliNodeType, DaliEdgeType } from '../types/domain';
+import type { DaliEdgeType } from '../types/domain';
 import type { LoomNode, LoomEdge } from '../types/graph';
 import { NODE_TYPE_MAP, ANIMATED_EDGES, getEdgeStyle } from './transformHelpers';
 
@@ -35,7 +35,7 @@ export function transformGraph(response: ApiGraphResponse): {
     target: e.target,
     animated: ANIMATED_EDGES.has(e.type),
     style: getEdgeStyle(e.type),
-    data: { edgeType: e.type },
+    data: { edgeType: e.type as DaliEdgeType },
   }));
 
   return { nodes, edges };

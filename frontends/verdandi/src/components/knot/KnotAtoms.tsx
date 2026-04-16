@@ -80,7 +80,6 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
 
     // Status filter
     if (statusFilter !== 'all') {
-      const statusLower = statusFilter.toLowerCase();
       result = result.filter(a => {
         const s = (a.status || '').toLowerCase();
         if (statusFilter === 'resolved')      return s === 'обработано' || s === 'resolved';

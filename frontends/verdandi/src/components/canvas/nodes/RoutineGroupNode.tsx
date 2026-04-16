@@ -45,7 +45,7 @@ export const RoutineGroupNode = memo(({ data, selected, id }: NodeProps<RoutineG
         <Workflow size={12} color="var(--suc)" strokeWidth={1.5} />
 
         {/* Package prefix (when routine comes from a package) */}
-        {data.metadata?.packageName && (
+        {!!data.metadata?.packageName && (
           <span style={{
             fontSize:     9,
             color:        'var(--t3)',

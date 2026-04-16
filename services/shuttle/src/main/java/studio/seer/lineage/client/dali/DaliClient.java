@@ -2,7 +2,6 @@ package studio.seer.lineage.client.dali;
 
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
-import org.eclipse.microprofile.faulttolerance.Fallback;
 import org.eclipse.microprofile.faulttolerance.Retry;
 import org.eclipse.microprofile.faulttolerance.Timeout;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
@@ -16,8 +15,10 @@ import java.util.List;
  * MicroProfile REST client for Dali's {@code /api} endpoints.
  *
  * <p>Configured via {@code quarkus.rest-client.dali-client.url} (default: http://localhost:9090).
- * All mutating methods have a {@link DaliClientFallback} so SHUTTLE degrades gracefully
- * when Dali is unreachable — mutations return an UNAVAILABLE stub instead of a 500.
+ * Fault tolerance: {@code @Timeout} and {@code @Retry} on methods; fallback handling is done
+ * reactively in {@link studio.seer.lineage.resource.MutationResource} via Mutiny
+ * {@code .onFailure().recoverWithItem()} — avoids SmallRye type-mismatch deployment exceptions
+ * that occur when {@code FallbackHandler<Object>} is used on typed return methods.
  */
 @RegisterRestClient(configKey = "dali-client")
 @Path("/api")
@@ -34,7 +35,6 @@ public interface DaliClient {
     @Timeout(value = 5, unit = ChronoUnit.SECONDS)
     @Retry(maxRetries = 2, delay = 500, delayUnit = ChronoUnit.MILLIS,
            retryOn = ProcessingException.class)
-    @Fallback(DaliClientFallback.class)
     SessionInfo createSession(DaliParseSessionInput input);
 
     /**
@@ -46,7 +46,6 @@ public interface DaliClient {
     @Timeout(value = 3, unit = ChronoUnit.SECONDS)
     @Retry(maxRetries = 3, delay = 200, delayUnit = ChronoUnit.MILLIS,
            retryOn = ProcessingException.class)
-    @Fallback(DaliClientFallback.class)
     SessionInfo getSession(@PathParam("id") String id);
 
     /**
@@ -57,7 +56,6 @@ public interface DaliClient {
     @Path("/sessions/{id}/cancel")
     @Timeout(value = 5, unit = ChronoUnit.SECONDS)
     @Retry(maxRetries = 1)
-    @Fallback(DaliClientFallback.class)
     CancelResponse cancelSession(@PathParam("id") String id);
 
     /**
@@ -66,7 +64,6 @@ public interface DaliClient {
     @GET
     @Path("/sessions")
     @Timeout(value = 3, unit = ChronoUnit.SECONDS)
-    @Fallback(DaliClientFallback.class)
     List<SessionInfo> listSessions(@QueryParam("limit") @DefaultValue("50") int limit);
 
     /**
@@ -75,7 +72,6 @@ public interface DaliClient {
     @GET
     @Path("/ygg/stats")
     @Timeout(value = 3, unit = ChronoUnit.SECONDS)
-    @Fallback(DaliClientFallback.class)
     DaliStats getStats();
 
     /**
@@ -84,6 +80,5 @@ public interface DaliClient {
     @GET
     @Path("/sessions/health")
     @Timeout(value = 2, unit = ChronoUnit.SECONDS)
-    @Fallback(DaliClientFallback.class)
     DaliHealth getHealth();
 }

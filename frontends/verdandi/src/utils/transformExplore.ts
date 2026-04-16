@@ -388,7 +388,6 @@ function hoistSubqueryReads(result: ExploreResult): {
       source:   e.target,
       target:   rootId,
       type:     'default',
-      pathOptions: { curvature: EDGE_CURVATURE },
       animated: false,
       style:    getEdgeStyle('READS_FROM'),
       data:     { edgeType: 'READS_FROM' as DaliEdgeType },

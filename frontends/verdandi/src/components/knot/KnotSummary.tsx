@@ -14,7 +14,7 @@ export const KnotSummary = memo(({ session: s, tables, statements }: Props) => {
   // Derive counts from actual data since backend session fields may be 0
   const derived = useMemo(() => {
     const tableCount = s.tableCount || tables.length;
-    const columnCount = s.columnCount || tables.reduce((sum, tb) => sum + (tb.columns?.length || 0), 0);
+    const columnCount = s.columnCount || tables.reduce((sum, tb) => sum + (tb.columnCount || 0), 0);
     const schemas = new Set(tables.map(tb => tb.schema).filter(Boolean));
     const schemaCount = s.schemaCount || schemas.size;
     const packages = new Set<string>();
