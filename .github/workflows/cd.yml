@@ -37,6 +37,7 @@ jobs:
           - service: heimdall-frontend
             context: .
             dockerfile: ./frontends/heimdall-frontend/Dockerfile
+            build_args: VITE_HEIMDALL_API=/heimdall
           - service: shell
             context: .
             dockerfile: ./frontends/shell/Dockerfile
@@ -59,6 +60,7 @@ jobs:
           context: ${{ matrix.context }}
           file:    ${{ matrix.dockerfile }}
           push: true
+          build-args: ${{ matrix.build_args }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,scope=${{ matrix.service }},mode=max
           tags: |
