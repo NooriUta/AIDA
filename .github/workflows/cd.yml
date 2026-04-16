@@ -159,6 +159,8 @@ jobs:
             # Pull new images from YCR (faster in YC region)
             export IMAGE_TAG=${{ github.sha }}
             export REPO=cr.yandex/${{ secrets.YC_REGISTRY_ID }}
+            export YC_REGISTRY_ID=${{ secrets.YC_REGISTRY_ID }}
+            export DOMAIN=${{ secrets.DOMAIN }}
 
             docker pull ${REPO}/verdandi:${IMAGE_TAG}
             docker pull ${REPO}/chur:${IMAGE_TAG}
