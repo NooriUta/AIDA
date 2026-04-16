@@ -100,7 +100,7 @@ services:
     image: cr.yandex/${YC_REGISTRY_ID}/dali:${IMAGE_TAG:-latest}
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
-      CORS_ORIGINS: "https://${DOMAIN:-seidrstudio.pro},https://seer.${DOMAIN:-seidrstudio.pro}"
+      CORS_ORIGINS: "https://${DOMAIN:-seidrstudio.pro},https://seer.${DOMAIN:-seidrstudio.pro},https://heimdall.${DOMAIN:-seidrstudio.pro}"
     <<: *env_file
     deploy:
       resources:
