@@ -41,7 +41,7 @@ import java.util.stream.Stream;
 public class FileUploadResource {
 
     static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            ".sql", ".pck", ".prc", ".pkb", ".pks", ".fnc", ".trg", ".vw", ".zip"
+            ".sql", ".pck", ".prc", ".pkb", ".pks", ".fnc", ".trg", ".vw", ".zip", ".rar"
     );
 
     @Inject SessionService sessionService;
@@ -63,11 +63,12 @@ public class FileUploadResource {
 
         String originalName = file.fileName().toLowerCase();
         boolean isZip = originalName.endsWith(".zip");
+        boolean isRar = originalName.endsWith(".rar");
         boolean isSql = ALLOWED_EXTENSIONS.stream()
-                .filter(e -> !e.equals(".zip"))
+                .filter(e -> !e.equals(".zip") && !e.equals(".rar"))
                 .anyMatch(originalName::endsWith);
 
-        if (!isZip && !isSql) {
+        if (!isZip && !isRar && !isSql) {
             return bad("unsupported file type: " + file.fileName()
                     + " — accepted: " + ALLOWED_EXTENSIONS);
         }
@@ -80,6 +81,8 @@ public class FileUploadResource {
 
             if (isZip) {
                 UploadExtractor.extractZip(file.uploadedFile(), tempDir);
+            } else if (isRar) {
+                UploadExtractor.extractRar(file.uploadedFile(), tempDir);
             } else {
                 String safeName = Path.of(file.fileName()).getFileName().toString();
                 Files.copy(file.uploadedFile(), tempDir.resolve(safeName));

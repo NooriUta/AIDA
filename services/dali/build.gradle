@@ -42,6 +42,10 @@ dependencies {
     // Validation annotations — required by HeimdallEvent (dali-models uses compileOnly)
     compileOnly 'jakarta.validation:jakarta.validation-api:3.0.2'
 
+    // Archive extraction — ZIP (JDK built-in) + RAR4/RAR5
+    implementation 'org.apache.commons:commons-compress:1.27.1'
+    implementation 'com.github.junrar:junrar:7.5.5'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
 }

@@ -1,5 +1,7 @@
 package studio.seer.dali.rest;
 
+import com.github.junrar.Archive;
+import com.github.junrar.rarfile.FileHeader;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 
@@ -12,12 +14,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Utility for extracting uploaded ZIP archives into a target directory.
+ * Utility for extracting uploaded ZIP and RAR archives into a target directory.
  *
- * <p>Safeguards:
+ * <p>Safeguards (applied to both formats):
  * <ul>
  *   <li>Path traversal — rejects entries with {@code ..} or absolute paths</li>
- *   <li>ZIP bomb — rejects archives exceeding {@link #MAX_FILES} entries or
+ *   <li>Bomb protection — rejects archives exceeding {@link #MAX_FILES} entries or
  *       {@link #MAX_UNCOMPRESSED_BYTES} total uncompressed size</li>
  *   <li>Extension whitelist — silently skips non-SQL files inside the archive</li>
  * </ul>
@@ -33,14 +35,13 @@ class UploadExtractor {
 
     private UploadExtractor() {}
 
+    // ── ZIP ────────────────────────────────────────────────────────────────────
+
     /**
      * Extracts all SQL files from {@code zipFile} into {@code targetDir}.
      *
-     * @param zipFile   path to the uploaded ZIP (Quarkus temp file)
-     * @param targetDir pre-created destination directory
      * @throws WebApplicationException 400 for path traversal / too many files / no SQL files found
      * @throws WebApplicationException 413 for uncompressed size exceeding the limit
-     * @throws IOException             on I/O failure during extraction
      */
     static void extractZip(Path zipFile, Path targetDir) throws IOException {
         int  fileCount  = 0;
@@ -49,38 +50,27 @@ class UploadExtractor {
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    zis.closeEntry();
-                    continue;
-                }
+                if (entry.isDirectory()) { zis.closeEntry(); continue; }
 
                 String name = entry.getName();
                 guardPathTraversal(name);
 
-                // Only extract SQL-family files
                 String lower = name.toLowerCase();
-                boolean sqlFile = SQL_EXTENSIONS.stream().anyMatch(lower::endsWith);
-                if (!sqlFile) {
+                if (SQL_EXTENSIONS.stream().noneMatch(lower::endsWith)) {
                     zis.closeEntry();
                     continue;
                 }
 
-                if (++fileCount > MAX_FILES) {
-                    throw bad("ZIP exceeds maximum of " + MAX_FILES + " SQL files");
-                }
+                if (++fileCount > MAX_FILES) throw bad("ZIP exceeds maximum of " + MAX_FILES + " SQL files");
 
-                // Use only the filename (no subdirectory structure in target)
-                String safeName = Path.of(name).getFileName().toString();
-                Path target = uniquePath(targetDir, safeName, fileCount);
-
+                Path target = uniquePath(targetDir, Path.of(name).getFileName().toString(), fileCount);
                 byte[] buf = new byte[8192];
                 int read;
                 try (OutputStream out = Files.newOutputStream(target)) {
                     while ((read = zis.read(buf)) != -1) {
                         totalBytes += read;
-                        if (totalBytes > MAX_UNCOMPRESSED_BYTES) {
+                        if (totalBytes > MAX_UNCOMPRESSED_BYTES)
                             throw entity(413, "ZIP uncompressed size exceeds 500 MB limit");
-                        }
                         out.write(buf, 0, read);
                     }
                 }
@@ -88,20 +78,66 @@ class UploadExtractor {
             }
         }
 
-        if (fileCount == 0) {
-            throw bad("ZIP contains no SQL files (accepted extensions: " + SQL_EXTENSIONS + ")");
+        if (fileCount == 0) throw bad("ZIP contains no SQL files (accepted: " + SQL_EXTENSIONS + ")");
+    }
+
+    // ── RAR ────────────────────────────────────────────────────────────────────
+
+    /**
+     * Extracts all SQL files from {@code rarFile} into {@code targetDir}.
+     * Supports RAR4 (via junrar) and RAR5 (via commons-compress).
+     *
+     * @throws WebApplicationException 400 for path traversal / too many files / no SQL files found
+     * @throws WebApplicationException 413 for uncompressed size exceeding the limit
+     */
+    static void extractRar(Path rarFile, Path targetDir) throws IOException {
+        int  fileCount  = 0;
+        long totalBytes = 0;
+
+        try (Archive archive = new Archive(rarFile.toFile())) {
+            FileHeader header;
+            while ((header = archive.nextFileHeader()) != null) {
+                if (header.isDirectory()) continue;
+
+                String name = header.getFileName().replace('\\', '/');
+                guardPathTraversal(name);
+
+                String lower = name.toLowerCase();
+                if (SQL_EXTENSIONS.stream().noneMatch(lower::endsWith)) continue;
+
+                if (++fileCount > MAX_FILES) throw bad("RAR exceeds maximum of " + MAX_FILES + " SQL files");
+
+                Path target = uniquePath(targetDir, Path.of(name).getFileName().toString(), fileCount);
+                byte[] buf = new byte[8192];
+                int read;
+                try (OutputStream out = Files.newOutputStream(target)) {
+                    try (var in = archive.getInputStream(header)) {
+                        while ((read = in.read(buf)) != -1) {
+                            totalBytes += read;
+                            if (totalBytes > MAX_UNCOMPRESSED_BYTES)
+                                throw entity(413, "RAR uncompressed size exceeds 500 MB limit");
+                            out.write(buf, 0, read);
+                        }
+                    }
+                }
+            }
+        } catch (WebApplicationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Failed to read RAR archive: " + e.getMessage(), e);
         }
+
+        if (fileCount == 0) throw bad("RAR contains no SQL files (accepted: " + SQL_EXTENSIONS + ")");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private static void guardPathTraversal(String name) {
         if (name.contains("..") || name.startsWith("/") || name.startsWith("\\")) {
-            throw bad("ZIP entry contains illegal path: " + name);
+            throw bad("Archive entry contains illegal path: " + name);
         }
     }
 
-    /** Returns {@code dir/name}, appending {@code _N} before the extension if the path already exists. */
     private static Path uniquePath(Path dir, String name, int counter) {
         Path candidate = dir.resolve(name);
         if (!Files.exists(candidate)) return candidate;

@@ -139,13 +139,13 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
                 {file ? (
                   <span className={css.uploadFileName}>{file.name}</span>
                 ) : (
-                  <span className={css.uploadPlaceholder}>Drop .zip or .sql here — or click to browse</span>
+                  <span className={css.uploadPlaceholder}>Drop .zip / .rar / .sql here — or click to browse</span>
                 )}
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".zip,.sql,.pck,.prc,.pkb,.pks,.fnc,.trg,.vw"
+                accept=".zip,.rar,.sql,.pck,.prc,.pkb,.pks,.fnc,.trg,.vw"
                 style={{ display: 'none' }}
                 onChange={e => {
                   const f = e.target.files?.[0] ?? null;
