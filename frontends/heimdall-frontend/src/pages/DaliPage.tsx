@@ -100,6 +100,13 @@ export default function DaliPage() {
     return () => { if (yggPollRef.current) clearInterval(yggPollRef.current); };
   }, []);
 
+  // Browser tab title
+  useEffect(() => {
+    const prev = document.title;
+    document.title = 'Ðali — Heimðallr';
+    return () => { document.title = prev; };
+  }, []);
+
   // Footer clock
   useEffect(() => {
     const tick = () => setClock(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
