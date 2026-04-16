@@ -170,7 +170,7 @@ jobs:
             if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ] && \
                [ -f "/etc/letsencrypt/live/seer.${DOMAIN}/fullchain.pem" ] && \
                [ -f "/etc/letsencrypt/live/heimdall.${DOMAIN}/fullchain.pem" ]; then
-              sudo nginx -t && sudo systemctl reload nginx
+              sudo nginx -t && sudo systemctl restart nginx
             else
               echo "TLS certs not yet provisioned for all subdomains — skipping nginx reload"
             fi
