@@ -49,7 +49,7 @@ services:
       ARCADE_DB:       ${ARCADEDB_DB:-hound}
       ARCADE_USER:     ${ARCADEDB_USER:-root}
       ARCADE_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD:-playwithdata}
-      QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
+      QUARKUS_HTTP_CORS_ORIGINS: https://seidrstudio.pro,https://www.seidrstudio.pro,http://localhost:13000,http://localhost:15173
     ports:
       - "18080:8080"
     depends_on:
