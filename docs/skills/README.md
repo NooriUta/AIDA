@@ -13,7 +13,7 @@
 | `code_review_hound` | Анализ зависимостей модулей Hound | После изменений в `libraries/hound/` |
 | `qg-chur-resilience` | QG: Chur BFF устойчив к отказам зависимостей | После изменений Chur или Keycloak |
 | `qg-dali-persistence` | QG: сессии Dali переживают рестарт | После каждого merge в `services/dali/` |
-| `performance-weekly` | SLO-прогон: P/A/R метрики, обновление PERFORMANCE_TARGETS.md | **Каждый понедельник**, перед demo |
+| `performance-weekly` | SLO-прогон: P/A/R метрики, обновление QG-PERFORMANCE-weekly.md | **Каждый понедельник**, перед demo |
 | `qg-dali-ygg-write` | QG: запись в YGG видна в HEIMDALL | После каждого прогона парсинга |
 | `qg-heimdall-backend-validation` | QG: HEIMDALL backend не падает на плохих данных | После изменений `services/heimdall-backend/` |
 | `qg-heimdall-frontend-ws` | QG: WebSocket автоматически переподключается | Перед demo-rehearsal |

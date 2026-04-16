@@ -1,9 +1,10 @@
-# Performance Targets — AIDA
+# QG-PERFORMANCE-weekly — SLO Check
 
-**Документ:** `PERFORMANCE_TARGETS`
+**Документ:** `QG-PERFORMANCE-weekly`
 **Версия:** 1.0
 **Дата:** 16.04.2026
 **Статус:** ACTIVE
+**Скилл:** `performance-weekly` → `~/.claude/scheduled-tasks/performance-weekly/SKILL.md`
 **Горизонт:** M2 (апрель 2026) → M3 (июль 2026)
 
 ---

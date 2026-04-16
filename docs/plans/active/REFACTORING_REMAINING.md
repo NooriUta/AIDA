@@ -107,7 +107,7 @@
 | `docs/architecture/YGG_SCHEMA_REFERENCE.md` | ✅ Создан 16.04.2026 |
 | `docs/guides/ONBOARDING.md` | ✅ Создан 16.04.2026 |
 | `docs/architecture/hound/HOUND_POSTGRESQL_SPEC.md` | ✅ Создан 16.04.2026 (DRAFT) |
-| `docs/quality-gates/PERFORMANCE_TARGETS.md` | ✅ Создан 16.04.2026 |
+| `docs/quality-gates/QG-PERFORMANCE-weekly.md` | ✅ Создан 16.04.2026 |
 | `docs/research/RAG_VS_PARSE_HYPOTHESIS.md` | ✅ Создан 16.04.2026 |
 | `docs/plans/MIMIR_SPEC.md` | ✅ Создан 16.04.2026 (DRAFT) |
 | `docs/plans/ANVIL_SPEC.md` | ✅ Создан 16.04.2026 (DRAFT) |
