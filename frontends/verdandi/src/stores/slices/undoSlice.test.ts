@@ -50,8 +50,8 @@ describe('pushUndo', () => {
     const { actions, getState } = setup({ undoStack: existing });
     actions.pushUndo({ type: 'hide', nodeId: 'n50' });
     expect(getState().undoStack).toHaveLength(50);
-    expect(getState().undoStack[49].nodeId).toBe('n50');
-    expect(getState().undoStack[0].nodeId).toBe('n1'); // oldest evicted
+    expect((getState().undoStack[49] as { type: 'hide'; nodeId: string }).nodeId).toBe('n50');
+    expect((getState().undoStack[0] as { type: 'hide'; nodeId: string }).nodeId).toBe('n1'); // oldest evicted
   });
 });
 

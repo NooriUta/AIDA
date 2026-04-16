@@ -39,7 +39,7 @@ import { clearLayoutCache }        from '../../utils/layoutGraph';
 import { isUnauthorized }          from '../../services/lineage';
 import { SCOPE_FILTER_TYPES }      from '../../utils/transformGraph';
 import { CANVAS }                  from '../../utils/constants';
-import type { LoomNode }           from '../../types/graph';
+import type { LoomNode, LoomEdge } from '../../types/graph';
 
 import { useGraphData }    from '../../hooks/canvas/useGraphData';
 import { useExpansion }    from '../../hooks/canvas/useExpansion';
@@ -84,7 +84,7 @@ const LoomCanvasInner = memo(() => {
   const { t } = useTranslation();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<LoomNode>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<LoomEdge>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
 
   // ── LOD: track zoom level for compact rendering ─────────────────────────────

@@ -1,5 +1,6 @@
 package studio.seer.lineage.resource;
 
+import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.inject.Inject;
@@ -74,7 +75,11 @@ public class MutationResource {
                     input.maxFiles()            // null → no limit
             );
             return daliClient.createSession(daliInput);
-        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+          .onFailure().recoverWithItem(ex -> {
+              Log.warnf("[SHUTTLE] Dali unavailable (startParseSession): %s", ex.getMessage());
+              return SessionInfo.unavailable();
+          });
     }
 
     // ── cancelSession ─────────────────────────────────────────────────────────
@@ -85,7 +90,11 @@ public class MutationResource {
         return Uni.createFrom().item(() -> {
             CancelResponse resp = daliClient.cancelSession(sessionId);
             return !"UNAVAILABLE".equals(resp.status());
-        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+          .onFailure().recoverWithItem(ex -> {
+              Log.warnf("[SHUTTLE] Dali unavailable (cancelSession): %s", ex.getMessage());
+              return false;
+          });
     }
 
     // ── askMimir (stub) ───────────────────────────────────────────────────────

@@ -270,7 +270,7 @@ export const StatementNode = memo(({ data, selected, id }: NodeProps<StatementNo
       ) : null}
 
       {/* "no col mapping" badge — write ops with no output columns mapped */}
-      {!isCompact && stmtType && WRITE_OPS.has(stmtType) && columns.length === 0 && (
+      {!isCompact && stmtType && WRITE_OPS.has(stmtType as 'INSERT' | 'UPDATE' | 'MERGE') && columns.length === 0 && (
         <div style={{
           padding:   '3px var(--seer-space-3)',
           borderTop: '1px solid var(--bd)',

@@ -8,6 +8,8 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jakarta.ws.rs.WebApplicationException;
+
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
@@ -87,14 +89,30 @@ public class FriggGateway {
 
     /**
      * Creates the FRIGG database if it doesn't already exist.
-     * Ignores errors (e.g. database already exists).
+     *
+     * @return {@code true} if the database exists and is usable (created or already present);
+     *         {@code false} if creation failed (auth error, network issue, etc.)
      */
-    public void ensureDatabase() {
+    public boolean ensureDatabase() {
+        // ArcadeDB 26.x uses POST /api/v1/server with a command body.
+        // The old /api/v1/create/{db} endpoint was removed in 26.x.
+        FriggCommand cmd = new FriggCommand(null, "create database " + db, null);
         try {
-            client.createDatabase(db, basicAuth()).await().atMost(TIMEOUT);
-            log.info("[FRIGG] database '{}' created (or already existed)", db);
+            client.serverCommand(basicAuth(), cmd).await().atMost(TIMEOUT);
+            log.info("[FRIGG] database '{}' created", db);
+            return true;
+        } catch (WebApplicationException e) {
+            int status = e.getResponse().getStatus();
+            if (status == 500) {
+                // ArcadeDB returns 500 when the database already exists — treat as success
+                log.info("[FRIGG] database '{}' already exists (HTTP 500 from /server)", db);
+                return true;
+            }
+            log.warn("[FRIGG] ensureDatabase failed — HTTP {}: {}", status, e.getMessage());
+            return false;
         } catch (Exception e) {
-            log.debug("[FRIGG] ensureDatabase — ignored: {}", e.getMessage());
+            log.warn("[FRIGG] ensureDatabase failed (connection issue?): {}", e.getMessage());
+            return false;
         }
     }
 

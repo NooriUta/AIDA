@@ -1,5 +1,4 @@
-/// <reference types="vitest" />
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { federation } from '@module-federation/vite';
@@ -14,9 +13,9 @@ export default defineConfig({
       filename: 'remoteEntry.js',
       exposes: { './App': './src/App.tsx' },
       shared: {
-        react:              { singleton: true, eager: true, requiredVersion: '^19.0.0' },
-        'react-dom':        { singleton: true, eager: true, requiredVersion: '^19.0.0' },
-        'react-router-dom': { singleton: true, eager: true, requiredVersion: '^7.0.0'  },
+        react:              { singleton: true, requiredVersion: '^19.0.0' },
+        'react-dom':        { singleton: true, requiredVersion: '^19.0.0' },
+        'react-router-dom': { singleton: true, requiredVersion: '^7.0.0'  },
         // aida-shared is NOT listed here — verdandi uses its own globals.css and
         // does not import from aida-shared, so MF should not try to resolve it.
         zustand:            { singleton: true, requiredVersion: '^5.0.0'  },

@@ -105,13 +105,13 @@ export function useGraphData() {
       const existingNodeIds = new Set(base.nodes.map((n) => n.id));
       const existingEdgeIds = new Set(base.edges.map((e) => e.id));
       const expansionGraph = transformGqlExplore(
-        { nodes: expansionGqlNodes, edges: expansionGqlEdges },
+        { nodes: expansionGqlNodes, edges: expansionGqlEdges, hasMore: false },
         existingNodeIds,
       );
       // L2: only allow table/statement nodes from expansion — suppress routines, packages, etc.
       const L2_ALLOWED = new Set(['tableNode', 'statementNode']);
       const allowedExpNodes = viewLevel === 'L2'
-        ? expansionGraph.nodes.filter((n) => L2_ALLOWED.has(n.type))
+        ? expansionGraph.nodes.filter((n) => L2_ALLOWED.has(n.type ?? ''))
         : expansionGraph.nodes;
       const allowedExpIds = new Set(allowedExpNodes.map((n) => n.id));
       const allowedExpEdges = viewLevel === 'L2'

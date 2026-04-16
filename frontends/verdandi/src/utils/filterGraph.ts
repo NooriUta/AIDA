@@ -15,8 +15,6 @@ export function filterGraphByScope(
   edges: LoomEdge[],
   scopeNodeId: string,
 ): { nodes: LoomNode[]; edges: LoomEdge[] } {
-  const nodeIndex = new Map(nodes.map((n) => [n.id, n]));
-
   // ── BFS ──────────────────────────────────────────────────────────────────
   const visited = new Set<string>([scopeNodeId]);
   const queue: string[] = [scopeNodeId];

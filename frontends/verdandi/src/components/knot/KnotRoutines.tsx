@@ -233,8 +233,6 @@ function RoutineRow({ routine: r, expanded, onToggle, callees, params, vars }: {
   vars: KnotVariable[];
 }) {
   const tables = Array.from(r.tables);
-  const hasExtras = callees.length > 0 || params.length > 0 || vars.length > 0;
-
   // Dynamic grid: 2 always (stmts + tables) + extras columns
   const extraCols = (callees.length > 0 ? 1 : 0) + (params.length > 0 ? 1 : 0) + (vars.length > 0 ? 1 : 0);
   const gridCols = `1fr 1fr${extraCols > 0 ? ` repeat(${extraCols}, 1fr)` : ''}`;

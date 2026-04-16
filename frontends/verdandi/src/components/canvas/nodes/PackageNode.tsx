@@ -44,7 +44,7 @@ export const PackageNode = memo(({ data, selected, id }: NodeProps<PackageNodeTy
           )}
         </div>
 
-        {data.metadata?.description && (
+        {!!data.metadata?.description && (
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: 'var(--seer-space-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {String(data.metadata.description)}
           </div>

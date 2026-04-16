@@ -214,7 +214,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
           </div>
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px', display: 'flex', alignItems: 'center', gap: '5px' }}>
             {columns.length} {t('nodes.columns')}
-            {data.metadata?.dataSource && (
+            {!!data.metadata?.dataSource && (
               <span style={{
                 fontSize: 8, padding: '1px 4px', borderRadius: 2, flexShrink: 0,
                 fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.03em',

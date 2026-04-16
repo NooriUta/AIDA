@@ -1016,9 +1016,9 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
   );
 }
 
-function PTblTh({ children }: { children: React.ReactNode }) {
+function PTblTh({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
-    <th style={{
+    <th title={title} style={{
       padding: '5px 8px', fontSize: 10, fontWeight: 500,
       letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--t3)',
       background: 'var(--bg3)', border: '1px solid var(--bd)', textAlign: 'left',
