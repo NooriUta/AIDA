@@ -61,10 +61,14 @@
       "serviceAccountsEnabled": false,
       "publicClient": false,
       "redirectUris": [
-        "http://localhost:3000/*"
+        "http://localhost:3000/*",
+        "https://seidrstudio.pro/*",
+        "https://www.seidrstudio.pro/*"
       ],
       "webOrigins": [
-        "http://localhost:3000"
+        "http://localhost:3000",
+        "https://seidrstudio.pro",
+        "https://www.seidrstudio.pro"
       ],
       "protocol": "openid-connect",
       "defaultClientScopes": [
