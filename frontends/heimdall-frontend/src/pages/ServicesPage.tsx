@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation }    from 'react-i18next';
+import { usePageTitle }      from '../hooks/usePageTitle';
 import { useNavigate }       from 'react-router-dom';
 import { HEIMDALL_API }      from '../api';
 import { useAuthStore }      from '../stores/authStore';
@@ -303,6 +304,7 @@ function ServiceCard({ group, isAdmin, onRefresh, onEventsClick }: {
 // ── ServicesPage ──────────────────────────────────────────────────────────────
 export default function ServicesPage() {
   const { t }   = useTranslation();
+  usePageTitle(t('nav.services'));
   const navigate = useNavigate();
   const user     = useAuthStore(s => s.user);
   const isAdmin  = user?.role === 'admin';

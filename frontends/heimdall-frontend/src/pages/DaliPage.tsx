@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type DaliSession, type YggStats, getDaliHealth, getSessions, getSessionsArchive, getYggStats } from '../api/dali';
+import { usePageTitle } from '../hooks/usePageTitle';
 import { ParseForm } from '../components/dali/ParseForm';
 import { SessionList } from '../components/dali/SessionList';
 import { UI } from '../i18n';
@@ -100,12 +101,7 @@ export default function DaliPage() {
     return () => { if (yggPollRef.current) clearInterval(yggPollRef.current); };
   }, []);
 
-  // Browser tab title
-  useEffect(() => {
-    const prev = document.title;
-    document.title = 'Ðali — Heimðallr';
-    return () => { document.title = prev; };
-  }, []);
+  usePageTitle('Ðali');
 
   // Footer clock
   useEffect(() => {

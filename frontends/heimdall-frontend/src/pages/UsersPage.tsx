@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { usePageTitle }   from '../hooks/usePageTitle';
 import { useAuthStore }   from '../stores/authStore';
 import { MOCK_USERS }     from '../components/users/mockUsers';
 import { UserEditModal }  from '../components/users/UserEditModal';
@@ -173,6 +174,7 @@ function UserRow({
 // ── UsersPage ─────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const { t } = useTranslation();
+  usePageTitle(t('nav.users'));
   const authUser = useAuthStore(s => s.user);
   // authUser.role from aida-shared only has 3 values ('viewer'|'editor'|'admin').
   // HEIMDALL manages 8 roles internally. Treat role as plain string for the

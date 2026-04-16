@@ -1,5 +1,6 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { useTranslation }    from 'react-i18next';
+import { usePageTitle }      from '../hooks/usePageTitle';
 import { EventLog }          from '../components/EventLog';
 import { useEventStream }    from '../hooks/useEventStream';
 import type { EventFilter, EventLevel } from 'aida-shared';
@@ -32,6 +33,7 @@ const inputStyle: React.CSSProperties = {
 
 export default function EventStreamPage() {
   const { t } = useTranslation();
+  usePageTitle(t('nav.events'));
 
   const [component,  setComponent]  = useState('');
   const [level,      setLevel]      = useState<'' | EventLevel>('');
