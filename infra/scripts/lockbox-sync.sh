@@ -1,32 +1,25 @@
 #!/usr/bin/env bash
 # lockbox-sync.sh — pull secrets from Yandex Lockbox → /opt/seer-studio/.env.prod
 #
-# Auth: uses VM service account via instance metadata (no credentials needed on VM).
-# The VM must have an SA with lockbox.payloadViewer role attached (done by Terraform).
-#
-# LOCKBOX_SECRET_ID is baked in by cloud-init from Terraform output.
-# Fallback: looks up by name "aida-prod" if ID not set.
-#
-# Lockbox keys synced to .env.prod:
-#   ARCADEDB_ADMIN_PASSWORD, ARCADEDB_PASS, FRIGG_PASSWORD,
-#   KEYCLOAK_CLIENT_SECRET, COOKIE_SECRET, ANTHROPIC_API_KEY,
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# Auth: uses VM service account via instance metadata (no yc CLI config needed).
+# The VM SA must have lockbox.payloadViewer role (granted by Terraform).
 #
 set -euo pipefail
 
 DEST="/opt/seer-studio/.env.prod"
+SECRET_ID="${LOCKBOX_SECRET_ID:-e6qk6ms2ptpfrrpcobif}"
 
-if [[ -n "${LOCKBOX_SECRET_ID:-}" ]]; then
-  LOOKUP="--id ${LOCKBOX_SECRET_ID}"
-else
-  LOOKUP="--name aida-prod"
-fi
+echo "[lockbox-sync] fetching secret ${SECRET_ID}..."
 
-echo "[lockbox-sync] fetching secret (${LOOKUP})..."
+# Get IAM token from instance metadata (same approach as docker login to YCR)
+IAM_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+  http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token \
+  | jq -r .access_token)
 
-yc lockbox payload get \
-  ${LOOKUP} \
-  --format json \
+# Fetch Lockbox payload and write .env.prod
+curl -sf \
+  -H "Authorization: Bearer ${IAM_TOKEN}" \
+  "https://payload.lockbox.api.cloud.yandex.net/lockbox/v1/secrets/${SECRET_ID}/payload" \
   | jq -r '.entries[] | "\(.key)=\(.textValue)"' \
   > "${DEST}"
 
