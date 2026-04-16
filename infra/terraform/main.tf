@@ -7,6 +7,7 @@
 #   terraform init
 #   terraform plan
 #   terraform apply
+#   ../scripts/set-github-secrets.sh               # sets GH secrets from outputs
 ###############################################################################
 
 terraform {
@@ -77,9 +78,10 @@ data "yandex_compute_image" "ubuntu" {
 }
 
 resource "yandex_compute_instance" "aida_vm" {
-  name        = "aida-prod"
-  platform_id = "standard-v3"
-  zone        = var.yc_zone
+  name               = "aida-prod"
+  platform_id        = "standard-v3"
+  zone               = var.yc_zone
+  service_account_id = yandex_iam_service_account.aida_vm.id   # VM SA: Lockbox + S3
 
   resources {
     cores  = var.vm_cores
@@ -102,8 +104,9 @@ resource "yandex_compute_instance" "aida_vm" {
 
   metadata = {
     user-data = templatefile("${path.module}/../cloud-init.yml", {
-      ssh_public_key = file(var.ssh_public_key_path)
-      domain         = var.domain
+      ssh_public_key    = file(var.ssh_public_key_path)
+      domain            = var.domain
+      lockbox_secret_id = yandex_lockbox_secret.aida_secrets.id
     })
   }
 
@@ -118,10 +121,10 @@ resource "yandex_container_registry" "aida_ycr" {
   folder_id = var.yc_folder_id
 }
 
-# ── IAM: Service Account for CI ──────────────────────────────────────────────
+# ── IAM: Service Account for CI (GitHub Actions) ─────────────────────────────
 resource "yandex_iam_service_account" "aida_ci" {
   name        = "aida-ci"
-  description = "Used by GitHub Actions CD pipeline to push to YCR and pull on VM"
+  description = "GitHub Actions CD — push to YCR, pull on VM via JSON key"
 }
 
 resource "yandex_container_registry_iam_binding" "aida_ci_pusher" {
@@ -136,15 +139,46 @@ resource "yandex_container_registry_iam_binding" "aida_ci_puller" {
   members     = ["serviceAccount:${yandex_iam_service_account.aida_ci.id}"]
 }
 
-resource "yandex_iam_service_account_static_access_key" "aida_ci_key" {
+# JSON key — used as YC_SA_KEY GitHub secret; supports `docker login cr.yandex -u json_key`
+resource "yandex_iam_service_account_key" "aida_ci_json_key" {
   service_account_id = yandex_iam_service_account.aida_ci.id
-  description        = "Key for GitHub Actions (YC_SA_KEY secret)"
+  description        = "JSON RSA key for GitHub Actions — docker login to YCR"
+  key_algorithm      = "RSA_4096"
+}
+
+# ── IAM: Service Account for VM ───────────────────────────────────────────────
+# Attached to the compute instance — allows yc CLI (via metadata service) to
+# access Lockbox and Object Storage without hardcoded credentials on the VM.
+resource "yandex_iam_service_account" "aida_vm" {
+  name        = "aida-vm"
+  description = "VM runtime SA — Lockbox reader + Object Storage for backups"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "aida_vm_lockbox" {
+  folder_id = var.yc_folder_id
+  role      = "lockbox.payloadViewer"
+  member    = "serviceAccount:${yandex_iam_service_account.aida_vm.id}"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "aida_vm_storage" {
+  folder_id = var.yc_folder_id
+  role      = "storage.editor"
+  member    = "serviceAccount:${yandex_iam_service_account.aida_vm.id}"
+}
+
+# HMAC key for S3-compatible Object Storage (used by backup-arcadedb.sh aws CLI)
+# Values go into Lockbox so the VM reads them via .env.prod
+resource "yandex_iam_service_account_static_access_key" "aida_vm_s3_key" {
+  service_account_id = yandex_iam_service_account.aida_vm.id
+  description        = "HMAC key for ArcadeDB backup → Object Storage"
 }
 
 # ── Object Storage (ArcadeDB backups) ────────────────────────────────────────
 resource "yandex_storage_bucket" "aida_backups" {
-  bucket    = "aida-arcadedb-backups"
-  folder_id = var.yc_folder_id
+  bucket     = "aida-arcadedb-backups"
+  folder_id  = var.yc_folder_id
+  access_key = yandex_iam_service_account_static_access_key.aida_vm_s3_key.access_key
+  secret_key = yandex_iam_service_account_static_access_key.aida_vm_s3_key.secret_key
 
   versioning {
     enabled = true
@@ -153,7 +187,7 @@ resource "yandex_storage_bucket" "aida_backups" {
   lifecycle_rule {
     enabled = true
     expiration {
-      days = 30   # retain 30 days of backups
+      days = 30
     }
   }
 }
@@ -166,23 +200,23 @@ resource "yandex_lockbox_secret" "aida_secrets" {
 }
 
 # NOTE: Secret values are NOT managed by Terraform to avoid storing them in state.
-# Add values manually via YC Console or:
-#   yc lockbox secret add-version \
-#     --id <secret-id> \
-#     --payload '[{"key":"ARCADEDB_ADMIN_PASSWORD","text_value":"..."},...]'
+# After `terraform apply`, run set-github-secrets.sh which prints the lockbox command.
 #
-# Required keys:
-#   ARCADEDB_ADMIN_PASSWORD
-#   ARCADEDB_PASS
-#   KEYCLOAK_CLIENT_SECRET
-#   COOKIE_SECRET
-#   ANTHROPIC_API_KEY
+# Required Lockbox keys (all go into .env.prod on the VM):
+#   ARCADEDB_ADMIN_PASSWORD   — YGG ArcadeDB root password
+#   ARCADEDB_PASS             — same value (used by shuttle/chur clients)
+#   FRIGG_PASSWORD            — FRIGG ArcadeDB root password (also used by Dali)
+#   KEYCLOAK_CLIENT_SECRET    — Keycloak client secret for Chur BFF
+#   COOKIE_SECRET             — session cookie signing secret (≥32 random chars)
+#   ANTHROPIC_API_KEY         — Claude API key (sk-ant-...)
+#   AWS_ACCESS_KEY_ID         — S3 HMAC key (from terraform output s3_access_key)
+#   AWS_SECRET_ACCESS_KEY     — S3 HMAC secret (from terraform output s3_secret_key)
 
 # ── DNS ───────────────────────────────────────────────────────────────────────
 resource "yandex_dns_zone" "aida" {
-  name        = "aida-zone"
-  zone        = "${var.domain}."
-  public      = true
+  name   = "aida-zone"
+  zone   = "${var.domain}."
+  public = true
 }
 
 resource "yandex_dns_recordset" "aida_a" {

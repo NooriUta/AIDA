@@ -104,7 +104,7 @@ services:
     image: arcadedata/arcadedb:26.3.2
     restart: unless-stopped
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_ROOT_PASSWORD:-playwithdata}"
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_PASSWORD:-playwithdata}"
     ports:
       - "2481:2480"
     volumes:
