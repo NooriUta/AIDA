@@ -113,6 +113,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fix file permissions for scp
+        run: chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/
+
       - name: Copy prod compose to server
         uses: appleboy/scp-action@v0.1.7
         with:
