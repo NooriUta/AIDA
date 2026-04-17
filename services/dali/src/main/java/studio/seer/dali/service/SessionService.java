@@ -32,7 +32,6 @@ import java.util.concurrent.ConcurrentMap;
 // Quarkus fires lower @Priority values first. @Priority(20) fires last — after
 // FriggSchemaInitializer(5) sets up the schema and JobRunrLifecycle(10) starts JobRunr.
 @ApplicationScoped
-@Priority(20)
 public class SessionService {
 
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
@@ -71,7 +70,7 @@ public class SessionService {
      * <p>Instance isolation: if {@code dali.instance.id} is set, only sessions whose
      * {@code instanceId} matches (or is null for backward-compat untagged sessions) are loaded.
      */
-    void onStart(@Observes StartupEvent ev) {
+    void onStart(@Observes @Priority(20) StartupEvent ev) {
         try {
             List<Session> persisted = repository.findAll(500);
             String myId = myInstanceId();

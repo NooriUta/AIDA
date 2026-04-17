@@ -36,7 +36,6 @@ import org.slf4j.LoggerFactory;
  * happen before the BackgroundJobServer starts.
  */
 @ApplicationScoped
-@Priority(5)
 public class FriggSchemaInitializer {
 
     private static final Logger log = LoggerFactory.getLogger(FriggSchemaInitializer.class);
@@ -86,7 +85,7 @@ public class FriggSchemaInitializer {
         return schemaReady;
     }
 
-    void onStart(@Observes StartupEvent ev) {
+    void onStart(@Observes @Priority(5) StartupEvent ev) {
         log.info("FriggSchemaInitializer: initialising JobRunr schema in FRIGG...");
         try {
             // Retry until the database is ready — FRIGG may need a moment after its

@@ -1,7 +1,7 @@
 const BASE = '/dali'; // proxied by Vite dev server → http://localhost:9090
 
 export type DaliDialect = 'plsql' | 'postgresql' | 'clickhouse';
-export type SessionStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type SessionStatus = 'QUEUED' | 'RUNNING' | 'CANCELLING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export interface ParseSessionInput {
   dialect: DaliDialect;
@@ -134,6 +134,11 @@ export interface YggStats {
   atomsConstant:   number;
   atomsUnresolved: number;
   atomsPending:    number;
+}
+
+export async function cancelSession(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/sessions/${id}/cancel`, { method: 'POST' });
+  if (!res.ok && res.status !== 409) throw new Error(`HTTP ${res.status}`);
 }
 
 export async function getYggStats(): Promise<YggStats> {
