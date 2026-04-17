@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation }              from 'react-i18next';
-import { type DaliSession, type FileResult } from '../../api/dali';
+import { type DaliSession, type FileResult, cancelSession } from '../../api/dali';
 import { useDaliSession } from '../../hooks/useDaliSession';
 import css from './dali.module.css';
 
@@ -62,11 +62,12 @@ function fmtK(n: number): string {
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: DaliSession['status'] }) {
   const badgeCls = {
-    QUEUED:    css.badgeQueued,
-    RUNNING:   css.badgeRunning,
-    COMPLETED: css.badgeCompleted,
-    FAILED:    css.badgeFailed,
-    CANCELLED: css.badgeCancelled,
+    QUEUED:      css.badgeQueued,
+    RUNNING:     css.badgeRunning,
+    CANCELLING:  css.badgeCancelling,
+    COMPLETED:   css.badgeCompleted,
+    FAILED:      css.badgeFailed,
+    CANCELLED:   css.badgeCancelled,
   }[status] ?? css.badgeQueued;
 
   return (
@@ -715,6 +716,7 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
   const { t } = useTranslation();
   const isTerminal = TERMINAL.has(session.status);
   const live = useDaliSession(session.id, !isTerminal);
+  const [cancelling, setCancelling] = useState(false);
   // Track last updatedAt we propagated so we don't depend on the session prop
   const reportedAtRef = useRef('');
   // Stable ref for onUpdate so the effect doesn't re-run on every parent render
@@ -729,6 +731,16 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
   }, [live]);
 
   const s = live ?? session;
+
+  async function handleCancel(e: React.MouseEvent) {
+    e.stopPropagation();
+    setCancelling(true);
+    try {
+      await cancelSession(s.id);
+      onUpdate({ ...s, status: 'CANCELLING' });
+    } catch { /* polling will reflect true state */ }
+    finally { setCancelling(false); }
+  }
 
   const chevronColor =
     s.status === 'FAILED'    ? 'var(--danger)' :
@@ -805,14 +817,38 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
           </div>
         </td>
         <td style={{ textAlign: 'center' }}>
-          <svg
-            width="13" height="13" viewBox="0 0 24 24" fill="none"
-            stroke={chevronColor}
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className={expanded ? css.chevronOpen : css.chevron}
-          >
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+            {(s.status === 'QUEUED' || s.status === 'RUNNING') && (
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                title={t('dali.sessions.cancelBtn')}
+                style={{
+                  background: 'none',
+                  border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)',
+                  borderRadius: 3,
+                  color: cancelling ? 'var(--t4)' : 'var(--danger)',
+                  cursor: cancelling ? 'default' : 'pointer',
+                  padding: '1px 5px',
+                  fontSize: 10,
+                  fontFamily: 'var(--mono)',
+                  lineHeight: '1.5',
+                  opacity: cancelling ? 0.5 : 0.8,
+                  flexShrink: 0,
+                }}
+              >
+                ✕
+              </button>
+            )}
+            <svg
+              width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke={chevronColor}
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={expanded ? css.chevronOpen : css.chevron}
+            >
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
         </td>
       </tr>
       {expanded && <DetailRow session={s} />}

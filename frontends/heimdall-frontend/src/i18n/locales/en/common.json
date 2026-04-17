@@ -289,7 +289,8 @@
       "errorsBtn_one":    "{{count}} error",
       "errorsBtn_other":  "{{count}} errors",
       "warningsBtn_one":   "{{count}} warning total",
-      "warningsBtn_other": "{{count}} warnings total"
+      "warningsBtn_other": "{{count}} warnings total",
+      "cancelBtn": "Cancel session"
     }
   }
 }

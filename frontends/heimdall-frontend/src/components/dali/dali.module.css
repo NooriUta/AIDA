@@ -428,7 +428,8 @@
 .badgeRunning   { background: color-mix(in srgb, var(--inf) 12%, transparent); color: var(--inf); border-color: color-mix(in srgb, var(--inf) 28%, transparent); gap: 4px; }
 .badgeCompleted { background: color-mix(in srgb, var(--suc) 12%, transparent); color: var(--suc); border-color: color-mix(in srgb, var(--suc) 28%, transparent); gap: 4px; }
 .badgeFailed    { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 28%, transparent); gap: 4px; }
-.badgeCancelled { background: var(--bg3); color: var(--t3); border-color: var(--bd); gap: 4px; }
+.badgeCancelled   { background: var(--bg3); color: var(--t3); border-color: var(--bd); gap: 4px; }
+.badgeCancelling  { background: color-mix(in srgb, var(--wrn) 10%, transparent); color: var(--wrn); border-color: color-mix(in srgb, var(--wrn) 28%, transparent); gap: 4px; }
 
 /* ── Chevron ─────────────────────────────────────────────────────────────────── */
 .chevron {

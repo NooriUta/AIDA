@@ -303,7 +303,8 @@
       "warningsBtn_one":   "{{count}} предупреждение",
       "warningsBtn_few":   "{{count}} предупреждения",
       "warningsBtn_many":  "{{count}} предупреждений",
-      "warningsBtn_other": "{{count}} предупреждений"
+      "warningsBtn_other": "{{count}} предупреждений",
+      "cancelBtn": "Отменить сессию"
     }
   }
 }
