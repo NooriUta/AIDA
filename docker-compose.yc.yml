@@ -10,7 +10,7 @@
 # What this file changes vs docker-compose.prod.yml:
 #   • Images: GHCR → YCR (faster in-region pulls, no traffic cost)
 #   • env_file: reads secrets from /opt/seer-studio/.env.prod (Lockbox-synced)
-#   • resource limits: tuned for 4 vCPU / 8 GB RAM VM
+#   • resource limits: tuned for 4 vCPU / 16 GB RAM VM
 #   • logging: json-file with rotation (stdout → /var/lib/docker/containers)
 #   • keycloak: switches from start-dev → start (production mode)
 ###############################################################################
@@ -45,9 +45,9 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 1G
         reservations:
-          memory: 256M
+          memory: 512M
     logging: *default_logging
 
   # ── SHUTTLE ────────────────────────────────────────────────────────────────
@@ -106,9 +106,9 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 768M
+          memory: 1536M
         reservations:
-          memory: 384M
+          memory: 768M
     logging: *default_logging
 
   # ── Heimdall Backend ────────────────────────────────────────────────────────
@@ -157,10 +157,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 768M
+          cpus: '1.0'
+          memory: 1536M
         reservations:
-          memory: 384M
+          memory: 768M
     logging: *default_logging
 
   # ── Ygg (ArcadeDB lineage graph) ───────────────────────────────────
@@ -169,8 +169,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 2G
+          cpus: '2.0'
+          memory: 4G
         reservations:
-          memory: 1G
+          memory: 2G
     logging: *default_logging
