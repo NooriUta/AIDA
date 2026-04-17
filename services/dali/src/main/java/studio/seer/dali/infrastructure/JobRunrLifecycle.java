@@ -37,7 +37,6 @@ import studio.seer.dali.storage.ArcadeDbStorageProvider;
 // Quarkus fires lower @Priority values first. Order: FriggSchemaInitializer(5) → here(10) → SessionService(20).
 // This guarantees FRIGG schema and stale-server cleanup finish before the BackgroundJobServer starts.
 @ApplicationScoped
-@Priority(10)
 public class JobRunrLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(JobRunrLifecycle.class);
@@ -73,7 +72,7 @@ public class JobRunrLifecycle {
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────
 
-    void onStart(@Observes StartupEvent ev) {
+    void onStart(@Observes @Priority(10) StartupEvent ev) {
         log.info("JobRunr: initialising...");
         JobActivator activator = new JobActivator() {
             @Override

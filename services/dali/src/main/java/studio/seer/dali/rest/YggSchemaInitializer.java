@@ -18,14 +18,13 @@ import org.slf4j.LoggerFactory;
  * <p>Retries up to 12 times with 3 s delay if ArcadeDB is still starting.
  */
 @ApplicationScoped
-@Priority(3)
 public class YggSchemaInitializer {
 
     private static final Logger log = LoggerFactory.getLogger(YggSchemaInitializer.class);
 
     @Inject YggGateway ygg;
 
-    void onStart(@Observes StartupEvent ev) {
+    void onStart(@Observes @Priority(3) StartupEvent ev) {
         log.info("YggSchemaInitializer: ensuring YGG database exists…");
         boolean ready = false;
         for (int attempt = 1; attempt <= 12 && !ready; attempt++) {
