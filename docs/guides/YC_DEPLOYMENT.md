@@ -1,8 +1,8 @@
 # AIDA — Yandex Cloud Deployment Guide
 
 **Документ:** `YC_DEPLOYMENT`
-**Версия:** 1.0
-**Дата:** 16.04.2026
+**Версия:** 1.2
+**Дата:** 18.04.2026
 **Статус:** ✅ ACTIVE — production deployment runbook
 
 > Это пошаговый runbook для деплоя SEER Studio в Yandex Cloud.
@@ -17,7 +17,7 @@ Internet
     │ HTTPS 443
     ▼
 ┌─────────────────────────────────────────┐
-│  YC VM  (Ubuntu 22.04, 4 vCPU / 8 GB)  │
+│  YC VM  (Ubuntu 22.04, 4 vCPU / 16 GB) │
 │                                         │
 │  Nginx (reverse proxy + TLS Certbot)    │
 │    /           → verdandi:15173         │
@@ -92,7 +92,7 @@ terraform apply   # подтверди: yes
 ```
 
 **Terraform создаст:**
-- VM `aida-prod` (4 vCPU / 8 GB / 50 GB SSD, Ubuntu 22.04)
+- VM `aida-prod` (4 vCPU / 16 GB / 50 GB SSD, Ubuntu 22.04)
 - VPC + subnet + security group (22/80/443)
 - Container Registry `aida-registry`
 - Service account `aida-ci` с правами push/pull
@@ -111,11 +111,16 @@ terraform output   # запиши vm_external_ip, registry_id, lockbox_secret_id
 
 | Secret | Значение |
 |---|---|
-| `DEPLOY_HOST` | `vm_external_ip` из terraform output |
+| `DEPLOY_HOST` | **статический** IP VM из YC console |
 | `DEPLOY_USER` | `ubuntu` |
 | `DEPLOY_KEY` | содержимое `~/.ssh/id_ed25519` (приватный ключ) |
 | `YC_SA_KEY` | JSON ключ service account (см. ниже) |
 | `YC_REGISTRY_ID` | `registry_id` из terraform output |
+
+> ⚠️ **ВАЖНО — статический IP:** YC назначает динамический IP при создании VM.
+> После ресайза или перезапуска VM IP может смениться.
+> Зарезервируй статический IP заранее (YC Console → Virtual Private Cloud → IP-адреса)
+> и привяжи к VM. Обнови `DEPLOY_HOST` если IP изменился — иначе CD pipeline сломается.
 
 **Создать JSON ключ для service account:**
 ```bash
@@ -351,10 +356,22 @@ docker volume ls               # список volumes
 # Остановить stack
 docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml down
 
-# В terraform.tfvars:
-#   vm_cores  = 8
+# Изменить конфигурацию через YC Console:
+#   Virtual Machines → aida-prod → Edit → CPU/RAM → Save
+# или через terraform:
+#   vm_cores  = 4
 #   vm_memory = 16
-# terraform apply  — YC изменит конфигурацию (downtime ~1 мин)
+#   terraform apply  — YC изменит конфигурацию (downtime ~1 мин)
+```
+
+> ⚠️ **После ресайза VM IP меняется** если IP динамический.
+> Проверь после ресайза: `yc compute instance get aida-prod --format=json | jq '.network_interfaces[].primary_v4_address.one_to_one_nat.address'`
+> Обнови DNS A-запись и GitHub Secret `DEPLOY_HOST` если IP изменился.
+
+```bash
+# Обновить resource limits в docker-compose.yc.yml после изменения RAM:
+# Скрипт-помощник (пересчитывает лимиты):
+bash scripts/upgrade-mem-16gb.sh
 
 # Поднять stack обратно
 ./docker-compose-start.sh
@@ -368,10 +385,11 @@ docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml down
 |---|---|---|---|
 | 1 | **4 сервиса не собираются в CD** (dali, heimdall-backend, heimdall-frontend, shell) | Собрать локально и запушить вручную в YCR | Следующий спринт |
 | 2 | **Нет systemd service** — stack не стартует после reboot VM | Вручную (шаг 1.7) или `docker-compose-start.sh` по SSH | Следующий спринт |
-| 3 | **docker-compose.yc.yml** не имеет resource limits для dali, heimdall-backend, frigg, houndarcade | Следить за потреблением через `docker stats` | Следующий спринт |
+| 3 | ~~**resource limits** не настроены~~ | ~~`docker stats`~~ | ✅ **FIXED** PR #34 — лимиты настроены для 16 GB VM |
 | 4 | **Certbot** — ручная выдача после DNS | Шаг 1.6 | Добавить в cloud-init |
-| 5 | **S3 File Upload** (Dali) — загрузка файлов через UI не работает в облаке | Использовать локальный путь на VM (временно) | `DALI_FILE_UPLOAD_SPEC.md` |
+| 5 | ~~**S3 File Upload** (Dali)~~ | ~~Использовать локальный путь~~ | ✅ **FIXED** sprint/dali-file-upload-apr16 |
 | 6 | **HEIMDALL IP whitelist** не настроен | Вручную (шаг 1.8) | Перед первым prod-деплоем |
+| 7 | **ArcadeDB MVCC conflict** — редкий `Concurrent modification on page DaliColumn` при парсинге большого корпуса | Повторить сессию; batch size 5000 слишком велик | Уменьшить batch size в ParseJob до ~500 |
 
 ---
 
@@ -418,6 +436,63 @@ docker compose ps          # все ли контейнеры healthy
 ss -tlnp | grep -E "13000|18180|15173|25174"
 ```
 
+### FRIGG WAL corruption (RestartCount растёт, логи: "received operation on deleted file")
+
+Повреждение WAL — требует полного сброса volume. **Данные FRIGG эфемерны** (только JobRunr state, пересоздаётся при старте Dali).
+
+```bash
+cd /opt/seer-studio
+docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml down
+docker volume rm seer-studio_frigg_data   # имя volume: проверь через `docker volume ls`
+docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml up -d
+```
+
+> ⚠️ После удаления volume Dali пересоздаёт схему FRIGG автоматически через `FriggSchemaInitializer`.
+
+### Сайт не открывается после смены IP
+
+Симптом: браузер показывает `ERR_TIMED_OUT`, ping идёт на старый IP.
+
+```bash
+# 1. Проверить текущий IP VM
+yc compute instance get aida-prod --format=json | \
+  jq '.network_interfaces[].primary_v4_address.one_to_one_nat.address'
+
+# 2. Проверить что DNS обновился
+nslookup seidrstudio.pro 1.1.1.1   # должен вернуть новый IP
+
+# 3. Проверить порт 443 на VM (должен видеть TCP handshake)
+sudo tcpdump -i eth0 port 443 -c 10
+
+# 4. Временный workaround пока DNS не разошёлся:
+# Добавить в C:\Windows\System32\drivers\etc\hosts (Windows, от Administrator):
+#   <NEW_IP> seidrstudio.pro www.seidrstudio.pro seer.seidrstudio.pro heimdall.seidrstudio.pro
+# После разлёта DNS убрать эти строки из hosts!
+```
+
+> **Причина:** YC назначает динамический IP при ресайзе. Решение — зарезервировать статический IP заранее (до первой выдачи сертификата).
+
+### OOM — контейнер убивает себя (exit code 137)
+
+```bash
+docker inspect <container> | grep -A5 '"State"'
+# OOMKilled: true → не хватает памяти
+
+# Проверить текущее потребление:
+docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}"
+
+# Увеличить лимиты в docker-compose.yc.yml и пересоздать контейнер:
+docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+  up -d --force-recreate <service_name>
+```
+
+### ArcadeDB MVCC conflict ("Concurrent modification on page")
+
+Редкая ошибка при параллельной записи в ArcadeDB. Симптом: сессия падает с `Remote cmd FAILED: Concurrent modification on page DaliColumn`.
+
+**Немедленное решение:** повторить сессию парсинга.
+**Долгосрочное:** уменьшить batch size в `ParseJob.buildConfig()` с 5000 до ~500.
+
 ---
 
 ## История изменений
@@ -425,3 +500,5 @@ ss -tlnp | grep -E "13000|18180|15173|25174"
 | Дата | Версия | Что |
 |---|---|---|
 | 16.04.2026 | 1.0 | Создан на основе аудита infra/ (cloud-init, terraform, nginx, cd.yml). Полный runbook first-time + per-deploy + maintenance. 6 известных ограничений. |
+| 18.04.2026 | 1.1 | Обновлён VM spec 8 GB → 16 GB. Добавлен раздел про статический IP. Troubleshooting: FRIGG WAL corruption, MVCC conflict, OOM, смена IP. Ограничение #3 (resource limits) и #5 (file upload) — FIXED. |
+| 18.04.2026 | 1.2 | Добавлен скрипт upgrade-mem-16gb.sh в секцию масштабирования. |
