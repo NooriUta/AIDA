@@ -2,6 +2,7 @@
 # docker-compose sets:  context: .  dockerfile: frontends/shell/Dockerfile
 
 FROM node:24-alpine AS builder
+RUN npm install -g npm@latest
 WORKDIR /app
 
 # Copy shared package first so npm can resolve file: dependency
@@ -28,6 +29,7 @@ RUN rm -rf .vite && \
     npx vite build
 
 FROM nginx:alpine AS runner
+RUN apk upgrade --no-cache
 COPY --from=builder /app/frontends/shell/dist /usr/share/nginx/html
 COPY frontends/shell/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 5175

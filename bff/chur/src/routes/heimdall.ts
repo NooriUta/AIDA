@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync }      from 'fastify';
-import type { SocketStream }            from '@fastify/websocket';
 import { WebSocket }                    from 'ws';
 import { requireAdmin }                 from '../middleware/requireAdmin';
 import { ensureValidSession }           from '../sessions';
@@ -179,21 +178,20 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/heimdall/ws/events',
     { websocket: true },
-    async (connection: SocketStream, request) => {
-      // connection = SocketStream (Duplex); connection.socket = ws.WebSocket
-      const ws = connection.socket;
+    async (socket: WebSocket, request) => {
+      // socket = ws.WebSocket (direct — @fastify/websocket v11 API)
 
       // Auth: validate session cookie
       const sid = (request.cookies as Record<string, string | undefined>)?.sid;
       if (!sid) {
-        ws.close(1008, 'Unauthorized');
+        socket.close(1008, 'Unauthorized');
         return;
       }
 
       const sessionUser = await ensureValidSession(sid).catch(() => null);
       const hasAdminScope = sessionUser?.scopes?.includes('aida:admin') ?? false;
       if (!sessionUser || !hasAdminScope) {
-        ws.close(1008, 'Forbidden');
+        socket.close(1008, 'Forbidden');
         return;
       }
 
@@ -204,22 +202,22 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
       const upstream = new WebSocket(wsUrl);
 
       upstream.on('message', (data) => {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (socket.readyState === WebSocket.OPEN) {
           // Convert Buffer → string so the browser receives a text frame, not binary.
           // JSON.parse(msg.data) in useEventStream requires a string, not a Blob.
-          ws.send(data.toString());
+          socket.send(data.toString());
         }
       });
 
-      upstream.on('error', () => ws.close(1011, 'Upstream error'));
-      upstream.on('close', () => { if (ws.readyState === WebSocket.OPEN) ws.close(); });
+      upstream.on('error', () => socket.close(1011, 'Upstream error'));
+      upstream.on('close', () => { if (socket.readyState === WebSocket.OPEN) socket.close(); });
 
-      ws.on('close', () => {
+      socket.on('close', () => {
         if (upstream.readyState === WebSocket.OPEN) upstream.close();
       });
 
       // Client is read-only — ignore messages from browser
-      ws.on('message', () => {});
+      socket.on('message', () => {});
     },
   );
 
