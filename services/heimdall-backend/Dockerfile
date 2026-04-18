@@ -31,7 +31,6 @@ FROM eclipse-temurin:21-jre-alpine AS runner
 RUN apk add --no-cache docker-cli
 WORKDIR /app
 COPY --from=builder /app/services/heimdall-backend/build/*-runner.jar app.jar
-COPY docs /docs
 EXPOSE 9093
 ENV JAVA_OPTS="-Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 CMD ["java", "-jar", "app.jar"]
