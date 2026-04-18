@@ -298,7 +298,8 @@ services:
       COMPOSE_PROJECT_NAME: aida-root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./docs:/docs:ro          # M: dev-only docs viewer (GET /docs)
+      - ./docs:/docs:ro                  # public docs baked into image + overridable in dev
+      - C:/AIDA/docs:/team-docs:ro       # team-internal docs (local only — not in prod)
     depends_on:
       frigg:
         condition: service_healthy

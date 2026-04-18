@@ -116,44 +116,86 @@ function ensureDocsStyles() {
   }
 }
 
+// ── Tab button ────────────────────────────────────────────────────────────────
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        borderBottom: active ? '2px solid var(--acc)' : '2px solid transparent',
+        color: active ? 'var(--t1)' : 'var(--t3)',
+        cursor: 'pointer',
+        padding: '8px 16px',
+        fontSize: '12px',
+        fontWeight: active ? 600 : 400,
+        fontFamily: 'var(--font-mono, monospace)',
+        transition: 'color 0.12s, border-color 0.12s',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ── DocsPage ──────────────────────────────────────────────────────────────────
-export default function DocsPage() {
-  usePageTitle('Docs');
+export type DocsTab = 'docs' | 'team-docs';
+
+interface Props { tab?: DocsTab; }
+
+export default function DocsPage({ tab = 'docs' }: Props) {
+  usePageTitle(tab === 'team-docs' ? 'Team Docs' : 'Docs');
   const { '*': splat } = useParams<{ '*': string }>();
   const navigate        = useNavigate();
   const filePath        = splat ?? '';
 
-  const [files,   setFiles]   = useState<string[]>([]);
-  const [content, setContent] = useState<string | null>(null);
-  const [error,   setError]   = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [pubFiles,  setPubFiles]  = useState<string[]>([]);
+  const [teamFiles, setTeamFiles] = useState<string[]>([]);
+  const [content,   setContent]   = useState<string | null>(null);
+  const [error,     setError]     = useState<string | null>(null);
+  const [loading,   setLoading]   = useState(false);
 
   useEffect(() => { ensureDocsStyles(); }, []);
 
-  // Load file tree
+  // Load both file lists once — team list determines whether Team tab is shown
   useEffect(() => {
-    fetch(`${HEIMDALL_API}/docs`)
-      .then(r => r.ok ? r.json() as Promise<string[]> : Promise.reject(`HTTP ${r.status}`))
-      .then(setFiles)
-      .catch(e => setError(String(e)));
+    Promise.all([
+      fetch(`${HEIMDALL_API}/docs`)
+        .then(r => r.ok ? (r.json() as Promise<string[]>) : Promise.resolve([])),
+      fetch(`${HEIMDALL_API}/team-docs`)
+        .then(r => r.ok ? (r.json() as Promise<string[]>) : Promise.resolve([])),
+    ]).then(([pub, team]) => {
+      setPubFiles(pub);
+      setTeamFiles(team);
+    }).catch(() => {});
   }, []);
 
-  // Load selected file
+  // Clear content when switching tabs so stale file from the other tab isn't shown
+  useEffect(() => {
+    setContent(null);
+    setError(null);
+  }, [tab]);
+
+  const apiNs     = tab === 'team-docs' ? 'team-docs' : 'docs';
+  const baseRoute = tab === 'team-docs' ? '/team-docs' : '/docs';
+  const files     = tab === 'team-docs' ? teamFiles : pubFiles;
+
   const loadFile = useCallback((path: string) => {
     setLoading(true);
     setError(null);
-    fetch(`${HEIMDALL_API}/docs/${path}`)
+    fetch(`${HEIMDALL_API}/${apiNs}/${path}`)
       .then(r => r.ok ? r.text() : Promise.reject(`HTTP ${r.status}`))
       .then(text => { setContent(text); setLoading(false); })
       .catch(e  => { setError(String(e)); setLoading(false); });
-  }, []);
+  }, [apiNs]);
 
   useEffect(() => {
     if (filePath) loadFile(filePath);
     else setContent(null);
   }, [filePath, loadFile]);
 
-  const html      = useMemo(() => content !== null ? marked.parse(content) as string : '', [content]);
+  const html       = useMemo(() => content !== null ? marked.parse(content) as string : '', [content]);
   const contentRef = useRef<HTMLDivElement>(null);
   const tree       = buildTree(files);
 
@@ -175,131 +217,143 @@ export default function DocsPage() {
         block.parentElement?.replaceWith(wrapper);
       }).catch(err => {
         console.warn('[mermaid] render error:', err);
-        // Leave original <pre><code> intact on error
       });
     });
   }, [html]);
 
+  const showTeamTab = teamFiles.length > 0;
+
   return (
-    <div style={{ display: 'flex', height: '100%', fontSize: '13px' }}>
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column', fontSize: '13px' }}>
 
-      {/* ── Sidebar ──────────────────────────────────────────────────────── */}
-      <aside style={{
-        width: '260px', flexShrink: 0,
-        borderRight: '1px solid var(--bd)',
+      {/* ── Tab bar — always visible; Team tab only when volume is mounted ── */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid var(--bd)',
         background: 'var(--bg1)',
-        overflowY: 'auto',
-        padding: '12px 0',
-        fontFamily: 'var(--font-mono, monospace)',
+        padding: '0 12px',
+        flexShrink: 0,
       }}>
-        <div style={{
-          padding: '4px 16px 12px',
-          fontSize: '10px', fontWeight: 700,
-          letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: 'var(--t3)',
-          borderBottom: '1px solid var(--bd)',
-          marginBottom: '8px',
-          display: 'flex', alignItems: 'center', gap: '6px',
-        }}>
-          <span style={{
-            background: 'var(--wrn)', color: '#000',
-            fontSize: '9px', padding: '1px 4px',
-            borderRadius: '3px', letterSpacing: '0.04em',
-          }}>dev</span>
-          Docs
-        </div>
+        <TabBtn active={tab === 'docs'}      onClick={() => navigate('/docs')}>Documentation</TabBtn>
+        {showTeamTab && (
+          <TabBtn active={tab === 'team-docs'} onClick={() => navigate('/team-docs')}>Team</TabBtn>
+        )}
+      </div>
 
-        {Object.keys(tree).sort().map(dir => (
-          <div key={dir}>
-            {dir && (
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+        <aside style={{
+          width: '260px', flexShrink: 0,
+          borderRight: '1px solid var(--bd)',
+          background: 'var(--bg1)',
+          overflowY: 'auto',
+          padding: '12px 0',
+          fontFamily: 'var(--font-mono, monospace)',
+        }}>
+          <div style={{
+            padding: '4px 16px 12px',
+            fontSize: '10px', fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: 'var(--t3)',
+            borderBottom: '1px solid var(--bd)',
+            marginBottom: '8px',
+          }}>
+            {tab === 'team-docs' ? 'Team' : 'Docs'}
+          </div>
+
+          {Object.keys(tree).sort().map(dir => (
+            <div key={dir}>
+              {dir && (
+                <div style={{
+                  padding: '6px 16px 2px',
+                  fontSize: '11px', fontWeight: 600,
+                  color: 'var(--t3)', letterSpacing: '0.04em',
+                }}>
+                  {dir}/
+                </div>
+              )}
+              {tree[dir].map(file => {
+                const full = dir ? `${dir}/${file}` : file;
+                const isActive = filePath === full;
+                return (
+                  <Link
+                    key={full}
+                    to={`${baseRoute}/${full}`}
+                    style={{
+                      display: 'block',
+                      padding: '3px 16px 3px ' + (dir ? '28px' : '16px'),
+                      color: isActive ? 'var(--acc)' : 'var(--t2)',
+                      background: isActive ? 'var(--bg3)' : 'transparent',
+                      textDecoration: 'none',
+                      borderLeft: isActive ? '2px solid var(--acc)' : '2px solid transparent',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {file}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+
+          {files.length === 0 && !error && (
+            <div style={{ padding: '12px 16px', color: 'var(--t3)' }}>Loading…</div>
+          )}
+          {error && (
+            <div style={{ padding: '12px 16px', color: 'var(--danger)', fontSize: '12px' }}>{error}</div>
+          )}
+        </aside>
+
+        {/* ── Content pane ─────────────────────────────────────────────────── */}
+        <main style={{
+          flex: 1, overflowY: 'auto',
+          padding: '24px 40px',
+          background: 'var(--bg0)',
+          color: 'var(--t1)',
+        }}>
+          {!filePath && (
+            <div style={{ color: 'var(--t3)', marginTop: '40px', textAlign: 'center' }}>
+              Select a document from the sidebar
+            </div>
+          )}
+
+          {loading && (
+            <div style={{ color: 'var(--t3)', padding: '8px 0' }}>Loading…</div>
+          )}
+
+          {!loading && content !== null && (
+            <>
               <div style={{
-                padding: '6px 16px 2px',
-                fontSize: '11px', fontWeight: 600,
-                color: 'var(--t3)', letterSpacing: '0.04em',
+                fontSize: '11px', color: 'var(--t3)',
+                marginBottom: '20px',
+                display: 'flex', alignItems: 'center', gap: '8px',
+                fontFamily: 'var(--font-mono, monospace)',
               }}>
-                {dir}/
-              </div>
-            )}
-            {tree[dir].map(file => {
-              const full = dir ? `${dir}/${file}` : file;
-              const isActive = filePath === full;
-              return (
-                <Link
-                  key={full}
-                  to={`/docs/${full}`}
+                <button
+                  onClick={() => navigate(baseRoute)}
                   style={{
-                    display: 'block',
-                    padding: '3px 16px 3px ' + (dir ? '28px' : '16px'),
-                    color: isActive ? 'var(--acc)' : 'var(--t2)',
-                    background: isActive ? 'var(--bg3)' : 'transparent',
-                    textDecoration: 'none',
-                    borderLeft: isActive ? '2px solid var(--acc)' : '2px solid transparent',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    fontSize: '12px',
+                    background: 'transparent', border: 'none',
+                    cursor: 'pointer', color: 'var(--acc)',
+                    fontSize: '11px', padding: 0,
                   }}
                 >
-                  {file}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-
-        {files.length === 0 && !error && (
-          <div style={{ padding: '12px 16px', color: 'var(--t3)' }}>Loading…</div>
-        )}
-        {error && (
-          <div style={{ padding: '12px 16px', color: 'var(--danger)', fontSize: '12px' }}>{error}</div>
-        )}
-      </aside>
-
-      {/* ── Content pane ─────────────────────────────────────────────────── */}
-      <main style={{
-        flex: 1, overflowY: 'auto',
-        padding: '24px 40px',
-        background: 'var(--bg0)',
-        color: 'var(--t1)',
-      }}>
-        {!filePath && (
-          <div style={{ color: 'var(--t3)', marginTop: '40px', textAlign: 'center' }}>
-            Select a document from the sidebar
-          </div>
-        )}
-
-        {loading && (
-          <div style={{ color: 'var(--t3)', padding: '8px 0' }}>Loading…</div>
-        )}
-
-        {!loading && content !== null && (
-          <>
-            <div style={{
-              fontSize: '11px', color: 'var(--t3)',
-              marginBottom: '20px',
-              display: 'flex', alignItems: 'center', gap: '8px',
-              fontFamily: 'var(--font-mono, monospace)',
-            }}>
-              <button
-                onClick={() => navigate('/docs')}
-                style={{
-                  background: 'transparent', border: 'none',
-                  cursor: 'pointer', color: 'var(--acc)',
-                  fontSize: '11px', padding: 0,
-                }}
-              >
-                ← back
-              </button>
-              <span>{filePath}</span>
-            </div>
-            {/* eslint-disable-next-line react/no-danger */}
-            <div
-              ref={contentRef}
-              className="docs-body"
-              dangerouslySetInnerHTML={{ __html: html }}
-              style={{ maxWidth: '860px' }}
-            />
-          </>
-        )}
-      </main>
+                  ← back
+                </button>
+                <span>{filePath}</span>
+              </div>
+              {/* eslint-disable-next-line react/no-danger */}
+              <div
+                ref={contentRef}
+                className="docs-body"
+                dangerouslySetInnerHTML={{ __html: html }}
+                style={{ maxWidth: '860px' }}
+              />
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

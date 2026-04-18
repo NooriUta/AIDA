@@ -53,23 +53,6 @@ test-results/
 **/.__mf__temp/
 **/@mf-types/
 
-# ── Внутренняя документация разработки (не публикуется в git) ─────────────────
-# Отслеживаются только: docs/guides/ и docs/skills/
-docs/architecture/
-docs/adr/
-docs/plans/
-docs/quality-gates/
-docs/reviews/
-docs/reports/
-docs/archive/
-docs/sprints/
-docs/hound/
-docs/loom/
-docs/verdandi/
-docs/infra/
-docs/k8s/
-docs/internal/
-docs/diagrams/
-docs/ci-cd/
-docs/plan/
+# ── Внутренняя документация команды → C:\AIDA\docs\ (вне репозитория) ─────────
+# docs/guides/, docs/architecture/, docs/diagrams/, docs/reference/ — публичные, tracked
 infra/terraform/
