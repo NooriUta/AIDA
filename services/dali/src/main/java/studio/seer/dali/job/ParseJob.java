@@ -143,6 +143,11 @@ public class ParseJob {
 
     // ── Batch (directory) ─────────────────────────────────────────────────────
 
+    /** Max per-file retry attempts for transient write failures (e.g. ArcadeDB MVCC conflicts). */
+    private static final int  FILE_MAX_RETRIES    = 3;
+    /** Base delay (ms) for per-file retry backoff: 2 s → 4 s on successive attempts. */
+    private static final long FILE_RETRY_BASE_MS  = 2_000;
+
     private void runBatch(String sessionId, Path dir, HoundConfig config,
                           ParseSessionInput input) throws IOException {
         List<Path> files = collectSqlFiles(dir);
@@ -155,21 +160,85 @@ public class ParseJob {
 
         List<FileResult> fileResults = new ArrayList<>();
 
-        // Parse file-by-file so we can update progress after each one
+        // Parse file-by-file so we can update progress after each one.
+        // Per-file retry absorbs transient ArcadeDB MVCC conflicts without aborting the entire
+        // batch — a single file failure no longer cascades into a full session retry (JobRunr).
         for (Path file : files) {
-            HoundEventListener listener = buildListener(sessionId, config);
-            ParseResult result = houndParser.parse(file, config, listener);
-            FileResult fr = toFileResult(result);
+            FileResult fr = parseFileWithRetry(sessionId, file, config);
             fileResults.add(fr);
             sessionService.recordFileComplete(sessionId, fr);
-            log.debug("[{}] File done: {} atoms={} dur={}ms",
-                    sessionId, file.getFileName(), result.atomCount(), result.durationMs());
+            if (fr.success()) {
+                log.debug("[{}] File done: {} atoms={} dur={}ms",
+                        sessionId, file.getFileName(), fr.atomCount(), fr.durationMs());
+            } else {
+                log.warn("[{}] File permanently failed (skipped): {}",
+                        sessionId, file.getFileName());
+            }
         }
 
         ParseResult merged = merge(input.source(), fileResults);
         sessionService.completeSession(sessionId, merged, fileResults);
         emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
+    }
+
+    /**
+     * Parses a single file with per-file retry fallback.
+     *
+     * <p>If the write phase throws (e.g. ArcadeDB MVCC conflict manifesting as an HTTP 5xx after
+     * {@link com.hound.storage.HttpBatchClient}'s own 3-attempt retry), this method waits and
+     * retries up to {@value FILE_MAX_RETRIES} times before giving up.
+     *
+     * <p>On permanent failure the file is recorded as {@code success=false} in the batch
+     * result, but processing continues for the remaining files.
+     */
+    private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config) {
+        Exception lastEx = null;
+        for (int attempt = 1; attempt <= FILE_MAX_RETRIES; attempt++) {
+            try {
+                HoundEventListener listener = buildListener(sessionId, config);
+                ParseResult result = houndParser.parse(file, config, listener);
+                if (attempt > 1) {
+                    log.info("[{}] File recovered on attempt {}/{}: {}",
+                            sessionId, attempt, FILE_MAX_RETRIES, file.getFileName());
+                }
+                return toFileResult(result);
+            } catch (Exception e) {
+                lastEx = e;
+                String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                if (attempt < FILE_MAX_RETRIES) {
+                    long delay = FILE_RETRY_BASE_MS << (attempt - 1); // 2 s, 4 s
+                    log.warn("[{}] File write failed (attempt {}/{}), retrying in {} ms: {} — {}",
+                            sessionId, attempt, FILE_MAX_RETRIES, delay, file.getFileName(), reason);
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                } else {
+                    log.error("[{}] File failed after {} attempts, skipping: {} — {}",
+                            sessionId, FILE_MAX_RETRIES, file.getFileName(), reason, e);
+                }
+            }
+        }
+        return failedFileResult(file, lastEx);
+    }
+
+    /** Creates a {@link FileResult} representing a file that could not be written. */
+    private static FileResult failedFileResult(Path file, Exception cause) {
+        String error = cause != null
+                ? (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName())
+                : "Unknown write error";
+        return new FileResult(
+                file.toString(),
+                false,            // success = false
+                0, 0, 0, 0,
+                List.of(),
+                0.0, 0, 0,
+                0L,
+                List.of(),
+                List.of("Write failed after " + FILE_MAX_RETRIES + " attempts: " + error));
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
