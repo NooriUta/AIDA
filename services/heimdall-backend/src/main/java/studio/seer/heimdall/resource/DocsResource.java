@@ -15,18 +15,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Temporary dev-only endpoint — browse docs/ directory from the browser.
- *
- * Enabled via docker-compose.yml volume mount:
- *   heimdall-backend:
- *     volumes:
- *       - ./docs:/docs:ro
+ * Serves the public project docs baked into the Docker image (COPY docs /docs).
  *
  * GET /docs         → JSON array of .md file paths (relative)
  * GET /docs/{path}  → raw Markdown content (text/plain)
  *
- * Path-traversal is blocked: any request that resolves outside DOCS_ROOT
- * returns 403.
+ * Path-traversal is blocked: any request that resolves outside DOCS_ROOT returns 403.
  */
 @Path("/docs")
 public class DocsResource {

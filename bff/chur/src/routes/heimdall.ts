@@ -222,4 +222,73 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
       ws.on('message', () => {});
     },
   );
+
+  // ── GET /heimdall/docs — list public .md files ────────────────────────────
+  app.get(
+    '/heimdall/docs',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      try {
+        const res = await fetch(`${HEIMDALL_ORIGIN}/docs`, {
+          headers: { 'X-Seer-Role': request.user.role },
+        });
+        return reply.status(res.status).send(await res.json());
+      } catch {
+        return reply.status(503).send({ error: 'HEIMDALL_UNREACHABLE' });
+      }
+    },
+  );
+
+  // ── GET /heimdall/docs/:path — serve public .md file content ─────────────
+  app.get(
+    '/heimdall/docs/*',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      const filePath = (request.params as Record<string, string>)['*'];
+      try {
+        const res = await fetch(`${HEIMDALL_ORIGIN}/docs/${filePath}`, {
+          headers: { 'X-Seer-Role': request.user.role },
+        });
+        const text = await res.text();
+        return reply.status(res.status).type('text/plain').send(text);
+      } catch {
+        return reply.status(503).send('HEIMDALL_UNREACHABLE');
+      }
+    },
+  );
+
+  // ── GET /heimdall/team-docs — list team .md files ────────────────────────
+  // Returns empty array when /team-docs volume is not mounted (tab auto-hides).
+  app.get(
+    '/heimdall/team-docs',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      try {
+        const res = await fetch(`${HEIMDALL_ORIGIN}/team-docs`, {
+          headers: { 'X-Seer-Role': request.user.role },
+        });
+        return reply.status(res.status).send(await res.json());
+      } catch {
+        return reply.status(503).send({ error: 'HEIMDALL_UNREACHABLE' });
+      }
+    },
+  );
+
+  // ── GET /heimdall/team-docs/:path — serve team .md file content ──────────
+  app.get(
+    '/heimdall/team-docs/*',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      const filePath = (request.params as Record<string, string>)['*'];
+      try {
+        const res = await fetch(`${HEIMDALL_ORIGIN}/team-docs/${filePath}`, {
+          headers: { 'X-Seer-Role': request.user.role },
+        });
+        const text = await res.text();
+        return reply.status(res.status).type('text/plain').send(text);
+      } catch {
+        return reply.status(503).send('HEIMDALL_UNREACHABLE');
+      }
+    },
+  );
 };
