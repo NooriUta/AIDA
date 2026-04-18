@@ -140,12 +140,20 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 // ── DocsPage ──────────────────────────────────────────────────────────────────
-export type DocsTab = 'docs' | 'team-docs';
+export type DocsTab = 'docs' | 'team-docs' | 'team-archive';
 
 interface Props { tab?: DocsTab; }
 
+// Tab → { apiNs, prefix stripped from file paths, base route, sidebar label }
+const TAB_META: Record<DocsTab, { apiNs: string; prefix: string; baseRoute: string; label: string }> = {
+  'docs':         { apiNs: 'docs',      prefix: '',         baseRoute: '/docs',         label: 'Docs'    },
+  'team-docs':    { apiNs: 'team-docs', prefix: 'current/', baseRoute: '/team-docs',    label: 'Current' },
+  'team-archive': { apiNs: 'team-docs', prefix: 'archive/', baseRoute: '/team-archive', label: 'Archive' },
+};
+
 export default function DocsPage({ tab = 'docs' }: Props) {
-  usePageTitle(tab === 'team-docs' ? 'Team Docs' : 'Docs');
+  const meta = TAB_META[tab];
+  usePageTitle(tab === 'team-archive' ? 'Archive' : tab === 'team-docs' ? 'Team Docs' : 'Docs');
   const { '*': splat } = useParams<{ '*': string }>();
   const navigate        = useNavigate();
   const filePath        = splat ?? '';
@@ -158,7 +166,6 @@ export default function DocsPage({ tab = 'docs' }: Props) {
 
   useEffect(() => { ensureDocsStyles(); }, []);
 
-  // Load both file lists once — team list determines whether Team tab is shown
   useEffect(() => {
     Promise.all([
       fetch(`${HEIMDALL_API}/docs`)
@@ -171,24 +178,31 @@ export default function DocsPage({ tab = 'docs' }: Props) {
     }).catch(() => {});
   }, []);
 
-  // Clear content when switching tabs so stale file from the other tab isn't shown
   useEffect(() => {
     setContent(null);
     setError(null);
   }, [tab]);
 
-  const apiNs     = tab === 'team-docs' ? 'team-docs' : 'docs';
-  const baseRoute = tab === 'team-docs' ? '/team-docs' : '/docs';
-  const files     = tab === 'team-docs' ? teamFiles : pubFiles;
+  // Files for this tab — team tabs filter & strip their prefix for clean sidebar paths
+  const files = useMemo(() => {
+    if (tab === 'docs') return pubFiles;
+    const pfx = meta.prefix;
+    return teamFiles.filter(f => f.startsWith(pfx)).map(f => f.slice(pfx.length));
+  }, [tab, pubFiles, teamFiles, meta.prefix]);
 
+  const showTeamTab    = teamFiles.some(f => f.startsWith('current/'));
+  const showArchiveTab = teamFiles.some(f => f.startsWith('archive/'));
+
+  // filePath in URL has prefix stripped; reconstruct full path for API
   const loadFile = useCallback((path: string) => {
     setLoading(true);
     setError(null);
-    fetch(`${HEIMDALL_API}/${apiNs}/${path}`)
+    const apiPath = `${meta.apiNs}/${meta.prefix}${path}`;
+    fetch(`${HEIMDALL_API}/${apiPath}`)
       .then(r => r.ok ? r.text() : Promise.reject(`HTTP ${r.status}`))
       .then(text => { setContent(text); setLoading(false); })
       .catch(e  => { setError(String(e)); setLoading(false); });
-  }, [apiNs]);
+  }, [meta]);
 
   useEffect(() => {
     if (filePath) loadFile(filePath);
@@ -221,12 +235,10 @@ export default function DocsPage({ tab = 'docs' }: Props) {
     });
   }, [html]);
 
-  const showTeamTab = teamFiles.length > 0;
-
   return (
     <div style={{ display: 'flex', height: '100%', flexDirection: 'column', fontSize: '13px' }}>
 
-      {/* ── Tab bar — always visible; Team tab only when volume is mounted ── */}
+      {/* ── Tab bar ── */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--bd)',
@@ -234,10 +246,9 @@ export default function DocsPage({ tab = 'docs' }: Props) {
         padding: '0 12px',
         flexShrink: 0,
       }}>
-        <TabBtn active={tab === 'docs'}      onClick={() => navigate('/docs')}>Documentation</TabBtn>
-        {showTeamTab && (
-          <TabBtn active={tab === 'team-docs'} onClick={() => navigate('/team-docs')}>Team</TabBtn>
-        )}
+        <TabBtn active={tab === 'docs'}         onClick={() => navigate('/docs')}>Documentation</TabBtn>
+        {showTeamTab    && <TabBtn active={tab === 'team-docs'}    onClick={() => navigate('/team-docs')}>Team</TabBtn>}
+        {showArchiveTab && <TabBtn active={tab === 'team-archive'} onClick={() => navigate('/team-archive')}>Archive</TabBtn>}
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -259,7 +270,7 @@ export default function DocsPage({ tab = 'docs' }: Props) {
             borderBottom: '1px solid var(--bd)',
             marginBottom: '8px',
           }}>
-            {tab === 'team-docs' ? 'Team' : 'Docs'}
+            {meta.label}
           </div>
 
           {Object.keys(tree).sort().map(dir => (
@@ -279,7 +290,7 @@ export default function DocsPage({ tab = 'docs' }: Props) {
                 return (
                   <Link
                     key={full}
-                    to={`${baseRoute}/${full}`}
+                    to={`${meta.baseRoute}/${full}`}
                     style={{
                       display: 'block',
                       padding: '3px 16px 3px ' + (dir ? '28px' : '16px'),
@@ -332,7 +343,7 @@ export default function DocsPage({ tab = 'docs' }: Props) {
                 fontFamily: 'var(--font-mono, monospace)',
               }}>
                 <button
-                  onClick={() => navigate(baseRoute)}
+                  onClick={() => navigate(meta.baseRoute)}
                   style={{
                     background: 'transparent', border: 'none',
                     cursor: 'pointer', color: 'var(--acc)',

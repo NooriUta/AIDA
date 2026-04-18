@@ -452,8 +452,9 @@ export default function App() {
             <Route path="events"    element={<EventStreamPage />} />
             <Route path="demodebug" element={<ControlsPage />} />
             <Route path="users"     element={<UsersPage />} />
-            <Route path="docs/*"      element={<DocsPage tab="docs" />} />
-            <Route path="team-docs/*" element={<DocsPage tab="team-docs" />} />
+            <Route path="docs/*"          element={<DocsPage tab="docs" />} />
+            <Route path="team-docs/*"     element={<DocsPage tab="team-docs" />} />
+            <Route path="team-archive/*"  element={<DocsPage tab="team-archive" />} />
             <Route path="*"         element={<Navigate to="/services" replace />} />
           </Route>
         </Route>
