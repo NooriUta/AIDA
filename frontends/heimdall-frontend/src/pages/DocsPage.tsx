@@ -226,19 +226,19 @@ export default function DocsPage({ tab = 'docs' }: Props) {
   return (
     <div style={{ display: 'flex', height: '100%', flexDirection: 'column', fontSize: '13px' }}>
 
-      {/* ── Tab bar — only rendered when team-docs volume is mounted ───────── */}
-      {showTeamTab && (
-        <div style={{
-          display: 'flex',
-          borderBottom: '1px solid var(--bd)',
-          background: 'var(--bg1)',
-          padding: '0 12px',
-          flexShrink: 0,
-        }}>
-          <TabBtn active={tab === 'docs'}      onClick={() => navigate('/docs')}>Documentation</TabBtn>
+      {/* ── Tab bar — always visible; Team tab only when volume is mounted ── */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid var(--bd)',
+        background: 'var(--bg1)',
+        padding: '0 12px',
+        flexShrink: 0,
+      }}>
+        <TabBtn active={tab === 'docs'}      onClick={() => navigate('/docs')}>Documentation</TabBtn>
+        {showTeamTab && (
           <TabBtn active={tab === 'team-docs'} onClick={() => navigate('/team-docs')}>Team</TabBtn>
-        </div>
-      )}
+        )}
+      </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
