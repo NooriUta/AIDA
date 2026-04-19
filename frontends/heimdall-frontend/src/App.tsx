@@ -15,6 +15,7 @@ import { useDashboardStore } from './stores/dashboardStore';
 const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
 const DaliPage        = React.lazy(() => import('./pages/DaliPage'));
+const DaliSourcesPage = React.lazy(() => import('./pages/DaliSourcesPage'));
 const EventStreamPage = React.lazy(() => import('./pages/EventStreamPage'));
 const ControlsPage    = React.lazy(() => import('./pages/ControlsPage'));
 const UsersPage       = React.lazy(() => import('./pages/UsersPage'));
@@ -356,6 +357,7 @@ function AppLayout() {
         <NavItem to="services"  label={t('nav.services')} />
         <NavItem to="dashboard" label={t('nav.dashboard')} />
         <NavItem to="dali"      label={t('nav.dali')} />
+        <NavItem to="sources"   label={t('nav.sources')} />
         <NavItem to="events"    label={t('nav.events')} />
         <NavItem to="demodebug" label={t('nav.demodebug')} />
         <NavItem to="users"     label={t('nav.users')} />
@@ -449,6 +451,7 @@ export default function App() {
             <Route path="services"  element={<ServicesPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="dali"      element={<DaliPage />} />
+            <Route path="sources"   element={<DaliSourcesPage />} />
             <Route path="events"    element={<EventStreamPage />} />
             <Route path="demodebug" element={<ControlsPage />} />
             <Route path="users"     element={<UsersPage />} />

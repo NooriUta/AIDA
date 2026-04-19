@@ -14,6 +14,7 @@
     "services":  "Сервисы",
     "dashboard": "Дашборд",
     "dali":      "Ðali",
+    "sources":   "Источники",
     "events":    "Поток событий",
     "demodebug": "DEMODEBUG",
     "users":     "Пользователи"
@@ -305,6 +306,64 @@
       "warningsBtn_many":  "{{count}} предупреждений",
       "warningsBtn_other": "{{count}} предупреждений",
       "cancelBtn": "Отменить сессию"
+    }
+  },
+  "sources": {
+    "title":       "JDBC Источники",
+    "description": "Управление JDBC-источниками (UC-1a) и загрузка файлов (UC-1b)",
+    "addBtn":      "Добавить источник",
+    "loadError":   "Ошибка загрузки источников",
+    "sourcesCount": "источников",
+    "jdbcTitle":   "JDBC Источники",
+    "emptyTitle":  "Источники не настроены",
+    "emptySub":    "Добавьте JDBC-источник для автоматического харвеста SQL-объектов",
+    "editBtn":     "Изменить",
+    "deleteBtn":   "Удалить",
+    "savedToast":   "Источник {{name}} обновлён",
+    "createdToast": "Источник {{name}} добавлен",
+    "deletedToast": "Источник {{name}} удалён",
+    "col": {
+      "name":        "Название",
+      "dialect":     "Диалект",
+      "jdbcUrl":     "JDBC URL",
+      "lastHarvest": "Последний харвест",
+      "atoms":       "Атомы",
+      "actions":     "Действия"
+    },
+    "modal": {
+      "addTitle":              "Добавить JDBC источник",
+      "editTitle":             "Изменить источник",
+      "name":                  "Название",
+      "dialect":               "Диалект",
+      "jdbcUrl":               "JDBC URL",
+      "username":              "Пользователь",
+      "password":              "Пароль",
+      "passwordEdit":          "Пароль (оставьте пустым, чтобы не менять)",
+      "passwordPlaceholder":   "без изменений",
+      "schemaInclude":         "Включённые схемы",
+      "schemaIncludePlaceholder": "HR, FINANCE (пусто = все)",
+      "schemaIncludeHint":     "Оставьте пустым для харвеста всех незапрещённых схем",
+      "schemaExclude":         "Исключённые схемы",
+      "schemaExcludeHint":     "Заполнено системными схемами для выбранного диалекта",
+      "testBtn":               "Проверить соединение",
+      "cancel":                "Отмена",
+      "save":                  "Сохранить",
+      "add":                   "Добавить источник",
+      "required":              "Обязательное поле"
+    },
+    "deleteModal": {
+      "title":   "Удалить источник",
+      "body":    "Удалить источник «{{name}}»? Отменить невозможно.",
+      "cancel":  "Отмена",
+      "confirm": "Удалить"
+    },
+    "upload": {
+      "title":           "Загрузка файлов",
+      "dropHint":        "Перетащите файлы или нажмите для выбора",
+      "previewMode":     "Preview-режим (без записи в YGG)",
+      "clearBeforeWrite": "Очистить схему YGG перед записью",
+      "uploadBtn":       "Загрузить и разобрать",
+      "success":         "Загружено — сессия {{id}} в очереди"
     }
   }
 }
