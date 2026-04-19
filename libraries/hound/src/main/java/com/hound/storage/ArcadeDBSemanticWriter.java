@@ -179,17 +179,21 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                 "HAS_PARAMETER","HAS_VARIABLE","CHILD_OF","CONTAINS_ROUTINE",
                 "ROUTINE_USES_TABLE","CALLS",
                 "BULK_COLLECTS_INTO","RECORD_USED_IN","HAS_RECORD_FIELD","FIELD_MAPS_TO",
-                "HAS_COLUMN","CONTAINS_TABLE","CONTAINS_SCHEMA","BELONGS_TO_APP","BELONGS_TO_SESSION"
+                "HAS_COLUMN","CONTAINS_TABLE","CONTAINS_SCHEMA","BELONGS_TO_APP","BELONGS_TO_SESSION",
+                // v28: DaliStatement -[HAS_SNIPPET]-> DaliSnippet
+                "HAS_SNIPPET"
         };
         String[] vtxTypes = {
                 "DaliAffectedColumn","DaliAtom","DaliOutputColumn","DaliJoin",
                 "DaliParameter","DaliVariable","DaliStatement",
                 "DaliColumn","DaliPackage","DaliRoutine","DaliTable",
                 "DaliSchema","DaliSession","DaliDatabase",
-                "DaliApplication","DaliRecord","DaliRecordField"
+                "DaliApplication","DaliRecord","DaliRecordField",
+                // v28: DaliSnippet promoted from document to vertex
+                "DaliSnippet"
         };
         String[] docTypes = {
-                "DaliSnippet","DaliSnippetScript"
+                "DaliSnippetScript"
         };
 
         remote.cleanAll(edgeTypes, vtxTypes, docTypes);

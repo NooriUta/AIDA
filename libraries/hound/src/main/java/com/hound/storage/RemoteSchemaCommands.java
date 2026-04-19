@@ -106,8 +106,13 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE IS_UNIQUE_COLUMN IF NOT EXISTS",
                 "CREATE EDGE TYPE HAS_CHECK IF NOT EXISTS",
 
-                // Document types
-                "CREATE DOCUMENT TYPE DaliSnippet IF NOT EXISTS",
+                // DaliSnippet — explicit per-statement SQL text vertex (v28+)
+                // Replaced DOCUMENT with VERTEX so a HAS_SNIPPET edge can link
+                // DaliStatement → DaliSnippet directly (no Session hop needed).
+                "CREATE VERTEX TYPE DaliSnippet IF NOT EXISTS",
+                // Edge: DaliStatement -[HAS_SNIPPET]-> DaliSnippet
+                "CREATE EDGE TYPE HAS_SNIPPET IF NOT EXISTS",
+                // DaliSnippetScript remains a document (no graph edges needed)
                 "CREATE DOCUMENT TYPE DaliSnippetScript IF NOT EXISTS",
         };
     }
@@ -236,10 +241,11 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliDDLStatement.line_end IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliDDLStatement.target_table_geoids IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliDDLStatement.short_name IF NOT EXISTS STRING",
-                // DaliSnippet (v22: +line_start, +line_end)
+                // DaliSnippet (v22: +line_start/end; v28: VERTEX + HAS_SNIPPET edge)
                 "CREATE PROPERTY DaliSnippet.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.snippet IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSnippet.snippet_hash IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.line_start IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliSnippet.line_end IF NOT EXISTS INTEGER",
                 // DaliSnippetScript (v22)
@@ -325,6 +331,9 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliRecordField (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliRecordField (field_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliStatement (short_name) NOTUNIQUE NULL_STRATEGY SKIP",
+                // DaliSnippet — stmt_geoid lookup for knotSnippet + backward-compat direct lookups
+                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (stmt_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippetScript (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (stmt_geoid) NOTUNIQUE NULL_STRATEGY SKIP",

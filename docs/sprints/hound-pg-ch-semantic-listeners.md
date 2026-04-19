@@ -810,3 +810,67 @@ public void exitCreatefunctionstmt(PostgreSQLParser.CreatefunctionstmtContext ct
 - `CH-T5`: `SELECT * FROM t` → onBareStar
 - `CH-T6`: `SELECT tbl.* FROM t tbl` → isTableStar=true
 - `CH-T7`: `SELECT arrayMap(x -> x * 2, arr) FROM t` → lambda guard, `arr` = atom, `x` = NOT atom
+
+---
+
+## Шаг 11 — DaliSnippet: явная связь Snippet → Element (v28)
+
+> Добавлено по запросу: "Добавь явную связь Snippet с элементом а не через Session"
+
+### Проблема
+
+`DaliSnippet` был **document**-типом в ArcadeDB — без рёбер. Связь со statement шла только
+через текстовые поля `session_id + stmt_geoid` (фактически через Session как посредник).
+SQL-вкладка InspectorStatement делала поиск `WHERE stmt_geoid = :geoid` — это полное сканирование
+документов, без использования графовых индексов.
+
+### Решение: VERTEX + HAS_SNIPPET edge
+
+```
+DaliStatement -[HAS_SNIPPET]-> DaliSnippet
+```
+
+**Изменённые файлы:**
+
+| Файл | Изменение |
+|---|---|
+| `RemoteSchemaCommands.java` | `CREATE VERTEX TYPE DaliSnippet` (было DOCUMENT); `CREATE EDGE TYPE HAS_SNIPPET`; индексы по `stmt_geoid` и `session_id` |
+| `RemoteWriter.java` | После каждого `INSERT INTO DaliSnippet` добавлен `CREATE EDGE HAS_SNIPPET FROM DaliStatement TO DaliSnippet` (оба пути: pre-batch и post-batch) |
+| `ArcadeDBSemanticWriter.java` | `DaliSnippet` перенесён из `docTypes[]` в `vtxTypes[]`; `HAS_SNIPPET` добавлен в `edgeTypes[]` (для `cleanAll`) |
+| `KnotService.java` | `knotSnippet()`: запрос через `TRAVERSE out('HAS_SNIPPET')` вместо `WHERE stmt_geoid = :geoid`; `loadSnippets()` оставлен на `session_id`-пути (эффективнее для bulk-загрузки отчёта) |
+| `InspectorStatement.tsx` | Убран `maxHeight: 'calc(100vh - 280px)'` из `<pre>` — ResizablePanel контролирует скролл |
+
+### Детали реализации
+
+**RemoteWriter** (оба пути: rcmd-direct и post-batch):
+```java
+rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, ...", sid, stmtGeoid, ...);
+rcmd("CREATE EDGE HAS_SNIPPET FROM" +
+     " (SELECT FROM DaliStatement WHERE stmt_geoid = ?)" +
+     " TO (SELECT FROM DaliSnippet WHERE stmt_geoid = ? AND session_id = ?)",
+     stmtGeoid, stmtGeoid, sid);
+```
+
+**KnotService.knotSnippet** — новый primary-запрос через граф:
+```sql
+SELECT snippet
+FROM (TRAVERSE out('HAS_SNIPPET') FROM (SELECT FROM DaliStatement WHERE stmt_geoid = :geoid))
+WHERE @type = 'DaliSnippet'
+LIMIT 1
+```
+
+### Миграция существующих данных
+
+Для БД с данными до v28 нужна однократная миграция:
+```sql
+-- 1. Сменить тип (требует пересоздания): DaliSnippet → VERTEX
+-- 2. Создать рёбра для уже существующих записей:
+CREATE EDGE HAS_SNIPPET
+FROM (SELECT FROM DaliStatement WHERE stmt_geoid IN (SELECT stmt_geoid FROM DaliSnippet))
+TO   (SELECT FROM DaliSnippet)
+WHERE in.stmt_geoid = out.stmt_geoid
+```
+
+> ⚠️ **Schema change**: `DaliSnippet` **DOCUMENT → VERTEX** требует миграции на существующих
+> развёртываниях. На свежих инсталляциях `IF NOT EXISTS` гарантирует правильный тип.
+

@@ -931,13 +931,24 @@ class RemoteWriter {
             }
         }
 
-        // ── DaliSnippet ──
+        // ── DaliSnippet + HAS_SNIPPET edge ──
+        // DaliSnippet is a VERTEX (v28+). After inserting the vertex we create a
+        // HAS_SNIPPET edge: DaliStatement -[HAS_SNIPPET]-> DaliSnippet.
+        // This gives the graph a direct Snippet ↔ element link without going via
+        // session_id / stmt_geoid text scan.  stmt_geoid is kept as a property for
+        // backward-compat queries (knotReport bulk load, migration).
         for (var e : str.getStatements().entrySet()) {
             String raw = truncate(e.getValue().getSnippet(), SNIPPET_MAX);
             if (raw == null) continue;
+            String stmtGeoid = e.getKey();
             rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?, line_start=?, line_end=?",
-                    sid, e.getKey(), raw, md5(raw),
+                    sid, stmtGeoid, raw, md5(raw),
                     e.getValue().getLineStart(), e.getValue().getLineEnd());
+            // Edge: statement vertex → snippet vertex (both identified by stmt_geoid)
+            rcmd("CREATE EDGE HAS_SNIPPET FROM" +
+                    " (SELECT FROM DaliStatement WHERE stmt_geoid = ?)" +
+                    " TO (SELECT FROM DaliSnippet WHERE stmt_geoid = ? AND session_id = ?)",
+                    stmtGeoid, stmtGeoid, sid);
         }
 
         // ── DaliOutputColumn ──
@@ -1808,13 +1819,20 @@ class RemoteWriter {
                     constraintRids.size());
         }
 
-        // Post-batch: DaliSnippet (document type — batch endpoint rejects @type "document")
+        // Post-batch: DaliSnippet (VERTEX since v28 — still inserted via rcmd because batch
+        // endpoint can't return RIDs needed for the HAS_SNIPPET edge creation).
         for (var e : str.getStatements().entrySet()) {
             String raw = truncate(e.getValue().getSnippet(), SNIPPET_MAX);
             if (raw == null) continue;
+            String stmtGeoid = e.getKey();
             rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?, line_start=?, line_end=?",
-                    sid, e.getKey(), raw, md5(raw),
+                    sid, stmtGeoid, raw, md5(raw),
                     e.getValue().getLineStart(), e.getValue().getLineEnd());
+            // Edge: DaliStatement -[HAS_SNIPPET]-> DaliSnippet (direct graph link, no Session hop)
+            rcmd("CREATE EDGE HAS_SNIPPET FROM" +
+                    " (SELECT FROM DaliStatement WHERE stmt_geoid = ?)" +
+                    " TO (SELECT FROM DaliSnippet WHERE stmt_geoid = ? AND session_id = ?)",
+                    stmtGeoid, stmtGeoid, sid);
         }
 
         WriteStats ws = builder.writeStats();
