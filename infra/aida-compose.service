@@ -1,0 +1,19 @@
+[Unit]
+Description=AIDA Docker Compose Stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/seer-studio
+EnvironmentFile=/opt/seer-studio/.env.prod
+ExecStart=/opt/seer-studio/docker-compose-start.sh
+ExecStop=/usr/bin/docker compose \
+  -f docker-compose.prod.yml \
+  -f docker-compose.yc.yml down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -436,7 +436,7 @@ public class UniversalSemanticEngine {
     // Column references
     // ═══════════════════════════════════════════════════════════════
 
-    public void onColumnRef(String fullRef, int line, int endLine) {
+    public void onColumnRef(String fullRef, int line, int col, int endLine) {
         if (fullRef == null || fullRef.isBlank()) return;
 
         String currentStmt = scopeManager.currentStatement();
@@ -492,12 +492,12 @@ public class UniversalSemanticEngine {
         }
 
         // Register as atom
-        atomProcessor.registerAtom(fullRef, line, 0, endLine, 0,
+        atomProcessor.registerAtom(fullRef, line, col, endLine, 0,
                 "COLUMN", currentStmt, parentContext);
     }
 
     public void onColumnRef(String fullRef) {
-        onColumnRef(fullRef, 0, 0);
+        onColumnRef(fullRef, 0, 0, 0);
     }
 
     // ═══════════════════════════════════════════════════════════════

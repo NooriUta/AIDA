@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { InspectorSection, InspectorRow } from './InspectorSection';
+import { useLoomStore } from '../../stores/loomStore';
+import { useKnotTableRoutines, useKnotColumnStatements } from '../../services/hooks';
+import type { KnotTableUsage, KnotColumnUsage } from '../../services/lineage';
 
 interface Props { data: DaliNodeData; nodeId: string }
 
@@ -140,35 +143,75 @@ function ColBadge({ label, color }: { label: string; color: string }) {
   );
 }
 
-function ColumnRow({ col }: { col: ColumnInfo }) {
+function ColumnRow({ col, tableGeoid }: { col: ColumnInfo; tableGeoid?: string }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const colGeoid = tableGeoid && col.name ? `${tableGeoid}.${col.name.toUpperCase()}` : undefined;
+  const { data: usages, isFetching } = useKnotColumnStatements(colGeoid, expanded);
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      padding: '3px 10px', borderTop: '1px solid var(--bd)',
-      fontSize: '11px', gap: 4,
-    }}>
-      <span style={{
-        flex: 1, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        fontFamily: 'var(--mono)',
+    <>
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        padding: '3px 10px', borderTop: '1px solid var(--bd)',
+        fontSize: '11px', gap: 4,
       }}>
-        {col.name}
-      </span>
-      {col.type && (
-        <span style={{ color: 'var(--t3)', fontSize: '10px', flexShrink: 0 }}>{col.type}</span>
-      )}
-      {col.isPrimaryKey && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-          <KeyRound size={9} color="var(--wrn)" strokeWidth={2} />
-          <ColBadge label="PK" color="var(--wrn)" />
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          title={expanded ? 'Свернуть' : 'Показать использование'}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            color: 'var(--t3)', fontSize: '10px', lineHeight: 1, flexShrink: 0,
+            transition: 'color 0.1s',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--acc)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--t3)'; }}
+        >
+          {expanded ? '▾' : '▸'}
+        </button>
+        <span style={{
+          flex: 1, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontFamily: 'var(--mono)',
+        }}>
+          {col.name}
         </span>
+        {col.type && (
+          <span style={{ color: 'var(--t3)', fontSize: '10px', flexShrink: 0 }}>{col.type}</span>
+        )}
+        {col.isPrimaryKey && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+            <KeyRound size={9} color="var(--wrn)" strokeWidth={2} />
+            <ColBadge label="PK" color="var(--wrn)" />
+          </span>
+        )}
+        {col.isForeignKey && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+            <Link2 size={9} color="var(--inf)" strokeWidth={2} />
+            <ColBadge label="FK" color="var(--inf)" />
+          </span>
+        )}
+      </div>
+      {expanded && (
+        <div style={{ background: 'var(--bg1)', borderTop: '1px solid var(--bd)' }}>
+          {isFetching && (
+            <div style={{ padding: '4px 16px', fontSize: '10px', color: 'var(--t3)' }}>…</div>
+          )}
+          {!isFetching && usages && usages.length === 0 && (
+            <div style={{ padding: '4px 16px', fontSize: '10px', color: 'var(--t3)' }}>
+              {t('inspector.noUsage', { defaultValue: 'Нет использований' })}
+            </div>
+          )}
+          {!isFetching && usages && usages.map((u: KnotColumnUsage, i: number) => (
+            <div key={`${u.stmtGeoid}-${i}`} style={{
+              padding: '2px 16px', fontSize: '10px', color: 'var(--t2)',
+              fontFamily: 'var(--mono)', borderTop: '1px solid var(--bd)',
+            }}>
+              {u.routineName || u.routineGeoid} · <span style={{ color: 'var(--t3)' }}>{u.stmtType}</span>
+            </div>
+          ))}
+        </div>
       )}
-      {col.isForeignKey && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-          <Link2 size={9} color="var(--inf)" strokeWidth={2} />
-          <ColBadge label="FK" color="var(--inf)" />
-        </span>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -225,19 +268,94 @@ function DdlPanel({ ddlText }: { ddlText: string }) {
   );
 }
 
+// ── Routines analytics section ────────────────────────────────────────────────
+
+function UsageRow({ usage, onNavigate }: { usage: KnotTableUsage; onNavigate: () => void }) {
+  const isWrite = usage.edgeType === 'WRITES_TO';
+  return (
+    <div
+      onClick={onNavigate}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '4px 10px', borderTop: '1px solid var(--bd)',
+        fontSize: '11px', cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg2)'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+    >
+      <span style={{
+        fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: 3, flexShrink: 0,
+        background: isWrite
+          ? 'color-mix(in srgb, var(--danger) 15%, transparent)'
+          : 'color-mix(in srgb, var(--suc) 15%, transparent)',
+        color: isWrite ? 'var(--danger)' : 'var(--suc)',
+        border: `1px solid ${isWrite ? 'color-mix(in srgb, var(--danger) 40%, transparent)' : 'color-mix(in srgb, var(--suc) 40%, transparent)'}`,
+      }}>
+        {isWrite ? 'W' : 'R'}
+      </span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--t1)', fontFamily: 'var(--mono)' }}>
+        {usage.routineName || usage.routineGeoid}
+      </span>
+      {usage.stmtType && (
+        <span style={{ fontSize: '9px', color: 'var(--t3)', flexShrink: 0 }}>{usage.stmtType}</span>
+      )}
+    </div>
+  );
+}
+
+function TableRoutinesSection({ nodeId }: { nodeId: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { jumpTo } = useLoomStore();
+  const [open, setOpen] = useState(false);
+  const { data, isFetching } = useKnotTableRoutines(nodeId, open);
+
+  const handleNavigate = useCallback((usage: KnotTableUsage) => {
+    if (usage.routineGeoid) {
+      jumpTo('L3', usage.routineGeoid, usage.routineName || usage.routineGeoid, 'DaliRoutine', { focusNodeId: usage.routineGeoid });
+      navigate('/');
+    }
+  }, [jumpTo, navigate]);
+
+  return (
+    <InspectorSection
+      title={`${t('inspector.routines', { defaultValue: 'Routines' })}${data ? ` (${data.length})` : ''}`}
+      defaultOpen={false}
+      onToggle={setOpen}
+    >
+      {isFetching && (
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+          {t('status.loading', { defaultValue: '…' })}
+        </div>
+      )}
+      {!isFetching && open && data && data.length === 0 && (
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+          {t('inspector.noRoutines', { defaultValue: 'Нет routines' })}
+        </div>
+      )}
+      {!isFetching && data && data.map((u, i) => (
+        <UsageRow key={`${u.routineGeoid}-${u.stmtGeoid}-${i}`} usage={u} onNavigate={() => handleNavigate(u)} />
+      ))}
+    </InspectorSection>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export const InspectorTable = memo(({ data, nodeId }: Props) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { jumpTo } = useLoomStore();
   const [tab, setTab] = useState<TableTab>('overview');
-  const columns   = data.columns ?? [];
+  const columns    = data.columns ?? [];
   const dataSource = typeof data.metadata?.dataSource === 'string' ? data.metadata.dataSource : undefined;
   const ddlText    = typeof data.metadata?.ddlText    === 'string' ? data.metadata.ddlText    : '';
   const schema     = data.schema ?? (typeof data.metadata?.schema === 'string' ? data.metadata.schema : undefined);
+  const tableGeoid = typeof data.metadata?.tableGeoid === 'string' ? data.metadata.tableGeoid
+    : schema && data.label ? `${schema}.${data.label}` : undefined;
 
   const openSchemaInLoom = schema
-    ? () => navigate(`/knot?schema=${encodeURIComponent(schema)}`)
+    ? () => { jumpTo('L1', null, schema); navigate('/'); }
     : undefined;
 
   return (
@@ -265,10 +383,12 @@ export const InspectorTable = memo(({ data, nodeId }: Props) => {
               </div>
             ) : (
               <div style={{ marginTop: 2 }}>
-                {columns.map((col) => <ColumnRow key={col.id} col={col} />)}
+                {columns.map((col) => <ColumnRow key={col.id} col={col} tableGeoid={tableGeoid} />)}
               </div>
             )}
           </InspectorSection>
+
+          <TableRoutinesSection nodeId={nodeId} />
         </div>
       )}
 
