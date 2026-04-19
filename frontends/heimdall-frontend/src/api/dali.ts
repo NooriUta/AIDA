@@ -146,3 +146,85 @@ export async function getYggStats(): Promise<YggStats> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// ── JDBC Sources ─────────────────────────────────────────────────────────────
+
+export interface SchemaFilter {
+  include: string[];
+  exclude: string[];
+}
+
+export interface DaliSource {
+  id: string;
+  name: string;
+  dialect: string;
+  jdbcUrl: string;
+  username: string;
+  lastHarvest: string | null;
+  atomCount: number;
+  schemaFilter: SchemaFilter;
+}
+
+export interface CreateSourceInput {
+  name: string;
+  dialect: string;
+  jdbcUrl: string;
+  username: string;
+  password: string;
+  schemaFilter: SchemaFilter;
+}
+
+export interface TestConnectionResult {
+  ok: boolean;
+  latencyMs?: number;
+  error?: string;
+}
+
+export async function getSources(): Promise<DaliSource[]> {
+  const res = await fetch(`${BASE}/api/sources`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function createSource(input: CreateSourceInput): Promise<DaliSource> {
+  const res = await fetch(`${BASE}/api/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateSource(id: string, input: Partial<CreateSourceInput>): Promise<DaliSource> {
+  const res = await fetch(`${BASE}/api/sources/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteSource(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/sources/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+}
+
+export async function testConnection(
+  jdbcUrl: string, username: string, password: string,
+): Promise<TestConnectionResult> {
+  const res = await fetch(`${BASE}/api/sources/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jdbcUrl, username, password }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
