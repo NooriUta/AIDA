@@ -275,4 +275,60 @@ class JsonlBatchBuilderTest {
                 "DaliRecord vertex (line " + daliRecordPos + ") must appear BEFORE " +
                 "RECORD_USED_IN edge (line " + recordUsedInPos + ")");
     }
+
+    // ── HOUND-DB-001: DaliSchema must carry db_name resolved from the database map ──
+
+    @Test
+    void daliSchema_hasDbName_whenDatabaseLinked() throws Exception {
+        // Schema "DWH.STAGING" belongs to database "DWH" with display name "DataWarehouse"
+        Map<String, Object> databases = new LinkedHashMap<>();
+        databases.put("DWH", Map.of("name", "DataWarehouse"));
+
+        Map<String, Object> schemas = new LinkedHashMap<>();
+        schemas.put("DWH.STAGING", Map.of("name", "STAGING", "db", "DWH"));
+
+        Structure str = new Structure(databases, schemas, Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        SemanticResult result = new SemanticResult("sid1", "/f.sql", "plsql", 10,
+                str, List.of(), Map.of(), List.of(), Map.of(), List.of());
+
+        JsonlBatchBuilder b = JsonlBatchBuilder.buildFromResult("sid1", result);
+        String payload = b.build();
+
+        JsonNode schemaVertex = null;
+        for (String line : payload.split("\n")) {
+            if (line.isBlank()) continue;
+            JsonNode n = MAPPER.readTree(line);
+            if ("DaliSchema".equals(n.get("@class").asText())) { schemaVertex = n; break; }
+        }
+        assertNotNull(schemaVertex, "DaliSchema vertex must be present in batch");
+        assertEquals("DataWarehouse", schemaVertex.get("db_name").asText(),
+                "db_name must be resolved from the databases map, not null");
+        assertEquals("DWH", schemaVertex.get("db_geoid").asText(),
+                "db_geoid must equal the database geoid key");
+    }
+
+    @Test
+    void daliSchema_dbNameFallsBackToGeoid_whenDatabaseNotInMap() throws Exception {
+        // Schema references a db geoid that is not in the databases map (edge case)
+        Map<String, Object> schemas = new LinkedHashMap<>();
+        schemas.put("UNKNOWN.SCH", Map.of("name", "SCH", "db", "UNKNOWN_DB"));
+
+        Structure str = new Structure(Map.of(), schemas, Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        SemanticResult result = new SemanticResult("sid2", "/f.sql", "plsql", 10,
+                str, List.of(), Map.of(), List.of(), Map.of(), List.of());
+
+        JsonlBatchBuilder b = JsonlBatchBuilder.buildFromResult("sid2", result);
+        String payload = b.build();
+
+        JsonNode schemaVertex = null;
+        for (String line : payload.split("\n")) {
+            if (line.isBlank()) continue;
+            JsonNode n = MAPPER.readTree(line);
+            if ("DaliSchema".equals(n.get("@class").asText())) { schemaVertex = n; break; }
+        }
+        assertNotNull(schemaVertex, "DaliSchema vertex must be present");
+        // Falls back to the geoid itself — not null
+        assertEquals("UNKNOWN_DB", schemaVertex.get("db_name").asText(),
+                "db_name must fall back to db_geoid when database map lookup fails");
+    }
 }

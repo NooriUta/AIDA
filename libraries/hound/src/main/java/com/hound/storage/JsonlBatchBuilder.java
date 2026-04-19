@@ -195,11 +195,17 @@ public class JsonlBatchBuilder {
             if (b.canonicalRids.containsKey(e.getKey())) continue; // already in DB, use RID for edges
             @SuppressWarnings("unchecked")
             Map<String, Object> sc = (Map<String, Object>) e.getValue();
+            String dbGeoid = (String) sc.get("db");
+            @SuppressWarnings("unchecked")
+            String dbName = (dbGeoid != null && str.getDatabases().containsKey(dbGeoid))
+                    ? (String) ((Map<String, Object>) str.getDatabases().get(dbGeoid)).get("name")
+                    : dbGeoid;
             b.appendVertex("DaliSchema", e.getKey(), mapOf(
                     "session_id", sid,
                     "schema_geoid", e.getKey(),
                     "schema_name", sc.get("name"),
-                    "db_geoid", sc.get("db")
+                    "db_name",   dbName,
+                    "db_geoid",  dbGeoid
             ));
         }
 

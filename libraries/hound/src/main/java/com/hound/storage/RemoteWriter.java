@@ -269,9 +269,15 @@ class RemoteWriter {
         if (str.getSchemas() != null && !str.getSchemas().isEmpty()) {
             for (var e : str.getSchemas().entrySet()) {
                 Map<String, Object> sc = (Map<String, Object>) e.getValue();
+                String adDbGeoid = (String) sc.get("db");
+                @SuppressWarnings("unchecked")
+                String adDbName = (adDbGeoid != null && str.getDatabases() != null
+                                   && str.getDatabases().containsKey(adDbGeoid))
+                        ? (String) ((Map<String, Object>) str.getDatabases().get(adDbGeoid)).get("name")
+                        : adDbGeoid;
                 try {
                     rcmd("INSERT INTO DaliSchema SET session_id=?, schema_geoid=?, schema_name=?, db_name=?, db_geoid=?",
-                            sid, e.getKey(), sc.get("name"), null, null);
+                            sid, e.getKey(), sc.get("name"), adDbName, adDbGeoid);
                     newSchemaGeoids.add(e.getKey());
                 } catch (RuntimeException ex) {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
