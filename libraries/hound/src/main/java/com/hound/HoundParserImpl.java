@@ -142,6 +142,70 @@ public class HoundParserImpl implements HoundParser {
     }
 
     @Override
+    public List<ParseResult> parseSources(List<SqlSource> sources, HoundConfig config,
+                                           HoundEventListener listener) {
+        if (sources.isEmpty()) return List.of();
+
+        try (ArcadeDBSemanticWriter writer = createWriter(config)) {
+            String schema = config.targetSchema();
+            CanonicalPool pool = (writer != null && schema != null && !schema.isBlank())
+                    ? writer.ensureCanonicalPool(schema, schema, schema)
+                    : null;
+
+            AtomicLong sessionSeq = new AtomicLong(System.currentTimeMillis());
+            int threads = config.workerThreads();
+            List<Future<AnalysisResult>> futures = new ArrayList<>(sources.size());
+            ThreadPoolManager tm = ThreadPoolManager.newFixedThreadPool(threads);
+
+            for (SqlSource source : sources) {
+                futures.add(tm.submit(() -> {
+                    listener.onFileParseStarted(source.sourceName(), config.dialect());
+                    return switch (source) {
+                        case SqlSource.FromFile f ->
+                                analyzeFile(f.path(), config, sessionSeq, schema, listener);
+                        case SqlSource.FromText t ->
+                                analyzeSqlText(t.sql(), t.sourceName(), config, sessionSeq, schema, listener);
+                    };
+                }));
+            }
+            tm.shutdownAndWait();
+
+            List<ParseResult> results = new ArrayList<>(sources.size());
+            for (int i = 0; i < futures.size(); i++) {
+                SqlSource source = sources.get(i);
+                try {
+                    AnalysisResult ar = futures.get(i).get();
+                    ParseResult pr;
+                    if (ar.semantic() != null) {
+                        WriteStats ws = null;
+                        if (writer != null) {
+                            ws = writer.saveResult(ar.semantic(), ar.timer(), pool, schema);
+                        }
+                        pr = toParseResult(ar.semantic(), ar.timer(), ws,
+                                ar.parseErrors(), ar.parseWarnings());
+                    } else {
+                        pr = emptyResult(source.sourceName());
+                    }
+                    listener.onFileParseCompleted(source.sourceName(), pr);
+                    results.add(pr);
+                } catch (ExecutionException e) {
+                    logger.error("parseSources failed: {} — {}", source.sourceName(),
+                            e.getCause().getMessage(), e.getCause());
+                    listener.onError(source.sourceName(), e.getCause());
+                    results.add(errorResult(source.sourceName(), e.getCause().getMessage()));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    listener.onError(source.sourceName(), e);
+                    results.add(errorResult(source.sourceName(), "Interrupted"));
+                }
+            }
+            return results;
+        } catch (Exception e) {
+            throw new RuntimeException("Hound parseSources failed", e);
+        }
+    }
+
+    @Override
     public void cleanAll(HoundConfig config) {
         try (ArcadeDBSemanticWriter writer = createWriter(config)) {
             if (writer != null) {
@@ -427,6 +491,49 @@ public class HoundParserImpl implements HoundParser {
             }
             default -> throw new IllegalArgumentException("Parser not implemented: " + dialect);
         };
+    }
+
+    /**
+     * Parses in-memory SQL text — the {@link com.hound.api.SqlSource.FromText} counterpart of
+     * {@link #analyzeFile}.
+     *
+     * <p>No disk I/O. SQL is already in memory from a SKADI/ULLR harvest.
+     * SQL*Plus stripping is applied only for the {@code "plsql"} dialect.
+     */
+    private AnalysisResult analyzeSqlText(String rawSql, String sourceName, HoundConfig config,
+                                           AtomicLong sessionSeq, String defaultSchema,
+                                           HoundEventListener listener) {
+        if (rawSql == null || rawSql.isBlank()) {
+            logger.warn("Empty SQL text for source: {}", sourceName);
+            return new AnalysisResult(null, null, new PipelineTimer(), List.of(), List.of());
+        }
+
+        String sql = "plsql".equalsIgnoreCase(config.dialect())
+                ? stripSqlPlusDirectives(rawSql, sourceName)
+                : rawSql;
+
+        long lineCount = sql.lines().count();
+        PipelineTimer timer = new PipelineTimer();
+        timer.count("lines", (int) lineCount);
+
+        UniversalSemanticEngine engine = new UniversalSemanticEngine(listener, sourceName);
+        Object dialectListener = createDialectListener(config.dialect(), engine, defaultSchema);
+        ParseOutcome outcome = parseAndWalk(sql, config.dialect(), dialectListener,
+                sourceName, listener, timer);
+
+        timer.start("resolve");
+        engine.resolvePendingColumns();
+        timer.stop("resolve");
+
+        long parseWalkResolveMs = timer.ms("parse") + timer.ms("walk") + timer.ms("resolve");
+        SemanticResult result = engine.getResult(
+                "session-" + sessionSeq.getAndIncrement(),
+                sourceName,
+                config.dialect(),
+                parseWalkResolveMs
+        ).withRawScript(rawSql);
+
+        return new AnalysisResult(null, result, timer, outcome.errors(), outcome.warnings());
     }
 
     // ─── File reading ─────────────────────────────────────────────

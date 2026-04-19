@@ -39,6 +39,9 @@ dependencies {
     // Hound library — in-JVM parse (no subprocess)
     implementation project(':libraries:hound')
 
+    // SKADI — SQL object harvester (DriverManager adapters: Oracle, PG, ClickHouse, ArcadeDB)
+    implementation project(':libraries:skadi')
+
     // Shared models — ParseSessionInput, Session, SessionStatus, HeimdallEvent
     implementation project(':shared:dali-models')
 
