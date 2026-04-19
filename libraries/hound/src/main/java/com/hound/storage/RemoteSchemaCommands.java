@@ -106,13 +106,11 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE IS_UNIQUE_COLUMN IF NOT EXISTS",
                 "CREATE EDGE TYPE HAS_CHECK IF NOT EXISTS",
 
-                // DaliSnippet — explicit per-statement SQL text vertex (v28+)
-                // Replaced DOCUMENT with VERTEX so a HAS_SNIPPET edge can link
-                // DaliStatement → DaliSnippet directly (no Session hop needed).
-                "CREATE VERTEX TYPE DaliSnippet IF NOT EXISTS",
-                // Edge: DaliStatement -[HAS_SNIPPET]-> DaliSnippet
-                "CREATE EDGE TYPE HAS_SNIPPET IF NOT EXISTS",
-                // DaliSnippetScript remains a document (no graph edges needed)
+                // DaliSnippet — DOCUMENT type (large SQL texts; bulk payload risk if promoted to VERTEX)
+                // Linked to DaliStatement via stmt_geoid text field + NOTUNIQUE index (fast O(1) lookup).
+                // HAS_SNIPPET graph edge deliberately NOT used: loading large snippets as vertices
+                // adds memory pressure on TRAVERSE and risks batch-endpoint payload overflow.
+                "CREATE DOCUMENT TYPE DaliSnippet IF NOT EXISTS",
                 "CREATE DOCUMENT TYPE DaliSnippetScript IF NOT EXISTS",
         };
     }

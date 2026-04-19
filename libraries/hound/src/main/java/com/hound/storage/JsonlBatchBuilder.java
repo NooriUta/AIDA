@@ -60,14 +60,13 @@ public class JsonlBatchBuilder {
     }
 
     /**
-     * True document types (DaliSnippetScript, DaliResolutionLog, DaliSchemaLog) are skipped in
-     * batch mode: ArcadeDB /api/v1/batch only accepts "vertex" and "edge" @type values.
+     * Document types (DaliSnippet, DaliSnippetScript, DaliResolutionLog, DaliSchemaLog) are
+     * skipped in batch mode: ArcadeDB /api/v1/batch only accepts "vertex" and "edge" @type values.
      * These types have no edges and are diagnostic-only, so graph integrity is unaffected.
      *
-     * <p>Note: DaliSnippet was a document type until v28. It is now a VERTEX and is written via
-     * {@code rcmd()} in the post-batch step of RemoteWriter (not via this batch builder) because
-     * the HAS_SNIPPET edge creation requires knowing both statement and snippet RIDs, which the
-     * batch endpoint cannot return.
+     * <p>DaliSnippet intentionally stays a DOCUMENT: large SQL texts (1 000s of lines) would
+     * cause memory pressure on any TRAVERSE operation that loads the full vertex payload, and
+     * risk batch-endpoint payload overflow. Written via {@code rcmd()} in RemoteWriter.
      */
     public void appendDocument(String type, Map<String, Object> props) {
         // no-op: batch endpoint rejects @type "document"

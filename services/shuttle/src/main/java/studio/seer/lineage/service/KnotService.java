@@ -45,8 +45,9 @@ import java.util.*;
  *   DaliStatement -[READS_FROM]->         DaliTable
  *   DaliStatement -[WRITES_TO]->          DaliTable
  *   DaliStatement -[HAS_ATOM]->           DaliAtom
- *   DaliStatement -[HAS_SNIPPET]->        DaliSnippet      (v28+: explicit link, no Session hop)
  *   DaliTable     -[HAS_COLUMN]->         DaliColumn
+ * DaliSnippet is a DOCUMENT (not vertex): large SQL texts, no graph edge.
+ *   Lookup: DaliSnippet WHERE stmt_geoid = ? — O(1) via NOTUNIQUE index.
  *   DaliRoutine   -[HAS_PARAMETER]->      DaliParameter
  *   DaliRoutine   -[HAS_VARIABLE]->       DaliVariable
  *
@@ -596,24 +597,23 @@ public class KnotService {
     public Uni<String> knotSnippet(String idOrGeoid) {
         if (idOrGeoid == null || idOrGeoid.isBlank()) return Uni.createFrom().nullItem();
         boolean isRid = idOrGeoid.startsWith("#");
-
-        // v28+: DaliSnippet is a VERTEX connected via HAS_SNIPPET edge.
-        // Traverse out('HAS_SNIPPET') from the DaliStatement to reach its snippet directly —
-        // no Session hop, no string-scan on session_id.
-        //
-        // Fallback (UNION): stmt_geoid text lookup for rows written before v28 migration.
-        // ArcadeDB SQL subqueries return a result set, so the RID path uses `IN (SELECT …)`.
+        // DaliSnippet is a DOCUMENT (not vertex — large SQL texts, VERTEX promotion rejected).
+        // RID path: resolve stmt_geoid via DaliStatement, then lookup DaliSnippet.
+        // ArcadeDB SQL subqueries return a result set, so the RID path must use
+        // `IN (SELECT …)` — `= (SELECT …)` compares a string to a record and
+        // always yields no rows (discovered the hard way during LOOM wire-up).
+        // geoid path: NOTUNIQUE index on stmt_geoid → O(1) lookup, no Session hop needed.
         String sql = isRid
             ? """
                 SELECT snippet
-                FROM (TRAVERSE out('HAS_SNIPPET') FROM (SELECT FROM DaliStatement WHERE @rid = :rid))
-                WHERE @type = 'DaliSnippet'
+                FROM DaliSnippet
+                WHERE stmt_geoid IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid)
                 LIMIT 1
                 """
             : """
                 SELECT snippet
-                FROM (TRAVERSE out('HAS_SNIPPET') FROM (SELECT FROM DaliStatement WHERE stmt_geoid = :geoid))
-                WHERE @type = 'DaliSnippet'
+                FROM DaliSnippet
+                WHERE stmt_geoid = :geoid
                 LIMIT 1
                 """;
         Map<String, Object> params = isRid
@@ -835,11 +835,8 @@ public class KnotService {
     // ── Snippets ──────────────────────────────────────────────────────────────
 
     private Uni<List<KnotSnippet>> loadSnippets(Map<String, Object> params) {
-        // Bulk load for knotReport: fetch all snippets for a session by session_id index.
-        // Using session_id scan is more efficient than traversing per-statement HAS_SNIPPET
-        // edges when loading a full session report (100s of statements × 1 snippet each).
-        // The HAS_SNIPPET edge is used by knotSnippet() for individual statement lazy-fetch.
-        // (v28+: DaliSnippet is a VERTEX; session_id is kept as a property for this bulk path.)
+        // DaliSnippet has no graph edges — DOCUMENT type joined by session_id + stmt_geoid.
+        // Bulk load for knotReport: fetch all snippets for a session via session_id NOTUNIQUE index.
         //
         // BUG-SS-042: LIMIT 2000 was too low for large packages (e.g. >100 routines × 20+ stmts).
         // Snippets are small text records; 50 000 rows load in <100ms on typical hardware.
