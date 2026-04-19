@@ -11,13 +11,18 @@
     ]
   },
   "nav": {
-    "services":  "Сервисы",
-    "dashboard": "Дашборд",
-    "dali":      "Ðali",
-    "sources":   "Источники",
-    "events":    "Поток событий",
-    "demodebug": "DEMODEBUG",
-    "users":     "Пользователи"
+    "services":     "Сервисы",
+    "dashboard":    "Дашборд",
+    "dali":         "Ðali",
+    "sources":      "Источники",
+    "events":       "Поток событий",
+    "demodebug":    "DEMODEBUG",
+    "users":        "Пользователи",
+    "overviewDesc": "Мониторинг сервисов и события",
+    "daliDesc":     "Разбор SQL и управление сессиями",
+    "adminDesc":    "Пользователи, роли, настройки",
+    "sessions":     "Сессии",
+    "jobrunr":      "JobRunr"
   },
   "auth": {
     "login":    "Войти",
@@ -307,6 +312,11 @@
       "warningsBtn_other": "{{count}} предупреждений",
       "cancelBtn": "Отменить сессию"
     }
+  },
+  "daliJobrunr": {
+    "title":        "JobRunr Dashboard",
+    "port":         "Запущен на порту {{port}}",
+    "openExternal": "Открыть в новой вкладке"
   },
   "sources": {
     "title":       "JDBC Источники",

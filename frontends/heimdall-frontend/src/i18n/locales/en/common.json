@@ -11,13 +11,18 @@
     ]
   },
   "nav": {
-    "services":  "Services",
-    "dashboard": "Dashboard",
-    "dali":      "Ðali",
-    "sources":   "Sources",
-    "events":    "Event Stream",
-    "demodebug": "DEMODEBUG",
-    "users":     "Users"
+    "services":     "Services",
+    "dashboard":    "Dashboard",
+    "dali":         "Ðali",
+    "sources":      "Sources",
+    "events":       "Event Stream",
+    "demodebug":    "DEMODEBUG",
+    "users":        "Users",
+    "overviewDesc": "Service monitoring and events",
+    "daliDesc":     "SQL parsing and session management",
+    "adminDesc":    "Users, roles, settings",
+    "sessions":     "Sessions",
+    "jobrunr":      "JobRunr"
   },
   "auth": {
     "login":    "Sign in",
@@ -293,6 +298,11 @@
       "warningsBtn_other": "{{count}} warnings total",
       "cancelBtn": "Cancel session"
     }
+  },
+  "daliJobrunr": {
+    "title":        "JobRunr Dashboard",
+    "port":         "Running on port {{port}}",
+    "openExternal": "Open in new tab"
   },
   "sources": {
     "title":       "JDBC Sources",
