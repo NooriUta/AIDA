@@ -16,12 +16,6 @@ vi.mock('react-i18next', () => ({
   Trans: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-// ── Mock react-router-dom ───────────────────────────────────────────────────
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<Record<string, unknown>>('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-    useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
-  };
-});
+// react-router-dom is NOT globally mocked here.
+// Tests that render components using useNavigate / useLocation must wrap in
+// MemoryRouter — use the renderWithRouter() helper from src/test/router-utils.tsx.
