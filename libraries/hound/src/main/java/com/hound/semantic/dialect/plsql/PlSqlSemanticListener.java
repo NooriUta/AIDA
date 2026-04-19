@@ -1068,7 +1068,7 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (ctx == null || ctx.getText() == null) return;
         String columnRef = BaseSemanticListener.cleanIdentifier(ctx.getText());
         if (columnRef != null && !columnRef.isBlank()) {
-            base.onColumnRef(columnRef, getStartLine(ctx), getEndLine(ctx));
+            base.onColumnRef(columnRef, getStartLine(ctx), getStartCol(ctx), getEndLine(ctx));
         }
     }
 

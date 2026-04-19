@@ -621,6 +621,58 @@ export async function fetchKnotTableDetail(
   return data.knotTableDetail;
 }
 
+// ── Table routines analytics (lazy, by table @rid) ───────────────────────────
+
+export interface KnotTableUsage {
+  routineGeoid: string;
+  routineName:  string;
+  edgeType:     string;  // READS_FROM | WRITES_TO
+  stmtGeoid:    string;
+  stmtType:     string;
+}
+
+const KNOT_TABLE_ROUTINES = /* GraphQL */ `
+  query KnotTableRoutines($tableRid: String!) {
+    knotTableRoutines(tableRid: $tableRid) {
+      routineGeoid routineName edgeType stmtGeoid stmtType
+    }
+  }
+`;
+
+export async function fetchKnotTableRoutines(tableRid: string): Promise<KnotTableUsage[]> {
+  const data = await gqlClient.request<{ knotTableRoutines: KnotTableUsage[] }>(
+    KNOT_TABLE_ROUTINES,
+    { tableRid },
+  );
+  return data.knotTableRoutines ?? [];
+}
+
+// ── Column-level usage (lazy, by columnGeoid) ────────────────────────────────
+
+export interface KnotColumnUsage {
+  stmtGeoid:    string;
+  stmtType:     string;
+  routineName:  string;
+  routineGeoid: string;
+  atomType:     string;
+}
+
+const KNOT_COLUMN_STATEMENTS = /* GraphQL */ `
+  query KnotColumnStatements($columnGeoid: String!) {
+    knotColumnStatements(columnGeoid: $columnGeoid) {
+      stmtGeoid stmtType routineName routineGeoid atomType
+    }
+  }
+`;
+
+export async function fetchKnotColumnStatements(columnGeoid: string): Promise<KnotColumnUsage[]> {
+  const data = await gqlClient.request<{ knotColumnStatements: KnotColumnUsage[] }>(
+    KNOT_COLUMN_STATEMENTS,
+    { columnGeoid },
+  );
+  return data.knotColumnStatements ?? [];
+}
+
 // ── Lazy snippet fetch (by stmtGeoid) ─────────────────────────────────────────
 
 const KNOT_SNIPPET = /* GraphQL */ `
