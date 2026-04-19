@@ -207,7 +207,7 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
 
 // ── Generic metadata rows ─────────────────────────────────────────────────────
 
-const ROUTINE_META_SKIP = new Set(['sqlText', 'snippet', 'ddlText', 'groupPath', 'routineKind', 'packageName']);
+const ROUTINE_META_SKIP = new Set(['sqlText', 'snippet', 'ddlText', 'groupPath', 'routineKind', 'packageName', 'scope', 'schemaName']);
 
 function AllMetaRows({ meta }: { meta: Record<string, unknown> | undefined }) {
   if (!meta) return null;

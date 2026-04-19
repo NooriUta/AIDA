@@ -25,7 +25,7 @@ export const SchemaGroupNode = memo(({ data, selected, id }: NodeProps<SchemaGro
         background:   'rgba(20,17,8,0.35)',
         position:     'relative',
       }}
-      onClick={(e) => { e.stopPropagation(); selectNode(id); }}
+      onClick={(e) => { e.stopPropagation(); selectNode(id, data); }}
     >
       {/* Header */}
       <div style={{
