@@ -45,6 +45,7 @@ import java.util.*;
  *   DaliStatement -[READS_FROM]->         DaliTable
  *   DaliStatement -[WRITES_TO]->          DaliTable
  *   DaliStatement -[HAS_ATOM]->           DaliAtom
+ *   DaliStatement -[HAS_SNIPPET]->        DaliSnippet      (v28+: explicit link, no Session hop)
  *   DaliTable     -[HAS_COLUMN]->         DaliColumn
  *   DaliRoutine   -[HAS_PARAMETER]->      DaliParameter
  *   DaliRoutine   -[HAS_VARIABLE]->       DaliVariable
