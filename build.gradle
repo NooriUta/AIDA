@@ -1,44 +1,57 @@
 // ─── AIDA monorepo — root build ──────────────────────────────────────────────
 //
-// JVM modules (Gradle subprojects — self-contained, own gradlew + settings):
-//   :libraries:hound     Java 21 / ANTLR       SQL parser & semantic engine
-//   :services:shuttle    Quarkus 3 / Java 21   lineage GraphQL API      :8080
+// JVM subprojects (Gradle — ./gradlew :<module>:<task>):
+//   :libraries:hound          Java 21 / ANTLR       SQL parser & semantic engine
+//   :services:shuttle         Quarkus 3 / Java 21   lineage GraphQL API        :8080
+//   :services:dali            Quarkus 3 / Java 21   ingestion & storage API    :9090
+//   :services:heimdall-backend Quarkus 3 / Java 21  team-docs / plan viewer    :9093
+//   :shared:dali-models       Java 21               shared model DTOs
 //
 // Node services (not Gradle subprojects — managed via tasks below):
-//   bff/chur             Fastify / Node 24     RBAC proxy + auth        :3000
-//   frontends/verdandi   React 19 / Vite 8     data lineage UI          :5173
+//   bff/chur                  Fastify / Node 24     RBAC proxy + auth          :3000
+//   frontends/verdandi        React 19 / Vite        data lineage UI            :5173
+//   frontends/heimdall-frontend React 19 / Vite      team-docs / plan UI        :5174
 //
 // ─── Quick-start ──────────────────────────────────────────────────────────────
-//   ./gradlew devAll                    start SHUTTLE + Chur + verdandi together
+//   ./gradlew devAll           start all services (7 windows on Windows)
+//   ./gradlew heimdallDev      start heimdall stack only (backend :9093 + frontend :5174)
 //
-// ─── Individual ───────────────────────────────────────────────────────────────
-//   ./gradlew :services:shuttle:quarkusDev    SHUTTLE in dev mode
-//   ./gradlew :services:shuttle:build         SHUTTLE fat-jar
-//   ./gradlew :libraries:hound:build          Hound library build
-//   ./gradlew :libraries:hound:fatJar         Hound standalone JAR
+// ─── JVM individual ───────────────────────────────────────────────────────────
+//   ./gradlew :services:shuttle:quarkusDev         SHUTTLE dev mode   :8080
+//   ./gradlew :services:dali:quarkusDev            Dali    dev mode   :9090
+//   ./gradlew :services:heimdall-backend:quarkusDev Heimdall dev mode :9093
+//   ./gradlew :services:shuttle:build              SHUTTLE fat-jar
+//   ./gradlew :libraries:hound:build               Hound library build
+//   ./gradlew :libraries:hound:fatJar              Hound standalone JAR
 //
-//   ./gradlew churDev                   Chur  in dev mode (tsx watch)
-//   ./gradlew churBuild                 Chur  compile TS → bff/chur/dist/
-//   ./gradlew churStart                 Chur  start from dist/ (production)
-//   ./gradlew churInstall               Chur  npm install
+// ─── Node individual ──────────────────────────────────────────────────────────
+//   ./gradlew churDev                  Chur  dev mode (tsx watch, :3000)
+//   ./gradlew churBuild                Chur  compile TS → bff/chur/dist/
+//   ./gradlew churStart                Chur  start from dist/ (production)
+//   ./gradlew churInstall              Chur  npm install
 //
-//   ./gradlew verdandiDev               verdandi in dev mode (Vite, :5173)
-//   ./gradlew verdandiBuild             verdandi production build → dist/
-//   ./gradlew verdandiInstall           verdandi npm install
+//   ./gradlew verdandiDev              verdandi  dev mode (Vite, :5173)
+//   ./gradlew verdandiBuild            verdandi  production build → dist/
+//   ./gradlew verdandiInstall          verdandi  npm install
+//
+//   ./gradlew heimdallFrontendDev      heimdall-frontend dev mode (Vite, :5174)
+//   ./gradlew heimdallFrontendBuild    heimdall-frontend production build → dist/
+//   ./gradlew heimdallFrontendInstall  heimdall-frontend npm install
 
 ext {
-    isWindows   = System.properties['os.name'].toLowerCase().contains('windows')
+    isWindows        = System.properties['os.name'].toLowerCase().contains('windows')
     // Prefer system Node (in PATH); fall back to JetBrains-managed Node
-    def sysNpm  = isWindows ? 'npm.cmd' : 'npm'
-    def sysNode = isWindows ? 'node.exe' : 'node'
-    def jbNode  = System.getenv('APPDATA') ?
+    def sysNpm       = isWindows ? 'npm.cmd' : 'npm'
+    def sysNode      = isWindows ? 'node.exe' : 'node'
+    def jbNode       = System.getenv('APPDATA') ?
         "${System.getenv('APPDATA')}/JetBrains/IntelliJIdea2025.3/node/versions/24.14.1" : ''
-    def nodeHome = System.getenv('NODE_HOME') ?: (jbNode && new File(jbNode, sysNode).exists() ? jbNode : '')
-    npmCmd      = nodeHome ? "${nodeHome}/${sysNpm}" : sysNpm
-    nodeCmd     = nodeHome ? "${nodeHome}/${sysNode}" : sysNode
-    churDir     = file('bff/chur')
-    verdandiDir = file('frontends/verdandi')
-    gradleCmd   = new File(rootDir, isWindows ? 'gradlew.bat' : 'gradlew').canonicalPath
+    def nodeHome     = System.getenv('NODE_HOME') ?: (jbNode && new File(jbNode, sysNode).exists() ? jbNode : '')
+    npmCmd           = nodeHome ? "${nodeHome}/${sysNpm}" : sysNpm
+    nodeCmd          = nodeHome ? "${nodeHome}/${sysNode}" : sysNode
+    churDir          = file('bff/chur')
+    verdandiDir      = file('frontends/verdandi')
+    heimdallFrontDir = file('frontends/heimdall-frontend')
+    gradleCmd        = new File(rootDir, isWindows ? 'gradlew.bat' : 'gradlew').canonicalPath
 }
 
 // ─── verdandi tasks ───────────────────────────────────────────────────────────
@@ -99,18 +112,82 @@ task churStart(type: Exec) {
     dependsOn   churBuild
 }
 
-// ─── devAll — start SHUTTLE + Chur + verdandi together ───────────────────────
+// ─── heimdall-frontend tasks ──────────────────────────────────────────────────
+
+task heimdallFrontendInstall(type: Exec) {
+    group       = 'heimdall'
+    description = 'npm install in frontends/heimdall-frontend/'
+    workingDir  heimdallFrontDir
+    commandLine npmCmd, 'install'
+}
+
+task heimdallFrontendDev(type: Exec) {
+    group       = 'heimdall'
+    description = 'Start heimdall frontend in dev mode (Vite, :5174)'
+    workingDir  heimdallFrontDir
+    commandLine npmCmd, 'run', 'dev'
+    dependsOn   heimdallFrontendInstall
+}
+
+task heimdallFrontendBuild(type: Exec) {
+    group       = 'heimdall'
+    description = 'Build heimdall-frontend production bundle → frontends/heimdall-frontend/dist/'
+    workingDir  heimdallFrontDir
+    commandLine npmCmd, 'run', 'build'
+    dependsOn   heimdallFrontendInstall
+}
+
+// ─── heimdallDev — heimdall backend + frontend together ──────────────────────
+
+task heimdallDev {
+    group       = 'heimdall'
+    description = 'Start heimdall stack: backend (:9093) + frontend (:5174)'
+    dependsOn   heimdallFrontendInstall
+
+    doLast {
+        if (isWindows) {
+            new ProcessBuilder('cmd', '/c',
+                "start \"Heimdall-Backend\" /D \"${rootDir}\" \"${gradleCmd}\" :services:heimdall-backend:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
+                "start \"Heimdall-Frontend\" /D \"${heimdallFrontDir}\" \"${npmCmd}\" run dev")
+                .start()
+            println '> Opened Heimdall-Backend (:9093) and Heimdall-Frontend (:5174) in separate windows.'
+        } else {
+            def backendProc = new ProcessBuilder(gradleCmd, ':services:heimdall-backend:quarkusDev')
+                .directory(rootDir).inheritIO().start()
+            def frontProc = new ProcessBuilder(npmCmd, 'run', 'dev')
+                .directory(heimdallFrontDir).inheritIO().start()
+            Runtime.runtime.addShutdownHook(new Thread({
+                backendProc.destroyForcibly()
+                frontProc.destroyForcibly()
+            }))
+            [backendProc, frontProc]*.waitFor()
+        }
+    }
+}
+
+// ─── devAll — start all services ─────────────────────────────────────────────
 
 task devAll {
     group       = 'Development'
-    description = 'Start all services: SHUTTLE (:8080) + Chur (:3000) + verdandi (:5173) + Dali (:9090)'
-    dependsOn   churInstall, verdandiInstall
+    description = 'Start all services: Shuttle (:8080) + Dali (:9090) + Heimdall (:9093/:5174) + Chur (:3000) + verdandi (:5173)'
+    dependsOn   churInstall, verdandiInstall, heimdallFrontendInstall
 
     doLast {
         if (isWindows) {
             // Open each service in its own console window (Windows)
             new ProcessBuilder('cmd', '/c',
-                "start \"SHUTTLE\" /D \"${rootDir}\" \"${gradleCmd}\" :services:shuttle:quarkusDev")
+                "start \"Shuttle\" /D \"${rootDir}\" \"${gradleCmd}\" :services:shuttle:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
+                "start \"Dali\" /D \"${rootDir}\" \"${gradleCmd}\" :services:dali:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
+                "start \"Heimdall-Backend\" /D \"${rootDir}\" \"${gradleCmd}\" :services:heimdall-backend:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
+                "start \"Heimdall-Frontend\" /D \"${heimdallFrontDir}\" \"${npmCmd}\" run dev")
                 .start()
             new ProcessBuilder('cmd', '/c',
                 "start \"Chur\" /D \"${churDir}\" \"${npmCmd}\" run dev")
@@ -118,27 +195,30 @@ task devAll {
             new ProcessBuilder('cmd', '/c',
                 "start \"verdandi\" /D \"${verdandiDir}\" \"${npmCmd}\" run dev")
                 .start()
-            new ProcessBuilder('cmd', '/c',
-                "start \"Dali\" /D \"${rootDir}\" \"${gradleCmd}\" :services:dali:quarkusDev")
-                .start()
-            println '> Opened SHUTTLE (:8080), Chur (:3000), verdandi (:5173) and Dali (:9090) in separate windows.'
+            println '> Opened 6 windows: Shuttle (:8080) Dali (:9090) Heimdall-Backend (:9093) Heimdall-Frontend (:5174) Chur (:3000) verdandi (:5173)'
         } else {
             // Unix/macOS — run all in parallel, inherit output to this terminal
             def shuttleProc = new ProcessBuilder(gradleCmd, ':services:shuttle:quarkusDev')
                 .directory(rootDir).inheritIO().start()
+            def daliProc = new ProcessBuilder(gradleCmd, ':services:dali:quarkusDev')
+                .directory(rootDir).inheritIO().start()
+            def heimdallBackProc = new ProcessBuilder(gradleCmd, ':services:heimdall-backend:quarkusDev')
+                .directory(rootDir).inheritIO().start()
+            def heimdallFrontProc = new ProcessBuilder(npmCmd, 'run', 'dev')
+                .directory(heimdallFrontDir).inheritIO().start()
             def churProc = new ProcessBuilder(npmCmd, 'run', 'dev')
                 .directory(churDir).inheritIO().start()
             def verdandiProc = new ProcessBuilder(npmCmd, 'run', 'dev')
                 .directory(verdandiDir).inheritIO().start()
-            def daliProc = new ProcessBuilder(gradleCmd, ':services:dali:quarkusDev')
-                .directory(rootDir).inheritIO().start()
             Runtime.runtime.addShutdownHook(new Thread({
                 shuttleProc.destroyForcibly()
+                daliProc.destroyForcibly()
+                heimdallBackProc.destroyForcibly()
+                heimdallFrontProc.destroyForcibly()
                 churProc.destroyForcibly()
                 verdandiProc.destroyForcibly()
-                daliProc.destroyForcibly()
             }))
-            [shuttleProc, churProc, verdandiProc, daliProc]*.waitFor()
+            [shuttleProc, daliProc, heimdallBackProc, heimdallFrontProc, churProc, verdandiProc]*.waitFor()
         }
     }
 }
