@@ -48,8 +48,10 @@ export default defineConfig({
       '/health':   { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
       '/metrics':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
       '/control':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/users':    { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/services': { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/users':     { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/services':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/team-docs': { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/docs':      { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
       // WebSocket event stream — same rewrite
       '/ws':       { target: 'ws://localhost:3000',   changeOrigin: true, ws: true, rewrite: (p: string) => `/heimdall${p}` },
       '/dali':     { target: 'http://localhost:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },

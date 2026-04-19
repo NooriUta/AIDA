@@ -2,6 +2,7 @@
 # docker-compose sets:  context: .  dockerfile: frontends/heimdall-frontend/Dockerfile
 
 FROM node:24-alpine AS builder
+RUN npm install -g npm@latest
 WORKDIR /app
 
 COPY packages/aida-shared ./packages/aida-shared
@@ -19,6 +20,7 @@ ENV VITE_HEIMDALL_API=$VITE_HEIMDALL_API
 RUN rm -rf .vite && npx vite build
 
 FROM nginx:alpine AS runner
+RUN apk upgrade --no-cache
 COPY --from=builder /app/frontends/heimdall-frontend/dist /usr/share/nginx/html
 COPY frontends/heimdall-frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 5174

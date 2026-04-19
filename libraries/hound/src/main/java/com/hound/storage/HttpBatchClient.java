@@ -72,10 +72,23 @@ public class HttpBatchClient {
                     return;
                 }
 
-                logger.warn("Batch HTTP {} attempt {}/{} sid={}: {}",
-                        resp.statusCode(), attempt, MAX_RETRIES, sid, resp.body());
+                if (resp.statusCode() < 500) {
+                    // 4xx — not retryable
+                    logger.warn("Batch HTTP {} (non-retryable) attempt {}/{} sid={}: {}",
+                            resp.statusCode(), attempt, MAX_RETRIES, sid, resp.body());
+                    break;
+                }
 
-                if (resp.statusCode() < 500) break; // 4xx — not retryable
+                // 5xx — retryable; detect MVCC specifically for observability
+                boolean isMvcc = resp.body() != null &&
+                        resp.body().contains("Concurrent modification");
+                if (isMvcc) {
+                    logger.warn("Batch MVCC conflict attempt {}/{} sid={} — ArcadeDB page locked, will retry",
+                            attempt, MAX_RETRIES, sid);
+                } else {
+                    logger.warn("Batch HTTP {} attempt {}/{} sid={}: {}",
+                            resp.statusCode(), attempt, MAX_RETRIES, sid, resp.body());
+                }
                 lastEx = new RuntimeException("HTTP " + resp.statusCode() + ": " + resp.body());
 
             } catch (Exception e) {
