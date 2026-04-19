@@ -676,8 +676,12 @@ public abstract class BaseSemanticListener {
         }
     }
 
+    public void onColumnRef(String columnName, int line, int col, int endLine) {
+        engine.onColumnRef(columnName, line, col, endLine);
+    }
+
     public void onColumnRef(String columnName, int line, int endLine) {
-        engine.onColumnRef(columnName, line, endLine);
+        engine.onColumnRef(columnName, line, 0, endLine);
     }
 
     public void onJoinEnter(String joinText, int line, int endLine) {

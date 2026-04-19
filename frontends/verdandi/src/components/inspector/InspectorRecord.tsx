@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { InspectorSection, InspectorRow } from './InspectorSection';
+import { useLoomStore } from '../../stores/loomStore';
 
 interface Props { data: DaliNodeData; nodeId: string }
 
@@ -127,21 +128,19 @@ function FieldRow({ field }: { field: ColumnInfo }) {
 export const InspectorRecord = memo(({ data, nodeId }: Props) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { jumpTo } = useLoomStore();
 
-  const fields: ColumnInfo[]  = Array.isArray(data.columns) ? data.columns : [];
-  const packageName  = data.metadata?.packageName  as string | undefined;
-  const routineGeoid = data.metadata?.routineGeoid as string | undefined;
+  const fields: ColumnInfo[] = Array.isArray(data.columns) ? data.columns : [];
+  const schema       = data.schema ?? (typeof data.metadata?.schema       === 'string' ? data.metadata.schema       : null);
+  const packageName  = typeof data.metadata?.packageName  === 'string' ? data.metadata.packageName  : null;
+  const routineGeoid = typeof data.metadata?.routineGeoid === 'string' ? data.metadata.routineGeoid : null;
+  const routineName  = routineGeoid ? routineGeoid.split(':').slice(1).join(':') || routineGeoid : null;
 
   const openInKnot = () => {
     const params = new URLSearchParams();
     if (packageName) params.set('pkg', packageName);
     navigate(`/knot?${params.toString()}`);
   };
-
-  const schema      = data.schema ?? (typeof data.metadata?.schema      === 'string' ? data.metadata.schema      as string : null);
-  const packageName =                  typeof data.metadata?.packageName === 'string' ? data.metadata.packageName as string : null;
-  const routineGeoid =                 typeof data.metadata?.routineGeoid === 'string' ? data.metadata.routineGeoid as string : null;
-  const routineName = routineGeoid ? routineGeoid.split(':').slice(1).join(':') || routineGeoid : null;
 
   return (
     <>
@@ -150,9 +149,9 @@ export const InspectorRecord = memo(({ data, nodeId }: Props) => {
         schema={schema}
         packageName={packageName}
         routineName={routineName}
-        onSchemaClick={schema      ? () => navigate(`/knot?schema=${encodeURIComponent(schema)}`)           : undefined}
-        onPackageClick={packageName ? () => navigate(`/knot?pkg=${encodeURIComponent(packageName)}`)         : undefined}
-        onRoutineClick={packageName ? () => navigate(`/knot?pkg=${encodeURIComponent(packageName)}`)         : undefined}
+        onSchemaClick={schema      ? () => { jumpTo('L1', null, schema); navigate('/'); }                                             : undefined}
+        onPackageClick={packageName ? () => { jumpTo('L2', `pkg-${packageName}`, packageName, 'DaliPackage'); navigate('/'); }         : undefined}
+        onRoutineClick={packageName ? () => { jumpTo('L2', `pkg-${packageName}`, packageName, 'DaliPackage'); navigate('/'); }         : undefined}
       />
 
       <InspectorSection title={t('inspector.properties')}>

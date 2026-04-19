@@ -494,7 +494,7 @@ function shortenSubLabel(geoid: string, parentGeoid: string | null): string {
 
 // ── Generic metadata rows ─────────────────────────────────────────────────────
 
-const META_SKIP_DEFAULT = new Set(['sqlText', 'snippet', 'ddlText', 'groupPath']);
+const META_SKIP_DEFAULT = new Set(['sqlText', 'snippet', 'ddlText', 'groupPath', 'id']);
 
 function AllMetaRows({
   meta, skip = [],

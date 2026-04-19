@@ -14,6 +14,8 @@ import {
   fetchKnotReport,
   fetchKnotSnippet,
   fetchKnotScript,
+  fetchKnotTableRoutines,
+  fetchKnotColumnStatements,
   fetchStatementExtras,
   fetchExpandDeep,
   isUnauthorized,
@@ -35,7 +37,9 @@ export const qk = {
   knotSnippet:   (geoid: string)  => ['knotSnippet', geoid]     as const,
   knotScript:    (sid: string)    => ['knotScript', sid]        as const,
   stmtExtras:    (geoid: string)  => ['statementExtras', geoid] as const,
-  routineDetail: (nodeId: string) => ['routineDetail', nodeId]  as const,
+  routineDetail:    (nodeId: string) => ['routineDetail', nodeId]       as const,
+  tableRoutines:    (rid: string)    => ['tableRoutines', rid]           as const,
+  columnStatements: (geoid: string)  => ['columnStatements', geoid]      as const,
 };
 
 // ── 401 handler — auto-logout when session expires ────────────────────────────
@@ -287,6 +291,32 @@ export function useStatementExtras(stmtGeoid: string | null | undefined, enabled
     queryFn:  () => fetchStatementExtras(stmtGeoid!),
     enabled:  enabled && !!stmtGeoid,
     staleTime: 300_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/** Lazy statements that reference a given column (by columnGeoid). Enabled on expand. */
+export function useKnotColumnStatements(columnGeoid: string | null | undefined, enabled: boolean) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.columnStatements(columnGeoid ?? ''),
+    queryFn:  () => fetchKnotColumnStatements(columnGeoid!),
+    enabled:  enabled && !!columnGeoid,
+    staleTime: 120_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/** Lazy routines + statements that use a given table. Enabled when analytics section is opened. */
+export function useKnotTableRoutines(tableRid: string | null | undefined, enabled: boolean) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.tableRoutines(tableRid ?? ''),
+    queryFn:  () => fetchKnotTableRoutines(tableRid!),
+    enabled:  enabled && !!tableRid,
+    staleTime: 120_000,
     throwOnError: false,
     meta: { onError },
   });
