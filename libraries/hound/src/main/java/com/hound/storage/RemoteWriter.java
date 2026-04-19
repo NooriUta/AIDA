@@ -768,12 +768,14 @@ class RemoteWriter {
         // ── DaliRoutine ──
         for (var e : str.getRoutines().entrySet()) {
             RoutineInfo r = e.getValue();
-            rcmd("INSERT INTO DaliRoutine SET session_id=?, routine_geoid=?, routine_name=?, routine_type=?, return_type=?, line_start=?, package_geoid=?, schema_geoid=?, data_source=?, is_pipelined=?, autonomous_transaction=?",
+            rcmd("INSERT INTO DaliRoutine SET session_id=?, routine_geoid=?, routine_name=?, routine_type=?, return_type=?, line_start=?, package_geoid=?, schema_geoid=?, data_source=?, is_pipelined=?, autonomous_transaction=?, has_spec=?, has_body=?",
                     sid, e.getKey(), r.getName(), r.getRoutineType(), r.getReturnType(),
                     r.getLineStart() > 0 ? r.getLineStart() : null,
                     r.getPackageGeoid(), r.getSchemaGeoid(), MASTER,
                     r.isPipelined() ? true : null,
-                    r.isAutonomousTransaction() ? true : null);
+                    r.isAutonomousTransaction() ? true : null,
+                    r.isHasSpec() ? true : null,
+                    r.isHasBody() ? true : null);
         }
         for (var e : str.getRoutines().entrySet()) {
             RoutineInfo r = e.getValue();

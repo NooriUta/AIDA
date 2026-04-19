@@ -290,7 +290,9 @@ public class JsonlBatchBuilder {
                     "package_geoid", r.getPackageGeoid(),
                     "schema_geoid", r.getSchemaGeoid(),
                     "is_pipelined", r.isPipelined() ? true : null,  // KI-PIPE-1
-                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null  // KI-PRAGMA-1
+                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null,  // KI-PRAGMA-1
+                    "has_spec", r.isHasSpec() ? true : null,
+                    "has_body", r.isHasBody() ? true : null
             ));
         }
 
@@ -1048,7 +1050,9 @@ public class JsonlBatchBuilder {
                     "package_geoid", r.getPackageGeoid(),
                     "schema_geoid", r.getSchemaGeoid(),
                     "is_pipelined", r.isPipelined() ? true : null,  // KI-PIPE-1
-                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null  // KI-PRAGMA-1
+                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null,  // KI-PRAGMA-1
+                    "has_spec", r.isHasSpec() ? true : null,
+                    "has_body", r.isHasBody() ? true : null
             ));
         }
 

@@ -347,22 +347,22 @@ public class StructureAndLineageBuilder {
                              String packageGeoid, int lineStart, String parentRoutineGeoid) {
         String upperName = name != null ? name.toUpperCase() : "UNKNOWN";
 
+        // Normalise spec types → base type so spec and body share the same geoid.
+        // PROCEDURE_SPEC / FUNCTION_SPEC → PROCEDURE / FUNCTION.
+        boolean isSpec = routineType != null && routineType.endsWith("_SPEC");
+        String effectiveType = isSpec
+                ? routineType.substring(0, routineType.length() - "_SPEC".length())
+                : (routineType != null ? routineType : "PROCEDURE");
+
         String geoid;
         if (parentRoutineGeoid != null && !parentRoutineGeoid.isBlank()) {
-            // Вложенная routine: parent:TYPE:NAME
-            // Примеры:
-            //   PKG_NAME:PROCEDURE:OUTER → PKG_NAME:PROCEDURE:OUTER:FUNCTION:INNER
-            //   PROCEDURE:STANDALONE → PROCEDURE:STANDALONE:FUNCTION:LOCAL_HELPER
-            geoid = parentRoutineGeoid + ":" + routineType + ":" + upperName;
+            geoid = parentRoutineGeoid + ":" + effectiveType + ":" + upperName;
         } else if (packageGeoid != null && !packageGeoid.isBlank()) {
-            // Top-level routine в пакете: PKG:TYPE:NAME
-            geoid = packageGeoid + ":" + routineType + ":" + upperName;
+            geoid = packageGeoid + ":" + effectiveType + ":" + upperName;
         } else if (schemaGeoid != null && !schemaGeoid.isBlank()) {
-            // Routine со схемой: SCHEMA:TYPE:NAME
-            geoid = schemaGeoid + ":" + routineType + ":" + upperName;
+            geoid = schemaGeoid + ":" + effectiveType + ":" + upperName;
         } else {
-            // Standalone: TYPE:NAME
-            geoid = routineType + ":" + upperName;
+            geoid = effectiveType + ":" + upperName;
         }
 
         // Ensure the owning schema exists for schema-routed standalone routines.
@@ -371,11 +371,16 @@ public class StructureAndLineageBuilder {
                 ensureSchema(schemaGeoid, null);
             }
         }
-        routines.computeIfAbsent(geoid, k -> {
-            logger.debug("New routine registered: {} {} [{}]", routineType, upperName, geoid);
-            return new RoutineInfo(geoid, upperName, routineType, packageGeoid, schemaGeoid,
+
+        RoutineInfo ri = routines.computeIfAbsent(geoid, k -> {
+            logger.debug("New routine registered: {} {} [{}]", effectiveType, upperName, geoid);
+            return new RoutineInfo(geoid, upperName, effectiveType, packageGeoid, schemaGeoid,
                                    parentRoutineGeoid, lineStart);
         });
+        // Track whether spec and/or body have been seen for this routine.
+        if (isSpec) ri.setHasSpec(true);
+        else        ri.setHasBody(true);
+
         return geoid;
     }
 

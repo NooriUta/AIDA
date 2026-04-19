@@ -163,6 +163,8 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRoutine.line_start IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliRoutine.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRoutine.data_source IF NOT EXISTS STRING",  // v24
+                "CREATE PROPERTY DaliRoutine.has_spec IF NOT EXISTS BOOLEAN",   // spec+body merge
+                "CREATE PROPERTY DaliRoutine.has_body IF NOT EXISTS BOOLEAN",   // spec+body merge
                 // DaliPackage
                 "CREATE PROPERTY DaliPackage.package_name IF NOT EXISTS STRING",
                 // DaliSession
