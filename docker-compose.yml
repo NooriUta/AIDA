@@ -310,9 +310,57 @@ services:
       retries: 10
       start_period: 30s
 
+  # ── PostgreSQL (SQL source — dev/test for Hound + SKADI) ───────────────────
+  # Access: localhost:5432  user=aida  password=aida  db=aida_src
+  # PG connection string: jdbc:postgresql://localhost:5432/aida_src
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     aida
+      POSTGRES_PASSWORD: aida
+      POSTGRES_DB:       aida_src
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/sql/postgres/init:/docker-entrypoint-initdb.d:ro   # optional seed scripts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aida -d aida_src"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Oracle XE 21c (SQL source — dev/test for Hound + SKADI) ────────────────
+  # ⚠️  First pull ~1.7 GB.  Startup takes ~3-4 min.
+  # Access: localhost:1521  user=system  password=aida  service=XEPDB1
+  # JDBC: jdbc:oracle:thin:@localhost:1521/XEPDB1
+  # Web EM: http://localhost:5500/em  (optional)
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    environment:
+      ORACLE_PASSWORD:     aida           # sets password for SYS + SYSTEM
+      ORACLE_DATABASE:     AIDA_SRC       # creates a PDB schema user AIDA_SRC (XE PDB = XEPDB1)
+      APP_USER:            aida
+      APP_USER_PASSWORD:   aida
+    ports:
+      - "127.0.0.1:1521:1521"
+      - "127.0.0.1:5500:5500"   # Enterprise Manager Express (optional)
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      - ./infra/sql/oracle/init:/container-entrypoint-initdb.d:ro  # optional seed scripts
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s   # Oracle XE takes ~3 min to initialise
+
 volumes:
   nginx_certs:
   frigg_data:
+  postgres_data:
+  oracle_data:
   hound_databases:
     external: true
   hound_config:
