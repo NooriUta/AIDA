@@ -9,6 +9,7 @@ rootProject.name = 'aida-root'
 
 // ─── JVM modules ──────────────────────────────────────────────────────────────
 include 'libraries:hound'
+include 'libraries:skadi'
 include 'services:shuttle'
 include 'shared:dali-models'
 include 'services:heimdall-backend'
