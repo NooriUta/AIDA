@@ -409,6 +409,72 @@ public class KnotService {
             });
     }
 
+    // ── Table usage analytics ─────────────────────────────────────────────────
+
+    public Uni<List<KnotTableUsage>> knotTableRoutines(String tableRid) {
+        if (tableRid == null || tableRid.isBlank()) {
+            return Uni.createFrom().item(List.of());
+        }
+        Map<String, Object> params = Map.of("rid", tableRid);
+        String cypher = """
+            MATCH (stmt:DaliStatement)-[r:READS_FROM|WRITES_TO]->(t:DaliTable)
+            WHERE id(t) = $rid
+            MATCH (ro:DaliRoutine)-[:CONTAINS_STMT]->(stmt)
+            RETURN DISTINCT
+              coalesce(ro.routine_geoid, '') AS routineGeoid,
+              coalesce(ro.routine_name,  '') AS routineName,
+              type(r)                        AS edgeType,
+              coalesce(stmt.stmt_geoid, '')  AS stmtGeoid,
+              coalesce(stmt.statement_type, stmt.stmt_type, '') AS stmtType
+            ORDER BY routineName, edgeType
+            LIMIT 100
+            """;
+        return arcade.cypher(cypher, params)
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.stream()
+                .map(r -> new KnotTableUsage(
+                    str(r, "routineGeoid"),
+                    str(r, "routineName"),
+                    str(r, "edgeType"),
+                    str(r, "stmtGeoid"),
+                    str(r, "stmtType")
+                ))
+                .toList()
+            );
+    }
+
+    public Uni<List<KnotColumnUsage>> knotColumnStatements(String columnGeoid) {
+        if (columnGeoid == null || columnGeoid.isBlank()) {
+            return Uni.createFrom().item(List.of());
+        }
+        Map<String, Object> params = Map.of("cg", columnGeoid);
+        String cypher = """
+            MATCH (a:DaliAtom)-[:IN_STATEMENT]->(stmt:DaliStatement)
+            WHERE a.ref_geoid = $cg OR a.ref = $cg
+            MATCH (ro:DaliRoutine)-[:CONTAINS_STMT]->(stmt)
+            RETURN DISTINCT
+              coalesce(stmt.stmt_geoid, '')  AS stmtGeoid,
+              coalesce(stmt.statement_type, stmt.stmt_type, '') AS stmtType,
+              coalesce(ro.routine_name,  '') AS routineName,
+              coalesce(ro.routine_geoid, '') AS routineGeoid,
+              coalesce(a.atom_type, '')      AS atomType
+            ORDER BY routineName, stmtType
+            LIMIT 50
+            """;
+        return arcade.cypher(cypher, params)
+            .onFailure().recoverWithItem(List.of())
+            .map(rows -> rows.stream()
+                .map(r -> new KnotColumnUsage(
+                    str(r, "stmtGeoid"),
+                    str(r, "stmtType"),
+                    str(r, "routineName"),
+                    str(r, "routineGeoid"),
+                    str(r, "atomType")
+                ))
+                .toList()
+            );
+    }
+
     // ── Statements ────────────────────────────────────────────────────────────
 
     private Uni<List<KnotStatement>> loadStatements(Map<String, Object> params) {

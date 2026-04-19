@@ -128,6 +128,48 @@ public class KnotResource {
                                        + ") → " + (detail != null ? detail.columns().size() : 0) + " cols")));
     }
 
+    @Query("knotTableRoutines")
+    @Description("KNOT — routines and statements that read from or write to a table (by @rid). Lazy — fired only when the Routines section is opened. Role: viewer+")
+    public Uni<List<KnotTableUsage>> knotTableRoutines(
+        @Name("tableRid")
+        @Description("ArcadeDB @rid of the DaliTable vertex, e.g. #16:4404")
+        String tableRid
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "knotTableRoutines",
+                       "call", "knotTableRoutines(tableRid=" + (tableRid != null ? tableRid : "") + ")"));
+        return knotService.knotTableRoutines(tableRid)
+                .invoke(list -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotTableRoutines",
+                               "tableRid", tableRid != null ? tableRid : "",
+                               "call", "knotTableRoutines(tableRid=" + (tableRid != null ? tableRid : "")
+                                       + ") → " + (list != null ? list.size() : 0) + " rows")));
+    }
+
+    @Query("knotColumnStatements")
+    @Description("KNOT — statements that reference a given column (by column_geoid). Lazy expand — fires only on user request. Role: viewer+")
+    public Uni<List<KnotColumnUsage>> knotColumnStatements(
+        @Name("columnGeoid")
+        @Description("column_geoid of the DaliColumn, e.g. DWH.STAGE_ADDRESSES.ID")
+        String columnGeoid
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "knotColumnStatements",
+                       "call", "knotColumnStatements(columnGeoid=" + (columnGeoid != null ? columnGeoid : "") + ")"));
+        return knotService.knotColumnStatements(columnGeoid)
+                .invoke(list -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotColumnStatements",
+                               "columnGeoid", columnGeoid != null ? columnGeoid : "",
+                               "call", "knotColumnStatements(columnGeoid=" + (columnGeoid != null ? columnGeoid : "")
+                                       + ") → " + (list != null ? list.size() : 0) + " rows")));
+    }
+
     @Query("knotScript")
     @Description("KNOT — full source file text for a session (from DaliSnippetScript). Lazy — fires only when the Source tab is open. Role: viewer+")
     public Uni<KnotScript> knotScript(

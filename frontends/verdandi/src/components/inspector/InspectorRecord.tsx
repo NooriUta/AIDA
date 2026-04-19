@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { InspectorSection, InspectorRow } from './InspectorSection';
+import { useLoomStore } from '../../stores/loomStore';
 
 interface Props { data: DaliNodeData; nodeId: string }
 
@@ -127,13 +128,19 @@ function FieldRow({ field }: { field: ColumnInfo }) {
 export const InspectorRecord = memo(({ data, nodeId }: Props) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { jumpTo } = useLoomStore();
 
   const fields: ColumnInfo[] = Array.isArray(data.columns) ? data.columns : [];
+  const schema       = data.schema ?? (typeof data.metadata?.schema       === 'string' ? data.metadata.schema       : null);
+  const packageName  = typeof data.metadata?.packageName  === 'string' ? data.metadata.packageName  : null;
+  const routineGeoid = typeof data.metadata?.routineGeoid === 'string' ? data.metadata.routineGeoid : null;
+  const routineName  = routineGeoid ? routineGeoid.split(':').slice(1).join(':') || routineGeoid : null;
 
-  const schema      = data.schema ?? (typeof data.metadata?.schema      === 'string' ? data.metadata.schema      as string : null);
-  const packageName =                  typeof data.metadata?.packageName === 'string' ? data.metadata.packageName as string : null;
-  const routineGeoid =                 typeof data.metadata?.routineGeoid === 'string' ? data.metadata.routineGeoid as string : null;
-  const routineName = routineGeoid ? routineGeoid.split(':').slice(1).join(':') || routineGeoid : null;
+  const openInKnot = () => {
+    const params = new URLSearchParams();
+    if (packageName) params.set('pkg', packageName);
+    navigate(`/knot?${params.toString()}`);
+  };
 
   return (
     <>
@@ -142,14 +149,37 @@ export const InspectorRecord = memo(({ data, nodeId }: Props) => {
         schema={schema}
         packageName={packageName}
         routineName={routineName}
-        onSchemaClick={schema      ? () => navigate(`/knot?schema=${encodeURIComponent(schema)}`)           : undefined}
-        onPackageClick={packageName ? () => navigate(`/knot?pkg=${encodeURIComponent(packageName)}`)         : undefined}
-        onRoutineClick={packageName ? () => navigate(`/knot?pkg=${encodeURIComponent(packageName)}`)         : undefined}
+        onSchemaClick={schema      ? () => { jumpTo('L1', null, schema); navigate('/'); }                                             : undefined}
+        onPackageClick={packageName ? () => { jumpTo('L2', `pkg-${packageName}`, packageName, 'DaliPackage'); navigate('/'); }         : undefined}
+        onRoutineClick={packageName ? () => { jumpTo('L2', `pkg-${packageName}`, packageName, 'DaliPackage'); navigate('/'); }         : undefined}
       />
 
       <InspectorSection title={t('inspector.properties')}>
-        <InspectorRow label="@rid" value={nodeId} />
-        {routineGeoid && <InspectorRow label="routineGeoid" value={routineGeoid} />}
+        <InspectorRow label={t('inspector.label')} value={data.label} />
+        <InspectorRow label={t('inspector.type')}  value={<RecBadge />} />
+        {packageName  && <InspectorRow label={t('inspector.package')} value={packageName} />}
+        {routineGeoid && <InspectorRow label={t('inspector.routine')} value={routineGeoid} />}
+        <InspectorRow label={t('inspector.id')}    value={nodeId} />
+        <div style={{ padding: '6px 10px 4px' }}>
+          <button
+            onClick={openInKnot}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px',
+              fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
+              background: 'var(--bg3)',
+              border: '1px solid var(--bd)',
+              borderRadius: 4,
+              color: 'var(--acc)',
+              cursor: 'pointer',
+              transition: 'border-color 0.1s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--acc)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)'; }}
+          >
+            ◈ {t('contextMenu.openInKnot')}
+          </button>
+        </div>
       </InspectorSection>
 
       <InspectorSection

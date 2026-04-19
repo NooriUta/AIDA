@@ -5,15 +5,17 @@ interface Props {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  onToggle?: (open: boolean) => void;
 }
 
-export const InspectorSection = memo(({ title, children, defaultOpen = true }: Props) => {
+export const InspectorSection = memo(({ title, children, defaultOpen = true, onToggle }: Props) => {
   const [open, setOpen] = useState(defaultOpen);
+  const toggle = () => { setOpen((o) => { const next = !o; onToggle?.(next); return next; }); };
 
   return (
     <div style={{ borderBottom: '1px solid var(--bd)' }} role="region" aria-label={title}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-expanded={open}
         aria-label={title}
         style={{
