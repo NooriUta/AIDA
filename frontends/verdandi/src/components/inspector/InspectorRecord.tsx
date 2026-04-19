@@ -1,32 +1,94 @@
-// src/components/inspector/InspectorRecord.tsx
-// Phase S2.4 — Inspector panel for DaliRecord nodes selected on the L3 canvas.
-// Shows record name, type badge, field list with data types and %ROWTYPE origin.
-
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import type { DaliNodeData, ColumnInfo } from '../../types/domain';
 import { InspectorSection, InspectorRow } from './InspectorSection';
 
 interface Props { data: DaliNodeData; nodeId: string }
 
-// ── Record type badge ─────────────────────────────────────────────────────────
 const REC_COLOR = '#B87AA8';
 
-function RecBadge() {
+// ── Header card ──────────────────────────────────────────────────────────────
+
+function RecordHeaderCard({
+  label, schema, packageName, routineName,
+  onSchemaClick, onPackageClick, onRoutineClick,
+}: {
+  label: string;
+  schema: string | null;
+  packageName: string | null;
+  routineName: string | null;
+  onSchemaClick?: () => void;
+  onPackageClick?: () => void;
+  onRoutineClick?: () => void;
+}) {
   return (
-    <span style={{
-      fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em',
-      padding: '1px 6px', borderRadius: 4,
-      background: `color-mix(in srgb, ${REC_COLOR} 18%, transparent)`,
-      color: REC_COLOR,
-      border: `1px solid color-mix(in srgb, ${REC_COLOR} 40%, transparent)`,
-    }}>
-      RECORD
-    </span>
+    <div
+      role="heading"
+      aria-level={2}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 8,
+        padding: '12px 14px',
+        background: 'var(--bg0)', borderBottom: '1px solid var(--bd)',
+        borderLeft: `3px solid ${REC_COLOR}`,
+      }}
+    >
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <RecordBreadcrumb label={schema}      onClick={onSchemaClick} />
+        <RecordBreadcrumb label={packageName} onClick={onPackageClick} />
+        <RecordBreadcrumb label={routineName} onClick={onRoutineClick} />
+        <div title={label} style={{
+          fontWeight: 700, fontSize: '13px', color: 'var(--t1)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          letterSpacing: '0.02em',
+        }}>
+          {label}
+        </div>
+      </div>
+      <span style={{
+        fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em',
+        padding: '1px 6px', borderRadius: 4, flexShrink: 0,
+        background: `color-mix(in srgb, ${REC_COLOR} 18%, transparent)`,
+        color: REC_COLOR,
+        border: `1px solid color-mix(in srgb, ${REC_COLOR} 40%, transparent)`,
+      }}>
+        RECORD
+      </span>
+    </div>
   );
 }
 
-// ── Single field row ──────────────────────────────────────────────────────────
+// ── Breadcrumb link ───────────────────────────────────────────────────────────
+
+function RecordBreadcrumb({ label, onClick }: { label: string | null | undefined; onClick?: () => void }) {
+  if (!label) return null;
+  if (onClick) {
+    return (
+      <button onClick={onClick} title={`Открыть ${label} в Loom`} style={{
+        fontSize: '9px', color: 'var(--acc)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        marginBottom: 2, letterSpacing: '0.03em', textTransform: 'uppercase',
+        background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+        textDecoration: 'underline', textDecorationStyle: 'dotted',
+        textAlign: 'left', fontFamily: 'inherit', display: 'block',
+      }}>
+        ◈ {label}
+      </button>
+    );
+  }
+  return (
+    <div style={{
+      fontSize: '9px', color: 'var(--t3)', opacity: 0.7,
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      marginBottom: 2, letterSpacing: '0.03em', textTransform: 'uppercase',
+    }}>
+      {label}
+    </div>
+  );
+}
+
+// ── Field row ─────────────────────────────────────────────────────────────────
+
 function FieldRow({ field }: { field: ColumnInfo }) {
   return (
     <div style={{
@@ -46,7 +108,6 @@ function FieldRow({ field }: { field: ColumnInfo }) {
           {field.type}
         </span>
       )}
-      {/* %ROWTYPE origin badge — isForeignKey is used as proxy for source_column_geoid */}
       {field.isForeignKey && (
         <span style={{
           fontSize: '9px', color: REC_COLOR, flexShrink: 0,
@@ -61,21 +122,36 @@ function FieldRow({ field }: { field: ColumnInfo }) {
   );
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
+
 export const InspectorRecord = memo(({ data, nodeId }: Props) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const fields: ColumnInfo[] = Array.isArray(data.columns) ? data.columns : [];
 
+  const schema      = data.schema ?? (typeof data.metadata?.schema      === 'string' ? data.metadata.schema      as string : null);
+  const packageName =                  typeof data.metadata?.packageName === 'string' ? data.metadata.packageName as string : null;
+  const routineGeoid =                 typeof data.metadata?.routineGeoid === 'string' ? data.metadata.routineGeoid as string : null;
+  const routineName = routineGeoid ? routineGeoid.split(':').slice(1).join(':') || routineGeoid : null;
+
   return (
     <>
-      {/* ── Properties ─────────────────────────────────────────────────── */}
+      <RecordHeaderCard
+        label={data.label}
+        schema={schema}
+        packageName={packageName}
+        routineName={routineName}
+        onSchemaClick={schema      ? () => navigate(`/knot?schema=${encodeURIComponent(schema)}`)           : undefined}
+        onPackageClick={packageName ? () => navigate(`/knot?pkg=${encodeURIComponent(packageName)}`)         : undefined}
+        onRoutineClick={packageName ? () => navigate(`/knot?pkg=${encodeURIComponent(packageName)}`)         : undefined}
+      />
+
       <InspectorSection title={t('inspector.properties')}>
-        <InspectorRow label={t('inspector.label')} value={data.label} />
-        <InspectorRow label={t('inspector.type')}  value={<RecBadge />} />
-        <InspectorRow label={t('inspector.id')}    value={nodeId} />
+        <InspectorRow label="@rid" value={nodeId} />
+        {routineGeoid && <InspectorRow label="routineGeoid" value={routineGeoid} />}
       </InspectorSection>
 
-      {/* ── Fields ─────────────────────────────────────────────────────── */}
       <InspectorSection
         title={`${t('inspector.fields')} (${fields.length})`}
         defaultOpen={fields.length > 0}
