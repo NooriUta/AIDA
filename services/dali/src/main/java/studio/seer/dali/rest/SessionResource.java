@@ -1,15 +1,19 @@
 package studio.seer.dali.rest;
 
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.jobrunr.scheduling.JobScheduler;
+import studio.seer.dali.job.HarvestJob;
 import studio.seer.dali.service.CancelResult;
 import studio.seer.dali.service.SessionService;
 import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.ParseSessionInput;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * REST API for Dali parse sessions.
@@ -25,8 +29,9 @@ import java.util.Map;
 @Consumes(MediaType.APPLICATION_JSON)
 public class SessionResource {
 
-    @Inject SessionService    sessionService;
-    @Inject SessionRepository sessionRepository;
+    @Inject SessionService          sessionService;
+    @Inject SessionRepository       sessionRepository;
+    @Inject Instance<JobScheduler>  jobScheduler;
 
     @GET
     public Response list(@QueryParam("limit") @DefaultValue("50") int limit) {
@@ -95,6 +100,28 @@ public class SessionResource {
             case "ALREADY_DONE" -> Response.status(Response.Status.CONFLICT).entity(result).build();
             default             -> Response.accepted(result).build();
         };
+    }
+
+    /**
+     * Trigger a full JDBC harvest via {@link HarvestJob} (C.3.2 / DS-03).
+     *
+     * <pre>
+     * 202 Accepted  — HarvestJob enqueued, harvestId in response body
+     * 503 Service Unavailable — JobScheduler not yet initialised
+     * </pre>
+     */
+    @POST
+    @Path("/harvest")
+    @Consumes(MediaType.WILDCARD)
+    public Response harvest() {
+        if (!jobScheduler.isResolvable()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity("{\"error\":\"JobScheduler not available — Dali may still be starting\"}")
+                    .build();
+        }
+        String harvestId = "harvest-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId));
+        return Response.accepted(Map.of("harvestId", harvestId, "status", "enqueued")).build();
     }
 
     @GET
