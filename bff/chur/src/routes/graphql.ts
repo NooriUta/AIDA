@@ -1,6 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify';
+import WebSocket from 'ws';
 
 const LINEAGE_API_URL = process.env.LINEAGE_API_URL ?? 'http://localhost:8080';
+
+function toWsUrl(httpUrl: string): string {
+  return httpUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+}
 
 /**
  * Proxy /graphql → lineage-api (Quarkus, port 8080).
@@ -47,11 +52,17 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // ── GET /graphql (introspection / GraphiQL passthrough) ────────────────────
-  app.get(
-    '/',
-    { preHandler: [app.authenticate] },
-    async (request, reply) => {
+  // ── GET /graphql — HTTP introspection + graphql-ws subscription proxy ────────
+  // app.route with `wsHandler` lets Fastify/websocket share the same GET path:
+  //  - HTTP GET  → passthrough to lineage-api (GraphiQL / introspection)
+  //  - WS upgrade → graphql-transport-ws proxy with X-Seer-Role/User injected
+  app.route({
+    method: 'GET',
+    url: '/',
+    preHandler: [app.authenticate],
+
+    // HTTP GET — introspection / GraphiQL passthrough
+    handler: async (request, reply) => {
       const { username, role } = request.user;
       const qs = new URLSearchParams(request.query as Record<string, string>);
 
@@ -70,5 +81,53 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(503).send({ errors: [{ message: 'Lineage API unavailable' }] });
       }
     },
-  );
+
+    // WebSocket upgrade — graphql-transport-ws proxy
+    wsHandler: (socket, request) => {
+      const { username, role } = request.user;
+      const wsUrl = `${toWsUrl(LINEAGE_API_URL)}/graphql`;
+
+      const upstream = new WebSocket(wsUrl, ['graphql-transport-ws'], {
+        headers: {
+          'X-Seer-Role': role,
+          'X-Seer-User': username,
+        },
+      });
+
+      // browser → SHUTTLE
+      socket.on('message', (data) => {
+        if (upstream.readyState === WebSocket.OPEN) {
+          upstream.send(data as Buffer);
+        }
+      });
+
+      // SHUTTLE → browser
+      upstream.on('message', (data) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(data as Buffer);
+        }
+      });
+
+      // Lifecycle
+      socket.on('close', (code, reason) => upstream.close(code, reason));
+      upstream.on('close', (code, reason) => {
+        if (socket.readyState === WebSocket.OPEN) socket.close(code, reason);
+      });
+
+      socket.on('error', (err) => {
+        app.log.warn(err, 'graphql-ws: browser socket error');
+        upstream.terminate();
+      });
+      upstream.on('error', (err) => {
+        app.log.warn(err, 'graphql-ws: upstream error');
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: 'connection_error',
+            payload: { message: 'Upstream unavailable' },
+          }));
+          socket.close(1011, 'upstream error');
+        }
+      });
+    },
+  });
 };
