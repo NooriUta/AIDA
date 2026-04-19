@@ -12,4 +12,5 @@ rootProject.name = 'aida-root'
 
 include 'shared:dali-models'
 include 'libraries:hound'
+include 'libraries:skadi'
 include 'services:dali'

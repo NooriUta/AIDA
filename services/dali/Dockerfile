@@ -24,6 +24,8 @@ COPY services/dali/src                          services/dali/src
 COPY shared/dali-models                         shared/dali-models
 COPY libraries/hound/build.gradle               libraries/hound/build.gradle
 COPY libraries/hound/src                        libraries/hound/src
+COPY libraries/skadi/build.gradle               libraries/skadi/build.gradle
+COPY libraries/skadi/src                        libraries/skadi/src
 
 RUN gradle :services:dali:build -x test --no-daemon \
     -Dquarkus.package.jar.type=uber-jar
