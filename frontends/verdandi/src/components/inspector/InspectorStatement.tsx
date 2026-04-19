@@ -728,7 +728,6 @@ function SqlPanel({ data, stmtGeoid }: { data: DaliNodeData; stmtGeoid: string }
           background: 'var(--bg0)',
           border: '1px solid var(--bd)',
           borderRadius: 4,
-          maxHeight: 'calc(100vh - 280px)',
           overflow: 'auto',
           whiteSpace: 'pre',
           fontFamily: 'var(--mono)',
