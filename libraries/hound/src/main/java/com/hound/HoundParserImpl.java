@@ -5,10 +5,16 @@ import com.hound.api.*;
 import com.hound.metrics.PipelineTimer;
 import com.hound.parser.PlSqlErrorCollector;
 import com.hound.semantic.model.AtomInfo;
+import com.hound.parser.base.grammars.sql.clickhouse.ClickHouseLexer;
+import com.hound.parser.base.grammars.sql.clickhouse.ClickHouseParser;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
+import com.hound.parser.base.grammars.sql.postgresql.PostgreSQLLexer;
+import com.hound.parser.base.grammars.sql.postgresql.PostgreSQLParser;
 import com.hound.processor.ThreadPoolManager;
+import com.hound.semantic.dialect.clickhouse.ClickHouseSemanticListener;
 import com.hound.semantic.dialect.plsql.PlSqlSemanticListener;
+import com.hound.semantic.dialect.postgresql.PostgreSQLSemanticListener;
 import com.hound.semantic.engine.UniversalSemanticEngine;
 import com.hound.semantic.model.SemanticResult;
 import com.hound.semantic.model.Structure;
@@ -333,6 +339,20 @@ public class HoundParserImpl implements HoundParser {
                 }
                 yield l;
             }
+            case "postgresql" -> {
+                PostgreSQLSemanticListener l = new PostgreSQLSemanticListener(engine);
+                if (defaultSchema != null && !defaultSchema.isBlank()) {
+                    l.setDefaultSchema(defaultSchema);
+                }
+                yield l;
+            }
+            case "clickhouse" -> {
+                ClickHouseSemanticListener l = new ClickHouseSemanticListener(engine);
+                if (defaultSchema != null && !defaultSchema.isBlank()) {
+                    l.setDefaultSchema(defaultSchema);
+                }
+                yield l;
+            }
             default -> throw new IllegalArgumentException("Dialect not implemented: " + dialect);
         };
     }
@@ -372,6 +392,38 @@ public class HoundParserImpl implements HoundParser {
                 timer.stop("walk");
 
                 yield new ParseOutcome(errorCollector.getErrors(), errorCollector.getGrammarLimitations());
+            }
+            case "postgresql" -> {
+                timer.start("parse");
+                PostgreSQLLexer pgLexer = new PostgreSQLLexer(CharStreams.fromString(sql));
+                CommonTokenStream pgTokens = new CommonTokenStream(pgLexer);
+                PostgreSQLParser pgParser = new PostgreSQLParser(pgTokens);
+                pgParser.removeErrorListeners();
+                PostgreSQLParser.RootContext pgTree = pgParser.root();
+                timer.stop("parse");
+                timer.count("tokens", pgTokens.getNumberOfOnChannelTokens());
+
+                timer.start("walk");
+                ParseTreeWalker.DEFAULT.walk((PostgreSQLSemanticListener) listener, pgTree);
+                timer.stop("walk");
+
+                yield new ParseOutcome(List.of(), List.of());
+            }
+            case "clickhouse" -> {
+                timer.start("parse");
+                ClickHouseLexer chLexer = new ClickHouseLexer(CharStreams.fromString(sql));
+                CommonTokenStream chTokens = new CommonTokenStream(chLexer);
+                ClickHouseParser chParser = new ClickHouseParser(chTokens);
+                chParser.removeErrorListeners();
+                ClickHouseParser.ClickhouseFileContext chTree = chParser.clickhouseFile();
+                timer.stop("parse");
+                timer.count("tokens", chTokens.getNumberOfOnChannelTokens());
+
+                timer.start("walk");
+                ParseTreeWalker.DEFAULT.walk((ClickHouseSemanticListener) listener, chTree);
+                timer.stop("walk");
+
+                yield new ParseOutcome(List.of(), List.of());
             }
             default -> throw new IllegalArgumentException("Parser not implemented: " + dialect);
         };

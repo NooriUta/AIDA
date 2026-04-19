@@ -34,11 +34,23 @@ public final class DialectRegistry {
             logger.warn("Could not register PlSqlDialectAdapter: {}", e.getMessage());
         }
 
-        // PostgreSQL — будущее
-        // try {
-        //     Class<?> pgClass = Class.forName("com.hound.semantic.dialect.pgsql.PgSqlDialectAdapter");
-        //     register("pgsql", (DialectAdapter) pgClass.getDeclaredConstructor().newInstance());
-        // } catch (Exception e) { ... }
+        // PostgreSQL
+        try {
+            Class<?> pgClass = Class.forName("com.hound.semantic.dialect.postgresql.PostgreSQLDialectAdapter");
+            register("postgresql", (DialectAdapter) pgClass.getDeclaredConstructor().newInstance());
+            logger.info("Registered dialect adapter: postgresql");
+        } catch (Exception e) {
+            logger.warn("Could not register PostgreSQLDialectAdapter: {}", e.getMessage());
+        }
+
+        // ClickHouse
+        try {
+            Class<?> chClass = Class.forName("com.hound.semantic.dialect.clickhouse.ClickHouseDialectAdapter");
+            register("clickhouse", (DialectAdapter) chClass.getDeclaredConstructor().newInstance());
+            logger.info("Registered dialect adapter: clickhouse");
+        } catch (Exception e) {
+            logger.warn("Could not register ClickHouseDialectAdapter: {}", e.getMessage());
+        }
     }
 
     /**

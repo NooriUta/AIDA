@@ -937,13 +937,22 @@ class RemoteWriter {
             }
         }
 
-        // ── DaliSnippet ──
+        // ── DaliSnippet (DOCUMENT type — large SQL texts, no graph edge) ──
+        // Kept as DOCUMENT: VERTEX promotion risks memory pressure on TRAVERSE + batch payload limits.
+        // v28: element_rid stores the ArcadeDB @rid of the owning DaliStatement so
+        // knotSnippet(@rid) can do O(1) lookup via element_rid index instead of a subquery.
+        // One bulk RID query resolves all stmt_geoid → @rid before the per-snippet loop.
+        Map<String, String> snippetStmtRids = buildRidMap("DaliStatement", "stmt_geoid", sid);
         for (var e : str.getStatements().entrySet()) {
             String raw = truncate(e.getValue().getSnippet(), SNIPPET_MAX);
             if (raw == null) continue;
-            rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?, line_start=?, line_end=?",
-                    sid, e.getKey(), raw, md5(raw),
-                    e.getValue().getLineStart(), e.getValue().getLineEnd());
+            String stmtGeoid  = e.getKey();
+            String elementRid = snippetStmtRids.get(stmtGeoid);
+            rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?," +
+                    " line_start=?, line_end=?, element_rid=?, element_type=?",
+                    sid, stmtGeoid, raw, md5(raw),
+                    e.getValue().getLineStart(), e.getValue().getLineEnd(),
+                    elementRid, elementRid != null ? "DaliStatement" : null);
         }
 
         // ── DaliOutputColumn ──
@@ -1814,13 +1823,21 @@ class RemoteWriter {
                     constraintRids.size());
         }
 
-        // Post-batch: DaliSnippet (document type — batch endpoint rejects @type "document")
+        // Post-batch: DaliSnippet (DOCUMENT — batch endpoint rejects @type "document").
+        // Kept as DOCUMENT: large SQL texts, VERTEX promotion rejected (memory + batch limits).
+        // v28: element_rid = @rid of DaliStatement — resolve after batch commit (vertices are in DB).
+        // One bulk RID query resolves all stmt_geoid → @rid before the per-snippet loop.
+        Map<String, String> batchSnippetRids = buildRidMap("DaliStatement", "stmt_geoid", sid);
         for (var e : str.getStatements().entrySet()) {
             String raw = truncate(e.getValue().getSnippet(), SNIPPET_MAX);
             if (raw == null) continue;
-            rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?, line_start=?, line_end=?",
-                    sid, e.getKey(), raw, md5(raw),
-                    e.getValue().getLineStart(), e.getValue().getLineEnd());
+            String stmtGeoid  = e.getKey();
+            String elementRid = batchSnippetRids.get(stmtGeoid);
+            rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?," +
+                    " line_start=?, line_end=?, element_rid=?, element_type=?",
+                    sid, stmtGeoid, raw, md5(raw),
+                    e.getValue().getLineStart(), e.getValue().getLineEnd(),
+                    elementRid, elementRid != null ? "DaliStatement" : null);
         }
 
         WriteStats ws = builder.writeStats();
