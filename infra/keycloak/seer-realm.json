@@ -89,6 +89,7 @@
         "aida:tenant:admin",
         "aida:tenant:owner",
         "aida:admin",
+        "aida:admin:destructive",
         "aida:superadmin"
       ],
       "protocolMappers": [
