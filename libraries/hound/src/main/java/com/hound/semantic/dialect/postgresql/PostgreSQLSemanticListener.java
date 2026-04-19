@@ -34,12 +34,6 @@ public class PostgreSQLSemanticListener extends PostgreSQLParserBaseListener {
     /** True while we are inside a CTE definition, before entering its select body. */
     private boolean inCteDefinition = false;
 
-    /** Table name accumulated in enterRelation_expr, consumed in exitTable_ref. */
-    private String pendingTableName = null;
-
-    /** Table alias accumulated in enterAlias_clause, consumed in exitTable_ref. */
-    private String pendingTableAlias = null;
-
     /** JOIN type accumulated in enterJoin_type, consumed in exitJoin_qual or exitTable_ref. */
     private String pendingJoinType = null;
 
@@ -149,30 +143,30 @@ public class PostgreSQLSemanticListener extends PostgreSQLParserBaseListener {
     }
 
     // =========================================================================
-    // P0 — FROM: table refs and aliases (pending state pattern)
+    // P0 — FROM: table refs and aliases
+    //
+    // PostgreSQL grammar: a JOIN node is a single Table_refContext where:
+    //   - ctx.relation_expr()   → the LEFT side table (inlined, no separate Table_refContext)
+    //   - ctx.table_ref()       → list of inner Table_refContexts (right side of JOIN, sub-refs)
+    //   - ctx.alias_clause()    → alias for the LEFT side (also direct child)
+    //
+    // Reading everything directly from ctx in exitTable_ref avoids the pending-state
+    // overwrite bug that occurs when the inner table_ref's enterRelation_expr fires
+    // and overwrites pendingTableName before the outer exitTable_ref can use it.
     // =========================================================================
 
     @Override
-    public void enterRelation_expr(PostgreSQLParser.Relation_exprContext ctx) {
-        if (ctx.qualified_name() != null) {
-            pendingTableName = BaseSemanticListener.cleanIdentifier(ctx.qualified_name().getText());
-        }
-    }
-
-    @Override
-    public void enterAlias_clause(PostgreSQLParser.Alias_clauseContext ctx) {
-        if (ctx.colid() != null) {
-            pendingTableAlias = BaseSemanticListener.cleanIdentifier(ctx.colid().getText());
-        }
-    }
-
-    @Override
     public void exitTable_ref(PostgreSQLParser.Table_refContext ctx) {
-        if (pendingTableName != null) {
-            base.onTableReference(pendingTableName, pendingTableAlias, startLine(ctx), endLine(ctx));
-            pendingTableName  = null;
-            pendingTableAlias = null;
+        if (ctx.relation_expr() == null) return;
+        if (ctx.relation_expr().qualified_name() == null) return;
+
+        String tableName = BaseSemanticListener.cleanIdentifier(
+                ctx.relation_expr().qualified_name().getText());
+        String alias = null;
+        if (ctx.alias_clause() != null && ctx.alias_clause().colid() != null) {
+            alias = BaseSemanticListener.cleanIdentifier(ctx.alias_clause().colid().getText());
         }
+        base.onTableReference(tableName, alias, startLine(ctx), endLine(ctx));
     }
 
     // =========================================================================
