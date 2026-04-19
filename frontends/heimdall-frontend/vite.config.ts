@@ -54,7 +54,8 @@ export default defineConfig({
       '/docs':      { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
       // WebSocket event stream — same rewrite
       '/ws':       { target: 'ws://localhost:3000',   changeOrigin: true, ws: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/dali':     { target: 'http://localhost:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
+      '/dali':          { target: 'http://localhost:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
+      '/highload-plan': { target: 'http://localhost:9093', changeOrigin: true },
     },
   },
 });

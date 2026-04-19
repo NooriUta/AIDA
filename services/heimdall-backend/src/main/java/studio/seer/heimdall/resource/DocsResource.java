@@ -11,6 +11,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,6 +26,8 @@ import java.util.stream.Collectors;
  */
 @Path("/docs")
 public class DocsResource {
+
+    public record DocFile(String path, String mtime) {}
 
     @ConfigProperty(name = "docs.root", defaultValue = "/docs")
     String docsRoot;
@@ -55,10 +59,10 @@ public class DocsResource {
         return configured;
     }
 
-    /** List all .md files under DOCS_ROOT, sorted, relative paths. */
+    /** List all .md files under DOCS_ROOT, sorted by path, with last-modified timestamp. */
     @GET
     @Produces(MediaType.APPLICATION_JSON)
-    public List<String> list() throws IOException {
+    public List<DocFile> list() throws IOException {
         java.nio.file.Path root = effectiveRoot();
         if (!Files.isDirectory(root)) {
             return List.of();
@@ -67,8 +71,16 @@ public class DocsResource {
             return stream
                 .filter(Files::isRegularFile)
                 .filter(p -> p.toString().endsWith(".md"))
-                .map(p -> root.relativize(p).toString().replace('\\', '/'))
-                .sorted()
+                .map(p -> {
+                    String relPath = root.relativize(p).toString().replace('\\', '/');
+                    String mtime;
+                    try {
+                        mtime = Files.getLastModifiedTime(p).toInstant()
+                            .truncatedTo(ChronoUnit.SECONDS).toString();
+                    } catch (IOException e) { mtime = ""; }
+                    return new DocFile(relPath, mtime);
+                })
+                .sorted(Comparator.comparing(DocFile::path))
                 .collect(Collectors.toList());
         }
     }
