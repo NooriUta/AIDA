@@ -16,6 +16,12 @@ const KIND_COLORS: Record<string, string> = {
   PACKAGE:   '#A8B860',
 };
 
+const OP_COLORS: Record<string, string> = {
+  INSERT: '#D4922A', UPDATE: '#D4922A', MERGE: '#D4922A', DELETE: '#c85c5c',
+  SELECT: '#88B8A8', CTE: '#A8B860',   WITH: '#A8B860',  CREATE: '#7DBF78',
+  DROP:   '#c85c5c', TRUNCATE: '#c85c5c', SQ: '#88B8A8', CURSOR: '#88B8A8',
+};
+
 function KindBadge({ kind }: { kind: string }) {
   const color = KIND_COLORS[kind.toUpperCase()] ?? 'var(--t3)';
   return (
@@ -75,12 +81,13 @@ export const InspectorRoutine = memo(({ data, nodeId }: Props) => {
   const packageName   = typeof data.metadata?.packageName === 'string' ? data.metadata.packageName : null;
 
   // ── Fetch detail data ─────────────────────────────────────────────────────
-  const { data: detail, isLoading } = useRoutineDetail(isPackage ? null : nodeId);
+  const { data: detail, isLoading } = useRoutineDetail(nodeId);
 
   // Parse nodes by type
-  const params    = detail?.nodes.filter(n => n.type === 'DaliParameter')  ?? [];
-  const vars      = detail?.nodes.filter(n => n.type === 'DaliVariable')   ?? [];
-  const stmtNodes = detail?.nodes.filter(n => n.type === 'DaliStatement')  ?? [];
+  const params        = detail?.nodes.filter(n => n.type === 'DaliParameter')  ?? [];
+  const vars          = detail?.nodes.filter(n => n.type === 'DaliVariable')   ?? [];
+  const stmtNodes     = detail?.nodes.filter(n => n.type === 'DaliStatement')  ?? [];
+  const routineNodes  = detail?.nodes.filter(n => n.type === 'DaliRoutine' || n.type === 'DaliPackage') ?? [];
 
   // Parse CALLS edges by direction
   const callsOutEdges = detail?.edges.filter(e => e.type === 'CALLS' && e.source === nodeId) ?? [];
@@ -207,21 +214,107 @@ export const InspectorRoutine = memo(({ data, nodeId }: Props) => {
               {t('inspector.noStatements')}
             </div>
           ) : (
-            <div style={{ padding: '4px 10px', display: 'flex', flexWrap: 'wrap', gap: '4px 8px' }}>
-              {[...breakdown.entries()].sort((a, b) => b[1] - a[1]).map(([type, count]) => (
-                <span key={type} style={{
-                  fontSize: '11px', color: 'var(--t1)',
-                  background: 'var(--bg3)',
-                  border: '1px solid var(--bd)',
-                  borderRadius: 4,
-                  padding: '1px 6px',
-                  fontFamily: 'var(--mono)',
-                }}>
-                  {type}
-                  <span style={{ color: 'var(--t3)', marginLeft: 4 }}>{count}</span>
-                </span>
-              ))}
+            <>
+              {/* Summary breakdown */}
+              <div style={{ padding: '3px 10px 4px', display: 'flex', flexWrap: 'wrap', gap: '3px 6px' }}>
+                {[...breakdown.entries()].sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                  <span key={type} style={{
+                    fontSize: '10px', color: 'var(--t3)',
+                    fontFamily: 'var(--mono)',
+                  }}>
+                    {type}<span style={{ color: 'var(--t2)', marginLeft: 2 }}>×{count}</span>
+                  </span>
+                ))}
+              </div>
+              {/* Clickable rows */}
+              {stmtNodes.map(n => {
+                const op   = extractStatementType(n.label) ?? '?';
+                const line = n.label.split(':').at(-1);
+                const opColor = OP_COLORS[op] ?? 'var(--t3)';
+                const knotUrl = `/knot?${new URLSearchParams({
+                  ...(packageName ? { pkg: packageName } : {}),
+                  stmt: n.id,
+                }).toString()}`;
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => navigate(knotUrl)}
+                    title={n.label}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '3px 10px', borderTop: '1px solid var(--bd)',
+                      cursor: 'pointer', fontSize: '11px',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg2)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  >
+                    <span style={{
+                      fontSize: '9px', padding: '1px 5px', borderRadius: 2,
+                      fontFamily: 'var(--mono)', fontWeight: 700,
+                      border: `0.5px solid ${opColor}`, color: opColor,
+                      flexShrink: 0, letterSpacing: '0.03em',
+                    }}>
+                      {op}
+                    </span>
+                    <span style={{
+                      flex: 1, color: 'var(--t1)', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      fontFamily: 'var(--mono)',
+                    }}>
+                      {n.label}
+                    </span>
+                    {line && (
+                      <span style={{ fontSize: '10px', color: 'var(--t3)', flexShrink: 0 }}>
+                        :{line}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </InspectorSection>
+      )}
+
+      {/* ── Package: routines list ──────────────────────────────────────── */}
+      {isPackage && (
+        <InspectorSection
+          title={`${t('inspector.routines')} (${isLoading ? '…' : routineNodes.length})`}
+          defaultOpen={routineNodes.length > 0}
+        >
+          {isLoading ? (
+            <div style={loadingStyle}>…</div>
+          ) : routineNodes.length === 0 ? (
+            <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+              {t('inspector.noRoutines')}
             </div>
+          ) : (
+            routineNodes.map(r => {
+              const kind = (r.meta?.find(m => m.key === 'routineKind')?.value ?? '').toUpperCase();
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => navigate(`/knot?${new URLSearchParams({ pkg: data.label }).toString()}`)}
+                  title={r.label}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '3px 10px', borderTop: '1px solid var(--bd)',
+                    cursor: 'pointer', fontSize: '11px',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg2)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                >
+                  {kind && <KindBadge kind={kind} />}
+                  <span style={{
+                    flex: 1, color: 'var(--t1)', overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    fontFamily: 'var(--mono)',
+                  }}>
+                    {r.label}
+                  </span>
+                </div>
+              );
+            })
           )}
         </InspectorSection>
       )}
