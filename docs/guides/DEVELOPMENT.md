@@ -119,6 +119,30 @@ docker compose up -d
 cd frontends/verdandi && npm run e2e
 ```
 
+## Dali — IDE vs Docker (важно)
+
+Dali использует JobRunr с общей очередью в **Frigg** (ArcadeDB).
+Если одновременно запущены Docker-контейнер dali и локальный `quarkusDev`,
+оба регистрируются как воркеры в `jobrunr_servers` и конкурируют за задачи.
+
+**Проблема**: Docker-воркер может забрать задачу с путём `C:\...` который
+внутри контейнера недоступен → задача зависает в QUEUED/FAILED.
+
+**Правило**: запускай только один инстанс dali против одного Frigg.
+
+| Сценарий | Что запустить |
+|----------|---------------|
+| Разработка hound / dali локально | `dali: quarkusDev` в IDEA, Docker dali — `stop` |
+| Полный стек (тест) | только Docker dali, IDE dali — не запускать |
+
+```bash
+# Остановить Docker dali перед запуском IDE-версии:
+docker compose stop dali
+```
+
+> Долгосрочное решение: изоляция через `DALI_INSTANCE_ID` + маршрутизация задач.
+> См. `docs/plans/active/DALI_INSTANCE_ISOLATION.md`.
+
 ## Docker
 ```bash
 # Dev stack:
