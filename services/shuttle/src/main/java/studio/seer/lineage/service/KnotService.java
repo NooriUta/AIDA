@@ -46,8 +46,9 @@ import java.util.*;
  *   DaliStatement -[WRITES_TO]->          DaliTable
  *   DaliStatement -[HAS_ATOM]->           DaliAtom
  *   DaliTable     -[HAS_COLUMN]->         DaliColumn
- * DaliSnippet is a DOCUMENT (not vertex): large SQL texts, no graph edge.
- *   Lookup: DaliSnippet WHERE stmt_geoid = ? — O(1) via NOTUNIQUE index.
+ * DaliSnippet is a DOCUMENT (not vertex): large SQL texts, VERTEX promotion rejected.
+ *   v28+: element_rid = ArcadeDB @rid of owning DaliStatement → O(1) lookup by node id.
+ *   Fallback: stmt_geoid NOTUNIQUE index (pre-v28 data or stmt_geoid path).
  *   DaliRoutine   -[HAS_PARAMETER]->      DaliParameter
  *   DaliRoutine   -[HAS_VARIABLE]->       DaliVariable
  *
@@ -597,17 +598,21 @@ public class KnotService {
     public Uni<String> knotSnippet(String idOrGeoid) {
         if (idOrGeoid == null || idOrGeoid.isBlank()) return Uni.createFrom().nullItem();
         boolean isRid = idOrGeoid.startsWith("#");
-        // DaliSnippet is a DOCUMENT (not vertex — large SQL texts, VERTEX promotion rejected).
-        // RID path: resolve stmt_geoid via DaliStatement, then lookup DaliSnippet.
-        // ArcadeDB SQL subqueries return a result set, so the RID path must use
-        // `IN (SELECT …)` — `= (SELECT …)` compares a string to a record and
-        // always yields no rows (discovered the hard way during LOOM wire-up).
-        // geoid path: NOTUNIQUE index on stmt_geoid → O(1) lookup, no Session hop needed.
+        // DaliSnippet is a DOCUMENT (large SQL texts — VERTEX promotion rejected).
+        //
+        // @rid path (v28+): element_rid stores the ArcadeDB @rid of DaliStatement directly,
+        //   so lookup is WHERE element_rid = :rid — O(1) via NOTUNIQUE index, no subquery.
+        //   (Pre-v28 fallback: IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid) —
+        //   ArcadeDB SQL subqueries return a result set, `= (SELECT …)` compares string to
+        //   record and always yields 0 rows; `IN (SELECT …)` is the safe form.)
+        //
+        // stmt_geoid path: NOTUNIQUE index on stmt_geoid → O(1) lookup, no Session hop.
         String sql = isRid
             ? """
                 SELECT snippet
                 FROM DaliSnippet
-                WHERE stmt_geoid IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid)
+                WHERE element_rid = :rid
+                   OR stmt_geoid IN (SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid)
                 LIMIT 1
                 """
             : """

@@ -239,13 +239,19 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliDDLStatement.line_end IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliDDLStatement.target_table_geoids IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliDDLStatement.short_name IF NOT EXISTS STRING",
-                // DaliSnippet (v22: +line_start/end; v28: VERTEX + HAS_SNIPPET edge)
+                // DaliSnippet (v22: +line_start/end; v28: +element_rid/element_type — direct @rid link)
                 "CREATE PROPERTY DaliSnippet.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.snippet IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.snippet_hash IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.line_start IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliSnippet.line_end IF NOT EXISTS INTEGER",
+                // v28: explicit link to the owning element (DaliStatement / DaliDDLStatement / DaliRoutine)
+                // element_rid = ArcadeDB @rid of the element, e.g. "#15:42"
+                // element_type = "DaliStatement" | "DaliDDLStatement" | "DaliRoutine"
+                // No graph edge needed — DOCUMENT stays DOCUMENT; element_rid gives direct @rid lookup
+                "CREATE PROPERTY DaliSnippet.element_rid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSnippet.element_type IF NOT EXISTS STRING",
                 // DaliSnippetScript (v22)
                 "CREATE PROPERTY DaliSnippetScript.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippetScript.file_path IF NOT EXISTS STRING",
@@ -329,9 +335,6 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliRecordField (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliRecordField (field_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliStatement (short_name) NOTUNIQUE NULL_STRATEGY SKIP",
-                // DaliSnippet — stmt_geoid lookup for knotSnippet + backward-compat direct lookups
-                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (stmt_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
-                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippetScript (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (stmt_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
@@ -366,10 +369,12 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliParameter (param_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliVariable (var_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliOutputColumn (name) NOTUNIQUE NULL_STRATEGY SKIP",
-                // DaliSnippet — session_id and stmt_geoid lookups (missing indices caused full-table
-                // scans on loadSnippets / knotSnippet, returning empty results for large DBs)
-                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
-                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (stmt_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
+                // DaliSnippet — session_id + stmt_geoid + element_rid lookups
+                // (missing indices caused full-table scans on loadSnippets / knotSnippet)
+                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (session_id)  NOTUNIQUE NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (stmt_geoid)  NOTUNIQUE NULL_STRATEGY SKIP",
+                // v28: element_rid = ArcadeDB @rid of the element — O(1) lookup by node id
+                "CREATE INDEX IF NOT EXISTS ON DaliSnippet (element_rid) NOTUNIQUE NULL_STRATEGY SKIP",
                 // FULLTEXT — per-statement SQL text search (kept intentionally)
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippet (snippet) FULL_TEXT" + FT_METADATA,
                 // DaliSnippetScript.script is intentionally NOT indexed — whole-file field
