@@ -384,14 +384,14 @@ export const InspectorRoutine = memo(({ data, nodeId }: Props) => {
           {/* Package routines (I-02) */}
           {isPackage && (
             <InspectorSection
-              title={`${t('inspector.routines')} (${isLoading ? '…' : pkgRoutines.length || (routinesCount ?? '…')})`}
+              title={`${t('inspector.routines')} (${isLoading ? '…' : routineNodes.length || (routinesCount ?? '…')})`}
               defaultOpen
             >
               {isLoading ? <div style={loadingStyle}>…</div>
-                : pkgRoutines.length === 0
+                : routineNodes.length === 0
                   ? <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>{t('inspector.noRoutines', { defaultValue: 'Нет данных' })}</div>
                   : <div style={{ marginTop: 2 }}>
-                      {pkgRoutines.map((r) => {
+                      {routineNodes.map((r) => {
                         const kind = (r.meta?.find?.((m: { key: string }) => m.key === 'routineKind')?.value as string | undefined) ?? '';
                         return (
                           <div
@@ -574,51 +574,9 @@ export const InspectorRoutine = memo(({ data, nodeId }: Props) => {
               })}
             </>
           )}
-        </InspectorSection>
-      )}
-
-      {/* ── Package: routines list ──────────────────────────────────────── */}
-      {isPackage && (
-        <InspectorSection
-          title={`${t('inspector.routines')} (${isLoading ? '…' : routineNodes.length})`}
-          defaultOpen={routineNodes.length > 0}
-        >
-          {isLoading ? (
-            <div style={loadingStyle}>…</div>
-          ) : routineNodes.length === 0 ? (
-            <div style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--t3)' }}>
-              {t('inspector.noRoutines')}
-            </div>
-          ) : (
-            routineNodes.map(r => {
-              const kind = (r.meta?.find(m => m.key === 'routineKind')?.value ?? '').toUpperCase();
-              return (
-                <div
-                  key={r.id}
-                  onClick={() => navigate(`/knot?${new URLSearchParams({ pkg: data.label }).toString()}`)}
-                  title={r.label}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '3px 10px', borderTop: '1px solid var(--bd)',
-                    cursor: 'pointer', fontSize: '11px',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg2)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  {kind && <KindBadge kind={kind} />}
-                  <span style={{
-                    flex: 1, color: 'var(--t1)', overflow: 'hidden',
-                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    fontFamily: 'var(--mono)',
-                  }}>
-                    {r.label}
-                  </span>
-                </div>
-              );
-            })
-          )}
         </div>
       )}
+
     </>
   );
 });

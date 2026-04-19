@@ -156,7 +156,7 @@ export const InspectorRecord = memo(({ data, nodeId }: Props) => {
 
       <InspectorSection title={t('inspector.properties')}>
         <InspectorRow label={t('inspector.label')} value={data.label} />
-        <InspectorRow label={t('inspector.type')}  value={<RecBadge />} />
+        <InspectorRow label={t('inspector.type')}  value="DaliRecord" />
         {packageName  && <InspectorRow label={t('inspector.package')} value={packageName} />}
         {routineGeoid && <InspectorRow label={t('inspector.routine')} value={routineGeoid} />}
         <InspectorRow label={t('inspector.id')}    value={nodeId} />
