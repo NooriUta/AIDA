@@ -631,10 +631,13 @@ function SqlPanel({ data, stmtGeoid }: { data: DaliNodeData; stmtGeoid: string }
         <pre style={{
           padding: '8px 10px', margin: 0,
           fontSize: '11px', lineHeight: '1.5',
-          color: 'var(--t1)', background: 'var(--bg0)',
-          border: '1px solid var(--bd)', borderRadius: 4,
-          maxHeight: 'calc(100vh - 280px)', overflow: 'auto',
-          whiteSpace: 'pre', fontFamily: 'var(--mono)',
+          color: 'var(--t1)',
+          background: 'var(--bg0)',
+          border: '1px solid var(--bd)',
+          borderRadius: 4,
+          overflow: 'auto',
+          whiteSpace: 'pre',
+          fontFamily: 'var(--mono)',
         }}>
           {sqlText}
         </pre>
