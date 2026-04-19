@@ -33,13 +33,15 @@ public class OverviewService {
         //   applicationGeoid/applicationName — не заполняем (BELONGS_TO_APP после HOUND-DB-001)
         String sql = """
             SELECT
-                @rid                                                          AS rid,
+                @rid                                                                           AS rid,
                 schema_name,
-                out('CONTAINS_TABLE').size()                                  AS tableCount,
-                out('CONTAINS_ROUTINE')[@type = 'DaliRoutine'].size()         AS routineCount,
-                out('CONTAINS_ROUTINE')[@type = 'DaliPackage'].size()         AS packageCount,
-                in('CONTAINS_SCHEMA')[0].db_geoid                             AS databaseGeoid,
-                in('CONTAINS_SCHEMA')[0].db_name                              AS databaseName
+                out('CONTAINS_TABLE').size()                                                   AS tableCount,
+                out('CONTAINS_ROUTINE')[@type = 'DaliRoutine'].size()                          AS routineCount,
+                out('CONTAINS_ROUTINE')[@type = 'DaliPackage'].size()                          AS packageCount,
+                in('CONTAINS_SCHEMA')[0].db_geoid                                              AS databaseGeoid,
+                in('CONTAINS_SCHEMA')[0].db_name                                               AS databaseName,
+                in('CONTAINS_SCHEMA')[0].out('BELONGS_TO_APP')[0].app_geoid                    AS applicationGeoid,
+                in('CONTAINS_SCHEMA')[0].out('BELONGS_TO_APP')[0].app_name                     AS applicationName
             FROM DaliSchema
             ORDER BY schema_name
             """;
@@ -59,7 +61,7 @@ public class OverviewService {
             num(row, "packageCount"),
             strOrNull(row, "databaseGeoid"),
             strOrNull(row, "databaseName"),
-            null,                              // databaseEngine — property absent in DaliDatabase
+            null,                              // databaseEngine — absent in DaliDatabase for now
             strOrNull(row, "applicationGeoid"),
             strOrNull(row, "applicationName")
         );

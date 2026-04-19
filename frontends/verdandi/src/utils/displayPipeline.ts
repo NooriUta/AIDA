@@ -252,7 +252,7 @@ export function applyL1HierarchyFilter(
     nodes: graph.nodes.map((n) =>
       inScope.has(n.id)
         ? n
-        : { ...n, style: { ...n.style, opacity: DIM_H, pointerEvents: 'none' as const } },
+        : { ...n, style: { ...n.style, opacity: DIM_H } },
     ),
     edges: graph.edges,
   };

@@ -547,8 +547,9 @@ export default function DocsPage({ tab = 'docs' }: Props) {
 
         {/* ── Content pane ── */}
         <main style={{
-          flex: 1, overflowY: 'auto',
-          padding: '24px 40px',
+          flex: 1,
+          overflow:  tab === 'highload' ? 'hidden' : 'auto',
+          padding:   tab === 'highload' ? 0 : '24px 40px',
           background: 'var(--bg0)',
           color: 'var(--t1)',
         }}>

@@ -189,8 +189,10 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const sessionUser = await ensureValidSession(sid).catch(() => null);
-      const hasAdminScope = sessionUser?.scopes?.includes('aida:admin') ?? false;
-      if (!sessionUser || !hasAdminScope) {
+      const hasAccess = sessionUser?.scopes?.some(
+        s => s === 'aida:admin' || s === 'aida:harvest',
+      ) ?? false;
+      if (!sessionUser || !hasAccess) {
         socket.close(1008, 'Forbidden');
         return;
       }

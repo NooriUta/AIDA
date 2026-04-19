@@ -30,7 +30,7 @@ export const PackageGroupNode = memo(({ data, selected, id }: NodeProps<PackageG
         position:     'relative',
         overflow:     'visible',
       }}
-      onClick={(e) => { e.stopPropagation(); selectNode(id); }}
+      onClick={(e) => { e.stopPropagation(); selectNode(id, data); }}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (data.childrenAvailable) drillDown(id, data.label, data.nodeType);

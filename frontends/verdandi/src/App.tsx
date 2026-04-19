@@ -21,6 +21,10 @@ const KnotPage = lazy(() =>
   import('./components/knot/KnotPage').then((m) => ({ default: m.KnotPage })),
 );
 
+const InspectorProto = lazy(() =>
+  import('./components/inspector/InspectorProto').then((m) => ({ default: m.InspectorProto })),
+);
+
 // Module-level QueryClient singleton — shared across standalone and MF-remote usage.
 // When verdandi runs inside the shell, the shell does not provide a QueryClient,
 // so verdandi creates and owns its own.
@@ -79,6 +83,12 @@ function AppRoutes() {
     <ErrorBoundary resetKey={pathname}>
       <Routes>
         <Route path="login" element={<LoginPage />} />
+
+        {/* dev-only prototype routes — no auth guard */}
+        <Route
+          path="proto/inspector"
+          element={<Suspense fallback={null}><InspectorProto /></Suspense>}
+        />
 
         <Route
           path="knot"

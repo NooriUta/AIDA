@@ -60,9 +60,13 @@ public class JsonlBatchBuilder {
     }
 
     /**
-     * Document types (DaliSnippet, DaliResolutionLog, DaliSchemaLog) are skipped in batch mode:
-     * ArcadeDB /api/v1/batch only accepts "vertex" and "edge" @type values.
+     * Document types (DaliSnippet, DaliSnippetScript, DaliResolutionLog, DaliSchemaLog) are
+     * skipped in batch mode: ArcadeDB /api/v1/batch only accepts "vertex" and "edge" @type values.
      * These types have no edges and are diagnostic-only, so graph integrity is unaffected.
+     *
+     * <p>DaliSnippet intentionally stays a DOCUMENT: large SQL texts (1 000s of lines) would
+     * cause memory pressure on any TRAVERSE operation that loads the full vertex payload, and
+     * risk batch-endpoint payload overflow. Written via {@code rcmd()} in RemoteWriter.
      */
     public void appendDocument(String type, Map<String, Object> props) {
         // no-op: batch endpoint rejects @type "document"
@@ -195,11 +199,17 @@ public class JsonlBatchBuilder {
             if (b.canonicalRids.containsKey(e.getKey())) continue; // already in DB, use RID for edges
             @SuppressWarnings("unchecked")
             Map<String, Object> sc = (Map<String, Object>) e.getValue();
+            String dbGeoid = (String) sc.get("db");
+            @SuppressWarnings("unchecked")
+            String dbName = (dbGeoid != null && str.getDatabases().containsKey(dbGeoid))
+                    ? (String) ((Map<String, Object>) str.getDatabases().get(dbGeoid)).get("name")
+                    : dbGeoid;
             b.appendVertex("DaliSchema", e.getKey(), mapOf(
                     "session_id", sid,
                     "schema_geoid", e.getKey(),
                     "schema_name", sc.get("name"),
-                    "db_geoid", sc.get("db")
+                    "db_name",   dbName,
+                    "db_geoid",  dbGeoid
             ));
         }
 
@@ -280,7 +290,9 @@ public class JsonlBatchBuilder {
                     "package_geoid", r.getPackageGeoid(),
                     "schema_geoid", r.getSchemaGeoid(),
                     "is_pipelined", r.isPipelined() ? true : null,  // KI-PIPE-1
-                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null  // KI-PRAGMA-1
+                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null,  // KI-PRAGMA-1
+                    "has_spec", r.isHasSpec() ? true : null,
+                    "has_body", r.isHasBody() ? true : null
             ));
         }
 
@@ -577,17 +589,8 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // 12. DaliSnippet (document, not vertex)
-        for (var e : str.getStatements().entrySet()) {
-            String raw = truncate(e.getValue().getSnippet(), SNIPPET_MAX);
-            if (raw == null) continue;
-            b.appendDocument("DaliSnippet", mapOf(
-                    "session_id", sid,
-                    "stmt_geoid", e.getKey(),
-                    "snippet", raw,
-                    "snippet_hash", md5(raw)
-            ));
-        }
+        // 12. DaliSnippet — NOT written here (v28+: VERTEX written via rcmd() post-batch in
+        //     RemoteWriter so that the HAS_SNIPPET edge can be created in the same transaction).
 
 
         // ─────────────────────────────────────────────────────
@@ -1047,7 +1050,9 @@ public class JsonlBatchBuilder {
                     "package_geoid", r.getPackageGeoid(),
                     "schema_geoid", r.getSchemaGeoid(),
                     "is_pipelined", r.isPipelined() ? true : null,  // KI-PIPE-1
-                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null  // KI-PRAGMA-1
+                    "autonomous_transaction", r.isAutonomousTransaction() ? true : null,  // KI-PRAGMA-1
+                    "has_spec", r.isHasSpec() ? true : null,
+                    "has_body", r.isHasBody() ? true : null
             ));
         }
 
@@ -1248,17 +1253,8 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // Documents (no-op in batch mode)
-        for (var e : str.getStatements().entrySet()) {
-            String raw = truncate(e.getValue().getSnippet(), SNIPPET_MAX);
-            if (raw == null) continue;
-            b.appendDocument("DaliSnippet", mapOf(
-                    "session_id", sid,
-                    "stmt_geoid", e.getKey(),
-                    "snippet", raw,
-                    "snippet_hash", md5(raw)
-            ));
-        }
+        // DaliSnippet — NOT written here (v28+: VERTEX written via rcmd() post-batch in
+        //     RemoteWriter so that the HAS_SNIPPET edge can be created in the same transaction).
 
         // ─────────────────────────────────────────────────────
         // Phase 2: Edges

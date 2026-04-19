@@ -15,7 +15,7 @@ public class RoutineInfo {
 
     private final String geoid;
     private final String name;
-    private final String routineType; // PROCEDURE, FUNCTION
+    private final String routineType; // PROCEDURE, FUNCTION (always normalised — no _SPEC suffix)
     private final String packageGeoid;
     private final String schemaGeoid;
     private final String parentRoutineGeoid; // null for top-level, geoid for nested
@@ -25,6 +25,10 @@ public class RoutineInfo {
     private boolean pipelined = false;
     /** KI-PRAGMA-1: true if PRAGMA AUTONOMOUS_TRANSACTION is declared. */
     private boolean autonomousTransaction = false;
+    /** True when a package-spec forward declaration was seen for this routine. */
+    private boolean hasSpec = false;
+    /** True when a package-body (or standalone) implementation was seen. */
+    private boolean hasBody = false;
     private final List<ParameterInfo> typedParameters = new ArrayList<>();
     private final List<VariableInfo> typedVariables = new ArrayList<>();
 
@@ -63,12 +67,19 @@ public class RoutineInfo {
     public void setPipelined(boolean v)           { this.pipelined = v; }
     public boolean isAutonomousTransaction()       { return autonomousTransaction; }
     public void setAutonomousTransaction(boolean v){ this.autonomousTransaction = v; }
+    public boolean isHasSpec()                     { return hasSpec; }
+    public void setHasSpec(boolean v)              { this.hasSpec = v; }
+    public boolean isHasBody()                     { return hasBody; }
+    public void setHasBody(boolean v)              { this.hasBody = v; }
 
     // ═══════ Parameters ═══════
 
     public void addTypedParameter(String name, String type, String mode) {
+        String upperName = name != null ? name.toUpperCase() : "UNKNOWN";
+        // Idempotent: spec and body declare the same signature — skip if already registered.
+        if (typedParameters.stream().anyMatch(p -> upperName.equals(p.name()))) return;
         typedParameters.add(new ParameterInfo(
-                name != null ? name.toUpperCase() : "UNKNOWN",
+                upperName,
                 type != null ? type : "UNKNOWN",
                 mode != null ? mode : "IN"));
     }

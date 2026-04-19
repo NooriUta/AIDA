@@ -36,7 +36,7 @@ export const L1SchemaNode = memo(({ data, selected, id }: NodeProps<L1SchemaNode
         transition:    'border-color 0.1s',
         boxSizing:     'border-box' as const,
       }}
-      onClick={(e) => { e.stopPropagation(); selectNode(id); }}
+      onClick={(e) => { e.stopPropagation(); selectNode(id, data); }}
       onDoubleClick={(e) => {
         e.stopPropagation();
         const dbName = data.metadata?.databaseName as string | null | undefined;

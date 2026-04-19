@@ -106,6 +106,7 @@ class HttpBatchClientMvccTest {
 
     @BeforeEach
     void setup() throws Exception {
+        if (!Boolean.getBoolean("integration")) return;
         dropDb();
         arcadeServer("create database " + TEST_DB);
         initSchema();
@@ -113,6 +114,7 @@ class HttpBatchClientMvccTest {
 
     @AfterEach
     void teardown() throws Exception {
+        if (!Boolean.getBoolean("integration")) return;
         dropDb();
     }
 

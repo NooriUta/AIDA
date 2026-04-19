@@ -1,0 +1,45 @@
+plugins { id 'java-library' }
+
+group   = 'com.skadi'
+version = '0.2.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+dependencies {
+    // НЕТ HikariCP — SKADI использует DriverManager.getConnection() (stateless)
+    // Один запрос = одно соединение; harvest по расписанию, пул не нужен.
+
+    // SLF4J API — только API, runtime предоставляется Dali (Quarkus JBoss Logging)
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+
+    // JDBC-драйверы — compileOnly (runtime обеспечивает Dali)
+    compileOnly 'com.oracle.database.jdbc:ojdbc11:23.7.0.25.01'
+    compileOnly 'org.postgresql:postgresql:42.7.5'
+    // ClickHouse: java.net.http.HttpClient (JDK built-in) — доп. deps нет
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.assertj:assertj-core:3.25.3'
+    testRuntimeOnly    'org.slf4j:slf4j-simple:2.0.13'
+    testImplementation 'org.mockito:mockito-core:5.14.0'
+    testImplementation 'org.testcontainers:testcontainers:1.20.0'
+    testImplementation 'org.testcontainers:postgresql:1.20.0'
+    testImplementation 'org.testcontainers:junit-jupiter:1.20.0'
+    testImplementation 'org.testcontainers:oracle-xe:1.20.0'
+
+    testRuntimeOnly 'org.postgresql:postgresql:42.7.5'
+}
+
+test {
+    useJUnitPlatform()
+    // Oracle-тесты пропускаются по умолчанию (медленные, требуют docker oracle)
+    systemProperty 'oracle', System.getProperty('oracle', 'false')
+    environment 'TESTCONTAINERS_REUSE_ENABLE', 'true'
+}

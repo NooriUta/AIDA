@@ -8,6 +8,7 @@ import { KnotRoutines } from './KnotRoutines';
 import { KnotStatements } from './KnotStatements';
 import { KnotAtoms } from './KnotAtoms';
 import { KnotSource } from './KnotSource';
+import { KnotRecord } from './KnotRecord';
 import { useKnotSessions, useKnotReport } from '../../services/hooks';
 import type { KnotSession } from '../../services/lineage';
 
@@ -17,8 +18,11 @@ export const KnotPage = memo(() => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlPkg  = searchParams.get('pkg')  ?? '';   // e.g. "PKG_ETL_CRM_STAGING"
-  const urlStmt = searchParams.get('stmt') ?? '';   // e.g. "INSERT:4343"
+  const urlPkg     = searchParams.get('pkg')     ?? '';
+  const urlStmt    = searchParams.get('stmt')    ?? '';
+  const urlRecord  = searchParams.get('record')  ?? '';   // e.g. "T_CUSTOMER_REC"
+  const urlSchema  = searchParams.get('schema')  ?? '';
+  const urlRoutine = searchParams.get('routine') ?? '';   // routineGeoid
 
   const [selectedId,    setSelectedId]    = useState<string | null>(null);
   const [activeTab,     setActiveTab]     = useState<TabId>('summary');
@@ -100,6 +104,24 @@ export const KnotPage = memo(() => {
     { id: 'atoms',      key: 'knot.tabs.atoms',      count: tabCounts.atoms },
     { id: 'source',     key: 'knot.tabs.source' },
   ];
+
+  // ── Standalone record view ───────────────────────────────────────────────
+  if (urlRecord) {
+    return (
+      <div style={{
+        display: 'grid', gridTemplateRows: '42px 1fr',
+        height: '100%', overflow: 'hidden', background: 'var(--bg0)',
+      }}>
+        <Header />
+        <KnotRecord
+          record={urlRecord}
+          pkg={urlPkg || undefined}
+          schema={urlSchema || undefined}
+          routineGeoid={urlRoutine || undefined}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{

@@ -1,10 +1,13 @@
 ###############################################################################
-# AIDA — Full-stack Docker Compose
-# Services: Keycloak · SHUTTLE · Chur · verdandi
-# ArcadeDB — external container (Ygg), joined via shared network
+# AIDA — Full-stack Docker Compose (application delivery)
+# Services: Keycloak · SHUTTLE · Dali · Chur · Verdandi · Heimdall · Shell
+# ArcadeDB (Ygg + Frigg) — graph & job store
 #
 # Host ports offset +10000 from dev to avoid conflicts:
 #   Keycloak  18180    SHUTTLE  18080    Chur  13000    verdandi  15173
+#
+# SQL source databases (Oracle, PostgreSQL) are NOT included here.
+# Use docker-compose.skadi-env.yml for SKADI/Hound integration testing.
 ###############################################################################
 
 networks:

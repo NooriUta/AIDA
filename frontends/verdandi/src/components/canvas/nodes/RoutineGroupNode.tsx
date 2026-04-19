@@ -26,7 +26,7 @@ export const RoutineGroupNode = memo(({ data, selected, id }: NodeProps<RoutineG
         position:     'relative',
         overflow:     'visible',
       }}
-      onClick={(e) => { e.stopPropagation(); selectNode(id); }}
+      onClick={(e) => { e.stopPropagation(); selectNode(id, data); }}
     >
       <Handle type="target" position={Position.Left} style={{ background: 'var(--suc)', zIndex: 5 }} />
 

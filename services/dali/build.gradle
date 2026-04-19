@@ -4,7 +4,7 @@ plugins {
 }
 
 group   = 'studio.seer.dali'
-version = '1.0.0-SNAPSHOT'
+version = '1.0.0'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -38,6 +38,9 @@ dependencies {
 
     // Hound library — in-JVM parse (no subprocess)
     implementation project(':libraries:hound')
+
+    // SKADI — SQL object harvester (DriverManager adapters: Oracle, PG, ClickHouse, ArcadeDB)
+    implementation project(':libraries:skadi')
 
     // Shared models — ParseSessionInput, Session, SessionStatus, HeimdallEvent
     implementation project(':shared:dali-models')
