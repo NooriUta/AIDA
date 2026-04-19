@@ -8,6 +8,14 @@ import com.hound.api.HoundHeimdallListener;
 import com.hound.api.HoundParser;
 import com.hound.api.NoOpHoundEventListener;
 import com.hound.api.ParseResult;
+import com.hound.api.SqlSource;
+import com.skadi.SkadiFetchConfig;
+import com.skadi.SkadiFetchException;
+import com.skadi.SkadiFetchResult;
+import com.skadi.SkadiFetcher;
+import studio.seer.dali.skadi.DaliSkadiFetchListener;
+import studio.seer.dali.skadi.SkadiFetcherRegistry;
+import studio.seer.dali.skadi.SourceArchiveService;
 import io.quarkus.arc.Unremovable;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -57,9 +65,11 @@ public class ParseJob {
             ".sql", ".pck", ".prc", ".pkb", ".pks", ".fnc", ".trg", ".vw"
     );
 
-    @Inject HoundParser    houndParser;
-    @Inject SessionService sessionService;
-    @Inject HeimdallEmitter emitter;
+    @Inject HoundParser          houndParser;
+    @Inject SessionService       sessionService;
+    @Inject HeimdallEmitter      emitter;
+    @Inject SkadiFetcherRegistry skadiFetcherRegistry;
+    @Inject SourceArchiveService sourceArchiveService;
 
     @ConfigProperty(name = "ygg.url")      String yggUrl;
     @ConfigProperty(name = "ygg.db")       String yggDb;
@@ -87,6 +97,12 @@ public class ParseJob {
                 log.info("[{}] clearBeforeWrite=true — truncating YGG...", sessionId);
                 houndParser.cleanAll(config);
                 log.info("[{}] YGG truncated", sessionId);
+            }
+
+            // JDBC source: harvest from database via SKADI, then parse in-memory
+            if (src.startsWith("jdbc:")) {
+                runJdbc(sessionId, src, config, input);
+                return;
             }
 
             Path sourcePath = Path.of(src);
@@ -139,6 +155,77 @@ public class ParseJob {
         sessionService.completeSession(sessionId, result, List.of(fr));
         emitter.sessionCompleted(sessionId, result.atomCount(), result.resolutionRate(),
                 result.durationMs(), 1);
+    }
+
+    // ── JDBC source (SKADI harvest) ───────────────────────────────────────────
+
+    /**
+     * Harvests SQL objects from a live database via SKADI, then parses them in-memory.
+     *
+     * <p>Flow:
+     * <ol>
+     *   <li>Detect SKADI adapter from JDBC URL prefix</li>
+     *   <li>{@code SkadiFetcher.fetchScripts()} — DDL text in memory (no temp files)</li>
+     *   <li>{@link SourceArchiveService#upsertAll} — filter changed files → {@link SqlSource.FromText} list</li>
+     *   <li>{@link HoundParser#parseSources} — parallel parse + optional YGG write</li>
+     * </ol>
+     *
+     * <p>The {@code clearBeforeWrite} flag is respected (applied before this method is called
+     * by the outer {@link #execute} frame). The {@code uploaded} flag is ignored for JDBC sources.
+     */
+    private void runJdbc(String sessionId, String jdbcUrl, HoundConfig config,
+                         ParseSessionInput input) throws SkadiFetchException {
+
+        // 1 — detect adapter
+        SkadiFetcher fetcher = skadiFetcherRegistry.detectByUrl(jdbcUrl)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No SKADI adapter registered for URL: " + jdbcUrl));
+
+        // 2 — build SKADI config
+        SkadiFetchConfig skConfig = SkadiFetchConfig.fullHarvest(
+                jdbcUrl,
+                input.jdbcUser(),
+                input.jdbcPassword(),
+                input.jdbcSchema());
+
+        // 3 — fetch scripts from source DB
+        DaliSkadiFetchListener fetchListener = new DaliSkadiFetchListener(emitter, sessionId);
+        fetchListener.onFetchStarted(fetcher.adapterName(), skConfig.schema(), skConfig.objectTypes());
+        SkadiFetchResult fetchResult = fetcher.fetchScripts(skConfig);
+        fetchListener.onFetchCompleted(fetchResult.stats());
+
+        // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup)
+        List<SqlSource> sources = sourceArchiveService.upsertAll(fetchResult.files());
+
+        if (sources.isEmpty()) {
+            log.info("[{}] SKADI: no SQL sources to parse (adapter={}, fetched={})",
+                    sessionId, fetcher.adapterName(), fetchResult.stats().totalFetched());
+            sessionService.startSession(sessionId, false, 0);
+            ParseResult empty = new ParseResult(jdbcUrl, 0, 0, 0, 0,
+                    java.util.Map.of(), 1.0, 0, 0, List.of(), List.of(), 0L);
+            sessionService.completeSession(sessionId, empty, List.of());
+            return;
+        }
+
+        // 5 — parse via Hound
+        log.info("[{}] SKADI: parsing {} source(s) via Hound (dialect={})",
+                sessionId, sources.size(), config.dialect());
+        sessionService.startSession(sessionId, true, sources.size());
+
+        HoundEventListener listener = buildListener(sessionId, config);
+        List<ParseResult> parseResults = houndParser.parseSources(sources, config, listener);
+
+        // 6 — aggregate and complete session
+        List<FileResult> fileResults = parseResults.stream()
+                .map(ParseJob::toFileResult)
+                .collect(java.util.stream.Collectors.toList());
+
+        fileResults.forEach(fr -> sessionService.recordFileComplete(sessionId, fr));
+
+        ParseResult merged = merge(jdbcUrl, fileResults);
+        sessionService.completeSession(sessionId, merged, fileResults);
+        emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
+                merged.durationMs(), fileResults.size());
     }
 
     // ── Batch (directory) ─────────────────────────────────────────────────────

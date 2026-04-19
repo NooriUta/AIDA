@@ -2,14 +2,18 @@ package com.hound.api;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Public API for parsing SQL files and writing semantic results to YGG.
  *
- * <p>All implementations must be thread-safe — Dali calls {@link #parseBatch}
- * from a JobRunr worker thread.
+ * <p>All implementations must be thread-safe — Dali calls {@link #parseSources}
+ * (or the deprecated {@link #parseBatch}) from a JobRunr worker thread.
  *
  * <p>Default implementation: {@code com.hound.HoundParserImpl}.
+ *
+ * <p><b>SKADI / in-memory flow:</b> use {@link #parseSources(List, HoundConfig, HoundEventListener)}
+ * with {@link SqlSource.FromText} to avoid writing temporary files to disk.
  */
 public interface HoundParser {
 
@@ -33,12 +37,31 @@ public interface HoundParser {
     ParseResult parse(Path file, HoundConfig config, HoundEventListener listener);
 
     /**
+     * Parse multiple SQL sources in parallel (preferred API since SI-03).
+     *
+     * <p>Supports both on-disk ({@link SqlSource.FromFile}) and in-memory
+     * ({@link SqlSource.FromText}) sources. Use {@code FromText} for SKADI harvests
+     * to avoid writing temporary files.
+     *
+     * <p>Thread count is taken from {@link HoundConfig#workerThreads()}.
+     *
+     * @param sources  list of SQL sources to parse; may mix FromFile and FromText
+     * @param config   typed Hound configuration
+     * @param listener event listener; use {@link NoOpHoundEventListener#INSTANCE} if not needed
+     * @return one {@link ParseResult} per source, in the same order as {@code sources}
+     */
+    List<ParseResult> parseSources(List<SqlSource> sources, HoundConfig config, HoundEventListener listener);
+
+    /**
      * Parse multiple files in parallel (thread count from {@link HoundConfig#workerThreads()}).
      *
      * @param files  list of SQL files to parse
      * @param config typed Hound configuration
      * @return one {@link ParseResult} per file, in the same order as {@code files}
+     * @deprecated Prefer {@link #parseSources(List, HoundConfig, HoundEventListener)} with
+     *             {@link SqlSource.FromFile} — avoids unnecessary Path→SqlSource conversion.
      */
+    @Deprecated
     List<ParseResult> parseBatch(List<Path> files, HoundConfig config);
 
     /**
@@ -48,13 +71,15 @@ public interface HoundParser {
      * @param config   typed Hound configuration
      * @param listener event listener
      * @return one {@link ParseResult} per file, in the same order as {@code files}
+     * @deprecated Prefer {@link #parseSources(List, HoundConfig, HoundEventListener)}.
      */
+    @Deprecated
     List<ParseResult> parseBatch(List<Path> files, HoundConfig config, HoundEventListener listener);
 
     /**
      * Truncates all Dali vertex/edge types in YGG (TRUNCATE TYPE … UNSAFE).
      *
-     * <p>Call this before the first {@link #parse} / {@link #parseBatch} call when you want
+     * <p>Call this before the first {@link #parse} / {@link #parseSources} call when you want
      * a clean slate (i.e. {@code clearBeforeWrite = true} in the UI). No-op when
      * {@code config.writeMode()} is {@link ArcadeWriteMode#DISABLED}.
      *
