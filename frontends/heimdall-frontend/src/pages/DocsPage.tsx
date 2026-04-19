@@ -259,9 +259,17 @@ function DirNode({ name, node, depth, dirPath, activeFilePath, baseRoute, collap
 // ── DocsPage ──────────────────────────────────────────────────────────────────
 interface Props { tab?: DocsTab; }
 
+// Tab → { apiNs, prefix stripped from file paths, base route, sidebar label }
+const TAB_META: Record<DocsTab, { apiNs: string; prefix: string; baseRoute: string; label: string }> = {
+  'docs':         { apiNs: 'docs',      prefix: '',         baseRoute: '/docs',         label: 'Docs'    },
+  'team-docs':    { apiNs: 'team-docs', prefix: 'current/', baseRoute: '/team-docs',    label: 'Current' },
+  'team-archive': { apiNs: 'team-docs', prefix: 'archive/', baseRoute: '/team-archive', label: 'Archive' },
+};
+
 export default function DocsPage({ tab = 'docs' }: Props) {
   const tabLabel = tab === 'team-archive' ? 'Archive' : tab === 'team-docs' ? 'Team' : tab === 'highload' ? 'HighLoad++' : 'Docs';
   usePageTitle(tabLabel);
+
 
   const { '*': splat } = useParams<{ '*': string }>();
   const navigate        = useNavigate();
@@ -307,7 +315,7 @@ export default function DocsPage({ tab = 'docs' }: Props) {
   // Reset collapsed state when switching tabs
   useEffect(() => { setCollapsedDirs(new Set()); }, [tab]);
 
-  // Load file lists once
+
   useEffect(() => {
     Promise.all([
       fetch(`${HEIMDALL_API}/docs`)
