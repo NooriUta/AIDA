@@ -286,16 +286,6 @@ function MockStatementExtra() {
     </div>
   );
 
-  const subLabel = (lbl: string, indent: number) => (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      padding: '3px 10px', paddingLeft: 10 + indent * 12,
-      borderTop: '1px solid var(--bd)', fontSize: '11px',
-    }}>
-      <span style={{ flex: 1, color: 'var(--t1)', fontFamily: 'var(--mono)', fontSize: 10 }}>{lbl}</span>
-    </div>
-  );
-
   return (
     <>
       <InspectorSection title={`ЧИТАЕМЫЕ ТАБЛИЦЫ (${readTables.length})`} defaultOpen>
