@@ -29,17 +29,34 @@ mermaid.initialize({
   securityLevel: 'loose',
 });
 
-// ── File tree helpers ─────────────────────────────────────────────────────────
-function buildTree(paths: string[]): Record<string, string[]> {
-  const tree: Record<string, string[]> = { '': [] };
-  for (const p of paths) {
-    const slash = p.lastIndexOf('/');
-    const dir   = slash === -1 ? '' : p.slice(0, slash);
-    const file  = slash === -1 ? p  : p.slice(slash + 1);
-    if (!tree[dir]) tree[dir] = [];
-    tree[dir].push(file);
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface DocFile     { path: string; mtime: string; }
+interface DisplayFile { displayPath: string; apiPath: string; mtime: string; }
+interface TreeNode    { files: DisplayFile[]; children: Record<string, TreeNode>; }
+
+export type DocsTab = 'docs' | 'team-docs' | 'team-archive' | 'highload';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function normalizeFiles(data: (string | DocFile)[]): DocFile[] {
+  return data.map(f => typeof f === 'string' ? { path: f, mtime: '' } : f);
+}
+
+function buildTree(files: DisplayFile[]): TreeNode {
+  const root: TreeNode = { files: [], children: {} };
+  for (const f of files) {
+    const parts = f.displayPath.split('/');
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!node.children[parts[i]]) node.children[parts[i]] = { files: [], children: {} };
+      node = node.children[parts[i]];
+    }
+    node.files.push(f);
   }
-  return tree;
+  return root;
+}
+
+function formatDate(iso: string): string {
+  return iso ? iso.slice(0, 10) : '';
 }
 
 // ── Scoped styles injected once ───────────────────────────────────────────────
@@ -139,56 +156,231 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
   );
 }
 
-// ── DocsPage ──────────────────────────────────────────────────────────────────
-export type DocsTab = 'docs' | 'team-docs';
+// ── Directory node (recursive collapsible) ────────────────────────────────────
+interface DirNodeProps {
+  name: string;
+  node: TreeNode;
+  depth: number;
+  dirPath: string;
+  activeFilePath: string;
+  baseRoute: string;
+  collapsedDirs: Set<string>;
+  toggleDir: (path: string) => void;
+}
 
+function DirNode({ name, node, depth, dirPath, activeFilePath, baseRoute, collapsedDirs, toggleDir }: DirNodeProps) {
+  const isExpanded = !collapsedDirs.has(dirPath);
+  const indent = depth * 12;
+
+  const hasActiveDescendant = (n: TreeNode, prefix: string): boolean => {
+    if (n.files.some(f => f.displayPath === activeFilePath)) return true;
+    return Object.entries(n.children).some(([seg, child]) =>
+      hasActiveDescendant(child, prefix ? `${prefix}/${seg}` : seg)
+    );
+  };
+  const isActive = hasActiveDescendant(node, '');
+
+  return (
+    <div>
+      <button
+        onClick={() => toggleDir(dirPath)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '5px',
+          width: '100%', background: 'none', border: 'none',
+          cursor: 'pointer',
+          padding: `5px 12px 5px ${16 + indent}px`,
+          color: isActive ? 'var(--acc)' : 'var(--t3)',
+          fontSize: '11px', fontWeight: 600,
+          letterSpacing: '0.04em', textAlign: 'left',
+          fontFamily: 'var(--font-mono, monospace)',
+        }}
+      >
+        <span style={{ width: '10px', flexShrink: 0, opacity: 0.7, fontSize: '10px' }}>
+          {isExpanded ? '▾' : '▸'}
+        </span>
+        {name}/
+      </button>
+
+      {isExpanded && (
+        <div>
+          {node.files.map(f => {
+            const fileName = f.displayPath.split('/').pop() ?? f.displayPath;
+            const active   = f.displayPath === activeFilePath;
+            const date     = formatDate(f.mtime);
+            return (
+              <Link
+                key={f.displayPath}
+                to={`${baseRoute}/${f.displayPath}`}
+                style={{
+                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                  gap: '6px',
+                  padding: `4px 12px 4px ${16 + indent + 14}px`,
+                  color: active ? 'var(--acc)' : 'var(--t2)',
+                  background: active ? 'color-mix(in srgb,var(--acc) 8%,var(--bg1))' : 'transparent',
+                  textDecoration: 'none',
+                  borderLeft: active ? '2px solid var(--acc)' : '2px solid transparent',
+                  fontSize: '12px',
+                  fontFamily: 'var(--font-mono, monospace)',
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                  {fileName}
+                </span>
+                {date && (
+                  <span style={{ flexShrink: 0, fontSize: '10px', color: 'var(--t3)' }}>
+                    {date}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+
+          {Object.entries(node.children)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([subName, subNode]) => (
+              <DirNode
+                key={subName}
+                name={subName}
+                node={subNode}
+                depth={depth + 1}
+                dirPath={`${dirPath}/${subName}`}
+                activeFilePath={activeFilePath}
+                baseRoute={baseRoute}
+                collapsedDirs={collapsedDirs}
+                toggleDir={toggleDir}
+              />
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DocsPage ──────────────────────────────────────────────────────────────────
 interface Props { tab?: DocsTab; }
 
+
 export default function DocsPage({ tab = 'docs' }: Props) {
-  usePageTitle(tab === 'team-docs' ? 'Team Docs' : 'Docs');
+  const tabLabel = tab === 'team-archive' ? 'Archive' : tab === 'team-docs' ? 'Team' : tab === 'highload' ? 'HighLoad++' : 'Docs';
+  usePageTitle(tabLabel);
+
+
   const { '*': splat } = useParams<{ '*': string }>();
   const navigate        = useNavigate();
   const filePath        = splat ?? '';
 
-  const [pubFiles,  setPubFiles]  = useState<string[]>([]);
-  const [teamFiles, setTeamFiles] = useState<string[]>([]);
+  const [pubFiles,  setPubFiles]  = useState<DocFile[]>([]);
+  const [teamFiles, setTeamFiles] = useState<DocFile[]>([]);
   const [content,   setContent]   = useState<string | null>(null);
   const [error,     setError]     = useState<string | null>(null);
   const [loading,   setLoading]   = useState(false);
 
+  // collapsed dir paths — empty = all expanded
+  const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
+
+  // resizable sidebar
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const dragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartW = useRef(0);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    dragging.current  = true;
+    dragStartX.current = e.clientX;
+    dragStartW.current = sidebarWidth;
+    e.preventDefault();
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const next = Math.max(160, Math.min(480, dragStartW.current + e.clientX - dragStartX.current));
+      setSidebarWidth(next);
+    };
+    const onUp = () => { dragging.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
+
   useEffect(() => { ensureDocsStyles(); }, []);
 
-  // Load both file lists once — team list determines whether Team tab is shown
+  // Reset collapsed state when switching tabs
+  useEffect(() => { setCollapsedDirs(new Set()); }, [tab]);
+
+
   useEffect(() => {
     Promise.all([
       fetch(`${HEIMDALL_API}/docs`)
-        .then(r => r.ok ? (r.json() as Promise<string[]>) : Promise.resolve([])),
+        .then(r => r.ok ? (r.json() as Promise<(string | DocFile)[]>) : Promise.resolve([])),
       fetch(`${HEIMDALL_API}/team-docs`)
-        .then(r => r.ok ? (r.json() as Promise<string[]>) : Promise.resolve([])),
+        .then(r => r.ok ? (r.json() as Promise<(string | DocFile)[]>) : Promise.resolve([])),
     ]).then(([pub, team]) => {
-      setPubFiles(pub);
-      setTeamFiles(team);
+      setPubFiles(normalizeFiles(pub));
+      setTeamFiles(normalizeFiles(team));
     }).catch(() => {});
   }, []);
 
-  // Clear content when switching tabs so stale file from the other tab isn't shown
+  // Clear content when switching tabs
   useEffect(() => {
     setContent(null);
     setError(null);
   }, [tab]);
 
-  const apiNs     = tab === 'team-docs' ? 'team-docs' : 'docs';
-  const baseRoute = tab === 'team-docs' ? '/team-docs' : '/docs';
-  const files     = tab === 'team-docs' ? teamFiles : pubFiles;
+  // Detect docs volume structure
+  const teamPrefix    = useMemo(() => teamFiles.some(f => f.path.startsWith('current/')) ? 'current/' : '', [teamFiles]);
+  const hasArchive    = useMemo(() => teamFiles.some(f => f.path.startsWith('archive/')), [teamFiles]);
+  const hasHighload   = useMemo(() => teamFiles.some(f => f.path.startsWith('highload/')), [teamFiles]);
+  const showTeamTab   = teamFiles.length > 0;
+  const showArchive   = hasArchive;
+  const showHighload  = hasHighload;
 
-  const loadFile = useCallback((path: string) => {
+  // Per-tab config derived at runtime
+  const apiNs = tab === 'docs' ? 'docs' : 'team-docs';
+  const prefix =
+    tab === 'docs'         ? '' :
+    tab === 'team-docs'    ? teamPrefix :
+    tab === 'team-archive' ? 'archive/' :
+    /* highload */            'highload/';
+  const baseRoute =
+    tab === 'docs'         ? '/docs' :
+    tab === 'team-docs'    ? '/team-docs' :
+    tab === 'team-archive' ? '/team-archive' :
+    /* highload */            '/highload';
+  const rawFiles: DocFile[] = tab === 'docs' ? pubFiles : teamFiles;
+
+  // Build display files (strip prefix, keep apiPath for fetching)
+  const displayFiles: DisplayFile[] = useMemo(() => {
+    if (prefix) {
+      return rawFiles
+        .filter(f => f.path.startsWith(prefix))
+        .map(f => ({ displayPath: f.path.slice(prefix.length), apiPath: f.path, mtime: f.mtime }));
+    }
+    return rawFiles.map(f => ({ displayPath: f.path, apiPath: f.path, mtime: f.mtime }));
+  }, [rawFiles, prefix]);
+
+  const tree = useMemo(() => buildTree(displayFiles), [displayFiles]);
+
+  const toggleDir = useCallback((path: string) => {
+    setCollapsedDirs(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  // Load a file by its display path
+  const loadFile = useCallback((dp: string) => {
+    const apiPath = prefix + dp;
     setLoading(true);
     setError(null);
-    fetch(`${HEIMDALL_API}/${apiNs}/${path}`)
+    fetch(`${HEIMDALL_API}/${apiNs}/${apiPath}`)
       .then(r => r.ok ? r.text() : Promise.reject(`HTTP ${r.status}`))
       .then(text => { setContent(text); setLoading(false); })
       .catch(e  => { setError(String(e)); setLoading(false); });
-  }, [apiNs]);
+  }, [apiNs, prefix]);
 
   useEffect(() => {
     if (filePath) loadFile(filePath);
@@ -197,36 +389,28 @@ export default function DocsPage({ tab = 'docs' }: Props) {
 
   const html       = useMemo(() => content !== null ? marked.parse(content) as string : '', [content]);
   const contentRef = useRef<HTMLDivElement>(null);
-  const tree       = buildTree(files);
 
-  // ── Render mermaid diagrams after HTML is injected into DOM ──────────────────
+  // Render mermaid diagrams after HTML injected into DOM
   useEffect(() => {
     if (!contentRef.current || !html) return;
-
     const blocks = contentRef.current.querySelectorAll<HTMLElement>('code.language-mermaid');
     if (blocks.length === 0) return;
-
     blocks.forEach((block, i) => {
       const definition = block.textContent ?? '';
       const id = `mermaid-${Date.now()}-${i}`;
       const wrapper = document.createElement('div');
       wrapper.style.cssText = 'margin:0 0 1em;overflow-x:auto;';
-
       mermaid.render(id, definition).then(({ svg }) => {
         wrapper.innerHTML = svg;
         block.parentElement?.replaceWith(wrapper);
-      }).catch(err => {
-        console.warn('[mermaid] render error:', err);
-      });
+      }).catch(err => { console.warn('[mermaid] render error:', err); });
     });
   }, [html]);
-
-  const showTeamTab = teamFiles.length > 0;
 
   return (
     <div style={{ display: 'flex', height: '100%', flexDirection: 'column', fontSize: '13px' }}>
 
-      {/* ── Tab bar — always visible; Team tab only when volume is mounted ── */}
+      {/* ── Tab bar ── */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--bd)',
@@ -234,71 +418,94 @@ export default function DocsPage({ tab = 'docs' }: Props) {
         padding: '0 12px',
         flexShrink: 0,
       }}>
-        <TabBtn active={tab === 'docs'}      onClick={() => navigate('/docs')}>Documentation</TabBtn>
+        <TabBtn active={tab === 'docs'}         onClick={() => navigate('/docs')}>Documentation</TabBtn>
         {showTeamTab && (
-          <TabBtn active={tab === 'team-docs'} onClick={() => navigate('/team-docs')}>Team</TabBtn>
+          <TabBtn active={tab === 'team-docs'}  onClick={() => navigate('/team-docs')}>Team</TabBtn>
+        )}
+        {showArchive && (
+          <TabBtn active={tab === 'team-archive'} onClick={() => navigate('/team-archive')}>Archive</TabBtn>
+        )}
+        {showHighload && (
+          <TabBtn active={tab === 'highload'} onClick={() => navigate('/highload')}>HighLoad++</TabBtn>
         )}
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-        {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+        {/* ── Sidebar ── */}
         <aside style={{
-          width: '260px', flexShrink: 0,
+          width: sidebarOpen ? sidebarWidth : 0,
+          minWidth: sidebarOpen ? sidebarWidth : 0,
+          flexShrink: 0,
           borderRight: '1px solid var(--bd)',
           background: 'var(--bg1)',
           overflowY: 'auto',
-          padding: '12px 0',
+          overflowX: 'hidden',
+          padding: sidebarOpen ? '12px 0' : 0,
           fontFamily: 'var(--font-mono, monospace)',
+          transition: 'width 0.15s, min-width 0.15s, padding 0.15s',
         }}>
           <div style={{
-            padding: '4px 16px 12px',
+            padding: '4px 16px 10px',
             fontSize: '10px', fontWeight: 700,
             letterSpacing: '0.08em', textTransform: 'uppercase',
             color: 'var(--t3)',
             borderBottom: '1px solid var(--bd)',
-            marginBottom: '8px',
+            marginBottom: '6px',
           }}>
-            {tab === 'team-docs' ? 'Team' : 'Docs'}
+            {tabLabel}
           </div>
 
-          {Object.keys(tree).sort().map(dir => (
-            <div key={dir}>
-              {dir && (
-                <div style={{
-                  padding: '6px 16px 2px',
-                  fontSize: '11px', fontWeight: 600,
-                  color: 'var(--t3)', letterSpacing: '0.04em',
-                }}>
-                  {dir}/
-                </div>
-              )}
-              {tree[dir].map(file => {
-                const full = dir ? `${dir}/${file}` : file;
-                const isActive = filePath === full;
-                return (
-                  <Link
-                    key={full}
-                    to={`${baseRoute}/${full}`}
-                    style={{
-                      display: 'block',
-                      padding: '3px 16px 3px ' + (dir ? '28px' : '16px'),
-                      color: isActive ? 'var(--acc)' : 'var(--t2)',
-                      background: isActive ? 'var(--bg3)' : 'transparent',
-                      textDecoration: 'none',
-                      borderLeft: isActive ? '2px solid var(--acc)' : '2px solid transparent',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      fontSize: '12px',
-                    }}
-                  >
-                    {file}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+          {/* Root-level files (no parent dir) */}
+          {tree.files.map(f => {
+            const active = f.displayPath === filePath;
+            const date   = formatDate(f.mtime);
+            return (
+              <Link
+                key={f.displayPath}
+                to={`${baseRoute}/${f.displayPath}`}
+                style={{
+                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                  gap: '6px',
+                  padding: `4px 12px 4px 16px`,
+                  color: active ? 'var(--acc)' : 'var(--t2)',
+                  background: active ? 'color-mix(in srgb,var(--acc) 8%,var(--bg1))' : 'transparent',
+                  textDecoration: 'none',
+                  borderLeft: active ? '2px solid var(--acc)' : '2px solid transparent',
+                  fontSize: '12px',
+                  fontFamily: 'var(--font-mono, monospace)',
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                  {f.displayPath}
+                </span>
+                {date && (
+                  <span style={{ flexShrink: 0, fontSize: '10px', color: 'var(--t3)' }}>
+                    {date}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
 
-          {files.length === 0 && !error && (
+          {/* Directories */}
+          {Object.entries(tree.children)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([name, node]) => (
+              <DirNode
+                key={name}
+                name={name}
+                node={node}
+                depth={0}
+                dirPath={name}
+                activeFilePath={filePath}
+                baseRoute={baseRoute}
+                collapsedDirs={collapsedDirs}
+                toggleDir={toggleDir}
+              />
+            ))}
+
+          {displayFiles.length === 0 && !error && (
             <div style={{ padding: '12px 16px', color: 'var(--t3)' }}>Loading…</div>
           )}
           {error && (
@@ -306,17 +513,57 @@ export default function DocsPage({ tab = 'docs' }: Props) {
           )}
         </aside>
 
-        {/* ── Content pane ─────────────────────────────────────────────────── */}
+        {/* ── Resize handle + toggle ── */}
+        <div style={{
+          position: 'relative', flexShrink: 0, width: '8px',
+          background: 'transparent', cursor: 'col-resize', zIndex: 10,
+        }}
+          onMouseDown={sidebarOpen ? onDragStart : undefined}
+        >
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0, left: '3px', width: '2px',
+            background: 'var(--bd)',
+            transition: 'background 0.12s',
+          }} />
+          <button
+            title={sidebarOpen ? 'Свернуть навигацию' : 'Развернуть навигацию'}
+            onClick={() => setSidebarOpen(v => !v)}
+            style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '16px', height: '32px',
+              background: 'var(--bg1)',
+              border: '1px solid var(--bd)',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--t3)', fontSize: '9px', padding: 0,
+              zIndex: 11,
+            }}
+          >
+            {sidebarOpen ? '‹' : '›'}
+          </button>
+        </div>
+
+        {/* ── Content pane ── */}
         <main style={{
           flex: 1, overflowY: 'auto',
           padding: '24px 40px',
           background: 'var(--bg0)',
           color: 'var(--t1)',
         }}>
-          {!filePath && (
+          {!filePath && tab !== 'highload' && (
             <div style={{ color: 'var(--t3)', marginTop: '40px', textAlign: 'center' }}>
               Select a document from the sidebar
             </div>
+          )}
+
+          {!filePath && tab === 'highload' && (
+            <iframe
+              src="/highload-plan"
+              style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+              title="AIDA Plan"
+            />
           )}
 
           {loading && (

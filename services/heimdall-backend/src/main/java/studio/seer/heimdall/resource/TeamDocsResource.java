@@ -11,6 +11,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,12 +26,14 @@ import java.util.stream.Collectors;
 @Path("/team-docs")
 public class TeamDocsResource {
 
+    public record DocFile(String path, String mtime) {}
+
     @ConfigProperty(name = "team-docs.root", defaultValue = "/team-docs")
     String teamDocsRoot;
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
-    public List<String> list() throws IOException {
+    public List<DocFile> list() throws IOException {
         java.nio.file.Path root = Paths.get(teamDocsRoot);
         if (!Files.isDirectory(root)) {
             return List.of();
@@ -38,8 +42,16 @@ public class TeamDocsResource {
             return stream
                 .filter(Files::isRegularFile)
                 .filter(p -> p.toString().endsWith(".md"))
-                .map(p -> root.relativize(p).toString().replace('\\', '/'))
-                .sorted()
+                .map(p -> {
+                    String relPath = root.relativize(p).toString().replace('\\', '/');
+                    String mtime;
+                    try {
+                        mtime = Files.getLastModifiedTime(p).toInstant()
+                            .truncatedTo(ChronoUnit.SECONDS).toString();
+                    } catch (IOException e) { mtime = ""; }
+                    return new DocFile(relPath, mtime);
+                })
+                .sorted(Comparator.comparing(DocFile::path))
                 .collect(Collectors.toList());
         }
     }
