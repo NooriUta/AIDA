@@ -58,9 +58,21 @@ public interface DaliConfig {
         @WithDefault("4")
         int workerThreads();
 
+        Dashboard dashboard();
+
         interface BackgroundJobServer {
             @WithDefault("true")
             boolean enabled();
+        }
+
+        interface Dashboard {
+            /** Start the JobRunr HTTP dashboard. Disable in test profile. */
+            @WithDefault("true")
+            boolean enabled();
+
+            /** HTTP port for the JobRunr dashboard server. */
+            @WithDefault("29091")
+            int port();
         }
     }
 
