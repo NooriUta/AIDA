@@ -55,9 +55,14 @@ public class SessionResource {
     }
 
     /** JSON body for POST /api/sessions — does not expose the internal {@code uploaded} flag. */
-    private record SessionRequest(String dialect, String source, boolean preview, boolean clearBeforeWrite) {
+    private record SessionRequest(String dialect, String source, boolean preview, boolean clearBeforeWrite,
+                                  String dbName, String appName) {
         ParseSessionInput toInput() {
-            return new ParseSessionInput(dialect, source, preview, clearBeforeWrite, false);
+            return new ParseSessionInput(
+                    dialect, source, preview, clearBeforeWrite, false,
+                    null, null, null,
+                    dbName  != null && !dbName.isBlank()  ? dbName.strip()  : null,
+                    appName != null && !appName.isBlank() ? appName.strip() : null);
         }
     }
 

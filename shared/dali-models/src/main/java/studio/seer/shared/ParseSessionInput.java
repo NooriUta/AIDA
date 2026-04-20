@@ -20,6 +20,11 @@ package studio.seer.shared;
  * @param jdbcUser         JDBC username (JDBC source only; null for FILE)
  * @param jdbcPassword     JDBC password (JDBC source only; null for FILE)
  * @param jdbcSchema       Schema/owner to harvest (JDBC source only; null → adapter default)
+ * @param dbName           Database display name — when non-null, Hound creates a DaliDatabase
+ *                         vertex and attaches CONTAINS_SCHEMA edges so schemas are navigable
+ *                         in the graph (fixes the "HoundDB" stub problem for ad-hoc uploads)
+ * @param appName          Optional application name — when non-null, Hound also creates a
+ *                         DaliApplication vertex linked via BELONGS_TO_APP
  */
 public record ParseSessionInput(
         String  dialect,
@@ -29,13 +34,15 @@ public record ParseSessionInput(
         boolean uploaded,
         String  jdbcUser,
         String  jdbcPassword,
-        String  jdbcSchema
+        String  jdbcSchema,
+        String  dbName,
+        String  appName
 ) {
     /**
-     * Backward-compatible constructor for FILE-based sources (no JDBC credentials).
+     * Backward-compatible constructor for FILE-based sources (no JDBC credentials, no db context).
      */
     public ParseSessionInput(String dialect, String source, boolean preview,
                              boolean clearBeforeWrite, boolean uploaded) {
-        this(dialect, source, preview, clearBeforeWrite, uploaded, null, null, null);
+        this(dialect, source, preview, clearBeforeWrite, uploaded, null, null, null, null, null);
     }
 }

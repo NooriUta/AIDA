@@ -9,6 +9,10 @@ export interface ParseSessionInput {
   preview: boolean;
   /** If true, all Dali YGG data is truncated before this session writes. Default: true. */
   clearBeforeWrite: boolean;
+  /** Database name — when set, Hound creates a DaliDatabase vertex + CONTAINS_SCHEMA edges. */
+  dbName?: string;
+  /** Optional application name for BELONGS_TO_APP grouping. */
+  appName?: string;
 }
 
 export interface VertexTypeStat {
@@ -71,12 +75,16 @@ export async function uploadAndParse(
   dialect: DaliDialect,
   preview: boolean,
   clearBeforeWrite: boolean,
+  dbName?: string,
+  appName?: string,
 ): Promise<DaliSession> {
   const form = new FormData();
   form.append('file', file);
   form.append('dialect', dialect);
   form.append('preview', String(preview));
   form.append('clearBeforeWrite', String(clearBeforeWrite));
+  if (dbName)  form.append('dbName',  dbName);
+  if (appName) form.append('appName', appName);
   const res = await fetch(`${BASE}/api/sessions/upload`, { method: 'POST', body: form });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

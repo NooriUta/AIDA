@@ -55,7 +55,9 @@ public class HarvestJob {
                         false,
                         src.username(),
                         src.password(),
-                        src.schema().orElse(null)
+                        src.schema().orElse(null),
+                        null,           // dbName — JDBC sources use targetSchema from config
+                        null            // appName
                 );
                 sessionService.enqueue(input);
                 log.info("[{}] HarvestJob: enqueued ParseJob for source '{}' (dialect={})",

@@ -243,6 +243,8 @@
       "submitParse":      "Parse",
       "submitUpload":     "Upload & Parse",
       "submitting":       "...",
+      "dbNameLabel":       "Database name",
+      "dbNamePlaceholder": "PROD_DB (optional — groups schemas under this DB node)",
       "errSelectFile":    "Select a file to upload",
       "errSourceRequired": "Source path is required",
       "errAnotherActive": "Another session is active — wait for it to finish"
