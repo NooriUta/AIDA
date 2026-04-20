@@ -1,6 +1,6 @@
 # Sprint: ELK M2 KNOT
 
-**Status:** ✅ DONE  
+**Status:** ✅ DONE (EK-01 visual quality → ⚠️ retest 2026-05-20)  
 **Branch:** `feature/elk-m2-knot`  
 **Target:** v1.3.0  
 **Dates:** 2026-04-20 – 2026-04-20  
@@ -11,7 +11,7 @@
 
 | ID | Title | Status | Estimate |
 |----|-------|--------|----------|
-| EK-01 | ELK algorithm auto-switch for dense graphs (E/V > 5 → stress) | ✅ DONE | 1d |
+| EK-01 | ELK algorithm auto-switch for dense graphs (E/V > 5 → stress) | ⚠️ BACKLOG-RETEST (2026-05-20) | 1d |
 | EK-02 | KNOT Inspector — Statements section + deduplication by stmtGeoid | ✅ DONE | 1d |
 | HOUND 2076N | ReactFlow virtualization for large graphs (onlyRenderVisibleElements) + perf marks | ✅ DONE | 1d |
 | BUG-EK-01 | DB node click not opening L2 view | ✅ DONE | 0.5d |

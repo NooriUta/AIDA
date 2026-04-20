@@ -521,6 +521,7 @@
     "language":      "Язык",
     "tables":        "Таблицы",
     "routines":      "Процедуры",
+    "noRoutines":    "Нет процедур",
     "noColumns":     "Нет колонок",
     "schemas":       "Схемы",
     "drillDown":     "Drill-down →",

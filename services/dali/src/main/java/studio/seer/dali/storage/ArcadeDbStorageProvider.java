@@ -144,10 +144,13 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         String state = job.getJobState().getName().name();
         String json  = jobMapper.serializeJob(job);
         runSql(
-            "UPDATE `jobrunr_jobs` SET state = :state, jobAsJson = :json, updatedAt = sysdate() " +
+            "UPDATE `jobrunr_jobs` SET id = :id, state = :state, jobAsJson = :json, updatedAt = sysdate() " +
             "UPSERT RETURN AFTER @rid WHERE id = :id",
             Map.of("id", id, "state", state, "json", json));
         log.debug("JobRunr: saved job {} state={}", id, state);
+        // Notify listeners so BackgroundJobServer wakes up immediately instead of
+        // waiting for the next periodic poll cycle (which may be delayed by backoff).
+        notifyJobStatsOnChangeListeners();
         return job;
     }
 
@@ -328,8 +331,16 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     private List<Job> deserializeJobs(List<Map<String, Object>> rows) {
         if (rows == null) return List.of();
-        return rows.stream()
-                .map(r -> jobMapper.deserializeJob((String) r.get("jobAsJson")))
-                .collect(Collectors.toList());
+        List<Job> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String json = (String) row.get("jobAsJson");
+            if (json == null) continue;
+            try {
+                result.add(jobMapper.deserializeJob(json));
+            } catch (Exception e) {
+                log.warn("JobRunr: skipping undeserializable job record: {}", e.getMessage());
+            }
+        }
+        return result;
     }
 }

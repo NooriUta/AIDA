@@ -270,8 +270,20 @@ function DdlPanel({ ddlText }: { ddlText: string }) {
 
 // ── Routines analytics section ────────────────────────────────────────────────
 
-function UsageRow({ usage, onNavigate }: { usage: KnotTableUsage; onNavigate: () => void }) {
-  const isWrite = usage.edgeType === 'WRITES_TO';
+const STMT_OP_COLORS: Record<string, string> = {
+  SELECT: 'var(--suc)',
+  INSERT: 'var(--inf)',
+  UPDATE: 'var(--wrn)',
+  DELETE: 'var(--danger)',
+  MERGE:  'var(--acc)',
+};
+
+function StmtRow({ usage, onNavigate }: { usage: KnotTableUsage; onNavigate: () => void }) {
+  const stmtType  = usage.stmtType || '?';
+  const color     = STMT_OP_COLORS[stmtType] ?? 'var(--t3)';
+  const stmtLabel = usage.stmtGeoid
+    ? usage.stmtGeoid.split(':').pop() ?? usage.stmtGeoid
+    : '—';
   return (
     <div
       onClick={onNavigate}
@@ -284,20 +296,18 @@ function UsageRow({ usage, onNavigate }: { usage: KnotTableUsage; onNavigate: ()
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <span style={{
-        fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: 3, flexShrink: 0,
-        background: isWrite
-          ? 'color-mix(in srgb, var(--danger) 15%, transparent)'
-          : 'color-mix(in srgb, var(--suc) 15%, transparent)',
-        color: isWrite ? 'var(--danger)' : 'var(--suc)',
-        border: `1px solid ${isWrite ? 'color-mix(in srgb, var(--danger) 40%, transparent)' : 'color-mix(in srgb, var(--suc) 40%, transparent)'}`,
-      }}>
-        {isWrite ? 'W' : 'R'}
-      </span>
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--t1)', fontFamily: 'var(--mono)' }}>
-        {usage.routineName || usage.routineGeoid}
-      </span>
-      {usage.stmtType && (
-        <span style={{ fontSize: '9px', color: 'var(--t3)', flexShrink: 0 }}>{usage.stmtType}</span>
+        fontSize: '8px', fontWeight: 700, padding: '1px 4px', borderRadius: 2,
+        flexShrink: 0, fontFamily: 'var(--mono)',
+        border: `0.5px solid ${color}`, color,
+      }}>{stmtType}</span>
+      <span style={{
+        flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        color: 'var(--t1)', fontFamily: 'var(--mono)',
+      }}>{stmtLabel}</span>
+      {usage.routineName && (
+        <span style={{ fontSize: '9px', color: 'var(--t3)', flexShrink: 0 }}>
+          {usage.routineName}
+        </span>
       )}
     </div>
   );
@@ -310,16 +320,27 @@ function TableRoutinesSection({ nodeId }: { nodeId: string }) {
   const [open, setOpen] = useState(false);
   const { data, isFetching } = useKnotTableRoutines(nodeId, open);
 
-  const handleNavigate = useCallback((usage: KnotTableUsage) => {
-    if (usage.routineGeoid) {
-      jumpTo('L3', usage.routineGeoid, usage.routineName || usage.routineGeoid, 'DaliRoutine', { focusNodeId: usage.routineGeoid });
-      navigate('/');
+  const routines = useMemo(() => {
+    if (!data) return [];
+    const map = new Map<string, { geoid: string; name: string; edgeTypes: Set<string>; stmtCount: number }>();
+    for (const u of data) {
+      if (!u.routineGeoid) continue;
+      const cur = map.get(u.routineGeoid) ?? { geoid: u.routineGeoid, name: u.routineName, edgeTypes: new Set<string>(), stmtCount: 0 };
+      cur.edgeTypes.add(u.edgeType);
+      cur.stmtCount++;
+      map.set(u.routineGeoid, cur);
     }
+    return [...map.values()];
+  }, [data]);
+
+  const handleNavigate = useCallback((geoid: string, name: string) => {
+    jumpTo('L3', geoid, name || geoid, 'DaliRoutine', { focusNodeId: geoid });
+    navigate('/');
   }, [jumpTo, navigate]);
 
   return (
     <InspectorSection
-      title={`${t('inspector.routines', { defaultValue: 'Routines' })}${data ? ` (${data.length})` : ''}`}
+      title={`${t('inspector.routines', { defaultValue: 'Routines' })}${data ? ` (${routines.length})` : ''}`}
       defaultOpen={false}
       onToggle={setOpen}
     >
@@ -328,14 +349,45 @@ function TableRoutinesSection({ nodeId }: { nodeId: string }) {
           {t('status.loading', { defaultValue: '…' })}
         </div>
       )}
-      {!isFetching && open && data && data.length === 0 && (
+      {!isFetching && open && routines.length === 0 && (
         <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)' }}>
           {t('inspector.noRoutines', { defaultValue: 'Нет routines' })}
         </div>
       )}
-      {!isFetching && data && data.map((u, i) => (
-        <UsageRow key={`${u.routineGeoid}-${u.stmtGeoid}-${i}`} usage={u} onNavigate={() => handleNavigate(u)} />
-      ))}
+      {!isFetching && routines.map((r) => {
+        const hasRead  = r.edgeTypes.has('READS_FROM');
+        const hasWrite = r.edgeTypes.has('WRITES_TO');
+        const badge    = hasRead && hasWrite ? 'RW' : hasWrite ? 'W' : 'R';
+        const badgeColor = hasRead && hasWrite ? 'var(--wrn)' : hasWrite ? 'var(--danger)' : 'var(--suc)';
+        return (
+          <div
+            key={r.geoid}
+            onClick={() => handleNavigate(r.geoid, r.name)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderTop: '1px solid var(--bd)',
+              fontSize: '11px', cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg2)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+          >
+            <span style={{
+              fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: 3, flexShrink: 0,
+              background: `color-mix(in srgb, ${badgeColor} 15%, transparent)`,
+              color: badgeColor,
+              border: `1px solid color-mix(in srgb, ${badgeColor} 40%, transparent)`,
+            }}>
+              {badge}
+            </span>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--t1)', fontFamily: 'var(--mono)' }}>
+              {r.name || r.geoid}
+            </span>
+            <span style={{ fontSize: '9px', color: 'var(--t3)', flexShrink: 0 }}>
+              {r.stmtCount} stmt
+            </span>
+          </div>
+        );
+      })}
     </InspectorSection>
   );
 }
@@ -384,7 +436,7 @@ function TableStatementsSection({ nodeId }: { nodeId: string }) {
         </div>
       )}
       {!isFetching && stmts.map((u, i) => (
-        <UsageRow key={`${u.stmtGeoid}-${i}`} usage={u} onNavigate={() => handleNavigate(u)} />
+        <StmtRow key={`${u.stmtGeoid}-${i}`} usage={u} onNavigate={() => handleNavigate(u)} />
       ))}
     </InspectorSection>
   );

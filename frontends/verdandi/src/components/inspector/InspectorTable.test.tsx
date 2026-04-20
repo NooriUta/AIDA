@@ -105,6 +105,55 @@ describe('InspectorTable: Statements section (EK-02)', () => {
   });
 });
 
+describe('InspectorTable: Routines section (EK-02 dedup)', () => {
+  it('deduplicates routines by routineGeoid — shows unique count in header', () => {
+    const data: KnotTableUsage[] = [
+      makeUsage({ routineGeoid: 'r1', routineName: 'PKG.PROC', edgeType: 'READS_FROM',  stmtGeoid: 'stmt-1', stmtType: 'SELECT' }),
+      makeUsage({ routineGeoid: 'r1', routineName: 'PKG.PROC', edgeType: 'WRITES_TO',   stmtGeoid: 'stmt-2', stmtType: 'UPDATE' }),
+      makeUsage({ routineGeoid: 'r2', routineName: 'PKG.FUNC', edgeType: 'READS_FROM',  stmtGeoid: 'stmt-3', stmtType: 'SELECT' }),
+    ];
+    mockUseKnotTableRoutines.mockReturnValue({ data, isFetching: false });
+
+    renderTable();
+
+    // 3 raw entries but 2 unique routines → Routines (2)
+    expect(screen.getByRole('button', { name: /inspector\.routines.*\(2\)/i })).toBeInTheDocument();
+  });
+
+  it('shows RW badge when routine both reads and writes', () => {
+    const data: KnotTableUsage[] = [
+      makeUsage({ routineGeoid: 'r1', routineName: 'PKG.PROC', edgeType: 'READS_FROM',  stmtGeoid: 'stmt-1', stmtType: 'SELECT' }),
+      makeUsage({ routineGeoid: 'r1', routineName: 'PKG.PROC', edgeType: 'WRITES_TO',   stmtGeoid: 'stmt-2', stmtType: 'INSERT' }),
+    ];
+    mockUseKnotTableRoutines.mockReturnValue({ data, isFetching: false });
+
+    renderTable();
+
+    // Open the section
+    fireEvent.click(screen.getByRole('button', { name: /inspector\.routines.*\(1\)/i }));
+    expect(screen.getByText('RW')).toBeInTheDocument();
+  });
+});
+
+describe('InspectorTable: StmtRow label (EK-02 refactor)', () => {
+  it('shows last stmtGeoid segment as primary label, not routineName', () => {
+    const data: KnotTableUsage[] = [
+      makeUsage({ routineGeoid: 'r1', routineName: 'PKG.PROC', edgeType: 'READS_FROM', stmtGeoid: 'SCH.PKG:stmt-abc', stmtType: 'SELECT' }),
+    ];
+    mockUseKnotTableRoutines.mockReturnValue({ data, isFetching: false });
+
+    renderTable();
+
+    // Open statements section
+    fireEvent.click(screen.getByRole('button', { name: /inspector\.statements.*\(1\)/i }));
+
+    // Primary label is last segment of stmtGeoid
+    expect(screen.getByText('stmt-abc')).toBeInTheDocument();
+    // stmtType badge is visible
+    expect(screen.getByText('SELECT')).toBeInTheDocument();
+  });
+});
+
 describe('InspectorTable: basic rendering', () => {
   it('renders the table label in the header', () => {
     renderTable(makeData({ label: 'MY_TABLE' }));
