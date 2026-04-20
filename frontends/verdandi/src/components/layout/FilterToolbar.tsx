@@ -184,7 +184,7 @@ function FilterPill({ icon, placeholder, value, options, onChange, onClear, acti
 export const FilterToolbar = memo(() => {
   const { t } = useTranslation();
   const compact = useIsMobile();
-  const [row2Collapsed, setRow2Collapsed] = useState(false);
+  const [row2Collapsed, setRow2Collapsed] = useState(compact);
 
   const {
     viewLevel,

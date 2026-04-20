@@ -118,7 +118,7 @@ function CascadePill({ icon, placeholder, value, options, onChange, onClear, act
 export const FilterToolbarL1 = memo(() => {
   const { t } = useTranslation();
   const compact = useIsMobile();
-  const [row2Collapsed, setRow2Collapsed] = useState(false);
+  const [row2Collapsed, setRow2Collapsed] = useState(compact);
   const {
     l1ScopeStack, clearL1Scope, setL1Scope,
     availableApps, availableDbs, availableSchemas,
