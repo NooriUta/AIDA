@@ -30,6 +30,7 @@ export function useFilterSync(rawGraph: Graph | null): void {
     setAvailableStmts,
     setAvailableFields,
     setAvailableColumns,
+    setAvailableRoutines,
   } = useLoomStore();
 
   // ── Populate App/DB/Schema lists for L1 filter panel ──────────────────────
@@ -54,11 +55,12 @@ export function useFilterSync(rawGraph: Graph | null): void {
     );
   }, [viewLevel, rawGraph, setAvailableApps, setAvailableDbs, setAvailableSchemas]);
 
-  // ── Populate Table/Stmt lists for L2 filter dropdowns ────────────────────────
+  // ── Populate Table/Stmt/Routine lists for L2 filter dropdowns ───────────────
   useEffect(() => {
     if (viewLevel !== 'L2' || !rawGraph) {
       setAvailableTables([]);
       setAvailableStmts([]);
+      setAvailableRoutines([]);
       return;
     }
     const tables = rawGraph.nodes
@@ -91,7 +93,13 @@ export function useFilterSync(rawGraph: Graph | null): void {
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
     setAvailableStmts(stmts);
-  }, [viewLevel, rawGraph, setAvailableTables, setAvailableStmts]);
+
+    const routines = rawGraph.nodes
+      .filter((n) => n.type === 'routineNode' || n.type === 'packageNode')
+      .map((n) => ({ id: n.id, label: n.data.label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    setAvailableRoutines(routines);
+  }, [viewLevel, rawGraph, setAvailableTables, setAvailableStmts, setAvailableRoutines]);
 
   // ── Populate all-columns list (availableFields) for the column dropdown ─────
   // Collects unique column names across ALL table/statement nodes so the

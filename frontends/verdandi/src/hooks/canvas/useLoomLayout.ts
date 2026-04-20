@@ -173,8 +173,8 @@ export function useLoomLayout(
   // Respects filter.depth: BFS expands N hops from the seed node(s).
   useEffect(() => {
     if (layouting || viewLevel !== 'L2') return;
-    const { tableFilter, stmtFilter, fieldFilter, depth, upstream, downstream } = filter;
-    const activeId = stmtFilter ?? tableFilter;
+    const { tableFilter, stmtFilter, fieldFilter, routineFilter, depth, upstream, downstream } = filter;
+    const activeId = stmtFilter ?? tableFilter ?? routineFilter;
     const DIM_TABLE = 0.18;
     const DIM_FIELD = 0.08;
 
@@ -353,7 +353,7 @@ export function useLoomLayout(
     }
     // activeId is null (cleared): no viewport movement.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter.tableFilter, filter.stmtFilter, filter.fieldFilter, filter.depth,
+  }, [filter.tableFilter, filter.stmtFilter, filter.fieldFilter, filter.routineFilter, filter.depth,
       filter.upstream, filter.downstream, viewLevel, layouting, getEdges, getNodes, setCenter, getZoom]);
 
   // M-3: callback for "Вычислить полный layout" button

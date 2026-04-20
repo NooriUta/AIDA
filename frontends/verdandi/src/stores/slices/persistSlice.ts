@@ -52,6 +52,7 @@ export function hydratePersistedState(): Partial<LoomStore> {
         tableFilter:      null,
         stmtFilter:       null,
         fieldFilter:      null,
+        routineFilter:    null,
         includeExternal:  false,
         routineAggregate: true,
       },

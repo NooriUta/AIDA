@@ -2,11 +2,13 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 export const StatusBar = memo(() => {
   const { viewLevel, nodeCount, edgeCount, zoom, graphTruncated } = useLoomStore();
   const user = useAuthStore((s) => s.user);
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
 
   const zoomPct = Math.round(zoom * 100);
 
@@ -31,13 +33,19 @@ export const StatusBar = memo(() => {
     }}>
       <Chip colour={levelColour}>{viewLevel}</Chip>
       <Divider />
-      <span>{nodeCount} {t('canvas.nodes')}</span>
+      {isMobile
+        ? <span title={t('canvas.nodes')}>{nodeCount}</span>
+        : <span>{nodeCount} {t('canvas.nodes')}</span>}
       <Divider />
-      <span>{edgeCount} {t('canvas.edges')}</span>
+      {isMobile
+        ? <span title={t('canvas.edges')}>{edgeCount}</span>
+        : <span>{edgeCount} {t('canvas.edges')}</span>}
       <Divider />
-      <span>{t('canvas.zoom')}: {zoomPct}%</span>
+      {isMobile
+        ? <span title={t('canvas.zoom')}>{zoomPct}%</span>
+        : <span>{t('canvas.zoom')}: {zoomPct}%</span>}
 
-      {/* Truncation warning — inline in footer */}
+      {/* Truncation warning */}
       {graphTruncated && (
         <>
           <Divider />
@@ -50,15 +58,15 @@ export const StatusBar = memo(() => {
             title={t('canvas.hasMore', { count: nodeCount })}
           >
             <span style={{ fontSize: '11px', lineHeight: 1 }}>⚠</span>
-            {t('canvas.hasMore', { count: nodeCount })}
+            {!isMobile && t('canvas.hasMore', { count: nodeCount })}
           </span>
         </>
       )}
 
       <div style={{ flex: 1 }} />
-      {user && <span>{user.role}</span>}
-      <Divider />
-      <span style={{ color: 'var(--bd)', letterSpacing: '0.07em' }}>Verðanði · Loom</span>
+      {user && !isMobile && <span>{user.role}</span>}
+      {!isMobile && <Divider />}
+      {!isMobile && <span style={{ color: 'var(--bd)', letterSpacing: '0.07em' }}>Verðanði · Loom</span>}
     </footer>
   );
 });

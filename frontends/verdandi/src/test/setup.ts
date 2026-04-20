@@ -7,6 +7,23 @@ if (typeof HTMLElement !== 'undefined') {
   HTMLElement.prototype.scrollIntoView = function () {};
 }
 
+// ── window.matchMedia (jsdom doesn't implement it) ──────────────────────────
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 // ── Mock react-i18next ──────────────────────────────────────────────────────
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -16,12 +33,6 @@ vi.mock('react-i18next', () => ({
   Trans: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-// ── Mock react-router-dom ───────────────────────────────────────────────────
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<Record<string, unknown>>('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-    useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
-  };
-});
+// react-router-dom is NOT globally mocked here.
+// Tests that render components using useNavigate / useLocation must wrap in
+// MemoryRouter — use the renderWithRouter() helper from src/test/router-utils.tsx.

@@ -1,8 +1,11 @@
 package studio.seer.lineage.resource;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.graphql.*;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+import studio.seer.lineage.client.dali.DaliClient;
 import studio.seer.lineage.heimdall.HeimdallEmitter;
 import studio.seer.lineage.heimdall.model.EventLevel;
 import studio.seer.lineage.heimdall.model.EventType;
@@ -10,9 +13,8 @@ import studio.seer.lineage.model.*;
 import studio.seer.lineage.security.SeerIdentity;
 import studio.seer.lineage.service.*;
 
-import java.util.Map;
-
 import java.util.List;
+import java.util.Map;
 
 /**
  * GraphQL API for SEER LOOM — three view levels + search.
@@ -26,12 +28,13 @@ import java.util.List;
 @GraphQLApi
 public class LineageResource {
 
-    @Inject SeerIdentity    identity;
-    @Inject OverviewService overviewService;
-    @Inject ExploreService  exploreService;
-    @Inject LineageService  lineageService;
-    @Inject SearchService   searchService;
-    @Inject HeimdallEmitter heimdall;
+    @Inject                SeerIdentity    identity;
+    @Inject                OverviewService overviewService;
+    @Inject                ExploreService  exploreService;
+    @Inject                LineageService  lineageService;
+    @Inject                SearchService   searchService;
+    @Inject                HeimdallEmitter heimdall;
+    @Inject @RestClient    DaliClient      daliClient;
 
     // ── L1: Overview ──────────────────────────────────────────────────────────
 
@@ -113,6 +116,10 @@ public class LineageResource {
                 Map.of("op", "explore", "scope", scope != null ? scope : "",
                        "includeExternal", ext,
                        "call", call("explore", "scope", scope != null ? scope : "") + (ext ? " +external" : "")));
+        // C.3.2 — aida: special scopes trigger Dali actions and return a synthetic node
+        if (scope != null && scope.startsWith("aida:")) {
+            return handleAidaScope(scope, start);
+        }
         return exploreService.explore(scope, ext)
                 .invoke(result -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
                         null, null, System.currentTimeMillis() - start,
@@ -124,6 +131,39 @@ public class LineageResource {
                                "call",  call("explore", "scope", scope != null ? scope : "") + (ext ? " +external" : "")
                                         + " → " + (result != null ? result.nodes().size() : 0) + " nodes, "
                                         + (result != null ? result.edges().size() : 0) + " edges")));
+    }
+
+    /**
+     * Handles {@code aida:<action>} scopes — currently only {@code aida:harvest}.
+     * Triggers a Dali HarvestJob and returns a synthetic ExploreResult with a
+     * HarvestSession node so the frontend can navigate to the Sessions tab.
+     */
+    private Uni<ExploreResult> handleAidaScope(String scope, long start) {
+        String action = scope.substring("aida:".length());
+        if (!"harvest".equals(action)) {
+            return Uni.createFrom().failure(new GraphQLException("Unknown aida: scope: " + scope));
+        }
+        return Uni.createFrom()
+                .item(() -> daliClient.startHarvest())
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+                .map(resp -> {
+                    String harvestId = resp.getOrDefault("harvestId", "unknown");
+                    String status    = resp.getOrDefault("status", "enqueued");
+                    GraphNode node = new GraphNode(
+                            "harvest-" + harvestId, "HarvestSession",
+                            "Harvest Started", "aida:harvest",
+                            Map.of("harvestId", harvestId, "status", status), "dali");
+                    heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                            null, null, System.currentTimeMillis() - start,
+                            Map.of("op", "explore", "scope", scope, "harvestId", harvestId));
+                    return new ExploreResult(List.of(node), List.of(), false);
+                })
+                .onFailure().recoverWithItem(ex -> new ExploreResult(
+                        List.of(new GraphNode("harvest-error", "HarvestSession",
+                                "Harvest Unavailable", "aida:harvest",
+                                Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Dali unreachable"),
+                                "dali")),
+                        List.of(), false));
     }
 
     // ── L4: Statement subquery tree ──────────────────────────────────────────

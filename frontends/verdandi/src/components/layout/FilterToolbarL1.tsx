@@ -1,13 +1,11 @@
 // src/components/layout/FilterToolbarL1.tsx
-// LOOM-024b: L1 Filter Toolbar — single 32px row.
-//
-// Layout:
-//   [Scope pill] | [Depth 1 2 3 ∞] | [↑ ↓] | [⊞ System] | [App→DB→Schema] [× clear]  ···  [Badge]
+// LOOM-024b: L1 Filter Toolbar — Row 1 (controls) + Row 2 (cascade pills, vertical stack).
 
-import { memo, type ReactNode } from 'react';
+import { memo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 import { ToolbarDivider, IconLayers, ToolbarToggleButton } from '../ui/ToolbarPrimitives';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const DEPTHS = [1, 2, 3, 99] as const;
 type L1Depth = typeof DEPTHS[number];
@@ -48,8 +46,6 @@ function IconSchema({ active }: { active: boolean }) {
   );
 }
 
-
-
 // ─── Cascade selector pill ────────────────────────────────────────────────────
 
 interface CascadePillProps {
@@ -60,9 +56,10 @@ interface CascadePillProps {
   onChange:    (id: string) => void;
   onClear?:    () => void;
   active:      boolean;
+  style?:      CSSProperties;
 }
 
-function CascadePill({ icon, placeholder, value, options, onChange, onClear, active }: CascadePillProps) {
+function CascadePill({ icon, placeholder, value, options, onChange, onClear, active, style }: CascadePillProps) {
   const label = options.find((o) => o.id === value)?.label ?? placeholder;
   return (
     <div style={{
@@ -80,6 +77,7 @@ function CascadePill({ icon, placeholder, value, options, onChange, onClear, act
       flexShrink:   0,
       maxWidth:     130,
       cursor:       'pointer',
+      ...style,
     }}>
       {icon}
       <span style={{
@@ -119,6 +117,8 @@ function CascadePill({ icon, placeholder, value, options, onChange, onClear, act
 
 export const FilterToolbarL1 = memo(() => {
   const { t } = useTranslation();
+  const compact = useIsMobile();
+  const [row2Collapsed, setRow2Collapsed] = useState(false);
   const {
     l1ScopeStack, clearL1Scope, setL1Scope,
     availableApps, availableDbs, availableSchemas,
@@ -143,8 +143,6 @@ export const FilterToolbarL1 = memo(() => {
       : `L1 · ${depthLabel(depth)}`;
 
   // ── Cascading options ─────────────────────────────────────────────────────
-  // DB list is narrowed by the active Scope selector (l1ScopeStack App) —
-  // so App filtering stays in the Scope pill, no duplication.
   const scopedAppId = activeScope?.nodeId ?? null;
   const dbOptions = availableDbs.filter(
     (d) => !scopedAppId || d.appId === scopedAppId,
@@ -161,141 +159,217 @@ export const FilterToolbarL1 = memo(() => {
 
   const handleSchemaChange = (id: string) => {
     if (!id) { setL1HierarchySchema(null); return; }
-    // If the schema belongs to a different DB, auto-set that DB first
     const sch = availableSchemas.find((s) => s.id === id);
     if (sch && sch.dbId !== dbId) setL1HierarchyDb(sch.dbId);
     setL1HierarchySchema(id);
   };
 
+  const pillStyle: CSSProperties = {
+    maxWidth: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+  };
+
   return (
     <div style={{
       display:      'flex',
-      alignItems:   'center',
-      gap:          5,
-      height:       32,
+      flexDirection:'column',
       flexShrink:   0,
-      padding:      '0 10px',
       background:   'var(--bg0)',
       borderBottom: '0.5px solid var(--bd)',
-      overflow:     'hidden',
     }}>
 
-      {/* ── Depth ─────────────────────────────────────────────────────── */}
-      <span style={{ fontSize: 10, color: 'var(--t3)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-        {t('toolbar.depth')}:
-      </span>
-      <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-        {DEPTHS.map((d) => {
-          const isOn = d === depth;
-          return (
-            <button key={d} aria-pressed={isOn} onClick={() => setL1Depth(d)} style={{
-              padding: '2px 6px', borderRadius: 3,
-              border: `0.5px solid ${isOn ? 'var(--acc)' : 'var(--bd)'}`,
-              fontSize: 9, color: isOn ? 'var(--acc)' : 'var(--t3)',
-              cursor: 'pointer',
-              background: isOn ? 'color-mix(in srgb, var(--acc) 8%, transparent)' : 'transparent',
-              fontWeight: isOn ? 600 : 400, fontFamily: 'var(--font)',
-            }}>
-              {depthLabel(d)}
-            </button>
-          );
-        })}
-      </div>
-
-      <ToolbarDivider size="sm" />
-
-      {/* ── Direction ─────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-        <ToolbarToggleButton active={dirUp} onClick={toggleL1DirUp} size="sm" color="var(--inf)">
-          ↑ {t('toolbar.upstream')}
-        </ToolbarToggleButton>
-        <ToolbarToggleButton active={dirDown} onClick={toggleL1DirDown} size="sm" color="var(--wrn)">
-          ↓ {t('toolbar.downstream')}
-        </ToolbarToggleButton>
-      </div>
-
-      <ToolbarDivider size="sm" />
-
-      {/* ── System-level toggle ───────────────────────────────────────── */}
-      <ToolbarToggleButton
-        active={systemLevel}
-        onClick={toggleL1SystemLevel}
-        size="sm"
-        color="var(--wrn)"
-        title={t('l1.systemLevelHint')}
-        style={{ fontSize: 9, padding: '2px 8px' }}
-      >
-        <IconLayers size={10} />
-        {t('l1.systemLevel')}
-      </ToolbarToggleButton>
-
-      <ToolbarDivider size="sm" />
-
-      {/* ── Cascade filter: App → DB → Schema ────────────────────────── */}
-      <CascadePill
-        icon={<IconApp active={!!activeScope} />}
-        placeholder={t('l1.allSystems')}
-        value={activeScope?.nodeId ?? ''}
-        options={availableApps}
-        onChange={(id) => {
-          if (!id) { clearL1HierarchyFilter(); clearL1Scope(); return; }
-          const app = availableApps.find((a) => a.id === id);
-          if (app) setL1Scope(app.id, app.label);
-        }}
-        onClear={() => { clearL1Scope(); clearL1HierarchyFilter(); }}
-        active={!!activeScope}
-      />
-      <span style={{ fontSize: 9, color: 'var(--t3)', flexShrink: 0, userSelect: 'none' }}>→</span>
-      <CascadePill
-        icon={<IconDb active={!!dbId} />}
-        placeholder={t('l1.allDbs')}
-        value={dbId ?? ''}
-        options={dbOptions}
-        onChange={handleDbChange}
-        onClear={() => setL1HierarchyDb(null)}
-        active={!!dbId}
-      />
-      <span style={{ fontSize: 9, color: 'var(--t3)', flexShrink: 0, userSelect: 'none' }}>→</span>
-      <CascadePill
-        icon={<IconSchema active={!!schemaId} />}
-        placeholder={t('l1.allSchemas')}
-        value={schemaId ?? ''}
-        options={schemaOptions}
-        onChange={handleSchemaChange}
-        onClear={() => setL1HierarchySchema(null)}
-        active={!!schemaId}
-      />
-
-      {/* Clear all filters */}
-      {hasFilter && (
-        <button
-          onClick={() => { clearL1Scope(); clearL1HierarchyFilter(); }}
-          style={{
-            padding: '1px 6px', borderRadius: 3,
-            border: '0.5px solid var(--wrn)',
-            fontSize: 8, color: 'var(--wrn)',
-            cursor: 'pointer',
-            background: 'color-mix(in srgb, var(--wrn) 6%, transparent)',
-            whiteSpace: 'nowrap', flexShrink: 0,
-            fontFamily: 'var(--font)',
-          }}
-        >✕</button>
-      )}
-
-      {/* ── Spacer ────────────────────────────────────────────────────── */}
-      <div style={{ flex: '1 1 auto' }} />
-
-      {/* ── Level badge ───────────────────────────────────────────────── */}
-      <span style={{
-        fontSize: 9, padding: '2px 7px',
-        border: `0.5px solid ${systemLevel || hasFilter ? 'var(--wrn)' : 'var(--bd)'}`,
-        borderRadius: 3,
-        color: systemLevel || hasFilter ? 'var(--wrn)' : 'var(--t3)',
-        fontFamily: 'var(--mono)',
-        whiteSpace: 'nowrap', flexShrink: 0,
+      {/* ── Row 1: controls ───────────────────────────────────────────── */}
+      <div style={{
+        display:    'flex',
+        alignItems: 'center',
+        gap:        5,
+        height:     compact ? 40 : 32,
+        flexShrink: 0,
+        padding:    '0 10px',
+        overflowX:  'auto',
+        overflowY:  'hidden',
       }}>
-        {badgeText}
-      </span>
+
+        {/* ── Depth ─────────────────────────────────────────────────────── */}
+        {compact ? (
+          <select
+            value={depth === 99 ? '99' : String(depth)}
+            onChange={(e) => setL1Depth(Number(e.target.value) as L1Depth)}
+            aria-label={t('toolbar.depth')}
+            title={t('toolbar.depth')}
+            style={{
+              background: 'var(--bg3)',
+              border: `1px solid ${depth !== 99 ? 'var(--acc)' : 'var(--bd)'}`,
+              borderRadius: 6,
+              color: depth !== 99 ? 'var(--acc)' : 'var(--t2)',
+              fontSize: 12, padding: '3px 6px',
+              outline: 'none', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            {DEPTHS.map((d) => (
+              <option key={d} value={String(d)}>{depthLabel(d)}</option>
+            ))}
+          </select>
+        ) : (
+          <>
+            <span style={{ fontSize: 10, color: 'var(--t3)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {t('toolbar.depth')}:
+            </span>
+            <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+              {DEPTHS.map((d) => {
+                const isOn = d === depth;
+                return (
+                  <button key={d} aria-pressed={isOn} onClick={() => setL1Depth(d)} style={{
+                    padding: '2px 6px', borderRadius: 3,
+                    border: `0.5px solid ${isOn ? 'var(--acc)' : 'var(--bd)'}`,
+                    fontSize: 9, color: isOn ? 'var(--acc)' : 'var(--t3)',
+                    cursor: 'pointer',
+                    background: isOn ? 'color-mix(in srgb, var(--acc) 8%, transparent)' : 'transparent',
+                    fontWeight: isOn ? 600 : 400, fontFamily: 'var(--font)',
+                  }}>
+                    {depthLabel(d)}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <ToolbarDivider size="sm" />
+
+        {/* ── Direction ─────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+          <ToolbarToggleButton active={dirUp} onClick={toggleL1DirUp} size="sm" color="var(--inf)"
+            title={t('toolbar.upstream')}>
+            ↑{!compact && <> {t('toolbar.upstream')}</>}
+          </ToolbarToggleButton>
+          <ToolbarToggleButton active={dirDown} onClick={toggleL1DirDown} size="sm" color="var(--wrn)"
+            title={t('toolbar.downstream')}>
+            ↓{!compact && <> {t('toolbar.downstream')}</>}
+          </ToolbarToggleButton>
+        </div>
+
+        <ToolbarDivider size="sm" />
+
+        {/* ── System-level toggle ───────────────────────────────────────── */}
+        <ToolbarToggleButton
+          active={systemLevel}
+          onClick={toggleL1SystemLevel}
+          size="sm"
+          color="var(--wrn)"
+          title={t('l1.systemLevelHint')}
+          style={{ fontSize: 9, padding: '2px 8px' }}
+        >
+          <IconLayers size={10} />
+          {!compact && t('l1.systemLevel')}
+        </ToolbarToggleButton>
+
+        {/* ── Row 2 collapse toggle (mobile only) ──────────────────────── */}
+        {compact && (
+          <>
+            <ToolbarDivider size="sm" />
+            <button
+              onClick={() => setRow2Collapsed((v) => !v)}
+              title={row2Collapsed ? t('toolbar.showFilters') : t('toolbar.hideFilters')}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                padding: '2px 6px', borderRadius: 3,
+                border: `0.5px solid ${hasFilter ? 'var(--acc)' : 'var(--bd)'}`,
+                background: hasFilter
+                  ? 'color-mix(in srgb, var(--acc) 15%, transparent)'
+                  : 'transparent',
+                color: hasFilter ? 'var(--acc)' : 'var(--t3)',
+                fontSize: 10, cursor: 'pointer', flexShrink: 0,
+                lineHeight: 1,
+              }}
+            >
+              {row2Collapsed ? '▾' : '▴'}
+            </button>
+          </>
+        )}
+
+        {/* ── Spacer ────────────────────────────────────────────────────── */}
+        <div style={{ flex: '1 1 auto' }} />
+
+        {/* ── Level badge (desktop only) ────────────────────────────────── */}
+        {!compact && (
+          <span style={{
+            fontSize: 9, padding: '2px 7px',
+            border: `0.5px solid ${systemLevel || hasFilter ? 'var(--wrn)' : 'var(--bd)'}`,
+            borderRadius: 3,
+            color: systemLevel || hasFilter ? 'var(--wrn)' : 'var(--t3)',
+            fontFamily: 'var(--mono)',
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            {badgeText}
+          </span>
+        )}
+
+      </div>
+
+      {/* ── Row 2: cascade filter — App / DB / Schema (vertical stack) ── */}
+      {!(compact && row2Collapsed) && (
+        <div style={{
+          display:       'flex',
+          flexDirection: 'column',
+          gap:           3,
+          padding:       '4px 10px 5px',
+          borderTop:     '0.5px solid var(--bd)',
+        }}>
+          <CascadePill
+            icon={<IconApp active={!!activeScope} />}
+            placeholder={t('l1.allSystems')}
+            value={activeScope?.nodeId ?? ''}
+            options={availableApps}
+            onChange={(id) => {
+              if (!id) { clearL1HierarchyFilter(); clearL1Scope(); return; }
+              const app = availableApps.find((a) => a.id === id);
+              if (app) setL1Scope(app.id, app.label);
+            }}
+            onClear={() => { clearL1Scope(); clearL1HierarchyFilter(); }}
+            active={!!activeScope}
+            style={pillStyle}
+          />
+          <CascadePill
+            icon={<IconDb active={!!dbId} />}
+            placeholder={t('l1.allDbs')}
+            value={dbId ?? ''}
+            options={dbOptions}
+            onChange={handleDbChange}
+            onClear={() => setL1HierarchyDb(null)}
+            active={!!dbId}
+            style={pillStyle}
+          />
+          <CascadePill
+            icon={<IconSchema active={!!schemaId} />}
+            placeholder={t('l1.allSchemas')}
+            value={schemaId ?? ''}
+            options={schemaOptions}
+            onChange={handleSchemaChange}
+            onClear={() => setL1HierarchySchema(null)}
+            active={!!schemaId}
+            style={pillStyle}
+          />
+
+          {/* Clear all filters */}
+          {hasFilter && (
+            <button
+              onClick={() => { clearL1Scope(); clearL1HierarchyFilter(); }}
+              style={{
+                alignSelf:    'flex-start',
+                padding:      '1px 6px', borderRadius: 3,
+                border:       '0.5px solid var(--wrn)',
+                fontSize:     8, color: 'var(--wrn)',
+                cursor:       'pointer',
+                background:   'color-mix(in srgb, var(--wrn) 6%, transparent)',
+                whiteSpace:   'nowrap', flexShrink: 0,
+                fontFamily:   'var(--font)',
+              }}
+            >✕ {t('toolbar.clearFilter')}</button>
+          )}
+        </div>
+      )}
 
     </div>
   );
