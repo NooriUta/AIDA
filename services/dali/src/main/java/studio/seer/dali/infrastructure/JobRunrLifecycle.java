@@ -16,6 +16,7 @@ import org.jobrunr.server.JobActivator;
 import org.jobrunr.storage.StorageProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.dali.config.DaliConfig;
 import studio.seer.dali.storage.ArcadeDbStorageProvider;
 
 /**
@@ -41,8 +42,8 @@ public class JobRunrLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(JobRunrLifecycle.class);
 
-    @Inject
-    ArcadeDbStorageProvider arcadeDbStorageProvider;
+    @Inject DaliConfig config;
+    @Inject ArcadeDbStorageProvider arcadeDbStorageProvider;
 
     private volatile JobRunrConfiguration.JobRunrConfigurationResult jobRunrResult;
 
@@ -81,11 +82,16 @@ public class JobRunrLifecycle {
             }
         };
         try {
-            jobRunrResult = JobRunr.configure()
+            var jrConfig = JobRunr.configure()
                     .useStorageProvider(arcadeDbStorageProvider)
                     .useJobActivator(activator)
-                    .useBackgroundJobServer()
-                    .initialize();
+                    .useBackgroundJobServer();
+            if (config.jobrunr().dashboard().enabled()) {
+                int port = config.jobrunr().dashboard().port();
+                jrConfig = jrConfig.useDashboard(port);
+                log.info("JobRunr: dashboard enabled on :{}", port);
+            }
+            jobRunrResult = jrConfig.initialize();
             log.info("JobRunr: ready — BackgroundJobServer started");
         } catch (Exception e) {
             log.error("JobRunr: initialisation FAILED — job scheduling is unavailable. " +

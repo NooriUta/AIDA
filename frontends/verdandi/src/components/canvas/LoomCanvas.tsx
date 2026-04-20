@@ -5,6 +5,7 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  ControlButton,
   MiniMap,
   Panel,
   useNodesState,
@@ -26,6 +27,7 @@ import { isUnauthorized }          from '../../services/lineage';
 import { CANVAS }                  from '../../utils/constants';
 import { getMinimapNodeColor }     from '../../utils/minimapColors';
 import type { LoomNode, LoomEdge } from '../../types/graph';
+import { useIsMobile }             from '../../hooks/useIsMobile';
 
 import { useGraphData }         from '../../hooks/canvas/useGraphData';
 import { useExpansion }         from '../../hooks/canvas/useExpansion';
@@ -37,7 +39,9 @@ import { useNodeInteractions }  from '../../hooks/canvas/useNodeInteractions';
 
 // ─── Inner canvas ─────────────────────────────────────────────────────────────
 const LoomCanvasInner = memo(() => {
-  const { viewLevel, currentScope, theme, selectNode, clearL1HierarchyFilter } = useLoomStore();
+  const { viewLevel, currentScope, theme, selectNode, clearL1HierarchyFilter,
+          minimapVisible, toggleMinimap, inspectorOpen, setInspectorOpen } = useLoomStore();
+  const isMobile = useIsMobile();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<LoomNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<LoomEdge>([]);
@@ -158,18 +162,49 @@ const LoomCanvasInner = memo(() => {
             gap={24} size={1.5}
             color="color-mix(in srgb, var(--bd) 30%, transparent)"
           />
-          <Controls position="bottom-right" />
-          <MiniMap
-            position="bottom-left"
-            nodeColor={getMinimapNodeColor as (node: unknown) => string}
-            maskColor={theme === 'dark' ? 'rgba(20,17,8,0.72)' : 'rgba(245,243,238,0.72)'}
-            style={{ border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)' }}
-            pannable
-            zoomable
-          />
-          <Panel position="top-right" style={{ margin: '8px' }}>
-            <ExportPanel containerRef={containerRef} />
-          </Panel>
+          {/* Controls: zoom/fit built-ins + minimap toggle (desktop) + inspector toggle */}
+          <Controls position={isMobile ? 'bottom-left' : 'bottom-right'}>
+            {!isMobile && (
+              <ControlButton
+                onClick={toggleMinimap}
+                title={minimapVisible ? 'Hide minimap' : 'Show minimap'}
+                style={{ opacity: minimapVisible ? 1 : 0.45 }}
+              >
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                  <rect x="1" y="1" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                  <rect x="8" y="1" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                  <rect x="1" y="8" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                  <rect x="8" y="8" width="5" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                </svg>
+              </ControlButton>
+            )}
+            {isMobile && (
+              <ControlButton
+                onClick={() => setInspectorOpen(!inspectorOpen)}
+                title="Inspector"
+                style={{ opacity: inspectorOpen ? 1 : 0.45, fontSize: '13px', fontWeight: 600 }}
+              >
+                ⓘ
+              </ControlButton>
+            )}
+          </Controls>
+
+          {/* MiniMap — desktop only, toggled via Controls button */}
+          {minimapVisible && !isMobile && (
+            <MiniMap
+              position="bottom-left"
+              nodeColor={getMinimapNodeColor as (node: unknown) => string}
+              maskColor={theme === 'dark' ? 'rgba(20,17,8,0.72)' : 'rgba(245,243,238,0.72)'}
+              style={{ border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)' }}
+              pannable
+              zoomable
+            />
+          )}
+          {!isMobile && (
+            <Panel position="top-right" style={{ margin: '8px' }}>
+              <ExportPanel containerRef={containerRef} />
+            </Panel>
+          )}
         </ReactFlow>
 
         <NodeContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />

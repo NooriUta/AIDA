@@ -81,4 +81,16 @@ public interface DaliClient {
     @Path("/sessions/health")
     @Timeout(value = 2, unit = ChronoUnit.SECONDS)
     DaliHealth getHealth();
+
+    /**
+     * Trigger a full JDBC harvest via HarvestJob (C.3.2 — aida:harvest scope).
+     * → 202 Accepted + {"harvestId":"...","status":"enqueued"}
+     */
+    @POST
+    @Path("/sessions/harvest")
+    @Timeout(value = 5, unit = ChronoUnit.SECONDS)
+    @Retry(maxRetries = 1, delay = 500, delayUnit = ChronoUnit.MILLIS,
+           retryOn = ProcessingException.class)
+    @SuppressWarnings("unchecked")
+    java.util.Map<String, String> startHarvest();
 }

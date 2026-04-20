@@ -86,8 +86,12 @@
     "searchPlaceholder": "Search…",
     "noMatches":       "No matches",
     "clearFilter":     "Clear filter",
-    "depthSteps":      "{{n}} steps",
-    "depthInfinity":   "∞ steps"
+    "depthSteps":           "{{n}} steps",
+    "depthInfinity":        "∞ steps",
+    "routineAggregateHint": "Switch to detailed exploration mode",
+    "routineExploreHint":   "Switch to aggregate overview",
+    "showFilters":          "Show filters",
+    "hideFilters":          "Hide filters"
   },
 
   "search": {
@@ -581,7 +585,8 @@
     "routine":       "Routine",
     "default":       "Default",
     "fields":        "Fields",
-    "noFields":      "No fields"
+    "noFields":      "No fields",
+    "noSqlText":     "SQL text not loaded"
   },
 
   "stub": {

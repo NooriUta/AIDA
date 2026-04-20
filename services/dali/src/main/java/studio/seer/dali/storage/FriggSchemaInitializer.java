@@ -45,7 +45,8 @@ public class FriggSchemaInitializer {
         "jobrunr_recurring_jobs",
         "jobrunr_servers",
         "jobrunr_metadata",
-        "dali_sessions"
+        "dali_sessions",
+        "dali_sources"
     };
 
     /**
@@ -73,6 +74,18 @@ public class FriggSchemaInitializer {
         { "dali_sessions",          "edgeCount",       "INTEGER"  },
         { "dali_sessions",          "droppedEdgeCount","INTEGER"  },
         { "dali_sessions",          "resolutionRate",  "DOUBLE"   },
+        // ── JDBC source registry ──────────────────────────────────────────────────
+        { "dali_sources",           "id",              "STRING"   },
+        { "dali_sources",           "name",            "STRING"   },
+        { "dali_sources",           "dialect",         "STRING"   },
+        { "dali_sources",           "jdbcUrl",         "STRING"   },
+        { "dali_sources",           "username",        "STRING"   },
+        { "dali_sources",           "password",        "STRING"   },
+        { "dali_sources",           "atomCount",       "INTEGER"  },
+        { "dali_sources",           "lastHarvest",     "STRING"   },
+        { "dali_sources",           "schemaInclude",   "STRING"   },
+        { "dali_sources",           "schemaExclude",   "STRING"   },
+        { "dali_sources",           "createdAt",       "STRING"   },
     };
 
     @Inject FriggGateway frigg;
@@ -121,7 +134,7 @@ public class FriggSchemaInitializer {
             clearStaleServers();
             if (allTypesOk) {
                 schemaReady = true;
-                log.info("FriggSchemaInitializer: schema ready (5 document types, perf-stat properties indexed)");
+                log.info("FriggSchemaInitializer: schema ready (6 document types, perf-stat properties indexed)");
             } else {
                 log.warn("FriggSchemaInitializer: schema partially initialised — one or more document " +
                          "types could not be created. Session enqueueing will be refused until Dali restarts.");
@@ -218,6 +231,8 @@ public class FriggSchemaInitializer {
         createIndex("dali_sessions",          "status",     false);
         createIndex("dali_sessions",          "dialect",    false);
         createIndex("dali_sessions",          "instanceId", false);
+        createIndex("dali_sources",           "id",         true);
+        createIndex("dali_sources",           "dialect",    false);
     }
 
     private void createIndex(String type, String property, boolean unique) {

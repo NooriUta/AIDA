@@ -18,6 +18,7 @@ const FILTER_DEFAULTS = {
   downstream:       true,
   tableLevelView:   false,
   showCfEdges:      true,
+  routineFilter:    null,
   includeExternal:  false,
   routineAggregate: true,   // Phase S2.3: default L2 view = routine-aggregate
 };

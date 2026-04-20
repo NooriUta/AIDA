@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 export const Breadcrumb = memo(() => {
   const {
@@ -17,6 +18,7 @@ export const Breadcrumb = memo(() => {
   } = useLoomStore();
   const { t } = useTranslation();
 
+  const isMobile = useIsMobile();
   const hasL1Scope  = viewLevel === 'L1' && l1ScopeStack.length > 0;
   const hasL2L3Path = navigationStack.length > 0 || (viewLevel !== 'L1' && currentScope);
 
@@ -37,9 +39,10 @@ export const Breadcrumb = memo(() => {
       backdropFilter: 'blur(8px)',
       border: '1px solid var(--bd)',
       borderRadius: 'var(--seer-radius-md)',
-      fontSize: '12px',
-      maxWidth: '640px',
+      fontSize: isMobile ? '11px' : '12px',
+      maxWidth: isMobile ? 'calc(100vw - 32px)' : '640px',
       flexWrap: 'wrap',
+      overflow: 'hidden',
     }}>
 
       {/* ── Root: Overview ────────────────────────────────────────────────── */}

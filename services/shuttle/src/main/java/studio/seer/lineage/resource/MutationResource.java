@@ -15,6 +15,7 @@ import studio.seer.lineage.heimdall.HeimdallEmitter;
 import studio.seer.lineage.heimdall.model.EventLevel;
 import studio.seer.lineage.heimdall.model.EventType;
 import studio.seer.lineage.heimdall.model.ParseSessionInput;
+import studio.seer.lineage.storage.ViewRepository;
 
 import java.util.Map;
 
@@ -28,8 +29,8 @@ import java.util.Map;
  *
  * Stubs pending further specs:
  *  - askMimir          — MimirClient (C.2.3 pending)
- *  - saveView          — FRIGG ArcadeDB view storage (pending)
- *  - deleteView        — FRIGG ArcadeDB view storage (pending)
+ *  - saveView          — YGG ArcadeDB ShuttleView vertex (C.4.1)    ✓
+ *  - deleteView        — YGG ArcadeDB ShuttleView vertex (C.4.1)    ✓
  */
 @GraphQLApi
 public class MutationResource {
@@ -37,6 +38,7 @@ public class MutationResource {
     @Inject @RestClient HeimdallControlClient controlClient;
     @Inject @RestClient DaliClient            daliClient;
     @Inject             HeimdallEmitter        heimdall;
+    @Inject             ViewRepository         viewRepository;
 
     // ── resetDemoState ────────────────────────────────────────────────────────
 
@@ -108,27 +110,43 @@ public class MutationResource {
                 new GraphQLException("askMimir: MimirClient not yet implemented (C.2.3 pending)"));
     }
 
-    // ── saveView (stub) ───────────────────────────────────────────────────────
+    // ── saveView (C.4.1) ──────────────────────────────────────────────────────
 
     @Mutation("saveView")
-    @Description("Persist a LOOM view configuration to FRIGG (stub — pending). Role: editor+")
+    @Description("Persist a LOOM view configuration to YGG (ShuttleView vertex). Role: editor+")
     public Uni<Boolean> saveView(
             @Name("viewId")  String viewId,
             @Name("payload") String payload) {
-        heimdall.emit(EventType.SESSION_STARTED, EventLevel.WARN, null, null, 0,
-                Map.of("mutation", "saveView", "stub", true, "viewId", viewId != null ? viewId : ""));
-        return Uni.createFrom().failure(
-                new GraphQLException("saveView: FRIGG view storage not yet implemented"));
+        if (viewId == null || viewId.isBlank()) {
+            return Uni.createFrom().failure(new GraphQLException("saveView: viewId is required"));
+        }
+        heimdall.emit(EventType.SESSION_STARTED, EventLevel.INFO, null, null, 0,
+                Map.of("mutation", "saveView", "viewId", viewId));
+        return viewRepository.save(viewId, payload != null ? payload : "{}", "system")
+                .map(ignored -> Boolean.TRUE)
+                .onFailure().recoverWithUni(ex -> {
+                    Log.errorf(ex, "saveView failed viewId=%s", viewId);
+                    return Uni.createFrom().failure(
+                            new GraphQLException("saveView failed: " + ex.getMessage()));
+                });
     }
 
-    // ── deleteView (stub) ─────────────────────────────────────────────────────
+    // ── deleteView (C.4.1) ────────────────────────────────────────────────────
 
     @Mutation("deleteView")
-    @Description("Delete a saved LOOM view from FRIGG (stub — pending). Role: editor+")
+    @Description("Delete a saved LOOM view from YGG. Role: editor+")
     public Uni<Boolean> deleteView(@Name("viewId") String viewId) {
-        heimdall.emit(EventType.SESSION_STARTED, EventLevel.WARN, null, null, 0,
-                Map.of("mutation", "deleteView", "stub", true, "viewId", viewId != null ? viewId : ""));
-        return Uni.createFrom().failure(
-                new GraphQLException("deleteView: FRIGG view storage not yet implemented"));
+        if (viewId == null || viewId.isBlank()) {
+            return Uni.createFrom().failure(new GraphQLException("deleteView: viewId is required"));
+        }
+        heimdall.emit(EventType.SESSION_STARTED, EventLevel.INFO, null, null, 0,
+                Map.of("mutation", "deleteView", "viewId", viewId));
+        return viewRepository.delete(viewId)
+                .map(ignored -> Boolean.TRUE)
+                .onFailure().recoverWithUni(ex -> {
+                    Log.errorf(ex, "deleteView failed viewId=%s", viewId);
+                    return Uni.createFrom().failure(
+                            new GraphQLException("deleteView failed: " + ex.getMessage()));
+                });
     }
 }
