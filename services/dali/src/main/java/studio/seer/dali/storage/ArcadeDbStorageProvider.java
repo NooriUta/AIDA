@@ -236,11 +236,6 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         return Set.of(); // stub — not critical for basic job flow
     }
 
-    @Override
-    public boolean recurringJobExists(String recurringJobId, StateName... states) {
-        return false;
-    }
-
     // ─── Recurring jobs (stub — not used in C.2) ──────────────────────────────
 
     @Override
@@ -263,6 +258,16 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         return 0;
     }
 
+    @Override
+    public Instant getRecurringJobLatestScheduledInstant(String recurringJobId, StateName... states) {
+        return null;
+    }
+
+    @Override
+    public List<Job> getCarbonAwareJobList(Instant scheduledBefore, AmountRequest amountRequest) {
+        return List.of();
+    }
+
     // ─── Stats ────────────────────────────────────────────────────────────────
 
     @Override
@@ -273,9 +278,11 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         long failed     = countJobs(StateName.FAILED);
         long succeeded  = countJobs(StateName.SUCCEEDED);
         long total      = scheduled + enqueued + processing + failed + succeeded;
-        return new JobStats(Instant.now(), 0L, total, scheduled, enqueued,
+        // 8.5.2: (timestamp, queryDur, total, awaiting, scheduled, enqueued,
+        //          processing, failed, succeeded, allTimeSucceeded, recurringJobs, bgServers)
+        return new JobStats(Instant.now(), 0L, total, 0L, scheduled, enqueued,
                 processing, failed, succeeded, 0L,
-                getBackgroundJobServers().size(), 0);
+                0, getBackgroundJobServers().size());
     }
 
     @Override
@@ -308,6 +315,12 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     public void deleteMetadata(String name) {
         metadataStore.entrySet().removeIf(e -> e.getKey().startsWith(name + "/"));
         log.debug("JobRunr: deleteMetadata name={}", name);
+    }
+
+    @Override
+    public void deleteMetadata(String name, String owner) {
+        metadataStore.remove(name + "/" + owner);
+        log.debug("JobRunr: deleteMetadata name={} owner={}", name, owner);
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
