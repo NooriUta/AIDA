@@ -10,6 +10,7 @@ const FILTER_DEFAULTS = {
   tableFilter:      null,
   stmtFilter:       null,
   fieldFilter:      null,
+  routineFilter:    null,
   depth:            5,
   upstream:         true,
   downstream:       true,
@@ -41,18 +42,24 @@ export function filterActions(set: Set) {
 
     setTableFilter: (tableId: string | null) =>
       set((s) => ({
-        filter: { ...s.filter, tableFilter: tableId, stmtFilter: null, fieldFilter: null },
+        filter: { ...s.filter, tableFilter: tableId, stmtFilter: null, fieldFilter: null, routineFilter: null },
         availableColumns: [],
       })),
 
     setStmtFilter: (stmtId: string | null) =>
       set((s) => ({
-        filter: { ...s.filter, stmtFilter: stmtId, tableFilter: null, fieldFilter: null },
+        filter: { ...s.filter, stmtFilter: stmtId, tableFilter: null, fieldFilter: null, routineFilter: null },
         availableColumns: [],
       })),
 
-    setFieldFilter:         (columnName: string | null) =>
+    setFieldFilter: (columnName: string | null) =>
       set((s) => ({ filter: { ...s.filter, fieldFilter: columnName } })),
+
+    setRoutineFilter: (routineId: string | null) =>
+      set((s) => ({
+        filter: { ...s.filter, routineFilter: routineId, tableFilter: null, stmtFilter: null, fieldFilter: null },
+        availableColumns: [],
+      })),
     setDepth:               (depth: number) =>
       set((s) => ({ filter: { ...s.filter, depth } })),
     setDirection:           (upstream: boolean, downstream: boolean) =>
@@ -82,9 +89,10 @@ export function filterActions(set: Set) {
         },
       })),
 
-    setAvailableFields:  (fields: string[])                                              => set({ availableFields: fields }),
-    setAvailableTables:  (tables: { id: string; label: string }[])                       => set({ availableTables: tables }),
-    setAvailableStmts:   (stmts:  { id: string; label: string; connectedTableIds: string[] }[]) => set({ availableStmts: stmts }),
-    setAvailableColumns: (cols:   { id: string; name: string }[])                        => set({ availableColumns: cols }),
+    setAvailableFields:   (fields: string[])                                              => set({ availableFields: fields }),
+    setAvailableTables:   (tables: { id: string; label: string }[])                       => set({ availableTables: tables }),
+    setAvailableStmts:    (stmts:  { id: string; label: string; connectedTableIds: string[] }[]) => set({ availableStmts: stmts }),
+    setAvailableColumns:  (cols:   { id: string; name: string }[])                        => set({ availableColumns: cols }),
+    setAvailableRoutines: (routines: { id: string; label: string }[])                     => set({ availableRoutines: routines }),
   };
 }

@@ -86,8 +86,12 @@
     "searchPlaceholder": "Поиск…",
     "noMatches":       "Не найдено",
     "clearFilter":     "Сбросить",
-    "depthSteps":      "{{n}} шагов",
-    "depthInfinity":   "∞ шагов"
+    "depthSteps":           "{{n}} шагов",
+    "depthInfinity":        "∞ шагов",
+    "routineAggregateHint": "Переключить на детальный режим",
+    "routineExploreHint":   "Переключить на агрегированный вид",
+    "showFilters":          "Показать фильтры",
+    "hideFilters":          "Скрыть фильтры"
   },
 
   "search": {
@@ -581,7 +585,8 @@
     "routine":       "Процедура",
     "default":       "По умолчанию",
     "fields":        "Поля",
-    "noFields":      "Нет полей"
+    "noFields":      "Нет полей",
+    "noSqlText":     "Текст SQL не загружен"
   },
 
   "stub": {

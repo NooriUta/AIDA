@@ -19,11 +19,6 @@ const KIND_COLORS: Record<string, string> = {
   PACKAGE:   '#A8B860',
 };
 
-const OP_COLORS: Record<string, string> = {
-  INSERT: '#D4922A', UPDATE: '#D4922A', MERGE: '#D4922A', DELETE: '#c85c5c',
-  SELECT: '#88B8A8', CTE: '#A8B860',   WITH: '#A8B860',  CREATE: '#7DBF78',
-  DROP:   '#c85c5c', TRUNCATE: '#c85c5c', SQ: '#88B8A8', CURSOR: '#88B8A8',
-};
 
 function KindBadge({ kind }: { kind: string }) {
   const color = KIND_COLORS[kind.toUpperCase()] ?? 'var(--t3)';
@@ -515,64 +510,33 @@ export const InspectorRoutine = memo(({ data, nodeId }: Props) => {
               </pre>
             </div>
           ) : (
-            <>
-              {/* Summary breakdown */}
-              <div style={{ padding: '3px 10px 4px', display: 'flex', flexWrap: 'wrap', gap: '3px 6px' }}>
-                {[...breakdown.entries()].sort((a, b) => b[1] - a[1]).map(([type, count]) => (
-                  <span key={type} style={{
-                    fontSize: '10px', color: 'var(--t3)',
-                    fontFamily: 'var(--mono)',
-                  }}>
-                    {type}<span style={{ color: 'var(--t2)', marginLeft: 2 }}>×{count}</span>
-                  </span>
-                ))}
+            <div style={{ padding: '20px 12px', textAlign: 'center' }}>
+              <div style={{ color: 'var(--t3)', fontSize: '11px', marginBottom: 6 }}>
+                {t('inspector.noSqlText', { defaultValue: 'Текст SQL не загружен' })}
               </div>
-              {/* Clickable rows */}
-              {stmtNodes.map(n => {
-                const op   = extractStatementType(n.label) ?? '?';
-                const line = n.label.split(':').at(-1);
-                const opColor = OP_COLORS[op] ?? 'var(--t3)';
-                const knotUrl = `/knot?${new URLSearchParams({
-                  ...(packageName ? { pkg: packageName } : {}),
-                  stmt: n.id,
-                }).toString()}`;
-                return (
-                  <div
-                    key={n.id}
-                    onClick={() => navigate(knotUrl)}
-                    title={n.label}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '3px 10px', borderTop: '1px solid var(--bd)',
-                      cursor: 'pointer', fontSize: '11px',
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg2)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                  >
-                    <span style={{
-                      fontSize: '9px', padding: '1px 5px', borderRadius: 2,
-                      fontFamily: 'var(--mono)', fontWeight: 700,
-                      border: `0.5px solid ${opColor}`, color: opColor,
-                      flexShrink: 0, letterSpacing: '0.03em',
-                    }}>
-                      {op}
+              {!isLoading && stmtNodes.length > 0 && (
+                <div style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: '3px 6px', justifyContent: 'center' }}>
+                  {[...breakdown.entries()].sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                    <span key={type} style={{ fontSize: '10px', color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
+                      {type}<span style={{ color: 'var(--t2)', marginLeft: 2 }}>×{count}</span>
                     </span>
-                    <span style={{
-                      flex: 1, color: 'var(--t1)', overflow: 'hidden',
-                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      fontFamily: 'var(--mono)',
-                    }}>
-                      {n.label}
-                    </span>
-                    {line && (
-                      <span style={{ fontSize: '10px', color: 'var(--t3)', flexShrink: 0 }}>
-                        :{line}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={openInKnot}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
+                  background: 'var(--bg3)', border: '1px solid var(--bd)', borderRadius: 4,
+                  color: 'var(--acc)', cursor: 'pointer', transition: 'border-color 0.1s',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--acc)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)'; }}
+              >
+                ◈ {t('inspector.openInKnot')}
+              </button>
+            </div>
           )}
         </div>
       )}

@@ -31,6 +31,7 @@ export interface FilterState {
   tableFilter:      string | null;
   stmtFilter:       string | null;
   fieldFilter:      string | null;
+  routineFilter:    string | null;
   depth:            number;
   upstream:         boolean;
   downstream:       boolean;
@@ -91,10 +92,11 @@ export interface LoomStore {
 
   // Filter toolbar (L2/L3)
   filter:           FilterState;
-  availableFields:  string[];
-  availableTables:  { id: string; label: string }[];
-  availableStmts:   { id: string; label: string; connectedTableIds: string[] }[];
-  availableColumns: { id: string; name: string }[];
+  availableFields:    string[];
+  availableTables:    { id: string; label: string }[];
+  availableStmts:     { id: string; label: string; connectedTableIds: string[] }[];
+  availableColumns:   { id: string; name: string }[];
+  availableRoutines:  { id: string; label: string }[];
 
   // Theme & stats
   theme:      'dark' | 'light';
@@ -157,6 +159,7 @@ export interface LoomStore {
   setTableFilter:       (tableId: string | null) => void;
   setStmtFilter:        (stmtId:  string | null) => void;
   setFieldFilter:       (columnName: string | null) => void;
+  setRoutineFilter:     (routineId: string | null) => void;
   setDepth:             (depth: number) => void;
   setDirection:         (upstream: boolean, downstream: boolean) => void;
   toggleTableLevelView:  () => void;
@@ -169,6 +172,7 @@ export interface LoomStore {
   setAvailableTables:   (tables: { id: string; label: string }[]) => void;
   setAvailableStmts:    (stmts:  { id: string; label: string; connectedTableIds: string[] }[]) => void;
   setAvailableColumns:  (cols:   { id: string; name: string }[]) => void;
+  setAvailableRoutines: (routines: { id: string; label: string }[]) => void;
 
   setNodeExpansion: (nodeId: string, state: 'collapsed' | 'partial' | 'expanded') => void;
   hideNode:         (nodeId: string) => void;
@@ -199,6 +203,12 @@ export interface LoomStore {
   clearPendingDeepExpand:    () => void;
   activatePendingDeepExpand: () => void;
   clearDeepExpandRequest:    () => void;
+
+  // Canvas UI prefs
+  minimapVisible:    boolean;
+  inspectorOpen:     boolean;
+  toggleMinimap:     () => void;
+  setInspectorOpen:  (v: boolean) => void;
 }
 
 // ─── Initial filter defaults ──────────────────────────────────────────────────
@@ -210,6 +220,7 @@ export const FILTER_DEFAULTS: FilterState = {
   tableFilter:      null,
   stmtFilter:       null,
   fieldFilter:      null,
+  routineFilter:    null,
   depth:            5,
   upstream:         true,
   downstream:       true,
@@ -239,7 +250,7 @@ export const useLoomStore = create<LoomStore>((set, get) => {
   selectedNodeId: null, selectedNodeData: null,
   highlightedNodes: new Set(), highlightedEdges: new Set(),
   filter: _persisted.filter ? { ...FILTER_DEFAULTS, ..._persisted.filter } : { ...FILTER_DEFAULTS },
-  availableFields: [], availableTables: [], availableStmts: [], availableColumns: [],
+  availableFields: [], availableTables: [], availableStmts: [], availableColumns: [], availableRoutines: [],
   nodeExpansionState: {}, hiddenNodeIds: new Set(),
   undoStack: [], redoStack: [],
   expandRequest: null, expandedUpstreamIds: new Set(), expandedDownstreamIds: new Set(),
@@ -248,6 +259,10 @@ export const useLoomStore = create<LoomStore>((set, get) => {
   theme: (localStorage.getItem('seer-theme') as 'dark' | 'light') ?? 'dark',
   palette: localStorage.getItem('seer-palette') ?? 'amber-forest',
   nodeCount: 0, edgeCount: 0, zoom: 1, graphTruncated: false, highlightedColumns: null,
+  minimapVisible: false,
+  inspectorOpen:  false,
+  toggleMinimap:    () => set((s) => ({ minimapVisible: !s.minimapVisible })),
+  setInspectorOpen: (v) => set({ inspectorOpen: v }),
 
   // ── Actions from slices ───────────────────────────────────────────────────
   ...navigationActions(set, get),
