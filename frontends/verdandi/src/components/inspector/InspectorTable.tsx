@@ -1,4 +1,4 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useMemo } from 'react';
 import { KeyRound, Link2, Table2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -340,6 +340,56 @@ function TableRoutinesSection({ nodeId }: { nodeId: string }) {
   );
 }
 
+// ── EK-02: Statements section ────────────────────────────────────────────────
+// Derives unique DaliStatements from the existing knotTableRoutines response
+// (each usage entry carries stmtGeoid + stmtType) — no extra backend query needed.
+
+function TableStatementsSection({ nodeId }: { nodeId: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { jumpTo } = useLoomStore();
+  const [open, setOpen] = useState(false);
+  const { data, isFetching } = useKnotTableRoutines(nodeId, open);
+
+  const stmts = useMemo(() => {
+    if (!data) return [];
+    const seen = new Map<string, KnotTableUsage>();
+    for (const u of data) {
+      if (u.stmtGeoid && !seen.has(u.stmtGeoid)) seen.set(u.stmtGeoid, u);
+    }
+    return [...seen.values()];
+  }, [data]);
+
+  const handleNavigate = useCallback((usage: KnotTableUsage) => {
+    if (usage.stmtGeoid) {
+      jumpTo('L3', usage.stmtGeoid, usage.stmtType || usage.stmtGeoid, 'DaliStatement', { focusNodeId: usage.stmtGeoid });
+      navigate('/');
+    }
+  }, [jumpTo, navigate]);
+
+  return (
+    <InspectorSection
+      title={`${t('inspector.statements', { defaultValue: 'Statements' })}${data ? ` (${stmts.length})` : ''}`}
+      defaultOpen={false}
+      onToggle={setOpen}
+    >
+      {isFetching && (
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+          {t('status.loading', { defaultValue: '…' })}
+        </div>
+      )}
+      {!isFetching && open && stmts.length === 0 && (
+        <div style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--t3)' }}>
+          {t('inspector.noStatements', { defaultValue: 'Нет statements' })}
+        </div>
+      )}
+      {!isFetching && stmts.map((u, i) => (
+        <UsageRow key={`${u.stmtGeoid}-${i}`} usage={u} onNavigate={() => handleNavigate(u)} />
+      ))}
+    </InspectorSection>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export const InspectorTable = memo(({ data, nodeId }: Props) => {
@@ -389,6 +439,7 @@ export const InspectorTable = memo(({ data, nodeId }: Props) => {
           </InspectorSection>
 
           <TableRoutinesSection nodeId={nodeId} />
+          <TableStatementsSection nodeId={nodeId} />
         </div>
       )}
 
