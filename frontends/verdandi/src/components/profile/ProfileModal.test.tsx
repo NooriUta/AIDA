@@ -84,4 +84,53 @@ describe('ProfileModal', () => {
     expect(screen.getByText('profile.interface')).toBeInTheDocument();
     expect(screen.getByText('profile.system')).toBeInTheDocument();
   });
+
+  it('clicking each tab renders the correct content', () => {
+    render(<ProfileModal onClose={vi.fn()} />);
+    const tabMap: [string, string][] = [
+      ['profile.tabs.security', 'tab-security'],
+      ['profile.tabs.access', 'tab-access'],
+      ['profile.tabs.graph', 'tab-graph'],
+      ['profile.tabs.activity', 'tab-activity'],
+      ['profile.tabs.notifications', 'tab-notifications'],
+      ['profile.tabs.favorites', 'tab-favorites'],
+      ['profile.tabs.shortcuts', 'tab-shortcuts'],
+      ['profile.tabs.tokens', 'tab-tokens'],
+    ];
+    for (const [label, testId] of tabMap) {
+      fireEvent.click(screen.getByText(label));
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    }
+  });
+
+  it('desktop nav button mouseEnter/Leave do not throw', () => {
+    render(<ProfileModal onClose={vi.fn()} />);
+    const appearanceBtn = screen.getByText('profile.tabs.appearance').closest('button')!;
+    fireEvent.mouseEnter(appearanceBtn);
+    fireEvent.mouseLeave(appearanceBtn);
+  });
+
+  it('close button mouseEnter/Leave do not throw', () => {
+    render(<ProfileModal onClose={vi.fn()} />);
+    const closeBtn = screen.getByTitle('profile.close');
+    fireEvent.mouseEnter(closeBtn);
+    fireEvent.mouseLeave(closeBtn);
+  });
+
+  it('logout button mouseEnter/Leave do not throw', () => {
+    render(<ProfileModal onClose={vi.fn()} />);
+    const logoutBtn = screen.getByText('auth.logout').closest('button')!;
+    fireEvent.mouseEnter(logoutBtn);
+    fireEvent.mouseLeave(logoutBtn);
+  });
+
+  it('clicking backdrop calls onClose', () => {
+    const onClose = vi.fn();
+    const { container } = render(<ProfileModal onClose={onClose} />);
+    // The outermost div is the backdrop
+    const backdrop = container.firstChild as HTMLElement;
+    fireEvent.click(backdrop);
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });
