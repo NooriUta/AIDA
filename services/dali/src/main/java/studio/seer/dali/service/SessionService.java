@@ -389,7 +389,7 @@ public class SessionService {
                         s.startedAt(), s.updatedAt(),
                         s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                         s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                        s.warnings(), s.errors(), s.fileResults(), true, s.instanceId()));
+                        s.warnings(), s.errors(), s.fileResults(), true, s.instanceId(), s.dbName()));
             }
         } catch (Exception e) {
             friggHealthy = false;
