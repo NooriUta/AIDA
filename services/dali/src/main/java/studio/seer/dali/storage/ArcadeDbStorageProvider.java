@@ -39,6 +39,12 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     private final JacksonJsonMapper jsonMapper; // for BackgroundJobServerStatus
     private       JobMapper     jobMapper;       // for Job objects — set by JobRunr
 
+    // Quarkus application classloader captured at CDI construction time (Quarkus thread).
+    // JobRunr creates its own thread pool (e.g. jobrunr-storage-notifier-0) whose TCCL is
+    // the system classloader — missing Quarkus-generated proxies like UniInvoker.
+    // All runSql() calls must restore this classloader before invoking the REST client.
+    private final ClassLoader quarkusClassLoader;
+
     // In-memory metadata store — single-node, no clustering needed.
     // Stores JobRunrMetadata by composite key "name/owner".
     // Critical: JobRunr uses "database_version/cluster" to check if data version >= 6.0.0.
@@ -47,8 +53,33 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     @Inject
     public ArcadeDbStorageProvider(FriggGateway frigg) {
         super(RateLimiter.Builder.rateLimit().withoutLimits());
-        this.frigg       = frigg;
-        this.jsonMapper  = new JacksonJsonMapper();
+        this.frigg             = frigg;
+        this.jsonMapper        = new JacksonJsonMapper();
+        this.quarkusClassLoader = Thread.currentThread().getContextClassLoader();
+    }
+
+    // Wrapper: sets Quarkus TCCL before calling frigg so that JobRunr background
+    // threads can use the Quarkus-generated REST client proxy without ClassNotFoundException.
+    private List<Map<String, Object>> runSql(String query, Map<String, Object> params) {
+        ClassLoader saved = Thread.currentThread().getContextClassLoader();
+        if (saved == quarkusClassLoader) return frigg.sql(query, params);
+        try {
+            Thread.currentThread().setContextClassLoader(quarkusClassLoader);
+            return frigg.sql(query, params);
+        } finally {
+            Thread.currentThread().setContextClassLoader(saved);
+        }
+    }
+
+    private List<Map<String, Object>> runSql(String query) {
+        ClassLoader saved = Thread.currentThread().getContextClassLoader();
+        if (saved == quarkusClassLoader) return frigg.sql(query);
+        try {
+            Thread.currentThread().setContextClassLoader(quarkusClassLoader);
+            return frigg.sql(query);
+        } finally {
+            Thread.currentThread().setContextClassLoader(saved);
+        }
     }
 
     // ─── JobRunr lifecycle hooks ───────────────────────────────────────────────
@@ -69,7 +100,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     @Override
     public void announceBackgroundJobServer(BackgroundJobServerStatus status) {
         String json = jsonMapper.serialize(status);
-        frigg.sql(
+        runSql(
             "UPDATE `jobrunr_servers` SET data = :data, lastHeartbeat = :hb " +
             "UPSERT RETURN AFTER @rid WHERE id = :id",
             Map.of("id",   status.getId().toString(),
@@ -86,7 +117,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public void signalBackgroundJobServerStopped(BackgroundJobServerStatus status) {
-        frigg.sql("DELETE FROM `jobrunr_servers` WHERE id = :id",
+        runSql("DELETE FROM `jobrunr_servers` WHERE id = :id",
                   Map.of("id", status.getId().toString()));
         log.info("JobRunr: server stopped id={}", status.getId());
     }
@@ -94,7 +125,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     @Override
     public List<BackgroundJobServerStatus> getBackgroundJobServers() {
         List<Map<String, Object>> rows =
-                frigg.sql("SELECT data FROM `jobrunr_servers`", Map.of());
+                runSql("SELECT data FROM `jobrunr_servers`", Map.of());
         if (rows == null) return List.of();
         return rows.stream()
                 .map(r -> jsonMapper.deserialize((String) r.get("data"), BackgroundJobServerStatus.class))
@@ -103,7 +134,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public UUID getLongestRunningBackgroundJobServerId() {
-        List<Map<String, Object>> rows = frigg.sql(
+        List<Map<String, Object>> rows = runSql(
             "SELECT id FROM `jobrunr_servers` ORDER BY lastHeartbeat ASC LIMIT 1", Map.of());
         if (rows == null || rows.isEmpty()) return null;
         Object id = rows.get(0).get("id");
@@ -113,7 +144,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         } catch (IllegalArgumentException e) {
             // Corrupt/test record — purge it and retry
             log.warn("getLongestRunningBackgroundJobServerId: removing invalid record id='{}': {}", id, e.getMessage());
-            frigg.sql("DELETE FROM `jobrunr_servers` WHERE id = :id", Map.of("id", id.toString()));
+            runSql("DELETE FROM `jobrunr_servers` WHERE id = :id", Map.of("id", id.toString()));
             return getLongestRunningBackgroundJobServerId();
         }
     }
@@ -123,13 +154,13 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         // Count then delete — ArcadeDB does not support RETURN BEFORE in DELETE.
         // Compare as epoch-millisecond LONG to avoid DATETIME string parsing issues.
         long cutoff = heartbeatOlderThan.toEpochMilli();
-        List<Map<String, Object>> cnt = frigg.sql(
+        List<Map<String, Object>> cnt = runSql(
             "SELECT count(*) as cnt FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
             Map.of("cutoff", cutoff));
         int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
                 ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
         if (count > 0) {
-            frigg.sql("DELETE FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
+            runSql("DELETE FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
                     Map.of("cutoff", cutoff));
         }
         return count;
@@ -142,7 +173,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         String id    = job.getId().toString();
         String state = job.getJobState().getName().name();
         String json  = jobMapper.serializeJob(job);
-        frigg.sql(
+        runSql(
             "UPDATE `jobrunr_jobs` SET state = :state, jobAsJson = :json, updatedAt = sysdate() " +
             "UPSERT RETURN AFTER @rid WHERE id = :id",
             Map.of("id", id, "state", state, "json", json));
@@ -158,7 +189,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public Job getJobById(UUID id) throws JobNotFoundException {
-        List<Map<String, Object>> rows = frigg.sql(
+        List<Map<String, Object>> rows = runSql(
             "SELECT jobAsJson FROM `jobrunr_jobs` WHERE id = :id",
             Map.of("id", id.toString()));
         if (rows == null || rows.isEmpty()) throw new JobNotFoundException(id);
@@ -167,7 +198,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public long countJobs(StateName state) {
-        List<Map<String, Object>> rows = frigg.sql(
+        List<Map<String, Object>> rows = runSql(
             "SELECT count(*) as cnt FROM `jobrunr_jobs` WHERE state = :state",
             Map.of("state", state.name()));
         if (rows == null || rows.isEmpty()) return 0L;
@@ -179,7 +210,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     public List<Job> getJobList(StateName state, AmountRequest amountRequest) {
         // BUG-SS-013 (rev): AmountRequest in JobRunr 7.3.0 exposes getLimit() only — no getOffset().
         // ArcadeDB SQL SKIP with named params is unsupported; pagination is handled by JobRunr internally.
-        List<Map<String, Object>> rows = frigg.sql(
+        List<Map<String, Object>> rows = runSql(
             "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = :state LIMIT :limit",
             Map.of("state", state.name(), "limit", amountRequest.getLimit()));
         return deserializeJobs(rows);
@@ -188,7 +219,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     @Override
     public List<Job> getJobList(StateName state, Instant updatedBefore, AmountRequest amountRequest) {
         // BUG-SS-013 (rev): same — getOffset() does not exist in JobRunr 7.3.0 AmountRequest.
-        List<Map<String, Object>> rows = frigg.sql(
+        List<Map<String, Object>> rows = runSql(
             "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :cutoff LIMIT :limit",
             Map.of("state", state.name(), "cutoff", updatedBefore.toString(),
                    "limit", amountRequest.getLimit()));
@@ -197,7 +228,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public List<Job> getScheduledJobs(Instant scheduledBefore, AmountRequest amountRequest) {
-        List<Map<String, Object>> rows = frigg.sql(
+        List<Map<String, Object>> rows = runSql(
             "SELECT jobAsJson FROM `jobrunr_jobs` WHERE state = 'SCHEDULED' AND scheduledAt < :cutoff LIMIT :limit",
             Map.of("cutoff", scheduledBefore.toString(), "limit", amountRequest.getLimit()));
         return deserializeJobs(rows);
@@ -206,26 +237,26 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     @Override
     public int deletePermanently(UUID id) {
         // ArcadeDB does not support RETURN BEFORE in DELETE — count then delete
-        List<Map<String, Object>> cnt = frigg.sql(
+        List<Map<String, Object>> cnt = runSql(
             "SELECT count(*) as cnt FROM `jobrunr_jobs` WHERE id = :id",
             Map.of("id", id.toString()));
         int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
                 ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
         if (count > 0) {
-            frigg.sql("DELETE FROM `jobrunr_jobs` WHERE id = :id", Map.of("id", id.toString()));
+            runSql("DELETE FROM `jobrunr_jobs` WHERE id = :id", Map.of("id", id.toString()));
         }
         return count;
     }
 
     @Override
     public int deleteJobsPermanently(StateName state, Instant updatedBefore) {
-        List<Map<String, Object>> cnt = frigg.sql(
+        List<Map<String, Object>> cnt = runSql(
             "SELECT count(*) as cnt FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :cutoff",
             Map.of("state", state.name(), "cutoff", updatedBefore.toString()));
         int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
                 ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
         if (count > 0) {
-            frigg.sql("DELETE FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :cutoff",
+            runSql("DELETE FROM `jobrunr_jobs` WHERE state = :state AND updatedAt < :cutoff",
                     Map.of("state", state.name(), "cutoff", updatedBefore.toString()));
         }
         return count;
