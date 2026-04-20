@@ -30,6 +30,9 @@ export function useNodeInteractions(
     if (viewLevel === 'L1') {
       if (node.type === 'databaseNode') {
         setL1HierarchyDb(node.id);
+        const scope = `db-${node.data.label}`;
+        setTableFilter(null);
+        drillDown(scope, node.data.label, 'DaliDatabase');
       } else if (node.type === 'l1SchemaNode' && node.parentId) {
         setL1HierarchyDb(node.parentId);
         setL1HierarchySchema(node.id);
@@ -45,7 +48,7 @@ export function useNodeInteractions(
       const f = useLoomStore.getState().filter;
       setFieldFilter(f.fieldFilter === node.data.label ? null : node.data.label);
     }
-  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema, setFieldFilter]);
+  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema, setFieldFilter, drillDown, setTableFilter]);
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {

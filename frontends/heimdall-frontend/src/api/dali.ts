@@ -63,6 +63,8 @@ export interface DaliSession {
   friggPersisted: boolean;
   /** Dali instance tag — null/undefined for untagged (single-instance) sessions. */
   instanceId: string | null;
+  /** Database name supplied at session creation — null/undefined for ad-hoc sessions. */
+  dbName?: string | null;
 }
 
 export interface DaliHealth {

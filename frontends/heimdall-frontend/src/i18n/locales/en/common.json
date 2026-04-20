@@ -21,6 +21,8 @@
     "overviewDesc": "Service monitoring and events",
     "daliDesc":     "SQL parsing and session management",
     "adminDesc":    "Users, roles, settings",
+    "docsDesc":     "Documentation and references",
+    "docs":         "DOCS",
     "sessions":     "Sessions",
     "jobrunr":      "JobRunr"
   },

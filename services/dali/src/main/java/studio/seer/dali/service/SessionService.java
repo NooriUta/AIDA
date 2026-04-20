@@ -96,7 +96,7 @@ public class SessionService {
                             s.warnings(),
                             List.of("Server restarted — session was QUEUED/RUNNING and could not be recovered"),
                             s.fileResults(),
-                            false, s.instanceId());
+                            false, s.instanceId(), s.dbName());
                     sessions.put(failed.id(), failed);
                     persist(failed);
                     reset++;
@@ -108,7 +108,7 @@ public class SessionService {
                             s.startedAt(), s.updatedAt(),
                             s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                             s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                            s.warnings(), s.errors(), s.fileResults(), true, s.instanceId());
+                            s.warnings(), s.errors(), s.fileResults(), true, s.instanceId(), s.dbName());
                     sessions.put(withFrigg.id(), withFrigg);
                     loaded++;
                 }
@@ -165,7 +165,8 @@ public class SessionService {
                 input.dialect(), input.source(),
                 now, now,
                 null, null, null, null, List.of(), null, null,
-                List.of(), List.of(), List.of(), false, myInstanceId());
+                List.of(), List.of(), List.of(), false, myInstanceId(),
+                (input.dbName() != null && !input.dbName().isBlank()) ? input.dbName().strip() : null);
         sessions.put(sessionId, session);
         persist(session);
         emitter.jobEnqueued(sessionId, input.source(), input.dialect());
@@ -197,7 +198,7 @@ public class SessionService {
                 s.clearBeforeWrite(),
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
                 null, null, null, null, List.of(), null, null,
-                List.of(), List.of(), List.of(), false, s.instanceId()));
+                List.of(), List.of(), List.of(), false, s.instanceId(), s.dbName()));
         if (updated != null) persist(updated);
         log.debug("Session started: id={} batch={} total={}", id, batch, total);
     }
@@ -215,7 +216,7 @@ public class SessionService {
                     s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                     s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), s.errors(), List.copyOf(list), false, s.instanceId());
+                    s.warnings(), s.errors(), List.copyOf(list), false, s.instanceId(), s.dbName());
         });
         if (updated != null) persist(updated);
     }
@@ -229,7 +230,7 @@ public class SessionService {
                 s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                 s.vertexStats(),
                 s.resolutionRate(), s.durationMs(),
-                s.warnings(), s.errors(), s.fileResults(), false, s.instanceId()));
+                s.warnings(), s.errors(), s.fileResults(), false, s.instanceId(), s.dbName()));
         if (updated != null) persist(updated);
         log.debug("Session status updated: id={} status={}", id, status);
     }
@@ -251,7 +252,7 @@ public class SessionService {
                     s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                     s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), List.copyOf(errors), s.fileResults(), false, s.instanceId());
+                    s.warnings(), List.copyOf(errors), s.fileResults(), false, s.instanceId(), s.dbName());
         });
         if (updated != null) persist(updated);
         log.debug("Session failed: id={} error={}", id, errorMessage);
@@ -276,7 +277,7 @@ public class SessionService {
                 result.durationMs(),
                 result.warnings() != null ? result.warnings() : List.of(),
                 result.errors()   != null ? result.errors()   : List.of(),
-                fileResults, false, s.instanceId()));
+                fileResults, false, s.instanceId(), s.dbName()));
         if (updated != null) persist(updated);
         log.info("Session completed: id={} atoms={} files={} duration={}ms",
                 id, result.atomCount(), fileResults.size(), result.durationMs());
@@ -356,7 +357,7 @@ public class SessionService {
                 s.clearBeforeWrite(), s.dialect(), s.source(), s.startedAt(), java.time.Instant.now(),
                 s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                 s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                s.warnings(), List.of("Cancelled by user"), s.fileResults(), false, s.instanceId()));
+                s.warnings(), List.of("Cancelled by user"), s.fileResults(), false, s.instanceId(), s.dbName()));
 
         Session cancelled = sessions.get(sessionId);
         if (cancelled != null) persist(cancelled);
