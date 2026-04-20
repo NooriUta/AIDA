@@ -5,11 +5,11 @@ const JR_BASE   = '/jobrunr';
 const LIMIT     = 30;
 const REFRESH_S = 5;
 
-// ── API types ─────────────────────────────────────────────────────────────────
+// ── API types (JobRunr 8.x) ───────────────────────────────────────────────────
 interface BgServer  { id: string; workerPoolSize: number; processedJobs: number }
 interface JobStats  {
   enqueued: number; processing: number; succeeded: number; failed: number;
-  deleted: number; recurringJobs: number;
+  scheduled: number; recurringJobs: number;
   backgroundJobServers: BgServer[];
 }
 interface Job {
@@ -17,25 +17,47 @@ interface Job {
   createdAt: string; updatedAt: string; labels?: string[];
 }
 interface RecurringJob { id: string; jobName: string; cronExpression: string; nextRun: string | null }
+interface JobPage { total: number; items: Job[] }
 type Tab  = 'ALL' | 'ENQUEUED' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'SCHEDULED' | 'RECURRING';
 type Conn = 'connecting' | 'online' | 'offline';
 
-// ── Fetchers ──────────────────────────────────────────────────────────────────
-async function fetchStats(): Promise<JobStats> {
-  const r = await fetch(`${JR_BASE}/api/jobStats`);
-  if (!r.ok) throw new Error(r.statusText);
-  return r.json() as Promise<JobStats>;
+// ── Fetchers (JobRunr 8.x: no /api/jobStats — counts come from per-state queries) ──
+async function fetchStatCount(state: string): Promise<number> {
+  const r = await fetch(`${JR_BASE}/api/jobs?state=${state}&offset=0&limit=1`);
+  if (!r.ok) return 0;
+  const d = await r.json() as JobPage;
+  return d.total ?? 0;
 }
-async function fetchJobs(state: Tab): Promise<{ total: number; items: Job[] }> {
+async function fetchServers(): Promise<BgServer[]> {
+  try {
+    const r = await fetch(`${JR_BASE}/api/servers`);
+    if (!r.ok) return [];
+    const d = await r.json();
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+async function fetchStats(): Promise<JobStats> {
+  const [enqueued, processing, succeeded, failed, scheduled, servers] = await Promise.all([
+    fetchStatCount('ENQUEUED'),
+    fetchStatCount('PROCESSING'),
+    fetchStatCount('SUCCEEDED'),
+    fetchStatCount('FAILED'),
+    fetchStatCount('SCHEDULED'),
+    fetchServers(),
+  ]);
+  return { enqueued, processing, succeeded, failed, scheduled, recurringJobs: 0, backgroundJobServers: servers };
+}
+async function fetchJobs(state: Tab): Promise<JobPage> {
   const q = state !== 'ALL' ? `&state=${state}` : '';
   const r = await fetch(`${JR_BASE}/api/jobs?offset=0&limit=${LIMIT}&order=updatedAt:desc${q}`);
   if (!r.ok) throw new Error(r.statusText);
-  return r.json() as Promise<{ total: number; items: Job[] }>;
+  return r.json() as Promise<JobPage>;
 }
 async function fetchRecurring(): Promise<RecurringJob[]> {
-  const r = await fetch(`${JR_BASE}/api/recurringJobs`);
-  if (!r.ok) throw new Error(r.statusText);
-  return r.json() as Promise<RecurringJob[]>;
+  const r = await fetch(`${JR_BASE}/api/recurring-jobs?offset=0&limit=${LIMIT}`);
+  if (!r.ok) return [];
+  const d = await r.json();
+  return Array.isArray(d) ? d : (d as { items?: RecurringJob[] }).items ?? [];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -96,7 +118,6 @@ export default function DaliJobRunrPage() {
     }
   }, []);
 
-  // Auto-refresh
   const startTimers = useCallback((activeTab: Tab) => {
     if (timerRef.current)  clearInterval(timerRef.current);
     if (countRef.current)  clearInterval(countRef.current);
@@ -128,18 +149,17 @@ export default function DaliJobRunrPage() {
     startTimers(tab);
   };
 
-  // ── Tab definitions ─────────────────────────────────────────────────────────
   const TABS: { id: Tab; label: string; badge?: number }[] = [
     { id: 'ALL',        label: t('daliJobrunr.tabAll') },
     { id: 'ENQUEUED',   label: t('daliJobrunr.tabEnqueued'),   badge: stats?.enqueued },
     { id: 'PROCESSING', label: t('daliJobrunr.tabProcessing'), badge: stats?.processing },
     { id: 'SUCCEEDED',  label: t('daliJobrunr.tabSucceeded') },
     { id: 'FAILED',     label: t('daliJobrunr.tabFailed'),     badge: stats?.failed },
-    { id: 'SCHEDULED',  label: t('daliJobrunr.tabScheduled') },
-    { id: 'RECURRING',  label: t('daliJobrunr.tabRecurring'),  badge: stats?.recurringJobs },
+    { id: 'SCHEDULED',  label: t('daliJobrunr.tabScheduled'),  badge: stats?.scheduled },
+    { id: 'RECURRING',  label: t('daliJobrunr.tabRecurring') },
   ];
 
-  const connDot = { connecting: '#7b8cde', online: '#4caf83', offline: '#e05252' }[conn];
+  const connDot      = { connecting: '#7b8cde', online: '#4caf83', offline: '#e05252' }[conn];
   const totalWorkers = stats?.backgroundJobServers.reduce((s, b) => s + b.workerPoolSize, 0) ?? 0;
 
   return (
@@ -190,7 +210,7 @@ export default function DaliJobRunrPage() {
             {loading ? '…' : t('daliJobrunr.refresh')}
           </button>
           <a
-            href="http://localhost:29091"
+            href="http://localhost:29091/dashboard"
             target="_blank" rel="noopener noreferrer"
             style={{
               padding: '5px 12px', fontSize: '12px', fontWeight: 500,
@@ -274,7 +294,6 @@ export default function DaliJobRunrPage() {
       {/* ── Body ── */}
       <div style={{ flex: 1, overflow: 'auto' }}>
 
-        {/* Connecting / offline */}
         {conn !== 'online' && (
           <div style={{ padding: '60px 24px', textAlign: 'center', fontSize: '13px',
             color: conn === 'offline' ? '#e05252' : 'var(--t3)' }}>
@@ -282,7 +301,6 @@ export default function DaliJobRunrPage() {
           </div>
         )}
 
-        {/* Recurring */}
         {conn === 'online' && tab === 'RECURRING' && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
@@ -307,7 +325,6 @@ export default function DaliJobRunrPage() {
           </table>
         )}
 
-        {/* Jobs table */}
         {conn === 'online' && tab !== 'RECURRING' && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
@@ -351,7 +368,6 @@ export default function DaliJobRunrPage() {
           </table>
         )}
 
-        {/* Footer: total */}
         {conn === 'online' && tab !== 'RECURRING' && total > LIMIT && (
           <div style={{ padding: '10px 16px', fontSize: '11px', color: 'var(--t4)', borderTop: '1px solid var(--bd)' }}>
             {t('daliJobrunr.showingOf', { shown: Math.min(LIMIT, jobs.length), total })}

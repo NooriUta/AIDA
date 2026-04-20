@@ -9,7 +9,6 @@ import org.jobrunr.jobs.mappers.JobMapper;
 import org.jobrunr.jobs.states.StateName;
 import org.jobrunr.storage.*;
 import org.jobrunr.storage.navigation.AmountRequest;
-import org.jobrunr.utils.mapper.jackson.JacksonJsonMapper;
 import org.jobrunr.utils.resilience.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +35,6 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     private static final Logger log = LoggerFactory.getLogger(ArcadeDbStorageProvider.class);
 
     private final FriggGateway  frigg;
-    private final JacksonJsonMapper jsonMapper; // for BackgroundJobServerStatus
     private       JobMapper     jobMapper;       // for Job objects — set by JobRunr
 
     // Quarkus application classloader captured at CDI construction time (Quarkus thread).
@@ -45,16 +43,16 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
     // All runSql() calls must restore this classloader before invoking the REST client.
     private final ClassLoader quarkusClassLoader;
 
-    // In-memory metadata store — single-node, no clustering needed.
-    // Stores JobRunrMetadata by composite key "name/owner".
-    // Critical: JobRunr uses "database_version/cluster" to check if data version >= 6.0.0.
-    private final ConcurrentHashMap<String, JobRunrMetadata> metadataStore = new ConcurrentHashMap<>();
+    // In-memory stores — single-node, no clustering needed.
+    // BackgroundJobServerStatus: avoids Jackson deserialization issue (no @JsonCreator in 8.x).
+    // JobRunrMetadata: critical — "database_version/cluster" must return version >= 6.0.0.
+    private final ConcurrentHashMap<UUID, BackgroundJobServerStatus> serverStore  = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, JobRunrMetadata>         metadataStore = new ConcurrentHashMap<>();
 
     @Inject
     public ArcadeDbStorageProvider(FriggGateway frigg) {
         super(RateLimiter.Builder.rateLimit().withoutLimits());
-        this.frigg             = frigg;
-        this.jsonMapper        = new JacksonJsonMapper();
+        this.frigg              = frigg;
         this.quarkusClassLoader = Thread.currentThread().getContextClassLoader();
     }
 
@@ -99,71 +97,43 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     @Override
     public void announceBackgroundJobServer(BackgroundJobServerStatus status) {
-        String json = jsonMapper.serialize(status);
-        runSql(
-            "UPDATE `jobrunr_servers` SET data = :data, lastHeartbeat = :hb " +
-            "UPSERT RETURN AFTER @rid WHERE id = :id",
-            Map.of("id",   status.getId().toString(),
-                   "data", json,
-                   "hb",   status.getLastHeartbeat().toEpochMilli()));
+        serverStore.put(status.getId(), status);
         log.debug("JobRunr: server announced id={}", status.getId());
     }
 
     @Override
     public boolean signalBackgroundJobServerAlive(BackgroundJobServerStatus status) {
-        announceBackgroundJobServer(status);
+        serverStore.put(status.getId(), status);
         return true;
     }
 
     @Override
     public void signalBackgroundJobServerStopped(BackgroundJobServerStatus status) {
-        runSql("DELETE FROM `jobrunr_servers` WHERE id = :id",
-                  Map.of("id", status.getId().toString()));
+        serverStore.remove(status.getId());
         log.info("JobRunr: server stopped id={}", status.getId());
     }
 
     @Override
     public List<BackgroundJobServerStatus> getBackgroundJobServers() {
-        List<Map<String, Object>> rows =
-                runSql("SELECT data FROM `jobrunr_servers`", Map.of());
-        if (rows == null) return List.of();
-        return rows.stream()
-                .map(r -> jsonMapper.deserialize((String) r.get("data"), BackgroundJobServerStatus.class))
-                .collect(Collectors.toList());
+        return List.copyOf(serverStore.values());
     }
 
     @Override
     public UUID getLongestRunningBackgroundJobServerId() {
-        List<Map<String, Object>> rows = runSql(
-            "SELECT id FROM `jobrunr_servers` ORDER BY lastHeartbeat ASC LIMIT 1", Map.of());
-        if (rows == null || rows.isEmpty()) return null;
-        Object id = rows.get(0).get("id");
-        if (id == null) return null;
-        try {
-            return UUID.fromString(id.toString());
-        } catch (IllegalArgumentException e) {
-            // Corrupt/test record — purge it and retry
-            log.warn("getLongestRunningBackgroundJobServerId: removing invalid record id='{}': {}", id, e.getMessage());
-            runSql("DELETE FROM `jobrunr_servers` WHERE id = :id", Map.of("id", id.toString()));
-            return getLongestRunningBackgroundJobServerId();
-        }
+        return serverStore.values().stream()
+                .min(Comparator.comparing(BackgroundJobServerStatus::getFirstHeartbeat))
+                .map(BackgroundJobServerStatus::getId)
+                .orElse(null);
     }
 
     @Override
     public int removeTimedOutBackgroundJobServers(Instant heartbeatOlderThan) {
-        // Count then delete — ArcadeDB does not support RETURN BEFORE in DELETE.
-        // Compare as epoch-millisecond LONG to avoid DATETIME string parsing issues.
-        long cutoff = heartbeatOlderThan.toEpochMilli();
-        List<Map<String, Object>> cnt = runSql(
-            "SELECT count(*) as cnt FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
-            Map.of("cutoff", cutoff));
-        int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
-                ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
-        if (count > 0) {
-            runSql("DELETE FROM `jobrunr_servers` WHERE lastHeartbeat < :cutoff",
-                    Map.of("cutoff", cutoff));
-        }
-        return count;
+        List<UUID> timedOut = serverStore.values().stream()
+                .filter(s -> s.getLastHeartbeat().isBefore(heartbeatOlderThan))
+                .map(BackgroundJobServerStatus::getId)
+                .collect(Collectors.toList());
+        timedOut.forEach(serverStore::remove);
+        return timedOut.size();
     }
 
     // ─── Job CRUD ──────────────────────────────────────────────────────────────
@@ -313,7 +283,7 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         //          processing, failed, succeeded, allTimeSucceeded, recurringJobs, bgServers)
         return new JobStats(Instant.now(), 0L, total, 0L, scheduled, enqueued,
                 processing, failed, succeeded, 0L,
-                0, getBackgroundJobServers().size());
+                0, serverStore.size());
     }
 
     @Override

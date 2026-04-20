@@ -561,7 +561,7 @@ export default function DocsPage({ tab = 'docs' }: Props) {
 
           {!filePath && tab === 'highload' && (
             <iframe
-              src="/heimdall/highload-plan"
+              src="/highload-plan"
               style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
               title="AIDA Plan"
             />
