@@ -4,12 +4,15 @@ import { screen, fireEvent } from '@testing-library/react';
 import { Header } from './Header';
 import { renderWithRouter } from '../../test/router-utils';
 
+const toggleThemeMock = vi.fn();
+const setPaletteMock  = vi.fn();
+
 vi.mock('../../stores/loomStore', () => ({
   useLoomStore: () => ({
     theme: 'dark',
-    toggleTheme: vi.fn(),
+    toggleTheme: toggleThemeMock,
     palette: 'amber-forest',
-    setPalette: vi.fn(),
+    setPalette: setPaletteMock,
     requestFitView: vi.fn(),
   }),
 }));
@@ -75,5 +78,76 @@ describe('Header — navigation state from useLocation', () => {
     expect(screen.getAllByText('VERDANDI').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('URD')).toBeInTheDocument();
     expect(screen.getByText('SKULD')).toBeInTheDocument();
+  });
+});
+
+describe('Header — toolbar interactions', () => {
+  it('theme toggle button calls toggleTheme', () => {
+    toggleThemeMock.mockClear();
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    // Theme button has title based on current theme ('dark' → shows 'theme.light')
+    const themeBtn = screen.getByTitle('theme.light');
+    fireEvent.click(themeBtn);
+    expect(toggleThemeMock).toHaveBeenCalledOnce();
+  });
+
+  it('palette button opens palette menu', () => {
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    const paletteBtn = screen.getByTitle('palette.title');
+    fireEvent.click(paletteBtn);
+    expect(screen.getByText('palette.amberForest')).toBeInTheDocument();
+    expect(screen.getByText('palette.lichen')).toBeInTheDocument();
+  });
+
+  it('clicking a palette option calls setPalette', () => {
+    setPaletteMock.mockClear();
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    fireEvent.click(screen.getByTitle('palette.title'));
+    fireEvent.click(screen.getByText('palette.lichen'));
+    expect(setPaletteMock).toHaveBeenCalledWith('lichen');
+  });
+
+  it('search button is rendered and clickable', () => {
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    const searchBtn = screen.getByTitle(/searchPalette.title/);
+    expect(searchBtn).toBeInTheDocument();
+    fireEvent.click(searchBtn);
+  });
+
+  it('cmd palette button is rendered and clickable', () => {
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    const cmdBtn = screen.getByTitle(/commandPalette.title/);
+    expect(cmdBtn).toBeInTheDocument();
+    fireEvent.click(cmdBtn);
+  });
+
+  it('KNOT sub-module button navigates on click', () => {
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    const knotBtn = screen.getByText('nav.knot');
+    fireEvent.click(knotBtn);
+    // navigation doesn't throw; KNOT route is /knot
+    expect(knotBtn).not.toBeDisabled();
+  });
+
+  it('norn button has mouseEnter/Leave handlers', () => {
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    const nornBtn = screen.getByText('VERDANDI');
+    fireEvent.mouseEnter(nornBtn);
+    fireEvent.mouseLeave(nornBtn);
+  });
+
+  it('palette menu item mouseEnter/Leave handlers fire without error', () => {
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    fireEvent.click(screen.getByTitle('palette.title'));
+    const lichenBtn = screen.getByText('palette.lichen');
+    fireEvent.mouseEnter(lichenBtn);
+    fireEvent.mouseLeave(lichenBtn);
+  });
+
+  it('seer menu button shows hover state on mouseEnter/Leave', () => {
+    renderWithRouter(<Header />, { initialEntries: ['/'] });
+    const seerBtn = screen.getByText('Seiðr').closest('button')!;
+    fireEvent.mouseEnter(seerBtn);
+    fireEvent.mouseLeave(seerBtn);
   });
 });

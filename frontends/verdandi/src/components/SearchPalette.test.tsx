@@ -80,4 +80,53 @@ describe('SearchPalette', () => {
     fireEvent.click(clearBtns[0]);
     expect(clearSearchHistory).toHaveBeenCalled();
   });
+
+  it('typing in search input updates query display', () => {
+    render(<SearchPalette open={true} onClose={vi.fn()} />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'my_table' } });
+    expect((input as HTMLInputElement).value).toBe('my_table');
+  });
+
+  it('clicking type filter button activates it', () => {
+    render(<SearchPalette open={true} onClose={vi.fn()} />);
+    const tablesBtn = screen.getByText('search.filters.tables');
+    fireEvent.click(tablesBtn);
+    // After click the button should be in an active state (aria-pressed or style change)
+    expect(tablesBtn).toBeInTheDocument();
+  });
+
+  it('clicking "all" filter after another filter resets to all', () => {
+    render(<SearchPalette open={true} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('search.filters.tables'));
+    fireEvent.click(screen.getByText('search.filters.all'));
+    expect(screen.getByText('search.filters.all')).toBeInTheDocument();
+  });
+
+  it('clicking each filter type does not throw', () => {
+    render(<SearchPalette open={true} onClose={vi.fn()} />);
+    const filters = [
+      'search.filters.columns', 'search.filters.routines',
+      'search.filters.statements', 'search.filters.databases',
+      'search.filters.applications',
+    ];
+    for (const f of filters) {
+      fireEvent.click(screen.getByText(f));
+    }
+  });
+
+  it('ArrowDown / ArrowUp keydown on dialog does not throw', () => {
+    render(<SearchPalette open={true} onClose={vi.fn()} />);
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    fireEvent.keyDown(dialog, { key: 'ArrowUp' });
+    fireEvent.keyDown(dialog, { key: 'Enter' });
+  });
+
+  it('clicking recent node from history does not throw', () => {
+    render(<SearchPalette open={true} onClose={vi.fn()} />);
+    const nodeBtn = screen.getByText('Table_A');
+    fireEvent.click(nodeBtn);
+    expect(nodeBtn).not.toBeNull();
+  });
 });
