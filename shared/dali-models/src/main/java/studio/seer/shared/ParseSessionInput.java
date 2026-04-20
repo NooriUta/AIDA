@@ -1,5 +1,8 @@
 package studio.seer.shared;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Input parameters for a Dali parse session.
  *
@@ -27,17 +30,39 @@ package studio.seer.shared;
  *                         DaliApplication vertex linked via BELONGS_TO_APP
  */
 public record ParseSessionInput(
-        String  dialect,
-        String  source,
-        boolean preview,
-        boolean clearBeforeWrite,
-        boolean uploaded,
-        String  jdbcUser,
-        String  jdbcPassword,
-        String  jdbcSchema,
-        String  dbName,
-        String  appName
+        @JsonProperty("dialect")          String  dialect,
+        @JsonProperty("source")           String  source,
+        @JsonProperty("preview")          boolean preview,
+        @JsonProperty("clearBeforeWrite") boolean clearBeforeWrite,
+        @JsonProperty("uploaded")         boolean uploaded,
+        @JsonProperty("jdbcUser")         String  jdbcUser,
+        @JsonProperty("jdbcPassword")     String  jdbcPassword,
+        @JsonProperty("jdbcSchema")       String  jdbcSchema,
+        @JsonProperty("dbName")           String  dbName,
+        @JsonProperty("appName")          String  appName
 ) {
+    /**
+     * Jackson factory — explicit {@code @JsonCreator} so that missing optional fields
+     * ({@code dbName}, {@code appName}) gracefully deserialise as {@code null} instead
+     * of failing with "not deserializable" when old serialised JSON lacks the new fields.
+     * This makes the class resilient to hot-reload class-version mismatches in dev mode.
+     */
+    @JsonCreator
+    public static ParseSessionInput of(
+            @JsonProperty("dialect")          String  dialect,
+            @JsonProperty("source")           String  source,
+            @JsonProperty("preview")          boolean preview,
+            @JsonProperty("clearBeforeWrite") boolean clearBeforeWrite,
+            @JsonProperty("uploaded")         boolean uploaded,
+            @JsonProperty("jdbcUser")         String  jdbcUser,
+            @JsonProperty("jdbcPassword")     String  jdbcPassword,
+            @JsonProperty("jdbcSchema")       String  jdbcSchema,
+            @JsonProperty("dbName")           String  dbName,
+            @JsonProperty("appName")          String  appName) {
+        return new ParseSessionInput(dialect, source, preview, clearBeforeWrite, uploaded,
+                jdbcUser, jdbcPassword, jdbcSchema, dbName, appName);
+    }
+
     /**
      * Backward-compatible constructor for FILE-based sources (no JDBC credentials, no db context).
      */
