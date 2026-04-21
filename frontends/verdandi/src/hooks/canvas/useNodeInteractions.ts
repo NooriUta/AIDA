@@ -17,6 +17,7 @@ export function useNodeInteractions(
     viewLevel,
     selectNode,
     drillDown,
+    jumpTo,
     pushL1Scope,
     setL1HierarchyDb,
     setL1HierarchySchema,
@@ -41,6 +42,13 @@ export function useNodeInteractions(
     }
 
     const nt = node.data.nodeType;
+
+    if (nt === 'DaliDatabase') {
+      setTableFilter(null);
+      jumpTo('L2', `db-${node.data.label}`, node.data.label, 'DaliDatabase');
+      return;
+    }
+
     if (
       nt === 'DaliColumn' || nt === 'DaliOutputColumn' ||
       nt === 'DaliAtom'   || nt === 'DaliAffectedColumn'
@@ -48,7 +56,7 @@ export function useNodeInteractions(
       const f = useLoomStore.getState().filter;
       setFieldFilter(f.fieldFilter === node.data.label ? null : node.data.label);
     }
-  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema, setFieldFilter, drillDown, setTableFilter]);
+  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema, setFieldFilter, drillDown, jumpTo, setTableFilter]);
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {
