@@ -83,7 +83,7 @@ function writeLS(partial: Partial<ServerPrefs>): void {
 
 // ── DOM application ──────────────────────────────────────────────────────────
 
-function applyDom(prefs: Partial<ServerPrefs>): void {
+export function applyDom(prefs: Partial<ServerPrefs>): void {
   const root = document.documentElement;
   if (prefs.theme)   root.setAttribute('data-theme', prefs.theme);
   if (prefs.density) root.setAttribute('data-density', prefs.density);
@@ -127,7 +127,12 @@ export const usePrefsStore = create<PrefsStore>()((set, get) => ({
     writeLS(partial);
     applyDom(partial);
 
-    // 2. Debounced server sync
+    // 2. Cross-MF broadcast (same tab — HEIMDALL and others react without reload)
+    try {
+      window.dispatchEvent(new CustomEvent('aida:prefs', { detail: partial }));
+    } catch { /* non-browser env */ }
+
+    // 3. Debounced server sync
     const { _timer } = get();
     if (_timer) clearTimeout(_timer);
 

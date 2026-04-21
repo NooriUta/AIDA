@@ -17,6 +17,8 @@ import { ToastContainer } from './components/Toast';
 import { UnderConstructionPage } from './components/stubs/UnderConstructionPage';
 import { useAuthStore }   from './stores/authStore';
 import { usePrefsSync }  from './hooks/usePrefsSync';
+import { applyDom }      from './stores/prefsStore';
+import type { ServerPrefs } from './stores/prefsStore';
 
 const KnotPage = lazy(() =>
   import('./components/knot/KnotPage').then((m) => ({ default: m.KnotPage })),
@@ -60,6 +62,13 @@ export default function App() {
   // Verify the httpOnly cookie is still valid after page reload.
   // If the 8h token expired, checkSession clears state → ProtectedRoute redirects.
   useEffect(() => { checkSession(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-MF prefs broadcast: when HEIMDALL changes palette/theme, apply here too
+  useEffect(() => {
+    const h = (e: Event) => applyDom((e as CustomEvent<Partial<ServerPrefs>>).detail);
+    window.addEventListener('aida:prefs', h);
+    return () => window.removeEventListener('aida:prefs', h);
+  }, []);
 
   // Sync Verdandi preferences to/from Keycloak (R4.14)
   usePrefsSync();

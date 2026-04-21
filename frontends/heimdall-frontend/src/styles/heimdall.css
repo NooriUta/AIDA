@@ -283,6 +283,33 @@ input[type=range] { accent-color: var(--acc); flex: 1; height: 4px; }
   grid-template-columns: repeat(4, 1fr);
 }
 
+/* ── Header nav buttons (CSS hover — replaces onMouseEnter/Leave inline) ────── */
+.hh-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--seer-radius-md);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.hh-btn:hover:not(:disabled) {
+  background: var(--bg2);
+  border-color: var(--bd);
+}
+.hh-btn--active {
+  background: color-mix(in srgb, var(--acc) 12%, transparent);
+  border-color: color-mix(in srgb, var(--acc) 30%, transparent);
+}
+.hh-btn--active:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--acc) 16%, transparent);
+}
+.hh-btn--open {
+  background: var(--bg2);
+  border-color: var(--bd);
+}
+.hh-btn--open:hover:not(:disabled) {
+  background: var(--bg3);
+}
+
 /* ── Responsive breakpoints ─────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   /* Utility: hide non-essential chrome on phones */
@@ -292,13 +319,44 @@ input[type=range] { accent-color: var(--acc); flex: 1; height: 4px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .jr-stats   { grid-template-columns: repeat(2, 1fr); }
 
+  /* HX-03 — EventLog 3-col grid on mobile (timestamp | level | type) */
+  .event-grid-head,
+  .event-row-grid {
+    grid-template-columns: 72px 48px 1fr;
+  }
+  /* Hide columns 3 (component), 5 (duration), 6 (payload) */
+  .event-grid-head > *:nth-child(3),
+  .event-row-grid  > *:nth-child(3),
+  .event-grid-head > *:nth-child(5),
+  .event-row-grid  > *:nth-child(5),
+  .event-grid-head > *:nth-child(6),
+  .event-row-grid  > *:nth-child(6) { display: none; }
+
+  /* HX-03 — EventStream filter bar: stack vertically */
+  .event-filter-bar { flex-direction: column; align-items: stretch; }
+  .event-filter-bar label { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .event-filter-bar select,
+  .event-filter-bar input { width: 100%; max-width: unset; }
+
+  /* HX-04 — Modal sidebar: horizontal rail on narrow screens */
+  .modal-body { flex-direction: column; }
+  .modal-nav {
+    width: 100%; flex-direction: row; overflow-x: auto; overflow-y: hidden;
+    border-right: none; border-bottom: 1px solid var(--bd);
+    padding: 6px 8px; gap: 2px;
+    scrollbar-width: none;
+  }
+  .modal-nav::-webkit-scrollbar { display: none; }
+  .nav-section-label { display: none; }
+  .nav-item { white-space: nowrap; width: auto; padding: 5px 10px; }
+  .modal-content { padding: 14px 16px; }
+
   /* Modals: use all available screen height */
   .modal {
     width: 100vw; max-width: 100vw;
     height: 100dvh; max-height: 100dvh;
     border-radius: 0;
   }
-  .modal-content { padding: 16px; }
 
   /* Tables: allow horizontal scroll on narrow screens */
   .data-panel { overflow-x: auto; }

@@ -13,6 +13,8 @@ import { HeimdallHeader }  from './components/layout/HeimdallHeader';
 import { useAuthStore }    from './stores/authStore';
 import { usePrefsStore }   from './stores/prefsStore';
 import { RoleGuard }       from './components/RoleGuard';
+import { applyPrefs }      from 'aida-shared';
+import type { SharedPrefs } from 'aida-shared';
 
 const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
@@ -89,6 +91,12 @@ function SessionGuard({ children }: { children: React.ReactNode }) {
  * in both standalone (base "/") and Shell (base "/heimdall/") contexts.
  */
 export default function App() {
+  useEffect(() => {
+    const h = (e: Event) => applyPrefs((e as CustomEvent<Partial<SharedPrefs>>).detail);
+    window.addEventListener('aida:prefs', h);
+    return () => window.removeEventListener('aida:prefs', h);
+  }, []);
+
   return (
     <SessionGuard>
       <Routes>
