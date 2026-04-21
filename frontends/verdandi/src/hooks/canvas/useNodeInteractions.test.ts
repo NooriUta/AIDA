@@ -103,3 +103,108 @@ describe('useNodeInteractions — column click', () => {
     expect(mockJumpTo).not.toHaveBeenCalled();
   });
 });
+
+describe('useNodeInteractions — L1 schema node click', () => {
+  it('calls setL1HierarchyDb + setL1HierarchySchema for l1SchemaNode with parentId', () => {
+    mockViewLevel = 'L1';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = {
+      id: 'schema-1',
+      type: 'l1SchemaNode',
+      parentId: 'db-parent',
+      data: { nodeType: 'DaliSchema', label: 'MY_SCHEMA', metadata: {} },
+    } as any;
+
+    act(() => { result.current.onNodeClick(fakeEvent, node); });
+
+    expect(mockSetL1Db).toHaveBeenCalledWith('db-parent');
+    expect(mockSetL1Schema).toHaveBeenCalledWith('schema-1');
+    expect(mockDrillDown).not.toHaveBeenCalled();
+  });
+});
+
+describe('useNodeInteractions — onNodeDoubleClick', () => {
+  it('calls pushL1Scope for DaliApplication on L1', () => {
+    mockViewLevel = 'L1';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = makeNode('DaliApplication', 'appNode', 'MY_APP');
+
+    act(() => { result.current.onNodeDoubleClick(fakeEvent, node); });
+
+    expect(mockPushL1Scope).toHaveBeenCalledWith('node-1', 'MY_APP', 'DaliApplication');
+  });
+
+  it('returns early on L3 when nodeType is not DaliStatement', () => {
+    mockViewLevel = 'L3';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = makeNode('DaliColumn', 'columnNode', 'COL');
+
+    act(() => { result.current.onNodeDoubleClick(fakeEvent, node); });
+
+    expect(mockDrillDown).not.toHaveBeenCalled();
+  });
+
+  it('drills to table by nodeId on L2 for DaliTable', () => {
+    mockViewLevel = 'L2';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = makeNode('DaliTable', 'tableNode', 'ORDERS');
+
+    act(() => { result.current.onNodeDoubleClick(fakeEvent, node); });
+
+    expect(mockSetTableFilter).toHaveBeenCalledWith(null);
+    expect(mockDrillDown).toHaveBeenCalledWith('node-1', 'ORDERS', 'DaliTable');
+  });
+
+  it('drills to schema with db qualifier when metadata.databaseName present', () => {
+    mockViewLevel = 'L2';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = {
+      id: 'node-1',
+      type: 'schemaNode',
+      data: { nodeType: 'DaliSchema', label: 'PUBLIC', metadata: { databaseName: 'PROD' } },
+    } as any;
+
+    act(() => { result.current.onNodeDoubleClick(fakeEvent, node); });
+
+    expect(mockDrillDown).toHaveBeenCalledWith('schema-PUBLIC|PROD', 'PUBLIC', 'DaliSchema');
+  });
+
+  it('drills to routine with routine-<id> scope', () => {
+    mockViewLevel = 'L2';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = makeNode('DaliRoutine', 'routineNode', 'PKG.PROC');
+
+    act(() => { result.current.onNodeDoubleClick(fakeEvent, node); });
+
+    expect(mockDrillDown).toHaveBeenCalledWith('routine-node-1', 'PKG.PROC', 'DaliRoutine');
+  });
+
+  it('skips drillDown for unrecognised nodeType on L2', () => {
+    mockViewLevel = 'L2';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = makeNode('DaliColumn', 'columnNode', 'IRRELEVANT');
+
+    act(() => { result.current.onNodeDoubleClick(fakeEvent, node); });
+
+    expect(mockDrillDown).not.toHaveBeenCalled();
+  });
+});
+
+describe('useNodeInteractions — onNodeContextMenu', () => {
+  it('calls setContextMenu with node info and pointer coords', () => {
+    mockViewLevel = 'L2';
+    const { result } = renderHook(() => useNodeInteractions(mockSetCtx));
+    const node = makeNode('DaliTable', 'tableNode', 'T1');
+    const evt = { preventDefault: vi.fn(), clientX: 100, clientY: 200 } as any;
+
+    act(() => { result.current.onNodeContextMenu(evt, node); });
+
+    expect(evt.preventDefault).toHaveBeenCalled();
+    expect(mockSetCtx).toHaveBeenCalledWith({
+      nodeId: 'node-1',
+      data: node.data,
+      x: 100,
+      y: 200,
+    });
+  });
+});
