@@ -1,7 +1,7 @@
 # Sprints Index
 
-**Version:** 1.0  
-**Date:** 2026-04-20  
+**Version:** 1.1  
+**Date:** 2026-04-21  
 
 ---
 
@@ -17,7 +17,7 @@
 | LOOM-036 nav hooks | ✅ DONE | `feature/loom-036-nav-hooks` | v1.2.0 | 2026-04-20 |
 | [ELK M2 KNOT](SPRINT_ELK_M2_KNOT.md) (EK-01, EK-02, HOUND 2076N, BUG-EK-01) | ✅ DONE | `feature/elk-m2-knot` | v1.3.0 | 2026-04-20 |
 | Infra Backlog (IF-01, IF-04, IF-06) | ✅ DONE | `fix/infra-backlog` (PR #41) | — | 2026-04-21 |
-| [HEIMDALL Sprint 4 RBAC](HEIMDALL_SPRINT4_RBAC.md) (R4.2–R4.14) | ✅ DONE | `feature/heimdall-s4-rbac` | — | 2026-04-21 |
+| [HEIMDALL Sprint 4 RBAC](HEIMDALL_SPRINT4_RBAC.md) (R4.2–R4.14 + Shell integration) | ✅ DONE | `feature/heimdall-s4-rbac` → `develop` | → v1.3.0 | 2026-04-21 |
 | Version bump 1.0.0 → 1.2.0 | ✅ DONE | `fix/version-bump-1.2.0` | v1.2.0 | 2026-04-20 |
 
 ---
@@ -53,3 +53,38 @@
 - `docs/current/specs/SKADI_SOURCE_SPEC.md`
 - `docs/current/specs/heimdall/HEIMDALL_SOURCES_UI.md`
 - `docs/current/specs/heimdall/HEIMDALL_DALI_API.md`
+
+---
+
+## v1.3.0 Release — What's Included (develop, not yet released)
+
+### Verdandi (frontend)
+- ELK auto-switch to stress algorithm for dense graphs (E/V > 5)
+- KNOT Inspector — Statements section with dedup by stmtGeoid
+- ReactFlow virtualization for large graphs (> 1500 nodes)
+- DB node single-click drill-down fix (BUG-EK-01)
+- usePrefsSync — Keycloak prefs sync on login
+
+### HEIMDALL (frontend)
+- RBAC: RoleGuard, useTenantContext, prefsStore
+- UsersPage + UserEditModal wired to Chur admin API
+- Shell integration: unified AuthGate/LoginPage, appBase/go() MF-safe navigation
+- FENRIR section active-state + visibility gating by role
+- heimdall.css import in App.tsx (Fenrir styles in MF remote mode)
+- AidaNav height normalized to 42px
+
+### Shell (frontend)
+- Unified AuthGate + ShellAuthStore + LoginPage
+- NavigateBridge for cross-app routing
+- i18n auth keys (EN + RU)
+
+### Chur (BFF)
+- requireAdmin middleware (R4.2)
+- Full admin routes: users CRUD, profile, prefs (R4.9–R4.11)
+- keycloakAdmin.ts: getUser, inviteUser, setUserRole, getUserAttributes, setUserAttributes
+
+### HEIMDALL backend
+- TenantContext + TenantContextFilter (X-Seer-* headers)
+
+### Documentation
+- `docs/current/sprints/HEIMDALL_SPRINT4_RBAC.md`

@@ -34,6 +34,9 @@
 |-----|----------|
 | `20295f7` | feat: admin routes, prefs sync, nav guards (R4.2/3/9/10/11/13/14) |
 | `0e7fcca` | test: admin route RBAC, role guard, prefs store (R4.8) |
+| `b12ff4e` | docs: sprint doc + sprints index |
+| `236965e` | fix(test): remove unused ordered variable in useTenantContext |
+| `407f2c6` | feat(shell-integration): unified login, MF nav fixes, Fenrir CSS, height normalization |
 
 ---
 
@@ -71,9 +74,14 @@ Phase 2 enforcement: сравнение `session.tenantId` с `:tenantId` из U
 - [x] `App.tsx` — loads prefs on auth, `/users` protected by `RoleGuard require="local-admin"`
 - [x] `HeimdallHeader.tsx` — Users nav item hidden for viewer/editor/operator/auditor
 - [x] `frontends/verdandi/src/hooks/usePrefsSync.ts` + wire в `App.tsx`
-- [x] `tsc --noEmit` — 0 ошибок (Chur, heimdall-frontend, Verdandi)
+- [x] `tsc --noEmit` — 0 ошибок (Shell, Chur, heimdall-frontend, Verdandi)
 - [x] Chur: 47 тестов прошли (admin.test.ts: 21, auth.test.ts: 8, rbac.test.ts: 11, graphql.test.ts: 7)
 - [x] heimdall-frontend: 65 тестов прошли (+27 новых: useTenantContext, RoleGuard, prefsStore)
+- [x] Shell: unified AuthGate + LoginPage + ShellAuthStore; AidaNav height 42px
+- [x] Shell: Verdandi + Heimdall — appBase/go() MF-safe navigation
+- [x] Heimdall: heimdall.css в App.tsx — Fenrir styles работают в MF remote mode
+- [x] Heimdall: FENRIR active-state detection, visibleSections filter, удалена кнопка Users из toolbar
+- [x] Влит в `develop` (merge commit `229cec3`)
 - [ ] R4.1 — Keycloak scopes в KC Admin UI: ручной шаг при деплое
 
 ---
