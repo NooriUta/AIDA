@@ -181,13 +181,29 @@
   },
   "profile": {
     "title":        "Profile",
-    "appearance":   "Appearance",
     "platform":     "AIÐA — Heimðallr Control Panel",
     "fieldUsername": "Username",
     "fieldEmail":    "Email",
     "fieldRole":     "Role",
     "fieldPlatform": "Platform",
-    "themeHint":     "Theme preferences are saved locally and shared across all AIÐA apps."
+    "themeHint":     "Theme preferences are saved locally and shared across all AIÐA apps.",
+    "tabs": {
+      "profile":    "Profile",
+      "appearance": "Appearance"
+    },
+    "appearance": {
+      "theme":    "Theme",
+      "dark":     "Dark",
+      "light":    "Light",
+      "palette":  "Palette",
+      "uiFont":   "UI Font",
+      "monoFont": "Monospace font",
+      "fontSize": "Font size",
+      "density":  "Density",
+      "compact":  "Compact",
+      "normal":   "Normal",
+      "preview":  "Preview text"
+    }
   },
   "dali": {
     "page": {
