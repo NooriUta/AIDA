@@ -1,6 +1,7 @@
 package studio.seer.tenantrouting;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Alternative;
 
 /**
  * STUB — post-HighLoad implementation that will look up {@code DaliTenantConfig}
@@ -13,6 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped;
  * TODO (post-HL): implement lookup via FRIGG DaliTenantConfig, per-tenant HikariCP pools,
  *                 and configVersion-based invalidation per SHUTTLE_TENANT_ISOLATION.md §2.
  */
+@Alternative
 @ApplicationScoped
 public class FriggYggLineageRegistry implements YggLineageRegistry {
 

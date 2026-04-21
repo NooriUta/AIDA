@@ -1,6 +1,7 @@
 package studio.seer.dali.security;
 
 import jakarta.annotation.Priority;
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
@@ -28,6 +29,7 @@ import java.util.Base64;
  */
 @Provider
 @Priority(Priorities.AUTHORIZATION)
+@RequestScoped
 public class JwtTenantConsistencyFilter implements ContainerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtTenantConsistencyFilter.class);

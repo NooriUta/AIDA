@@ -19,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -77,11 +76,9 @@ public class FileUploadResource {
                     + " — accepted: " + ALLOWED_EXTENSIONS);
         }
 
-        Path tempDir = Path.of(System.getProperty("java.io.tmpdir"),
-                "dali-upload-" + UUID.randomUUID());
-
+        Path tempDir = null;
         try {
-            Files.createDirectories(tempDir);
+            tempDir = Files.createTempDirectory("dali-upload-");
 
             if (isZip) {
                 UploadExtractor.extractZip(file.uploadedFile(), tempDir);
