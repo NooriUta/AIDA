@@ -89,6 +89,8 @@ public class ParseJob {
 
         try {
             HoundConfig config = buildConfig(input);
+            log.info("[ParseJob] sid={} preview={} writeMode={} clear={}",
+                    sessionId, input.preview(), config.writeMode(), input.clearBeforeWrite());
             emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(),
                     input.clearBeforeWrite(), config.workerThreads());
 
