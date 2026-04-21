@@ -104,10 +104,12 @@ write_files:
       set -euo pipefail
       cd /opt/seer-studio
       /opt/seer-studio/infra/scripts/lockbox-sync.sh
+      # IF-04: use --pull missing instead of --pull always so that reboot
+      # doesn't fail when YCR registry is unreachable during VM startup.
       docker compose \
         -f docker-compose.prod.yml \
         -f docker-compose.yc.yml \
-        up -d --remove-orphans --pull always
+        up -d --remove-orphans --pull missing
 
   - path: /etc/systemd/system/aida-compose.service
     permissions: '0644'
@@ -127,6 +129,8 @@ write_files:
       ExecStop=/usr/bin/docker compose \
         -f docker-compose.prod.yml \
         -f docker-compose.yc.yml down
+      Restart=on-failure
+      RestartSec=30s
       TimeoutStartSec=300
 
       [Install]
