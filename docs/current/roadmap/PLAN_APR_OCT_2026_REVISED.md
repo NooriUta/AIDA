@@ -1,8 +1,8 @@
 # AIDA Platform — Roadmap APR–OCT 2026 (Revised)
 
-**Version:** 1.4  
+**Version:** 1.5  
 **Date:** 2026-04-20  
-**M2 Progress:** ~65%
+**M2 Progress:** ~85%
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Milestone | Target | Status |
 |-----------|--------|--------|
-| M2 Tech Tasks (core backend) | May 31, 2026 | 🟡 IN PROGRESS ~65% |
+| M2 Tech Tasks (core backend) | May 31, 2026 | 🟡 IN PROGRESS ~85% |
 | M2 UI/UX (Verdandi mobile + LOOM S2) | Jun 30, 2026 | 🟡 IN PROGRESS |
 | M3 Analytics + ELK 5K | Aug 31, 2026 | ⬜ PLANNED |
 | M4 Production GA | Oct 31, 2026 | ⬜ PLANNED |
@@ -43,12 +43,13 @@
 
 | Task | Sprint | Estimate | Priority |
 |------|--------|----------|----------|
-| EK-01: ELK algorithm auto-switch for dense graphs | SPRINT_ELK_M2_KNOT | 2d | HIGH |
-| EK-02: KNOT Inspector — Routines + Statements sections | SPRINT_ELK_M2_KNOT | 2d | HIGH |
+| EK-01: ELK algorithm auto-switch for dense graphs | SPRINT_ELK_M2_KNOT | 2d | ✅ DONE |
+| EK-02: KNOT Inspector — Statements section + dedup | SPRINT_ELK_M2_KNOT | 2d | ✅ DONE |
+| HOUND 2076N: ReactFlow virtualization + perf marks | SPRINT_ELK_M2_KNOT | 1d | ✅ DONE |
+| Version bump: all services to 1.2.0 | Release hygiene | 0.5d | ✅ DONE |
+| Coverage: verdandi functions ≥ 70% (now 71.21%) | QG | 1d | ✅ DONE |
 | SKADI: schema filter UI in DaliSourcesPage (include/exclude tags) | Dali Core S2 | 1d | MEDIUM |
 | SKADI: ⚡ Test Connection button | Dali Core S2 | 0.5d | MEDIUM |
-| Coverage: verdandi functions ≥ 70% | QG | 1d | HIGH |
-| Version bump: all services to 1.2.0 | Release hygiene | 0.5d | LOW |
 | CVE remediation (fastify v4→v5, npm upgrade, apk upgrade) | Security | 1d | HIGH |
 
 ---
@@ -81,9 +82,9 @@
 | Gate | Threshold | Current | Status |
 |------|-----------|---------|--------|
 | Verdandi TS errors | 0 | 0 | ✅ |
-| Verdandi vitest pass rate | 100% | 216/216 | ✅ |
-| Verdandi function coverage | ≥ 70% | 64.04% | 🔴 FAIL |
-| Verdandi line coverage | ≥ 70% | TBD | — |
+| Verdandi vitest pass rate | 100% | 256/256 | ✅ |
+| Verdandi function coverage | ≥ 70% | 71.21% | ✅ |
+| Verdandi line coverage | ≥ 70% | 76.54% | ✅ |
 | Dali `./gradlew test` | green | green | ✅ |
 | SHUTTLE `./gradlew test` | green | green | ✅ |
 
@@ -94,11 +95,11 @@
 | Service | Version | Last changed |
 |---------|---------|-------------|
 | verdandi | 1.2.0 | v1.2.0 |
-| heimdall-frontend | 1.0.0 | needs bump |
-| chur (BFF) | 1.0.0 | needs bump |
-| dali | 1.0.0 | needs bump |
-| shuttle | 1.0.0 | needs bump |
-| heimdall-backend | 1.0.0 | needs bump |
+| heimdall-frontend | 1.2.0 | ✅ bumped |
+| chur (BFF) | 1.2.0 | ✅ bumped |
+| dali | 1.2.0 | ✅ bumped |
+| shuttle | 1.2.0 | ✅ bumped |
+| heimdall-backend | 1.2.0 | ✅ bumped |
 | hound | 1.0.0 | stable |
 | skadi | 0.2.0 | pre-release |
 
@@ -110,6 +111,6 @@
 |------|--------|-----------|
 | YGG (ArcadeDB) single-node, no replication | HIGH | Backup cronjob, planned ArcadeDB HA in M4 |
 | SKADI JDBC harvester not yet tested on ClickHouse | MEDIUM | Add ClickHouse integration test in Weeks 5–8 |
-| Verdandi function coverage below 70% | MEDIUM | Add tests for hooks + store actions (Weeks 5–6) |
+| ~~Verdandi function coverage below 70%~~ | MEDIUM | ✅ Closed — coverage 71.21% (20.04.2026) |
 | 7 active CVEs (fastify, npm chain, busybox) | HIGH | CVE remediation sprint Weeks 5–6 |
 | skadi library at v0.2.0 (pre-release API) | LOW | Stabilize API before M3 |

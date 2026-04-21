@@ -276,3 +276,33 @@ input[type=range] { accent-color: var(--acc); flex: 1; height: 4px; }
 .toast.suc     { border-color: var(--suc); color: var(--suc); }
 .toast.wrn     { border-color: var(--wrn); color: var(--wrn); }
 .toast.err     { border-color: var(--danger); color: var(--danger); }
+
+/* ── JobRunr stats grid ──────────────────────────────────────────────────────── */
+.jr-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* ── Responsive breakpoints ─────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Utility: hide non-essential chrome on phones */
+  .hide-mobile { display: none !important; }
+
+  /* 4-col stats grids → 2×2 */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .jr-stats   { grid-template-columns: repeat(2, 1fr); }
+
+  /* Modals: use all available screen height */
+  .modal {
+    width: 100vw; max-width: 100vw;
+    height: 100dvh; max-height: 100dvh;
+    border-radius: 0;
+  }
+  .modal-content { padding: 16px; }
+
+  /* Tables: allow horizontal scroll on narrow screens */
+  .data-panel { overflow-x: auto; }
+
+  /* Toasts: full width on phones */
+  .toast { left: 12px; right: 12px; max-width: unset; }
+}

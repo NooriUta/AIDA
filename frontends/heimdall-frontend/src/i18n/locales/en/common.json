@@ -21,6 +21,8 @@
     "overviewDesc": "Service monitoring and events",
     "daliDesc":     "SQL parsing and session management",
     "adminDesc":    "Users, roles, settings",
+    "docsDesc":     "Documentation and references",
+    "docs":         "DOCS",
     "sessions":     "Sessions",
     "jobrunr":      "JobRunr"
   },
@@ -243,6 +245,8 @@
       "submitParse":      "Parse",
       "submitUpload":     "Upload & Parse",
       "submitting":       "...",
+      "dbNameLabel":       "Database name",
+      "dbNamePlaceholder": "PROD_DB (optional — groups schemas under this DB node)",
       "errSelectFile":    "Select a file to upload",
       "errSourceRequired": "Source path is required",
       "errAnotherActive": "Another session is active — wait for it to finish"

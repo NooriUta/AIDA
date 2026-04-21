@@ -89,6 +89,8 @@ public class ParseJob {
 
         try {
             HoundConfig config = buildConfig(input);
+            log.info("[ParseJob] sid={} preview={} writeMode={} clear={}",
+                    sessionId, input.preview(), config.writeMode(), input.clearBeforeWrite());
             emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(),
                     input.clearBeforeWrite(), config.workerThreads());
 
@@ -112,7 +114,7 @@ public class ParseJob {
             if (Files.isDirectory(sourcePath)) {
                 runBatch(sessionId, sourcePath, config, input);
             } else {
-                runSingle(sessionId, sourcePath, config);
+                runSingle(sessionId, sourcePath, config, input);
             }
 
         } catch (Exception e) {
@@ -145,11 +147,13 @@ public class ParseJob {
 
     // ── Single file ────────────────────────────────────────────────────────────
 
-    private void runSingle(String sessionId, Path file, HoundConfig config) {
+    private void runSingle(String sessionId, Path file, HoundConfig config, ParseSessionInput input) {
         sessionService.startSession(sessionId, false, 1);
 
         HoundEventListener listener = buildListener(sessionId, config);
-        ParseResult result = houndParser.parse(file, config, listener);
+        ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
+                ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
+                : houndParser.parse(file, config, listener);
 
         FileResult fr = toFileResult(result);
         sessionService.completeSession(sessionId, result, List.of(fr));
@@ -251,7 +255,7 @@ public class ParseJob {
         // Per-file retry absorbs transient ArcadeDB MVCC conflicts without aborting the entire
         // batch — a single file failure no longer cascades into a full session retry (JobRunr).
         for (Path file : files) {
-            FileResult fr = parseFileWithRetry(sessionId, file, config);
+            FileResult fr = parseFileWithRetry(sessionId, file, config, input);
             fileResults.add(fr);
             sessionService.recordFileComplete(sessionId, fr);
             if (fr.success()) {
@@ -279,12 +283,15 @@ public class ParseJob {
      * <p>On permanent failure the file is recorded as {@code success=false} in the batch
      * result, but processing continues for the remaining files.
      */
-    private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config) {
+    private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config,
+                                          ParseSessionInput input) {
         Exception lastEx = null;
         for (int attempt = 1; attempt <= FILE_MAX_RETRIES; attempt++) {
             try {
                 HoundEventListener listener = buildListener(sessionId, config);
-                ParseResult result = houndParser.parse(file, config, listener);
+                ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
+                        ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
+                        : houndParser.parse(file, config, listener);
                 if (attempt > 1) {
                     log.info("[{}] File recovered on attempt {}/{}: {}",
                             sessionId, attempt, FILE_MAX_RETRIES, file.getFileName());

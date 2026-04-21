@@ -24,6 +24,7 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
   const [dragOver,         setDragOver]         = useState(false);
   const [preview,          setPreview]          = useState(false);
   const [clearBeforeWrite, setClearBeforeWrite] = useState(true);
+  const [dbName,           setDbName]           = useState('');
   const [error,            setError]            = useState('');
   const [loading,          setLoading]          = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,15 +41,16 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
     setLoading(true);
     try {
       let session: DaliSession;
+      const resolvedDbName = dbName.trim() || undefined;
       if (mode === 'upload') {
         if (!file) { setError(t('dali.form.errSelectFile')); return; }
-        session = await uploadAndParse(file, dialect, preview, clearBeforeWrite);
+        session = await uploadAndParse(file, dialect, preview, clearBeforeWrite, resolvedDbName);
         setFile(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
       } else {
         const src = source.trim().replace(/[\t\r\n\u00a0\ufeff]+/g, '');
         if (!src) { setError(t('dali.form.errSourceRequired')); return; }
-        session = await postSession({ dialect, source: src, preview, clearBeforeWrite });
+        session = await postSession({ dialect, source: src, preview, clearBeforeWrite, dbName: resolvedDbName });
         setSource('');
       }
       onSessionCreated(session);
@@ -160,7 +162,22 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
           )}
         </div>
 
-        {/* Row 2: Options + Parse button */}
+        {/* Row 2: DB name */}
+        <div className={css.formRowTop} style={{ marginTop: 0 }}>
+          <div className={css.fieldGroup} style={{ flex: 1 }}>
+            <label className={css.fieldLabel}>{t('dali.form.dbNameLabel')}</label>
+            <input
+              className="field-input"
+              style={{ fontFamily: 'var(--mono)', fontSize: '13px', padding: '6px 10px' }}
+              type="text"
+              value={dbName}
+              onChange={e => setDbName(e.target.value)}
+              placeholder={t('dali.form.dbNamePlaceholder')}
+            />
+          </div>
+        </div>
+
+        {/* Row 3: Options + Parse button */}
         <div className={css.formRowBottom}>
           <div className={css.checkboxStack}>
             <div className={css.previewRow}>

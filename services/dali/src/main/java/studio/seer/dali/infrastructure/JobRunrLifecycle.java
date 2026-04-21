@@ -12,6 +12,7 @@ import jakarta.inject.Singleton;
 import org.jobrunr.configuration.JobRunr;
 import org.jobrunr.configuration.JobRunrConfiguration;
 import org.jobrunr.scheduling.JobScheduler;
+import org.jobrunr.server.BackgroundJobServerConfiguration;
 import org.jobrunr.server.JobActivator;
 import org.jobrunr.storage.StorageProvider;
 import org.slf4j.Logger;
@@ -82,10 +83,13 @@ public class JobRunrLifecycle {
             }
         };
         try {
+            var bgServerConfig = BackgroundJobServerConfiguration
+                    .usingStandardBackgroundJobServerConfiguration()
+                    .andWorkerCount(config.jobrunr().workerThreads());
             var jrConfig = JobRunr.configure()
                     .useStorageProvider(arcadeDbStorageProvider)
                     .useJobActivator(activator)
-                    .useBackgroundJobServer();
+                    .useBackgroundJobServer(bgServerConfig);
             if (config.jobrunr().dashboard().enabled()) {
                 int port = config.jobrunr().dashboard().port();
                 jrConfig = jrConfig.useDashboard(port);

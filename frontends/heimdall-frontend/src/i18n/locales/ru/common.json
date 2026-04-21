@@ -21,6 +21,8 @@
     "overviewDesc": "Мониторинг сервисов и события",
     "daliDesc":     "Разбор SQL и управление сессиями",
     "adminDesc":    "Пользователи, роли, настройки",
+    "docsDesc":     "Документация и справочники",
+    "docs":         "ДОКУМЕНТЫ",
     "sessions":     "Сессии",
     "jobrunr":      "JobRunr"
   },
@@ -251,6 +253,8 @@
       "submitParse":      "Парсить",
       "submitUpload":     "Загрузить и парсить",
       "submitting":       "...",
+      "dbNameLabel":       "Имя базы данных",
+      "dbNamePlaceholder": "PROD_DB (опционально — группирует схемы под узел БД)",
       "errSelectFile":    "Выберите файл для загрузки",
       "errSourceRequired": "Путь к источнику обязателен",
       "errAnotherActive": "Другая сессия активна — дождитесь завершения"
