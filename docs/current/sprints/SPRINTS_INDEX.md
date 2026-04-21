@@ -16,6 +16,8 @@
 | SHUTTLE C2X (C.3.2, C.4.1) | ✅ DONE | `feature/shuttle-c2x` | v1.2.0 | 2026-04-20 |
 | LOOM-036 nav hooks | ✅ DONE | `feature/loom-036-nav-hooks` | v1.2.0 | 2026-04-20 |
 | [ELK M2 KNOT](SPRINT_ELK_M2_KNOT.md) (EK-01, EK-02, HOUND 2076N, BUG-EK-01) | ✅ DONE | `feature/elk-m2-knot` | v1.3.0 | 2026-04-20 |
+| Infra Backlog (IF-01, IF-04, IF-06) | ✅ DONE | `fix/infra-backlog` (PR #41) | — | 2026-04-21 |
+| [HEIMDALL Sprint 4 RBAC](HEIMDALL_SPRINT4_RBAC.md) (R4.2–R4.14) | ✅ DONE | `feature/heimdall-s4-rbac` | — | 2026-04-21 |
 | Version bump 1.0.0 → 1.2.0 | ✅ DONE | `fix/version-bump-1.2.0` | v1.2.0 | 2026-04-20 |
 
 ---
