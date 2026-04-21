@@ -32,6 +32,9 @@ import java.util.ArrayList;
  * @param instanceId     Dali instance tag (from {@code dali.instance.id} config).
  *                       Null for untagged sessions (pre-multi-instance, backward-compat).
  *                       Used to isolate sessions when multiple Dali instances share one FRIGG.
+ * @param dbName         Database name supplied by the user (optional). When non-null, Hound
+ *                       creates a DaliDatabase vertex and attaches CONTAINS_SCHEMA edges.
+ *                       Null for ad-hoc sessions where the user did not specify a database name.
  */
 public record Session(
         String         id,
@@ -55,5 +58,6 @@ public record Session(
         List<String>         errors,
         List<FileResult>     fileResults,
         boolean              friggPersisted,  // true = record confirmed written to FRIGG
-        String               instanceId       // Dali instance tag — null = untagged
+        String               instanceId,      // Dali instance tag — null = untagged
+        String               dbName          // optional DB grouping label — null = ad-hoc
 ) {}

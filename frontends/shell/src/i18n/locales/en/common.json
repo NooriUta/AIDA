@@ -14,5 +14,20 @@
     "warmDark":    "Warm Dark"
   },
   "language": { "en": "English", "ru": "Русский" },
-  "status":   { "loading": "Loading…" }
+  "status":   { "loading": "Loading…" },
+  "auth": {
+    "login":    "Sign in",
+    "logout":   "Sign out",
+    "username": "Username",
+    "password": "Password",
+    "signingIn": "Signing in…",
+    "tagline":  "All-seeing. Always on.",
+    "error": {
+      "invalid":   "Invalid username or password.",
+      "required":  "This field is required",
+      "server":    "Server error. Please try again.",
+      "network":   "Cannot connect to server. Check your network.",
+      "rateLimit": "Too many login attempts. Try again in 15 minutes."
+    }
+  }
 }

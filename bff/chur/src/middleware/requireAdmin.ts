@@ -37,3 +37,25 @@ export function requireScope(...scopes: string[]) {
 // Backward-compatible aliases — existing routes using requireAdmin do not need to change.
 export const requireAdmin       = requireScope('aida:admin');
 export const requireDestructive = requireScope('aida:admin', 'aida:admin:destructive');
+
+/**
+ * Blocks cross-tenant access.
+ * Phase 1 (single-tenant): superadmin always passes, everyone else passes
+ * because tenantId is not yet in the session schema.
+ * Phase 2 (multi-tenant): enforce tenantId matching from session vs :tenantId param.
+ */
+export function requireSameTenant() {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (!request.user) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+    // superadmin bypasses cross-tenant check
+    if (request.user.scopes?.includes('aida:superadmin')) return;
+
+    // Phase 1: single-tenant — no tenantId in session yet, pass through.
+    // When multi-tenant is implemented, compare request.user.tenantId to params.tenantId.
+    const targetTenant = (request.params as Record<string, string>)?.tenantId;
+    if (!targetTenant) return; // no tenant scoping required for this route
+    // (Phase 2 enforcement goes here)
+  };
+}

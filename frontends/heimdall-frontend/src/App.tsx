@@ -2,12 +2,17 @@
 // ensures it runs when App is loaded as an MF remote (main.tsx is not
 // executed in that case).
 import './i18n/config';
+// heimdall.css must also be imported here so styles load in MF-remote mode
+// (main.tsx is not executed when Shell imports heimdall-frontend/App).
+import './styles/heimdall.css';
 import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useTranslation }  from 'react-i18next';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
 import { useAuthStore }    from './stores/authStore';
+import { usePrefsStore }   from './stores/prefsStore';
+import { RoleGuard }       from './components/RoleGuard';
 
 const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
@@ -39,16 +44,38 @@ function AppLayout() {
 }
 
 // ── Protected layout route ────────────────────────────────────────────────────
+// In Shell mode: Shell's AuthGate has already validated the session, so
+// isAuthenticated is already true when this renders.
+// In standalone mode: waits for checkSession to complete before redirecting.
 function ProtectedRoute() {
-  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const isAuthenticated   = useAuthStore(s => s.isAuthenticated);
+  const isCheckingSession = useAuthStore(s => s.isCheckingSession);
+
+  if (isCheckingSession) return (
+    <div style={{
+      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: 'var(--t3)', fontSize: '13px',
+    }}>
+      …
+    </div>
+  );
   if (!isAuthenticated) return <Navigate to="login" replace />;
   return <Outlet />;
 }
 
-// ── Session check on mount ────────────────────────────────────────────────────
+// ── Session check on mount + prefs load on auth ───────────────────────────────
 function SessionGuard({ children }: { children: React.ReactNode }) {
   const checkSession = useAuthStore(s => s.checkSession);
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const loadPrefs = usePrefsStore(s => s.load);
+
   useEffect(() => { void checkSession(); }, [checkSession]);
+
+  // Load server-side prefs whenever the user becomes authenticated
+  useEffect(() => {
+    if (isAuthenticated) void loadPrefs();
+  }, [isAuthenticated, loadPrefs]);
+
   return <>{children}</>;
 }
 
@@ -90,7 +117,9 @@ export default function App() {
             </Route>
 
             {/* Standalone pages */}
-            <Route path="users"          element={<UsersPage />} />
+            <Route path="users" element={
+              <RoleGuard require="local-admin"><UsersPage /></RoleGuard>
+            } />
             <Route path="demodebug"      element={<ControlsPage />} />
             <Route path="docs/*"         element={<DocsPage tab="docs" />} />
             <Route path="team-docs/*"    element={<DocsPage tab="team-docs" />} />
@@ -98,9 +127,9 @@ export default function App() {
             <Route path="highload/*"     element={<DocsPage tab="highload" />} />
 
             {/* Backward compat: old flat routes redirect to new paths */}
-            <Route path="services"  element={<Navigate to="/overview/services"  replace />} />
-            <Route path="dashboard" element={<Navigate to="/overview/dashboard" replace />} />
-            <Route path="events"    element={<Navigate to="/overview/events"    replace />} />
+            <Route path="services"  element={<Navigate to="../overview/services"  replace />} />
+            <Route path="dashboard" element={<Navigate to="../overview/dashboard" replace />} />
+            <Route path="events"    element={<Navigate to="../overview/events"    replace />} />
 
             <Route path="*" element={<Navigate to="overview/services" replace />} />
           </Route>

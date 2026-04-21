@@ -626,9 +626,9 @@ export async function fetchKnotTableDetail(
 export interface KnotTableUsage {
   routineGeoid: string;
   routineName:  string;
-  edgeType:     string;  // READS_FROM | WRITES_TO
-  stmtGeoid:    string;
-  stmtType:     string;
+  edgeType:     string;        // READS_FROM | WRITES_TO
+  stmtGeoid:    string | null; // null when routine has no associated statement
+  stmtType:     string | null; // null when stmtGeoid is null
 }
 
 const KNOT_TABLE_ROUTINES = /* GraphQL */ `

@@ -52,7 +52,9 @@ public class FileUploadResource {
             @RestForm("file")             FileUpload file,
             @RestForm("dialect")          String     dialect,
             @RestForm("preview")          @DefaultValue("false") boolean preview,
-            @RestForm("clearBeforeWrite") @DefaultValue("true")  boolean clearBeforeWrite
+            @RestForm("clearBeforeWrite") @DefaultValue("true")  boolean clearBeforeWrite,
+            @RestForm("dbName")           @DefaultValue("")       String  dbName,
+            @RestForm("appName")          @DefaultValue("")       String  appName
     ) {
         if (file == null || file.fileName() == null || file.fileName().isBlank()) {
             return bad("file is required");
@@ -89,7 +91,10 @@ public class FileUploadResource {
             }
 
             ParseSessionInput input = new ParseSessionInput(
-                    dialect.strip(), tempDir.toString(), preview, clearBeforeWrite, true);
+                    dialect.strip(), tempDir.toString(), preview, clearBeforeWrite, true,
+                    null, null, null,
+                    dbName  != null && !dbName.isBlank()  ? dbName.strip()  : null,
+                    appName != null && !appName.isBlank() ? appName.strip() : null);
 
             try {
                 return Response.accepted(sessionService.enqueue(input)).build();

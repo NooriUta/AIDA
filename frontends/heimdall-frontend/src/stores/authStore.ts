@@ -5,23 +5,25 @@ import type { AuthUser } from 'aida-shared';
 const AUTH_BASE = (import.meta.env.VITE_AUTH_URL as string | undefined) ?? '/auth';
 
 interface AuthStore {
-  user: AuthUser | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
-  checkSession: () => Promise<void>;
-  clearError: () => void;
+  user:              AuthUser | null;
+  isAuthenticated:   boolean;
+  isCheckingSession: boolean;
+  isLoading:         boolean;
+  error:             string | null;
+  login:             (username: string, password: string) => Promise<void>;
+  logout:            () => void;
+  checkSession:      () => Promise<void>;
+  clearError:        () => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set) => ({
-      user:            null,
-      isAuthenticated: false,
-      isLoading:       false,
-      error:           null,
+      user:              null,
+      isAuthenticated:   false,
+      isCheckingSession: true,   // true on init so ProtectedRoute waits for the first /auth/me
+      isLoading:         false,
+      error:             null,
 
       login: async (username, password) => {
         set({ isLoading: true, error: null });
@@ -50,13 +52,17 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       checkSession: async () => {
+        set({ isCheckingSession: true });
         try {
           const res = await fetch(`${AUTH_BASE}/me`, { credentials: 'include' });
-          if (!res.ok) { set({ user: null, isAuthenticated: false }); return; }
+          if (!res.ok) {
+            set({ user: null, isAuthenticated: false, isCheckingSession: false });
+            return;
+          }
           const user = await res.json() as AuthUser;
-          set({ user, isAuthenticated: true });
+          set({ user, isAuthenticated: true, isCheckingSession: false });
         } catch {
-          set({ user: null, isAuthenticated: false });
+          set({ user: null, isAuthenticated: false, isCheckingSession: false });
         }
       },
 

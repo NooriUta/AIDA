@@ -3,8 +3,9 @@ import { LAYOUT, TRANSFORM } from './constants';
 
 // ─── Layout result type ───────────────────────────────────────────────────────
 export interface LayoutResult {
-  nodes:  LoomNode[];
-  isGrid: boolean;   // true when grid was used (proactive M-3 or fallback)
+  nodes:   LoomNode[];
+  isGrid:  boolean;   // true when grid was used (proactive M-3 or fallback)
+  isDense: boolean;   // EK-01: true when E/V > DENSE_GRAPH_RATIO → stress algorithm
 }
 import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 
@@ -99,6 +100,19 @@ function getLayeredOptions(nodeCount: number): Record<string, string> {
   };
 }
 
+// ─── EK-01: Dense graph options (stress algorithm) ───────────────────────────
+// Activated when E/V > DENSE_GRAPH_RATIO. ELK stress minimization spreads nodes
+// evenly and handles high-edge-density better than the layered algorithm.
+function getDenseOptions(): Record<string, string> {
+  return {
+    'elk.algorithm':                   'stress',
+    'elk.stress.desiredEdgeLength':    String(LAYOUT.STRESS_EDGE_LENGTH),
+    'elk.spacing.nodeNode':            String(LAYOUT.ELK_NODE_SPACING),
+    'elk.separateConnectedComponents': 'true',
+    'elk.spacing.componentComponent':  String(LAYOUT.ELK_COMPONENT_SPACING),
+  };
+}
+
 // ─── Fingerprint-based 1-entry layout cache ───────────────────────────────
 // Avoids re-running ELK when the same graph structure is requested again
 // (e.g. toggling a post-layout filter and back).
@@ -106,6 +120,7 @@ interface LayoutCacheEntry {
   fingerprint: string;
   result:      LoomNode[];
   isGrid:      boolean;
+  isDense:     boolean;
 }
 let layoutCache: LayoutCacheEntry | null = null;
 
@@ -258,12 +273,21 @@ export async function applyELKLayout(
   edges:   LoomEdge[],
   options: { timeout?: number; forceELK?: boolean } = {},
 ): Promise<LayoutResult> {
-  if (nodes.length === 0) return { nodes, isGrid: false };
+  if (nodes.length === 0) return { nodes, isGrid: false, isDense: false };
 
   // Check 1-entry cache before hitting ELK
   const fp = graphFingerprint(nodes, edges);
   if (layoutCache && layoutCache.fingerprint === fp) {
-    return { nodes: layoutCache.result, isGrid: layoutCache.isGrid };
+    return { nodes: layoutCache.result, isGrid: layoutCache.isGrid, isDense: layoutCache.isDense };
+  }
+
+  performance.mark('loom-layout-start');
+
+  // EK-01: detect dense graph (E/V > DENSE_GRAPH_RATIO) → stress algorithm
+  const edgeRatio = edges.length / nodes.length;
+  const isDense   = edgeRatio > LAYOUT.DENSE_GRAPH_RATIO;
+  if (isDense) {
+    console.info(`[LOOM] Dense graph (E/V=${edgeRatio.toFixed(1)}) — switching to stress algorithm (EK-01)`);
   }
 
   // M-3: proactive grid for very large graphs — skip ELK entirely
@@ -271,8 +295,10 @@ export async function applyELKLayout(
   if (!options.forceELK && nodes.length > LAYOUT.AUTO_GRID_THRESHOLD) {
     console.info(`[LOOM] Graph has ${nodes.length} nodes (>${LAYOUT.AUTO_GRID_THRESHOLD}) — using grid layout (M-3)`);
     const laid = applyGridLayout(nodes);
-    layoutCache = { fingerprint: fp, result: laid, isGrid: true };
-    return { nodes: laid, isGrid: true };
+    layoutCache = { fingerprint: fp, result: laid, isGrid: true, isDense: false };
+    performance.mark('loom-layout-end');
+    performance.measure('loom-layout', 'loom-layout-start', 'loom-layout-end');
+    return { nodes: laid, isGrid: true, isDense: false };
   }
 
   // M-7: dynamic timeout — reduce for large graphs to fail fast
@@ -292,24 +318,26 @@ export async function applyELKLayout(
     );
     const graph: ElkGraph = {
       id: 'root',
-      layoutOptions: getLayeredOptions(nodes.length),
+      layoutOptions: isDense ? getDenseOptions() : getLayeredOptions(nodes.length),
       children: nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: getNodeHeight(n) })),
       // Only data-flow edges — containment edges are filtered out so ELK receives
       // a clean DAG (or near-DAG) without CONTAINS_ROUTINE/CONTAINS_STMT chains.
       edges: flatEdges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
     };
     const result = await runElkLayout(graph, timeout);
+    performance.mark('loom-layout-end');
+    performance.measure('loom-layout', 'loom-layout-start', 'loom-layout-end');
     if (!result) {
       const laid = applyGridLayout(nodes);
-      layoutCache = { fingerprint: fp, result: laid, isGrid: true };
-      return { nodes: laid, isGrid: true };
+      layoutCache = { fingerprint: fp, result: laid, isGrid: true, isDense: false };
+      return { nodes: laid, isGrid: true, isDense: false };
     }
     const laid = nodes.map((node) => {
       const c = result.children.find((r) => r.id === node.id);
       return c ? { ...node, position: { x: c.x ?? 0, y: c.y ?? 0 } } : node;
     });
-    layoutCache = { fingerprint: fp, result: laid, isGrid: false };
-    return { nodes: laid, isGrid: false };
+    layoutCache = { fingerprint: fp, result: laid, isGrid: false, isDense };
+    return { nodes: laid, isGrid: false, isDense };
   }
 
   // ── Compound layout (supports multi-level nesting: Schema → Routine → Stmt) ─
@@ -329,7 +357,7 @@ export async function applyELKLayout(
 
   const graph: ElkGraph = {
     id: 'root',
-    layoutOptions: getLayeredOptions(topNodes.length),
+    layoutOptions: isDense ? getDenseOptions() : getLayeredOptions(topNodes.length),
     children: topNodes.map((n) => ({
       id:     n.id,
       // Use pre-computed style dimensions for compound (group) nodes
@@ -359,13 +387,15 @@ export async function applyELKLayout(
   };
 
   const result = await runElkLayout(graph, timeout);
+  performance.mark('loom-layout-end');
+  performance.measure('loom-layout', 'loom-layout-start', 'loom-layout-end');
   if (!result) {
     // Grid-position top-level nodes; children keep pre-computed relative positions.
     const gridTop = applyGridLayout(topNodes);
     const gridIds = new Set(gridTop.map((n) => n.id));
     const laid = [...gridTop, ...nodes.filter((n) => !gridIds.has(n.id))];
-    layoutCache = { fingerprint: fp, result: laid, isGrid: true };
-    return { nodes: laid, isGrid: true };
+    layoutCache = { fingerprint: fp, result: laid, isGrid: true, isDense: false };
+    return { nodes: laid, isGrid: true, isDense: false };
   }
   const posMap = new Map(result.children.map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
   const laid = nodes.map((node) => {
@@ -373,6 +403,6 @@ export async function applyELKLayout(
     const pos = posMap.get(node.id);
     return pos ? { ...node, position: pos } : node;
   });
-  layoutCache = { fingerprint: fp, result: laid, isGrid: false };
-  return { nodes: laid, isGrid: false };
+  layoutCache = { fingerprint: fp, result: laid, isGrid: false, isDense };
+  return { nodes: laid, isGrid: false, isDense };
 }

@@ -5,12 +5,10 @@ const JR_BASE   = '/jobrunr';
 const LIMIT     = 30;
 const REFRESH_S = 5;
 
-// ── API types (JobRunr 8.x) ───────────────────────────────────────────────────
-interface BgServer  { id: string; workerPoolSize: number; processedJobs: number }
+// ── API types (JobRunr 8.x Community) ────────────────────────────────────────
 interface JobStats  {
   enqueued: number; processing: number; succeeded: number; failed: number;
-  scheduled: number; recurringJobs: number;
-  backgroundJobServers: BgServer[];
+  scheduled: number;
 }
 interface Job {
   id: string; jobName: string; state: string;
@@ -28,24 +26,15 @@ async function fetchStatCount(state: string): Promise<number> {
   const d = await r.json() as JobPage;
   return d.total ?? 0;
 }
-async function fetchServers(): Promise<BgServer[]> {
-  try {
-    const r = await fetch(`${JR_BASE}/api/servers`);
-    if (!r.ok) return [];
-    const d = await r.json();
-    return Array.isArray(d) ? d : [];
-  } catch { return []; }
-}
 async function fetchStats(): Promise<JobStats> {
-  const [enqueued, processing, succeeded, failed, scheduled, servers] = await Promise.all([
+  const [enqueued, processing, succeeded, failed, scheduled] = await Promise.all([
     fetchStatCount('ENQUEUED'),
     fetchStatCount('PROCESSING'),
     fetchStatCount('SUCCEEDED'),
     fetchStatCount('FAILED'),
     fetchStatCount('SCHEDULED'),
-    fetchServers(),
   ]);
-  return { enqueued, processing, succeeded, failed, scheduled, recurringJobs: 0, backgroundJobServers: servers };
+  return { enqueued, processing, succeeded, failed, scheduled };
 }
 async function fetchJobs(state: Tab): Promise<JobPage> {
   const q = state !== 'ALL' ? `&state=${state}` : '';
@@ -159,8 +148,7 @@ export default function DaliJobRunrPage() {
     { id: 'RECURRING',  label: t('daliJobrunr.tabRecurring') },
   ];
 
-  const connDot      = { connecting: '#7b8cde', online: '#4caf83', offline: '#e05252' }[conn];
-  const totalWorkers = stats?.backgroundJobServers.reduce((s, b) => s + b.workerPoolSize, 0) ?? 0;
+  const connDot = { connecting: '#7b8cde', online: '#4caf83', offline: '#e05252' }[conn];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -180,16 +168,6 @@ export default function DaliJobRunrPage() {
           <span style={{ fontSize: '12px', color: 'var(--t4)' }}>
             {conn === 'offline' ? t('daliJobrunr.offline') : t('daliJobrunr.port', { port: '29091' })}
           </span>
-          {totalWorkers > 0 && (
-            <span style={{
-              fontSize: '11px', padding: '2px 8px', borderRadius: 99,
-              background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
-              color: 'var(--acc)',
-              border: '1px solid color-mix(in srgb, var(--acc) 30%, transparent)',
-            }}>
-              {t('daliJobrunr.workers', { count: totalWorkers })}
-            </span>
-          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -226,10 +204,7 @@ export default function DaliJobRunrPage() {
 
       {/* ── Stats row ── */}
       {stats && (
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-          borderBottom: '1px solid var(--bd)', flexShrink: 0,
-        }}>
+        <div className="jr-stats" style={{ borderBottom: '1px solid var(--bd)', flexShrink: 0 }}>
           {([
             { key: 'enqueued',   val: stats.enqueued,   color: 'var(--t1)' },
             { key: 'processing', val: stats.processing, color: 'var(--acc)' },

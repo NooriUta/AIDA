@@ -9,15 +9,16 @@ export interface AuthUser {
 }
 
 interface AuthStore {
-  user: AuthUser | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
+  user:              AuthUser | null;
+  isAuthenticated:   boolean;
+  isCheckingSession: boolean;
+  isLoading:         boolean;
+  error:             string | null;
 
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  login:        (username: string, password: string) => Promise<void>;
+  logout:       () => Promise<void>;
   checkSession: () => Promise<void>;
-  clearError: () => void;
+  clearError:   () => void;
   /** Silently renew the JWT if the user is authenticated. */
   refreshToken: () => Promise<void>;
 }
@@ -40,10 +41,11 @@ const AUTH_BASE = import.meta.env.VITE_AUTH_URL ?? '/auth';
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
+      user:              null,
+      isAuthenticated:   false,
+      isCheckingSession: true,   // true on init so ProtectedRoute waits for the first /auth/me
+      isLoading:         false,
+      error:             null,
 
       // ── login ──────────────────────────���───────────────────────���────────────
       login: async (username, password) => {
@@ -97,33 +99,37 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       // ── checkSession — verifies the httpOnly cookie is still valid ───────────
-      // Call on app mount when sessionStorage says isAuthenticated=true.
-      // If the 8h token has expired, clears state so ProtectedRoute redirects.
+      // Always calls /auth/me so that:
+      //   • standalone: restores session after page reload
+      //   • Shell mode: discovers the Shell-level session even when local
+      //     sessionStorage has isAuthenticated=false (fresh tab or first load)
       checkSession: async () => {
-        if (!get().isAuthenticated) return;
+        set({ isCheckingSession: true });
         try {
           const res = await fetch(`${AUTH_BASE}/me`, {
             credentials: 'include',
           });
           if (res.status === 401) {
             stopRefreshTimer();
-            set({ user: null, isAuthenticated: false });
+            set({ user: null, isAuthenticated: false, isCheckingSession: false });
           } else if (res.ok) {
-            // Session still valid — restore user in case storage was partially cleared,
-            // then start silent refresh cycle.
             try {
               const data = await res.json();
-              set((s) => ({ user: data ?? s.user }));
-            } catch { /* keep existing user state */ }
+              set((s) => ({ user: data ?? s.user, isAuthenticated: true, isCheckingSession: false }));
+            } catch {
+              set({ isAuthenticated: true, isCheckingSession: false });
+            }
             startRefreshTimer(() => get().refreshToken());
-            // Hydrate prefs if not yet synced (e.g. page reload)
             if (!usePrefsStore.getState().synced) {
               usePrefsStore.getState().fetchPrefs().catch(() => {});
             }
+          } else {
+            // Non-401, non-ok (e.g. 500): keep existing auth state
+            set({ isCheckingSession: false });
           }
-          // Non-401, non-ok (e.g. 500): fall through to catch path — keep existing state
         } catch {
-          // Network down — keep existing state, will fail on next API call
+          // Network down — keep existing state
+          set({ isCheckingSession: false });
         }
       },
 

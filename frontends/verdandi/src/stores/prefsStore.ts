@@ -133,14 +133,18 @@ export const usePrefsStore = create<PrefsStore>()((set, get) => ({
 
     const timer = setTimeout(async () => {
       try {
-        await fetch(PREFS_URL, {
+        const resp = await fetch(PREFS_URL, {
           method:      'PUT',
           credentials: 'include',
           headers:     { 'Content-Type': 'application/json' },
           body:        JSON.stringify(readLS()),
+          signal:      AbortSignal.timeout(5_000),
         });
-      } catch {
-        // fire-and-forget — localStorage remains the device cache
+        if (!resp.ok) {
+          console.warn(`[prefsStore] PUT /prefs failed: ${resp.status}`);
+        }
+      } catch (err) {
+        console.warn('[prefsStore] sync failed:', (err as Error).message);
       }
       set({ _timer: null });
     }, DEBOUNCE);

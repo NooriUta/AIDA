@@ -521,6 +521,7 @@
     "language":      "Language",
     "tables":        "Tables",
     "routines":      "Routines",
+    "noRoutines":    "No routines",
     "noColumns":     "No columns",
     "schemas":       "Schemas",
     "drillDown":     "Drill-down →",

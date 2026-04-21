@@ -437,7 +437,7 @@ export default function DocsPage({ tab = 'docs' }: Props) {
           width: sidebarOpen ? sidebarWidth : 0,
           minWidth: sidebarOpen ? sidebarWidth : 0,
           flexShrink: 0,
-          borderRight: '1px solid var(--bd)',
+          borderRight: sidebarOpen ? '1px solid var(--bd)' : 'none',
           background: 'var(--bg1)',
           overflowY: 'auto',
           overflowX: 'hidden',
@@ -513,8 +513,9 @@ export default function DocsPage({ tab = 'docs' }: Props) {
           )}
         </aside>
 
-        {/* ── Resize handle + toggle ── */}
+        {/* ── Resize handle + toggle — hidden when sidebar is closed ── */}
         <div style={{
+          display: sidebarOpen ? undefined : 'none',
           position: 'relative', flexShrink: 0, width: '8px',
           background: 'transparent', cursor: 'col-resize', zIndex: 10,
         }}
@@ -547,12 +548,39 @@ export default function DocsPage({ tab = 'docs' }: Props) {
 
         {/* ── Content pane ── */}
         <main style={{
-          flex: 1,
+          flex: 1, position: 'relative',
           overflow:  tab === 'highload' ? 'hidden' : 'auto',
           padding:   tab === 'highload' ? 0 : '24px 40px',
           background: 'var(--bg0)',
           color: 'var(--t1)',
         }}>
+          {/* Floating reopen button — only when sidebar is fully hidden */}
+          {!sidebarOpen && (
+            <button
+              title="Открыть навигацию"
+              onClick={() => setSidebarOpen(true)}
+              style={{
+                position: 'absolute', top: '10px', left: '10px', zIndex: 5,
+                width: '26px', height: '26px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--bg1)', border: '1px solid var(--bd)',
+                borderRadius: 'var(--seer-radius-md)',
+                cursor: 'pointer', color: 'var(--t3)', fontSize: '12px',
+                transition: 'color 0.12s, border-color 0.12s',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.color = 'var(--t1)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--acc)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.color = 'var(--t3)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)';
+              }}
+            >
+              ›
+            </button>
+          )}
+
           {!filePath && tab !== 'highload' && (
             <div style={{ color: 'var(--t3)', marginTop: '40px', textAlign: 'center' }}>
               Select a document from the sidebar
