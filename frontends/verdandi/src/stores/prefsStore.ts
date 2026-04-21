@@ -103,6 +103,14 @@ export function applyDom(prefs: Partial<ServerPrefs>): void {
 
 const PREFS_URL = '/prefs';
 const DEBOUNCE  = 1500;
+const COOKIE    = 'seer-prefs';
+
+function writeCookie(prefs: ServerPrefs): void {
+  try {
+    const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify(prefs))}; expires=${expires}; path=/; SameSite=Lax`;
+  } catch { /* ignore */ }
+}
 
 export const usePrefsStore = create<PrefsStore>()((set, get) => ({
   synced: false,
@@ -116,6 +124,7 @@ export const usePrefsStore = create<PrefsStore>()((set, get) => ({
       // Server wins — overwrite localStorage and apply to DOM
       writeLS(server);
       applyDom(server);
+      writeCookie(server);
       set({ synced: true });
     } catch {
       // FRIGG down / offline — localStorage is already applied (verdandi reads it on mount)
@@ -123,9 +132,10 @@ export const usePrefsStore = create<PrefsStore>()((set, get) => ({
   },
 
   savePrefs: (partial) => {
-    // 1. Instant localStorage write + DOM
+    // 1. Instant localStorage write + DOM + cookie
     writeLS(partial);
     applyDom(partial);
+    writeCookie(readLS());
 
     // 2. Cross-MF broadcast (same tab — HEIMDALL and others react without reload)
     try {

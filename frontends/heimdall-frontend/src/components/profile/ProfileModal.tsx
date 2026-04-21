@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LogOut, User, Palette, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '../../stores/authStore';
-import { useIsMobile }  from '../../hooks/useIsMobile';
+import { useAuthStore }       from '../../stores/authStore';
+import { useIsMobile }        from '../../hooks/useIsMobile';
+import { sharedPrefsStore }   from '../../stores/sharedPrefsStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'appearance';
@@ -51,14 +52,12 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const applyTheme = useCallback((t: string) => {
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('seer-theme', t);
+    sharedPrefsStore.savePrefs({ theme: t });
     setThemeState(t);
   }, []);
 
   const applyPalette = useCallback((p: string) => {
-    document.documentElement.setAttribute('data-palette', p);
-    localStorage.setItem('seer-palette', p);
+    sharedPrefsStore.savePrefs({ palette: p });
     setPaletteState(p);
   }, []);
 
@@ -324,22 +323,22 @@ function AppearanceTab({ theme, palette, onTheme, onPalette }: {
 
   useEffect(() => {
     document.documentElement.style.setProperty('--font', `'${uiFont}', system-ui, sans-serif`);
-    localStorage.setItem('seer-ui-font', uiFont);
+    sharedPrefsStore.savePrefs({ uiFont });
   }, [uiFont]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--mono', `'${monoFont}', monospace`);
-    localStorage.setItem('seer-mono-font', monoFont);
+    sharedPrefsStore.savePrefs({ monoFont });
   }, [monoFont]);
 
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize}px`;
-    localStorage.setItem('seer-font-size', String(fontSize));
+    sharedPrefsStore.savePrefs({ fontSize: String(fontSize) });
   }, [fontSize]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-density', density);
-    localStorage.setItem('seer-density', density);
+    sharedPrefsStore.savePrefs({ density });
   }, [density]);
 
   return (
