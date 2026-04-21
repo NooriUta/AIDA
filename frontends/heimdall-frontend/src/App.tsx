@@ -2,6 +2,9 @@
 // ensures it runs when App is loaded as an MF remote (main.tsx is not
 // executed in that case).
 import './i18n/config';
+// heimdall.css must also be imported here so styles load in MF-remote mode
+// (main.tsx is not executed when Shell imports heimdall-frontend/App).
+import './styles/heimdall.css';
 import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useTranslation }  from 'react-i18next';
@@ -41,8 +44,21 @@ function AppLayout() {
 }
 
 // ── Protected layout route ────────────────────────────────────────────────────
+// In Shell mode: Shell's AuthGate has already validated the session, so
+// isAuthenticated is already true when this renders.
+// In standalone mode: waits for checkSession to complete before redirecting.
 function ProtectedRoute() {
-  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const isAuthenticated   = useAuthStore(s => s.isAuthenticated);
+  const isCheckingSession = useAuthStore(s => s.isCheckingSession);
+
+  if (isCheckingSession) return (
+    <div style={{
+      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: 'var(--t3)', fontSize: '13px',
+    }}>
+      …
+    </div>
+  );
   if (!isAuthenticated) return <Navigate to="login" replace />;
   return <Outlet />;
 }
@@ -111,9 +127,9 @@ export default function App() {
             <Route path="highload/*"     element={<DocsPage tab="highload" />} />
 
             {/* Backward compat: old flat routes redirect to new paths */}
-            <Route path="services"  element={<Navigate to="/overview/services"  replace />} />
-            <Route path="dashboard" element={<Navigate to="/overview/dashboard" replace />} />
-            <Route path="events"    element={<Navigate to="/overview/events"    replace />} />
+            <Route path="services"  element={<Navigate to="../overview/services"  replace />} />
+            <Route path="dashboard" element={<Navigate to="../overview/dashboard" replace />} />
+            <Route path="events"    element={<Navigate to="../overview/events"    replace />} />
 
             <Route path="*" element={<Navigate to="overview/services" replace />} />
           </Route>

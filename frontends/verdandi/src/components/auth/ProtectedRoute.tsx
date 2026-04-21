@@ -7,19 +7,19 @@ interface Props {
 }
 
 export function ProtectedRoute({ children }: Props) {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const isLoading       = useAuthStore((s) => s.isLoading);
+  const isAuthenticated   = useAuthStore((s) => s.isAuthenticated);
+  const isCheckingSession = useAuthStore((s) => s.isCheckingSession);
 
-  // While the session check is in-flight, render nothing to avoid a premature
-  // redirect.  The App-level useEffect calls checkSession() immediately, so the
-  // loading window is very short (one network round-trip).
-  if (isLoading) return null;
+  // While checkSession is in-flight, render nothing — avoids premature redirect
+  // both in standalone mode and when loaded as an MF remote inside Shell
+  // (Shell's session was already validated, but Verdandi's store hasn't caught
+  // up yet via its own /auth/me call).
+  if (isCheckingSession) return null;
 
   // Use a RELATIVE path so the redirect is correct both in standalone mode
   // ("/login") and when verdandi is mounted inside Shell at "/verdandi/*"
-  // ("/verdandi/login").  React Router v6 resolves relative <Navigate to>
-  // against the currently matched route segment.
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  // ("/verdandi/login").
+  if (!isAuthenticated) return <Navigate to="login" replace />;
 
   return <>{children}</>;
 }

@@ -1,4 +1,4 @@
-import { memo, useRef, useState, useCallback } from 'react';
+import { memo, useRef, useState, useCallback, useMemo } from 'react';
 import { Sun, Moon, Paintbrush, ChevronDown, Search } from 'lucide-react';
 import { ProfileModal } from '../profile/ProfileModal';
 import { CommandPalette } from '../CommandPalette';
@@ -60,13 +60,23 @@ export const Header = memo(() => {
   const { pathname } = useLocation();
   const isMobile = useIsMobile();
 
+  const appBase = useMemo(
+    () => (pathname.startsWith('/verdandi') ? '/verdandi' : ''),
+    [pathname],
+  );
+  const go = useCallback(
+    (route: string) => navigate(appBase + route),
+    [navigate, appBase],
+  );
+  const localPath = pathname.slice(appBase.length) || '/';
+
   const activeNorn: NornId =
-    pathname.startsWith('/urd')   ? 'URD'   :
-    pathname.startsWith('/skuld') ? 'SKULD' :
+    localPath.startsWith('/urd')   ? 'URD'   :
+    localPath.startsWith('/skuld') ? 'SKULD' :
     'VERDANDI';
 
   const activeSubModule: string =
-    pathname.startsWith('/knot') ? 'KNOT' : 'LOOM';
+    localPath.startsWith('/knot') ? 'KNOT' : 'LOOM';
 
   const currentNorn = NORNS.find((n) => n.id === activeNorn)!;
 
@@ -172,7 +182,7 @@ export const Header = memo(() => {
               return (
                 <button
                   key={norn.id}
-                  onClick={() => { navigate(norn.route); setSeerMenuOpen(false); }}
+                  onClick={() => { go(norn.route); setSeerMenuOpen(false); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
                     width: '100%', padding: '10px 12px',
@@ -279,7 +289,7 @@ export const Header = memo(() => {
                     <button
                       key={sub.id}
                       onClick={() => {
-                        if (isEnabled && sub.route) { navigate(sub.route); setMobileVernOpen(false); }
+                        if (isEnabled && sub.route) { go(sub.route); setMobileVernOpen(false); }
                       }}
                       disabled={!isEnabled}
                       style={{
@@ -331,7 +341,7 @@ export const Header = memo(() => {
         /* ── Desktop: Norn name + separator + full tab nav ──────────────── */
         <>
           <button
-            onClick={() => navigate(currentNorn.route)}
+            onClick={() => go(currentNorn.route)}
             title={`${currentNorn.id} — ${t(currentNorn.descKey)}`}
             style={{
               padding: '5px 10px',
@@ -360,7 +370,7 @@ export const Header = memo(() => {
                     disabled={!isEnabled}
                     aria-disabled={!isEnabled}
                     tabIndex={isEnabled ? 0 : -1}
-                    onClick={() => isEnabled && sub.route && navigate(sub.route)}
+                    onClick={() => isEnabled && sub.route && go(sub.route)}
                     title={!isEnabled && sub.horizon ? t('nav.comingSoon', { horizon: sub.horizon }) : undefined}
                     style={{
                       padding: '6px 14px', fontSize: '12px',
