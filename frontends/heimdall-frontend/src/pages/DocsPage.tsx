@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link }                      from 'react-router-dom';
 import { usePageTitle }                                      from '../hooks/usePageTitle';
+import { useIsMobile }                                       from '../hooks/useIsMobile';
 import { marked }                                            from 'marked';
 import mermaid                                               from 'mermaid';
 import { HEIMDALL_API }                                      from '../api';
@@ -278,9 +279,11 @@ export default function DocsPage({ tab = 'docs' }: Props) {
   // collapsed dir paths — empty = all expanded
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
 
-  // resizable sidebar
+  const isMobile = useIsMobile();
+
+  // resizable sidebar — collapsed by default on mobile
   const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const [sidebarOpen,  setSidebarOpen]  = useState(() => window.innerWidth > 640);
   const dragging = useRef(false);
   const dragStartX = useRef(0);
   const dragStartW = useRef(0);
@@ -430,21 +433,39 @@ export default function DocsPage({ tab = 'docs' }: Props) {
         )}
       </div>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+
+        {/* Mobile backdrop — close sidebar when tapping outside */}
+        {isMobile && sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            style={{
+              position: 'absolute', inset: 0, zIndex: 19,
+              background: 'rgba(0,0,0,0.45)',
+            }}
+          />
+        )}
 
         {/* ── Sidebar ── */}
-        <aside style={{
-          width: sidebarOpen ? sidebarWidth : 0,
-          minWidth: sidebarOpen ? sidebarWidth : 0,
-          flexShrink: 0,
-          borderRight: sidebarOpen ? '1px solid var(--bd)' : 'none',
-          background: 'var(--bg1)',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: sidebarOpen ? '12px 0' : 0,
-          fontFamily: 'var(--font-mono, monospace)',
-          transition: 'width 0.15s, min-width 0.15s, padding 0.15s',
-        }}>
+        <aside
+          onClick={isMobile ? (e) => {
+            if ((e.target as HTMLElement).closest('a')) setSidebarOpen(false);
+          } : undefined}
+          style={{
+            position: isMobile ? 'absolute' : 'relative',
+            top: 0, left: 0, bottom: 0,
+            width: sidebarOpen ? (isMobile ? Math.min(sidebarWidth, 300) : sidebarWidth) : 0,
+            minWidth: sidebarOpen ? (isMobile ? Math.min(sidebarWidth, 300) : sidebarWidth) : 0,
+            flexShrink: 0,
+            borderRight: sidebarOpen ? '1px solid var(--bd)' : 'none',
+            background: 'var(--bg1)',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: sidebarOpen ? '12px 0' : 0,
+            fontFamily: 'var(--font-mono, monospace)',
+            transition: 'width 0.15s, min-width 0.15s, padding 0.15s',
+            zIndex: isMobile ? 20 : 'auto',
+          }}>
           <div style={{
             padding: '4px 16px 10px',
             fontSize: '10px', fontWeight: 700,
@@ -513,44 +534,46 @@ export default function DocsPage({ tab = 'docs' }: Props) {
           )}
         </aside>
 
-        {/* ── Resize handle + toggle — hidden when sidebar is closed ── */}
-        <div style={{
-          display: sidebarOpen ? undefined : 'none',
-          position: 'relative', flexShrink: 0, width: '8px',
-          background: 'transparent', cursor: 'col-resize', zIndex: 10,
-        }}
-          onMouseDown={sidebarOpen ? onDragStart : undefined}
-        >
+        {/* ── Resize handle + toggle — desktop only ── */}
+        {!isMobile && (
           <div style={{
-            position: 'absolute', top: 0, bottom: 0, left: '3px', width: '2px',
-            background: 'var(--bd)',
-            transition: 'background 0.12s',
-          }} />
-          <button
-            title={sidebarOpen ? 'Свернуть навигацию' : 'Развернуть навигацию'}
-            onClick={() => setSidebarOpen(v => !v)}
-            style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '16px', height: '32px',
-              background: 'var(--bg1)',
-              border: '1px solid var(--bd)',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--t3)', fontSize: '9px', padding: 0,
-              zIndex: 11,
-            }}
+            display: sidebarOpen ? undefined : 'none',
+            position: 'relative', flexShrink: 0, width: '8px',
+            background: 'transparent', cursor: 'col-resize', zIndex: 10,
+          }}
+            onMouseDown={sidebarOpen ? onDragStart : undefined}
           >
-            {sidebarOpen ? '‹' : '›'}
-          </button>
-        </div>
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0, left: '3px', width: '2px',
+              background: 'var(--bd)',
+              transition: 'background 0.12s',
+            }} />
+            <button
+              title={sidebarOpen ? 'Свернуть навигацию' : 'Развернуть навигацию'}
+              onClick={() => setSidebarOpen(v => !v)}
+              style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '16px', height: '32px',
+                background: 'var(--bg1)',
+                border: '1px solid var(--bd)',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--t3)', fontSize: '9px', padding: 0,
+                zIndex: 11,
+              }}
+            >
+              {sidebarOpen ? '‹' : '›'}
+            </button>
+          </div>
+        )}
 
         {/* ── Content pane ── */}
         <main style={{
           flex: 1, position: 'relative',
           overflow:  tab === 'highload' ? 'hidden' : 'auto',
-          padding:   tab === 'highload' ? 0 : '24px 40px',
+          padding:   tab === 'highload' ? 0 : isMobile ? '16px' : '24px 40px',
           background: 'var(--bg0)',
           color: 'var(--t1)',
         }}>
@@ -582,8 +605,8 @@ export default function DocsPage({ tab = 'docs' }: Props) {
           )}
 
           {!filePath && tab !== 'highload' && (
-            <div style={{ color: 'var(--t3)', marginTop: '40px', textAlign: 'center' }}>
-              Select a document from the sidebar
+            <div style={{ color: 'var(--t3)', marginTop: '40px', textAlign: 'center', padding: '0 16px' }}>
+              {isMobile ? 'Tap › to open the file list' : 'Select a document from the sidebar'}
             </div>
           )}
 

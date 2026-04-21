@@ -1,5 +1,5 @@
 import 'aida-shared/styles/tokens';
-import { initSharedPrefs } from 'aida-shared';
+import { initSharedPrefs } from './stores/sharedPrefsStore';
 
 // Apply saved prefs to <html> before first render (no FOUC)
 initSharedPrefs();

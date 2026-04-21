@@ -10,7 +10,7 @@ import { useIsMobile }         from '../../hooks/useIsMobile';
 import { useTenantContext }    from '../../hooks/useTenantContext';
 import { useHotkeys }          from '../../hooks/useHotkeys';
 import { HeimdallCommandPalette } from '../HeimdallCommandPalette';
-import { sharedPrefsStore }   from 'aida-shared';
+import { sharedPrefsStore }   from '../../stores/sharedPrefsStore';
 
 // ── Navigation data ────────────────────────────────────────────────────────────
 type SectionId = 'BIFROST' | 'DALI' | 'SAGA' | 'FENRIR';

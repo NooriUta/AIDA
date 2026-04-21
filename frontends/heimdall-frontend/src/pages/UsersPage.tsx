@@ -140,7 +140,7 @@ function UserRow({
       <td style={{ fontSize: 11, color: 'var(--t3)' }}>{user.lastActive}</td>
 
       {/* Actions */}
-      <td>
+      <td className="user-row-actions">
         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
           {isAdmin && (
             <>
@@ -406,7 +406,7 @@ export default function UsersPage() {
           placeholder={t('users.filterSearch')}
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ width: 220 }}
+          style={{ flex: '1 1 auto', minWidth: 100 }}
         />
         <button className="btn btn-secondary btn-sm" onClick={clearFilters}>
           ✕ {t('users.clearFilters')}

@@ -361,6 +361,15 @@ input[type=range] { accent-color: var(--acc); flex: 1; height: 4px; }
   /* Tables: allow horizontal scroll on narrow screens */
   .data-panel { overflow-x: auto; }
 
+  /* UsersPage — hide Scopes (4), Источники (5), Активность (7) on mobile */
+  .data-table th:nth-child(4), .data-table td:nth-child(4),
+  .data-table th:nth-child(5), .data-table td:nth-child(5),
+  .data-table th:nth-child(7), .data-table td:nth-child(7) { display: none; }
+
+  /* UsersPage — action buttons stack vertically on narrow screens */
+  .user-row-actions > div { flex-direction: column; gap: 3px; align-items: stretch; }
+  .user-row-actions .btn-sm { font-size: 10px; padding: 4px 6px; text-align: center; white-space: nowrap; }
+
   /* Toasts: full width on phones */
   .toast { left: 12px; right: 12px; max-width: unset; }
 }

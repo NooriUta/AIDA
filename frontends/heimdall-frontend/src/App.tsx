@@ -13,8 +13,8 @@ import { HeimdallHeader }  from './components/layout/HeimdallHeader';
 import { useAuthStore }    from './stores/authStore';
 import { usePrefsStore }   from './stores/prefsStore';
 import { RoleGuard }       from './components/RoleGuard';
-import { applyPrefs }      from 'aida-shared';
-import type { SharedPrefs } from 'aida-shared';
+import { applyPrefs }      from './stores/sharedPrefsStore';
+import type { SharedPrefs } from './stores/sharedPrefsStore';
 
 const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
