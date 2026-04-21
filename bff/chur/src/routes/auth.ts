@@ -80,7 +80,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       );
       const userInfo = extractUserInfo(payload);
 
-      const sid = createSession(
+      const sid = await createSession(
         tokens.access_token,
         tokens.refresh_token,
         tokens.expires_in,
@@ -124,7 +124,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/logout', async (request, reply) => {
     const sid = request.cookies.sid;
     if (sid) {
-      const session = deleteSession(sid);
+      const session = await deleteSession(sid);
       // Invalidate refresh token in Keycloak (fire-and-forget)
       if (session) {
         keycloakLogout(session.refreshToken);

@@ -90,10 +90,14 @@ public class JobRunrLifecycle {
                     .useStorageProvider(arcadeDbStorageProvider)
                     .useJobActivator(activator)
                     .useBackgroundJobServer(bgServerConfig);
-            if (config.jobrunr().dashboard().enabled()) {
+            boolean dashboardEnabled = config.jobrunr().dashboard().enabled()
+                    && !config.jobrunr().workerOnly();
+            if (dashboardEnabled) {
                 int port = config.jobrunr().dashboard().port();
                 jrConfig = jrConfig.useDashboard(port);
                 log.info("JobRunr: dashboard enabled on :{}", port);
+            } else if (config.jobrunr().workerOnly()) {
+                log.info("JobRunr: worker-only mode — dashboard suppressed");
             }
             jobRunrResult = jrConfig.initialize();
             log.info("JobRunr: ready — BackgroundJobServer started");

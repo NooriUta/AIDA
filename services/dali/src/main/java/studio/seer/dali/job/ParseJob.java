@@ -28,6 +28,7 @@ import studio.seer.dali.service.SessionService;
 import studio.seer.shared.FileResult;
 import studio.seer.shared.ParseSessionInput;
 import studio.seer.shared.VertexTypeStat;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -70,9 +71,9 @@ public class ParseJob {
     @Inject HeimdallEmitter      emitter;
     @Inject SkadiFetcherRegistry skadiFetcherRegistry;
     @Inject SourceArchiveService sourceArchiveService;
+    @Inject YggLineageRegistry   yggLineageRegistry;
 
     @ConfigProperty(name = "ygg.url")      String yggUrl;
-    @ConfigProperty(name = "ygg.db")       String yggDb;
     @ConfigProperty(name = "ygg.user")     String yggUser;
     @ConfigProperty(name = "ygg.password") String yggPassword;
     // Optional — absent when HEIMDALL_URL env var is not set (e.g. CI, local dev without Heimdall).
@@ -136,11 +137,15 @@ public class ParseJob {
         if (input.preview()) {
             return HoundConfig.defaultDisabled(input.dialect());
         }
+        // DMT-04/05: resolve target lineage DB via registry (tenant-aware in Phase 2;
+        // single pool in Phase 1 → always hound_default)
+        String tenantAlias = input.tenantAlias() != null ? input.tenantAlias() : "default";
+        String lineageDb = yggLineageRegistry.resourceFor(tenantAlias).databaseName();
         return new HoundConfig(
                 input.dialect(),
                 null,                           // targetSchema — no namespace isolation
                 ArcadeWriteMode.REMOTE_BATCH,
-                yggUrl, yggDb, yggUser, yggPassword,
+                yggUrl, lineageDb, yggUser, yggPassword,
                 Runtime.getRuntime().availableProcessors(),
                 false, 5000, null);
     }
@@ -198,8 +203,9 @@ public class ParseJob {
         SkadiFetchResult fetchResult = fetcher.fetchScripts(skConfig);
         fetchListener.onFetchCompleted(fetchResult.stats());
 
-        // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup)
-        List<SqlSource> sources = sourceArchiveService.upsertAll(fetchResult.files());
+        // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup against hound_src_{alias})
+        String tenantAlias = input.tenantAlias() != null ? input.tenantAlias() : "default";
+        List<SqlSource> sources = sourceArchiveService.upsertAll(tenantAlias, fetchResult.files());
 
         if (sources.isEmpty()) {
             log.info("[{}] SKADI: no SQL sources to parse (adapter={}, fetched={})",

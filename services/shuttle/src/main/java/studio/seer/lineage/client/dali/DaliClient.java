@@ -35,7 +35,10 @@ public interface DaliClient {
     @Timeout(value = 5, unit = ChronoUnit.SECONDS)
     @Retry(maxRetries = 2, delay = 500, delayUnit = ChronoUnit.MILLIS,
            retryOn = ProcessingException.class)
-    SessionInfo createSession(DaliParseSessionInput input);
+    SessionInfo createSession(
+            @HeaderParam("X-Seer-Tenant-Alias") String tenantAlias,
+            @HeaderParam("X-Correlation-ID")    String correlationId,
+            DaliParseSessionInput input);
 
     /**
      * Poll session status.
@@ -46,7 +49,9 @@ public interface DaliClient {
     @Timeout(value = 3, unit = ChronoUnit.SECONDS)
     @Retry(maxRetries = 3, delay = 200, delayUnit = ChronoUnit.MILLIS,
            retryOn = ProcessingException.class)
-    SessionInfo getSession(@PathParam("id") String id);
+    SessionInfo getSession(
+            @HeaderParam("X-Seer-Tenant-Alias") String tenantAlias,
+            @PathParam("id") String id);
 
     /**
      * Cancel a session.
@@ -56,7 +61,21 @@ public interface DaliClient {
     @Path("/sessions/{id}/cancel")
     @Timeout(value = 5, unit = ChronoUnit.SECONDS)
     @Retry(maxRetries = 1)
-    CancelResponse cancelSession(@PathParam("id") String id);
+    CancelResponse cancelSession(
+            @HeaderParam("X-Seer-Tenant-Alias") String tenantAlias,
+            @PathParam("id") String id);
+
+    /**
+     * SHT-06: Replay (re-enqueue) a completed or failed session.
+     * → 202 Accepted + SessionInfo{status=QUEUED} | 404 | 409
+     */
+    @POST
+    @Path("/sessions/{id}/replay")
+    @Timeout(value = 5, unit = ChronoUnit.SECONDS)
+    @Retry(maxRetries = 1)
+    SessionInfo replaySession(
+            @HeaderParam("X-Seer-Tenant-Alias") String tenantAlias,
+            @PathParam("id") String id);
 
     /**
      * List recent sessions.
@@ -64,7 +83,9 @@ public interface DaliClient {
     @GET
     @Path("/sessions")
     @Timeout(value = 3, unit = ChronoUnit.SECONDS)
-    List<SessionInfo> listSessions(@QueryParam("limit") @DefaultValue("50") int limit);
+    List<SessionInfo> listSessions(
+            @HeaderParam("X-Seer-Tenant-Alias") String tenantAlias,
+            @QueryParam("limit") @DefaultValue("50") int limit);
 
     /**
      * YGG vertex/edge statistics.
@@ -72,7 +93,7 @@ public interface DaliClient {
     @GET
     @Path("/ygg/stats")
     @Timeout(value = 3, unit = ChronoUnit.SECONDS)
-    DaliStats getStats();
+    DaliStats getStats(@HeaderParam("X-Seer-Tenant-Alias") String tenantAlias);
 
     /**
      * Dali health check (FRIGG + sessions).
@@ -92,5 +113,5 @@ public interface DaliClient {
     @Retry(maxRetries = 1, delay = 500, delayUnit = ChronoUnit.MILLIS,
            retryOn = ProcessingException.class)
     @SuppressWarnings("unchecked")
-    java.util.Map<String, String> startHarvest();
+    java.util.Map<String, String> startHarvest(@HeaderParam("X-Seer-Tenant-Alias") String tenantAlias);
 }

@@ -7,48 +7,57 @@ import org.eclipse.microprofile.graphql.Description;
 import org.eclipse.microprofile.graphql.GraphQLApi;
 import org.eclipse.microprofile.graphql.Name;
 import studio.seer.lineage.heimdall.HeimdallEventBus;
+import studio.seer.lineage.heimdall.model.HeimdallEvent;
 import studio.seer.lineage.heimdall.model.HeimdallEventView;
+import studio.seer.lineage.security.SeerIdentity;
 
 /**
  * GraphQL Subscriptions for SHUTTLE.
  *
- * Transport: graphql-ws protocol over WebSocket on /graphql endpoint
- * (handled natively by quarkus-smallrye-graphql — no extra setup needed).
- *
- * Architecture (I33 — INTEGRATIONS_MATRIX):
- *   HEIMDALL --HTTP/WS--> heimdall-frontend (native WebSocket, direct)
- *   HEIMDALL --events--> HeimdallEmitter --bus--> SubscriptionResource
- *                     --> graphql-ws --> verdandi / shell (via Chur proxy)
- *
- * heimdallEvents    — all events (admin only in production, role check via Chur)
- * sessionProgress   — events filtered by sessionId (viewer+)
- *
- * Note: returns HeimdallEventView (not HeimdallEvent) because Map<String,Object>
- * does not map cleanly to a GraphQL scalar — payload is serialised as payloadJson String.
+ * SHT-07: All subscriptions are tenant-filtered. Events are only delivered
+ * when event.tenantAlias matches the subscriber's tenant alias, or when the
+ * subscriber has superadmin role (null tenantAlias = no filter).
  */
 @GraphQLApi
 public class SubscriptionResource {
 
-    @Inject
-    HeimdallEventBus eventBus;
+    @Inject HeimdallEventBus eventBus;
+    @Inject SeerIdentity     identity;
 
     // ── heimdallEvents ────────────────────────────────────────────────────────
 
     @Subscription("heimdallEvents")
-    @Description("Live HEIMDALL event stream via graphql-ws. Delivers all components. Role: admin")
+    @Description("Live HEIMDALL event stream via graphql-ws. Tenant-filtered. Role: admin")
     public Multi<HeimdallEventView> heimdallEvents() {
-        return eventBus.stream().map(HeimdallEventView::from);
+        String alias = identity.tenantAlias();
+        boolean isSuperadmin = "super-admin".equals(identity.role());
+
+        return eventBus.stream()
+                .filter(e -> isSuperadmin || tenantMatches(e, alias))
+                .map(HeimdallEventView::from);
     }
 
     // ── sessionProgress ───────────────────────────────────────────────────────
 
     @Subscription("sessionProgress")
-    @Description("Live events filtered by sessionId. Role: viewer+")
+    @Description("Live events filtered by sessionId and tenant. Role: viewer+")
     public Multi<HeimdallEventView> sessionProgress(
             @Name("sessionId") String sessionId) {
 
+        String alias = identity.tenantAlias();
+        boolean isSuperadmin = "super-admin".equals(identity.role());
+
         return eventBus.stream()
                 .filter(e -> sessionId != null && sessionId.equals(e.sessionId()))
+                .filter(e -> isSuperadmin || tenantMatches(e, alias))
                 .map(HeimdallEventView::from);
+    }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    private static boolean tenantMatches(HeimdallEvent e, String alias) {
+        String eventAlias = e.tenantAlias();
+        // null tenantAlias on event = legacy/global event, allow to all
+        return eventAlias == null || eventAlias.isBlank() || eventAlias.equals(alias);
     }
 }

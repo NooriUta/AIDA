@@ -1,5 +1,7 @@
 package studio.seer.shared;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
 import java.util.ArrayList;
@@ -35,6 +37,9 @@ import java.util.ArrayList;
  * @param dbName         Database name supplied by the user (optional). When non-null, Hound
  *                       creates a DaliDatabase vertex and attaches CONTAINS_SCHEMA edges.
  *                       Null for ad-hoc sessions where the user did not specify a database name.
+ * @param tenantAlias    Tenant alias resolved from X-Seer-Tenant-Alias header. Defaults to
+ *                       "default" for legacy / single-tenant sessions. Determines which
+ *                       dali_{alias} ArcadeDB database this session is stored in.
  */
 public record Session(
         String         id,
@@ -59,5 +64,44 @@ public record Session(
         List<FileResult>     fileResults,
         boolean              friggPersisted,  // true = record confirmed written to FRIGG
         String               instanceId,      // Dali instance tag — null = untagged
-        String               dbName          // optional DB grouping label — null = ad-hoc
-) {}
+        String               dbName,         // optional DB grouping label — null = ad-hoc
+        String               tenantAlias     // tenant alias — "default" for single-tenant
+) {
+    @JsonCreator
+    public static Session of(
+            @JsonProperty("id")               String         id,
+            @JsonProperty("status")           SessionStatus  status,
+            @JsonProperty("progress")         int            progress,
+            @JsonProperty("total")            int            total,
+            @JsonProperty("batch")            boolean        batch,
+            @JsonProperty("clearBeforeWrite") boolean        clearBeforeWrite,
+            @JsonProperty("dialect")          String         dialect,
+            @JsonProperty("source")           String         source,
+            @JsonProperty("startedAt")        Instant        startedAt,
+            @JsonProperty("updatedAt")        Instant        updatedAt,
+            @JsonProperty("atomCount")        Integer        atomCount,
+            @JsonProperty("vertexCount")      Integer        vertexCount,
+            @JsonProperty("edgeCount")        Integer        edgeCount,
+            @JsonProperty("droppedEdgeCount") Integer        droppedEdgeCount,
+            @JsonProperty("vertexStats")      List<VertexTypeStat> vertexStats,
+            @JsonProperty("resolutionRate")   Double         resolutionRate,
+            @JsonProperty("durationMs")       Long           durationMs,
+            @JsonProperty("warnings")         List<String>   warnings,
+            @JsonProperty("errors")           List<String>   errors,
+            @JsonProperty("fileResults")      List<FileResult> fileResults,
+            @JsonProperty("friggPersisted")   boolean        friggPersisted,
+            @JsonProperty("instanceId")       String         instanceId,
+            @JsonProperty("dbName")           String         dbName,
+            @JsonProperty("tenantAlias")      String         tenantAlias) {
+        return new Session(id, status, progress, total, batch, clearBeforeWrite,
+                dialect, source, startedAt, updatedAt,
+                atomCount, vertexCount, edgeCount, droppedEdgeCount,
+                vertexStats != null ? vertexStats : List.of(),
+                resolutionRate, durationMs,
+                warnings    != null ? warnings    : List.of(),
+                errors      != null ? errors      : List.of(),
+                fileResults != null ? fileResults : List.of(),
+                friggPersisted, instanceId, dbName,
+                tenantAlias != null ? tenantAlias : "default");
+    }
+}

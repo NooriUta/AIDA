@@ -1,16 +1,16 @@
 /**
- * In-memory session store for Keycloak BFF pattern.
+ * CAP-04: Session store — replaced in-memory Map with CachedSessionStore.
+ * Writes through to ArcadeDB (FRIGG frigg-sessions); LRU cache for hot paths.
  *
- * Each browser session is identified by a random UUID ("sid") stored in an
- * httpOnly cookie. The server-side Session holds the Keycloak access + refresh
- * tokens so they never leave the backend.
- *
- * Trade-off: sessions are lost on Chur restart (users must re-login).
- * For horizontal scaling, replace with Redis via the SessionStore interface.
+ * Sessions survive Chur restarts. Horizontal scaling works because both replicas
+ * read from / write to the same ArcadeDB backend.
  */
 import { randomUUID } from 'node:crypto';
 import { refreshAccessToken, extractUserInfo } from './keycloak';
 import type { UserRole } from './types';
+import { ArcadeDbSessionStore } from './store/ArcadeDbSessionStore';
+import { CachedSessionStore }   from './store/CachedSessionStore';
+import type { SessionStore }    from './store/SessionStore';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,12 @@ export interface SessionUser {
 
 // ── Store ────────────────────────────────────────────────────────────────────
 
-const sessions = new Map<string, Session>();
+let store: SessionStore = new CachedSessionStore(new ArcadeDbSessionStore());
+
+/** Replace the store — for unit tests only. */
+export function _setStoreForTesting(s: SessionStore): void {
+  store = s;
+}
 
 /** Mutex map: prevents concurrent refresh for the same session. */
 const refreshLocks = new Map<string, Promise<Session>>();
@@ -47,7 +52,7 @@ const EXPIRY_BUFFER_MS = 30_000;
  * Create a new session from a Keycloak token response.
  * Returns the session ID (to be stored in the cookie).
  */
-export function createSession(
+export async function createSession(
   accessToken:  string,
   refreshToken: string,
   expiresIn:    number,
@@ -55,9 +60,9 @@ export function createSession(
   username:     string,
   role:         UserRole,
   scopes:       string[] = [],
-): string {
+): Promise<string> {
   const sid = randomUUID();
-  sessions.set(sid, {
+  const session: Session = {
     accessToken,
     refreshToken,
     accessExpiresAt: Date.now() + expiresIn * 1000,
@@ -65,19 +70,19 @@ export function createSession(
     username,
     role,
     scopes,
-  });
+  };
+  await store.create(sid, session);
   return sid;
 }
 
 /** Retrieve a session by ID. Returns undefined if not found. */
-export function getSession(sid: string): Session | undefined {
-  return sessions.get(sid);
+export async function getSession(sid: string): Promise<Session | undefined> {
+  return store.get(sid);
 }
 
 /** Delete a session (logout). Returns the deleted session or undefined. */
-export function deleteSession(sid: string): Session | undefined {
-  const session = sessions.get(sid);
-  sessions.delete(sid);
+export async function deleteSession(sid: string): Promise<Session | undefined> {
+  const session = await store.delete(sid);
   refreshLocks.delete(sid);
   return session;
 }
@@ -94,7 +99,7 @@ export function isAccessValid(session: Session): boolean {
  * Returns the (possibly refreshed) session, or throws if refresh fails.
  */
 export async function ensureValidSession(sid: string): Promise<Session> {
-  const session = sessions.get(sid);
+  const session = await store.get(sid);
   if (!session) throw new Error('Session not found');
 
   if (isAccessValid(session)) return session;
@@ -131,21 +136,13 @@ async function doRefresh(sid: string, session: Session): Promise<Session> {
     scopes:          userInfo.scopes,
   };
 
-  sessions.set(sid, updated);
+  await store.update(sid, updated);
   return updated;
 }
 
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 
-/** Sweep expired sessions every 5 minutes. */
-setInterval(() => {
-  const now = Date.now();
-  for (const [sid, session] of sessions) {
-    // Remove sessions where even the refresh token is likely expired.
-    // Keycloak default SSO idle = 30 min. We use a generous 1-hour cutoff.
-    if (session.accessExpiresAt + 60 * 60 * 1000 < now) {
-      sessions.delete(sid);
-      refreshLocks.delete(sid);
-    }
-  }
+/** CAP-03: Sweep expired sessions every 5 minutes (fallback until HEIMDALL scheduler). */
+setInterval(async () => {
+  await store.sweep().catch(() => {});
 }, 5 * 60 * 1000).unref();

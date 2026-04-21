@@ -24,6 +24,7 @@ import studio.seer.lineage.heimdall.model.EventType;
 import studio.seer.lineage.heimdall.model.ParseSessionInput;
 import studio.seer.lineage.security.SeerIdentity;
 import studio.seer.lineage.storage.ViewRepository;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,7 @@ public class MutationResource {
     @Inject             ViewRepository        viewRepository;
     @Inject             SeerIdentity          identity;
     @Inject             ObjectMapper          objectMapper;
+    @Inject             YggLineageRegistry    lineageRegistry;
 
     // ── resetDemoState ────────────────────────────────────────────────────────
 
@@ -89,7 +91,7 @@ public class MutationResource {
                     input.filePattern(),        // null → Dali defaults to "*.sql"
                     input.maxFiles()            // null → no limit
             );
-            return daliClient.createSession(daliInput);
+            return daliClient.createSession(identity.tenantAlias(), null, daliInput);
         }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
           .onFailure().recoverWithItem(ex -> {
               Log.warnf("[SHUTTLE] Dali unavailable (startParseSession): %s", ex.getMessage());
@@ -103,13 +105,27 @@ public class MutationResource {
     @Description("Cancel a running or queued parse session. Role: admin")
     public Uni<Boolean> cancelSession(@Name("sessionId") String sessionId) {
         return Uni.createFrom().item(() -> {
-            CancelResponse resp = daliClient.cancelSession(sessionId);
+            CancelResponse resp = daliClient.cancelSession(identity.tenantAlias(), sessionId);
             return !"UNAVAILABLE".equals(resp.status());
         }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
           .onFailure().recoverWithItem(ex -> {
               Log.warnf("[SHUTTLE] Dali unavailable (cancelSession): %s", ex.getMessage());
               return false;
           });
+    }
+
+    // ── replaySession (SHT-06) ───────────────────────────────────────────────
+
+    @Mutation("replaySession")
+    @Description("Re-enqueue a completed or failed parse session. Role: admin")
+    public Uni<SessionInfo> replaySession(@Name("sessionId") String sessionId) {
+        return Uni.createFrom().item(() ->
+            daliClient.replaySession(identity.tenantAlias(), sessionId)
+        ).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+         .onFailure().recoverWithItem(ex -> {
+             Log.warnf("[SHUTTLE] Dali unavailable (replaySession): %s", ex.getMessage());
+             return SessionInfo.unavailable();
+         });
     }
 
     // ── askMimir (SC-02) ──────────────────────────────────────────────────────
@@ -122,9 +138,10 @@ public class MutationResource {
             @Name("maxToolCalls") @DefaultValue("5") int maxToolCalls) {
 
         return Uni.createFrom().item(() ->
+            String lineageDb = lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
             mimirClient.ask(
                     identity.tenantAlias(),
-                    new AskInput(question, sessionId, "hound_default", maxToolCalls))
+                    new AskInput(question, sessionId, lineageDb, maxToolCalls))
         ).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
          .onFailure().recoverWithItem(ex -> {
              Log.warnf("[SHUTTLE] MIMIR unavailable (askMimir): %s", ex.getMessage());
@@ -144,9 +161,10 @@ public class MutationResource {
             @Name("maxHops") @DefaultValue("5") int maxHops) {
 
         return Uni.createFrom().item(() ->
+            String lineageDb = lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
             anvilClient.findImpact(
                     identity.tenantAlias(),
-                    new ImpactRequest(nodeId, direction, "hound_default", maxHops, List.of()))
+                    new ImpactRequest(nodeId, direction, lineageDb, maxHops, List.of()))
         ).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
          .onFailure().recoverWithItem(ex -> {
              Log.warnf("[SHUTTLE] ANVIL unavailable (findImpact): %s", ex.getMessage());

@@ -42,6 +42,12 @@ dependencies {
     // Health checks — /q/health/live and /q/health/ready
     implementation 'io.quarkus:quarkus-smallrye-health'
 
+    // Tenant routing — TenantContext, YggLineageRegistry, TenantContextFilter
+    implementation project(':libraries:tenant-routing')
+
+    // ArchUnit — structural architecture tests
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.quarkus:quarkus-junit5-mockito'
 }

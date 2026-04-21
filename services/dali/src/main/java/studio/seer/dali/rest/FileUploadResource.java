@@ -12,6 +12,7 @@ import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import studio.seer.dali.service.SessionService;
 import studio.seer.shared.ParseSessionInput;
+import studio.seer.tenantrouting.TenantContext;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -45,6 +46,7 @@ public class FileUploadResource {
     );
 
     @Inject SessionService sessionService;
+    @Inject TenantContext  tenantCtx;
 
     @POST
     @Produces(MediaType.APPLICATION_JSON)
@@ -94,7 +96,8 @@ public class FileUploadResource {
                     dialect.strip(), tempDir.toString(), preview, clearBeforeWrite, true,
                     null, null, null,
                     dbName  != null && !dbName.isBlank()  ? dbName.strip()  : null,
-                    appName != null && !appName.isBlank() ? appName.strip() : null);
+                    appName != null && !appName.isBlank() ? appName.strip() : null,
+                    tenantCtx.tenantAlias());
 
             try {
                 return Response.accepted(sessionService.enqueue(input)).build();

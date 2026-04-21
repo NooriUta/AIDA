@@ -1,16 +1,9 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { emitSpoofAttempt } from './auditEmit';
 
 /**
  * Fastify preHandler factory: requires all listed scopes in the session.
  * Must be used AFTER app.authenticate in the preHandler chain.
- *
- * Replaces the M1 role === 'admin' pattern with JWT scope-based RBAC.
- * Scopes are extracted from the Keycloak JWT `scope` claim at login time
- * and stored in the server-side session.
- *
- * Usage:
- *   app.delete('/route', { preHandler: [app.authenticate, requireScope('aida:admin')] }, handler)
- *   app.post('/danger', { preHandler: [app.authenticate, requireDestructive] }, handler)
  */
 export function requireScope(...scopes: string[]) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
@@ -34,28 +27,59 @@ export function requireScope(...scopes: string[]) {
   };
 }
 
-// Backward-compatible aliases — existing routes using requireAdmin do not need to change.
+// Backward-compatible aliases.
 export const requireAdmin       = requireScope('aida:admin');
 export const requireDestructive = requireScope('aida:admin', 'aida:admin:destructive');
 
 /**
- * Blocks cross-tenant access.
- * Phase 1 (single-tenant): superadmin always passes, everyone else passes
- * because tenantId is not yet in the session schema.
- * Phase 2 (multi-tenant): enforce tenantId matching from session vs :tenantId param.
+ * CAP-10/15: Blocks cross-tenant access and enforces JWT ↔ header alias consistency.
+ *
+ * Phase 2 (multi-tenant): validates that the JWT organization.alias claim matches
+ * the :alias route param. Superadmin bypasses the check.
+ * Mismatch emits seer.audit.tenant_spoof_attempt.
  */
 export function requireSameTenant() {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!request.user) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
-    // superadmin bypasses cross-tenant check
     if (request.user.scopes?.includes('aida:superadmin')) return;
 
-    // Phase 1: single-tenant — no tenantId in session yet, pass through.
-    // When multi-tenant is implemented, compare request.user.tenantId to params.tenantId.
-    const targetTenant = (request.params as Record<string, string>)?.tenantId;
-    if (!targetTenant) return; // no tenant scoping required for this route
-    // (Phase 2 enforcement goes here)
+    const targetAlias = (request.params as Record<string, string>)?.alias
+      ?? (request.params as Record<string, string>)?.tenantId;
+    if (!targetAlias) return; // route has no tenant scoping
+
+    // Extract JWT organization.alias claim (CAP-15 anti-spoofing)
+    const jwtAlias = extractJwtOrgAlias(request);
+    if (jwtAlias && jwtAlias !== targetAlias) {
+      console.warn(
+        `[RBAC] spoof attempt — user=${request.user.username} ` +
+        `jwt_alias=${jwtAlias} header_alias=${targetAlias}`,
+      );
+      emitSpoofAttempt(request.user.username, targetAlias, jwtAlias);
+      return reply.status(403).send({ error: 'Forbidden: tenant alias mismatch' });
+    }
+
+    // Phase 2: enforce session tenantAlias vs route param
+    const sessionAlias = (request.user as any).tenantAlias as string | undefined;
+    if (sessionAlias && sessionAlias !== targetAlias) {
+      return reply.status(403).send({ error: 'Forbidden: cross-tenant access denied' });
+    }
   };
+}
+
+// ── Internal: lightweight JWT claim extraction ────────────────────────────────
+
+function extractJwtOrgAlias(request: FastifyRequest): string | null {
+  const auth = request.headers.authorization ?? '';
+  if (!auth.startsWith('Bearer ')) return null;
+  const token = auth.slice(7);
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8'));
+    return (payload?.organization?.alias as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
 }

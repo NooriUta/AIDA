@@ -8,6 +8,7 @@ pluginManagement {
 rootProject.name = 'aida-root'
 
 // ─── JVM modules ──────────────────────────────────────────────────────────────
+include 'libraries:tenant-routing'
 include 'libraries:hound'
 include 'libraries:skadi'
 include 'services:shuttle'
