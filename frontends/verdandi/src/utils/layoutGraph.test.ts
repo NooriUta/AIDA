@@ -14,13 +14,13 @@ vi.mock('elkjs/lib/elk.bundled.js', () => ({
 }));
 
 // Mock fetch used by resolveWorkerBlobUrl
-global.fetch = vi.fn().mockResolvedValue({
+(globalThis as any).fetch = vi.fn().mockResolvedValue({
   ok: true,
   text: async () => 'mock-worker-script',
 });
 
 // Mock URL.createObjectURL
-global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+(globalThis as any).URL.createObjectURL = vi.fn(() => 'blob:mock-url');
 
 import { applyELKLayout, clearLayoutCache } from './layoutGraph';
 import type { LoomNode, LoomEdge } from '../types/graph';
