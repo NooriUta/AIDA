@@ -40,6 +40,9 @@ dependencies {
     // Shared schema — HeimdallEvent, EventType, EventLevel
     implementation project(':shared:dali-models')
 
+    // JobRunr — same version as Dali (shared frigg-jobrunr storage)
+    implementation 'org.jobrunr:jobrunr:8.5.2'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
 }
