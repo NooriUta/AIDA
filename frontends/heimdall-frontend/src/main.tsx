@@ -1,8 +1,8 @@
 import 'aida-shared/styles/tokens';
-import { initTheme } from 'aida-shared/theme';
+import { initSharedPrefs } from './stores/sharedPrefsStore';
 
-// Apply theme/palette to <html> before first render
-initTheme();
+// Apply saved prefs to <html> before first render (no FOUC)
+initSharedPrefs();
 
 import './i18n/config';   // initialise i18next (side-effect import, must be before React)
 

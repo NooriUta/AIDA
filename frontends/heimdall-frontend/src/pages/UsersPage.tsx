@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle }   from '../hooks/usePageTitle';
 import { useAuthStore }   from '../stores/authStore';
+import { useIsMobile }    from '../hooks/useIsMobile';
 import { MOCK_USERS }     from '../components/users/mockUsers';
 import { UserEditModal }  from '../components/users/UserEditModal';
 import { UserInviteModal } from '../components/users/UserInviteModal';
@@ -140,7 +141,7 @@ function UserRow({
       <td style={{ fontSize: 11, color: 'var(--t3)' }}>{user.lastActive}</td>
 
       {/* Actions */}
-      <td>
+      <td className="user-row-actions">
         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
           {isAdmin && (
             <>
@@ -171,10 +172,80 @@ function UserRow({
   );
 }
 
+// ── User card (mobile) ────────────────────────────────────────────────────────
+function UserCard({
+  user, isAdmin, onEdit, onBlock,
+}: {
+  user: AidaUser; isAdmin: boolean;
+  onEdit: (id: number) => void; onBlock: (id: number) => void;
+}) {
+  const { t } = useTranslation();
+  const r   = ROLES.find(x => x.id === user.role) ?? ROLES[0];
+  const ini = user.name.slice(0, 2).toUpperCase();
+
+  return (
+    <div className="user-card" style={{ opacity: user.active ? 1 : 0.55 }}>
+      <div className="user-card-header">
+        <div className="user-ava" style={{
+          background:  `color-mix(in srgb, ${r.clr} 16%, var(--bg3))`,
+          border:      `1px solid color-mix(in srgb, ${r.clr} 28%, transparent)`,
+          color:        r.clr, flexShrink: 0,
+        }}>
+          {ini}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {user.name}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--t3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {user.email}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+          <RoleBadge roleId={user.role} />
+          <span className={`badge ${user.active ? 'badge-suc' : 'badge-err'}`} style={{ fontSize: 10 }}>
+            {user.active ? 'active' : 'disabled'}
+          </span>
+        </div>
+      </div>
+      <div className="user-card-meta">
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t3)' }}>
+          {user.quotas.mimir}/ч · {user.quotas.sessions}sess
+        </span>
+        {user.sources.length > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--t2)' }}>
+            {user.sources[0]}{user.sources.length > 1 ? ` +${user.sources.length - 1}` : ''}
+          </span>
+        )}
+      </div>
+      {isAdmin && (
+        <div className="user-card-actions">
+          <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => onEdit(user.id)}>
+            {t('users.edit')}
+          </button>
+          {user.active
+            ? <button className="btn btn-danger btn-sm" style={{ flex: 1 }} onClick={() => onBlock(user.id)}>
+                {t('users.block')}
+              </button>
+            : <button
+                className="btn btn-secondary btn-sm"
+                style={{ flex: 1, color: 'var(--suc)', borderColor: `color-mix(in srgb, var(--suc) 40%, transparent)` }}
+                onClick={() => onBlock(user.id)}
+              >
+                {t('users.unblock')}
+              </button>
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── UsersPage ─────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const { t } = useTranslation();
   usePageTitle(t('nav.users'));
+  const isMobile = useIsMobile();
   const authUser = useAuthStore(s => s.user);
   // authUser.role from aida-shared only has 3 values ('viewer'|'editor'|'admin').
   // HEIMDALL manages 8 roles internally. Treat role as plain string for the
@@ -406,7 +477,7 @@ export default function UsersPage() {
           placeholder={t('users.filterSearch')}
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ width: 220 }}
+          style={{ flex: '1 1 auto', minWidth: 100 }}
         />
         <button className="btn btn-secondary btn-sm" onClick={clearFilters}>
           ✕ {t('users.clearFilters')}
@@ -416,41 +487,48 @@ export default function UsersPage() {
         </span>
       </div>
 
-      {/* ── Data table ── */}
-      <div className="data-panel">
-        <table className="data-table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th>Пользователь</th>
-              <th>Роль</th>
-              <th>Статус</th>
-              <th>Scopes</th>
-              <th>Источники</th>
-              <th>Квоты</th>
-              <th>Активность</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(u => (
-              <UserRow
-                key={u.id}
-                user={u}
-                isAdmin={isAdmin}
-                onEdit={editUser}
-                onBlock={requestBlock}
-              />
-            ))}
-            {filtered.length === 0 && (
+      {/* ── User list: cards on mobile, table on desktop ── */}
+      {isMobile ? (
+        <div className="user-card-list">
+          {filtered.map(u => (
+            <UserCard key={u.id} user={u} isAdmin={isAdmin} onEdit={editUser} onBlock={requestBlock} />
+          ))}
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', color: 'var(--t3)', padding: 32, fontSize: 12 }}>
+              Нет пользователей по заданным фильтрам
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="data-panel">
+          <table className="data-table" style={{ width: '100%' }}>
+            <thead>
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32, fontSize: 12 }}>
-                  Нет пользователей по заданным фильтрам
-                </td>
+                <th>Пользователь</th>
+                <th>Роль</th>
+                <th>Статус</th>
+                <th>Scopes</th>
+                <th>Источники</th>
+                <th>Квоты</th>
+                <th>Активность</th>
+                <th />
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map(u => (
+                <UserRow key={u.id} user={u} isAdmin={isAdmin} onEdit={editUser} onBlock={requestBlock} />
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32, fontSize: 12 }}>
+                    Нет пользователей по заданным фильтрам
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* ── Modals ── */}
       {editingUser && (

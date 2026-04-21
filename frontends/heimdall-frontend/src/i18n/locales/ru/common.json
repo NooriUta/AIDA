@@ -181,13 +181,29 @@
   },
   "profile": {
     "title":         "Профиль",
-    "appearance":    "Внешний вид",
     "platform":      "AIÐA — Панель управления Heimðallr",
     "fieldUsername": "Логин",
     "fieldEmail":    "Email",
     "fieldRole":     "Роль",
     "fieldPlatform": "Платформа",
-    "themeHint":     "Настройки темы сохраняются локально и используются во всех приложениях AIÐA."
+    "themeHint":     "Настройки темы сохраняются локально и используются во всех приложениях AIÐA.",
+    "tabs": {
+      "profile":    "Профиль",
+      "appearance": "Внешний вид"
+    },
+    "appearance": {
+      "theme":    "Тема",
+      "dark":     "Тёмная",
+      "light":    "Светлая",
+      "palette":  "Палитра",
+      "uiFont":   "Шрифт интерфейса",
+      "monoFont": "Моноширинный шрифт",
+      "fontSize": "Размер шрифта",
+      "density":  "Плотность",
+      "compact":  "Компактный",
+      "normal":   "Обычный",
+      "preview":  "Текст для превью"
+    }
   },
   "dali": {
     "page": {

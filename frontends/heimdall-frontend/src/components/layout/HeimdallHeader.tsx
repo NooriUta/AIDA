@@ -8,6 +8,9 @@ import { ProfileModal }        from '../profile/ProfileModal';
 import { PresentationMode }    from '../PresentationMode';
 import { useIsMobile }         from '../../hooks/useIsMobile';
 import { useTenantContext }    from '../../hooks/useTenantContext';
+import { useHotkeys }          from '../../hooks/useHotkeys';
+import { HeimdallCommandPalette } from '../HeimdallCommandPalette';
+import { sharedPrefsStore }   from '../../stores/sharedPrefsStore';
 
 // ── Navigation data ────────────────────────────────────────────────────────────
 type SectionId = 'BIFROST' | 'DALI' | 'SAGA' | 'FENRIR';
@@ -102,11 +105,10 @@ function LanguageSwitcher() {
 function PaletteDropdown() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [palette, setPaletteState] = useState(() => localStorage.getItem('seer-palette') ?? 'amber-forest');
+  const [palette, setPaletteState] = useState(() => sharedPrefsStore.getPrefs().palette);
   const ref = useRef<HTMLDivElement>(null);
   const pick = (id: string) => {
-    document.documentElement.setAttribute('data-palette', id);
-    localStorage.setItem('seer-palette', id);
+    sharedPrefsStore.savePrefs({ palette: id });
     setPaletteState(id);
     setOpen(false);
   };
@@ -150,11 +152,10 @@ function PaletteDropdown() {
 
 function ThemeToggle() {
   const { t } = useTranslation();
-  const [theme, setThemeState] = useState(() => localStorage.getItem('seer-theme') ?? 'dark');
+  const [theme, setThemeState] = useState(() => sharedPrefsStore.getPrefs().theme);
   const toggle = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('seer-theme', next);
+    sharedPrefsStore.savePrefs({ theme: next });
     setThemeState(next);
   };
   return (
@@ -249,8 +250,11 @@ export const HeimdallHeader = memo(() => {
   const [openSectionId, setOpenSectionId] = useState<SectionId | null>(null);
   const menuRefs = useRef(new Map<SectionId, HTMLDivElement | null>());
 
+  const [cmdOpen,          setCmdOpen]          = useState(false);
   const [profileOpen,      setProfileOpen]      = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
+
+  useHotkeys([{ key: 'k', ctrl: true, action: () => setCmdOpen(v => !v), global: true }]);
 
   const { canManageUsers } = useTenantContext();
 
@@ -440,21 +444,8 @@ export const HeimdallHeader = memo(() => {
               <button
                 onClick={() => setProfileOpen(true)}
                 title={`${user.username} · ${user.role}`}
-                style={{
-                  display: 'flex', alignItems: 'center',
-                  padding: '4px 5px',
-                  background: 'transparent', border: '1px solid transparent',
-                  borderRadius: 'var(--seer-radius-md)', cursor: 'pointer',
-                  transition: 'background 0.12s, border-color 0.12s',
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.background = 'var(--bg3)';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)';
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.background = 'transparent';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'transparent';
-                }}
+                className="hh-btn"
+                style={{ display: 'flex', alignItems: 'center', padding: '4px 5px' }}
               >
                 <div style={{
                   width: 24, height: 24, borderRadius: '50%',
@@ -508,28 +499,12 @@ export const HeimdallHeader = memo(() => {
                       onClick={() => toggleDesktopSection(sec)}
                       disabled={isDisabled}
                       title={sec.id}
+                      className={isActive ? 'hh-btn hh-btn--active' : isOpen ? 'hh-btn hh-btn--open' : 'hh-btn'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '3px',
                         padding: '4px 8px',
-                        background: isActive
-                          ? 'color-mix(in srgb, var(--acc) 12%, transparent)'
-                          : isOpen ? 'var(--bg2)' : 'transparent',
-                        border: '1px solid',
-                        borderColor: isActive
-                          ? 'color-mix(in srgb, var(--acc) 30%, transparent)'
-                          : isOpen ? 'var(--bd)' : 'transparent',
-                        borderRadius: 'var(--seer-radius-md)',
                         cursor: isDisabled ? 'not-allowed' : 'pointer',
                         opacity: isDisabled ? 0.4 : 1,
-                        transition: 'background 0.12s, border-color 0.12s',
-                      }}
-                      onMouseEnter={e => {
-                        if (!isActive && !isDisabled && !isOpen)
-                          (e.currentTarget as HTMLElement).style.background = 'var(--bg2)';
-                      }}
-                      onMouseLeave={e => {
-                        if (!isActive && !isOpen)
-                          (e.currentTarget as HTMLElement).style.background = 'transparent';
                       }}
                     >
                       <span style={{
@@ -581,6 +556,7 @@ export const HeimdallHeader = memo(() => {
             {/* Desktop secondary tools */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
+                onClick={() => setCmdOpen(v => !v)}
                 title={t('commandPalette.title') + ' (⌘K)'}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px',
@@ -616,20 +592,10 @@ export const HeimdallHeader = memo(() => {
                 <button
                   onClick={() => setProfileOpen(true)}
                   title={`${user.username} · ${user.role}`}
+                  className="hh-btn"
                   style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
                     padding: '4px 8px 4px 5px',
-                    background: 'transparent', border: '1px solid transparent',
-                    borderRadius: 'var(--seer-radius-md)', cursor: 'pointer',
-                    transition: 'background 0.12s, border-color 0.12s',
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.background = 'var(--bg3)';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)';
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.background = 'transparent';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'transparent';
                   }}
                 >
                   <div style={{
@@ -649,6 +615,14 @@ export const HeimdallHeader = memo(() => {
         )}
       </header>
 
+      {cmdOpen && (
+        <HeimdallCommandPalette
+          open={cmdOpen}
+          onClose={() => setCmdOpen(false)}
+          sections={visibleSections}
+          onNavigate={go}
+        />
+      )}
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
       {presentationMode && (
         <PresentationMode events={events} metrics={metrics} onExit={() => setPresentationMode(false)} />
