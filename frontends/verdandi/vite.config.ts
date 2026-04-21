@@ -66,7 +66,12 @@ export default defineConfig({
       },
     },
   },
-  // Module Federation generates top-level await — requires es2022+ target.
+  // vite 8.0.5+ (rolldown) introduced a hard REQUIRE_TLA check: CJS require()
+  // cannot import a TLA module. @module-federation/vite generates TLA virtual
+  // files for shared modules in remotes, and CJS react-dom uses require("react").
+  // Pinning to 8.0.4 (last pre-rolldown release) avoids this incompatibility.
+  // The HIGH CVE in 8.0.0-8.0.4 (server.fs.deny bypass) is dev-server only —
+  // it cannot be triggered by `vite build` in CI or nginx in production.
   build: {
     target: 'es2022',
     sourcemap: false,
