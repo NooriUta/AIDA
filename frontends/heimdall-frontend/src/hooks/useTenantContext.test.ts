@@ -109,8 +109,6 @@ describe('unknown/custom role', () => {
 });
 
 describe('role tier ordering', () => {
-  const ordered = ['viewer', 'editor', 'operator', 'auditor', 'local-admin', 'tenant-owner', 'admin', 'super-admin'] as const;
-
   it('each tier is strictly more privileged than the previous', () => {
     // local-admin can manage, editor cannot
     withRole('editor');
