@@ -4,10 +4,17 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
-import studio.seer.anvil.model.*;
+import studio.seer.anvil.model.ImpactEdge;
+import studio.seer.anvil.model.ImpactNode;
+import studio.seer.anvil.model.LineageRequest;
+import studio.seer.anvil.model.LineageResult;
+import studio.seer.anvil.model.YggCommand;
 import studio.seer.anvil.rest.YggQueryClient;
+import studio.seer.anvil.util.YggUtil;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class LineageService {
@@ -30,7 +37,7 @@ public class LineageService {
         String db = req.dbName() != null ? req.dbName() : defaultDb;
         int maxHops = req.maxHops() > 0 ? req.maxHops() : 10;
         String direction = req.direction() != null ? req.direction() : "downstream";
-        String auth = basicAuth(yggUser, yggPassword);
+        String auth = YggUtil.basicAuth(yggUser, yggPassword);
 
         List<ImpactNode> nodes = new ArrayList<>();
 
@@ -82,16 +89,7 @@ public class LineageService {
             RETURN related.geoid AS id, labels(related)[0] AS type,
                    related.qualifiedName AS label, depth
             ORDER BY depth ASC LIMIT 500
-            """.formatted(escape(nodeId), escape(db), relPattern, escape(db));
-    }
-
-    private static String basicAuth(String user, String pass) {
-        String creds = user + ":" + pass;
-        return "Basic " + Base64.getEncoder().encodeToString(creds.getBytes());
-    }
-
-    private static String escape(String s) {
-        return s == null ? "" : s.replace("'", "\\'");
+            """.formatted(YggUtil.escape(nodeId), YggUtil.escape(db), relPattern, YggUtil.escape(db));
     }
 
     private static String str(Map<String, Object> row, String key) {
