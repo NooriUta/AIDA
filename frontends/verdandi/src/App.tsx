@@ -15,7 +15,8 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
 import { UnderConstructionPage } from './components/stubs/UnderConstructionPage';
-import { useAuthStore } from './stores/authStore';
+import { useAuthStore }   from './stores/authStore';
+import { usePrefsSync }  from './hooks/usePrefsSync';
 
 const KnotPage = lazy(() =>
   import('./components/knot/KnotPage').then((m) => ({ default: m.KnotPage })),
@@ -59,6 +60,9 @@ export default function App() {
   // Verify the httpOnly cookie is still valid after page reload.
   // If the 8h token expired, checkSession clears state → ProtectedRoute redirects.
   useEffect(() => { checkSession(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync Verdandi preferences to/from Keycloak (R4.14)
+  usePrefsSync();
 
   return (
     <QueryClientProvider client={queryClient}>

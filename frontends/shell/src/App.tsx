@@ -1,14 +1,14 @@
 import React, { Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { AidaNav }        from './components/AidaNav';
-import { useShellStore }  from './stores/shellStore';
+import { useTranslation }    from 'react-i18next';
+import { AidaNav }           from './components/AidaNav';
+import { LoginPage }         from './components/LoginPage';
+import { useShellStore }     from './stores/shellStore';
+import { useShellAuthStore } from './stores/authStore';
 
 // ── Lazy remote apps ──────────────────────────────────────────────────────────
-// Each remote is loaded from Module Federation remoteEntry.js.
-// If the remote is unavailable, the ErrorBoundary (below) catches the error.
-const VerdandiApp    = React.lazy(() => import('verdandi/App'));
-const HeimdallApp    = React.lazy(() => import('heimdall-frontend/App'));
+const VerdandiApp  = React.lazy(() => import('verdandi/App'));
+const HeimdallApp  = React.lazy(() => import('heimdall-frontend/App'));
 
 // ── Error boundary for failed remote loads ────────────────────────────────────
 class RemoteErrorBoundary extends React.Component<
@@ -38,12 +38,10 @@ function NavigateBridge() {
   const _setNavigate   = useShellStore(s => s._setNavigate);
   const navigateTo     = useShellStore(s => s.navigateTo);
 
-  // Register navigate with the store so components outside the router can call it
   useEffect(() => {
     _setNavigate(navigate);
   }, [navigate, _setNavigate]);
 
-  // Sync currentApp from URL on first load
   useEffect(() => {
     const path = window.location.pathname;
     if (path.startsWith('/heimdall')) navigateTo('heimdall');
@@ -67,7 +65,7 @@ function AppLoader() {
   );
 }
 
-// ── Root layout ───────────────────────────────────────────────────────────────
+// ── Authenticated shell layout ────────────────────────────────────────────────
 function AppLayout() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -86,7 +84,7 @@ function AppLayout() {
             <Route
               path="/heimdall/*"
               element={
-                <RemoteErrorBoundary name="HEIMDALL Control">
+                <RemoteErrorBoundary name="Heimðallr Control">
                   <HeimdallApp />
                 </RemoteErrorBoundary>
               }
@@ -99,12 +97,42 @@ function AppLayout() {
   );
 }
 
+// ── Auth gate — checks session once on mount ──────────────────────────────────
+// While checking: shows a centered spinner.
+// Not authenticated: renders LoginPage (URL preserved — after login user lands
+// exactly where they tried to go).
+// Authenticated: renders the full shell with nav + app routes.
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const checkSession       = useShellAuthStore(s => s.checkSession);
+  const isAuthenticated    = useShellAuthStore(s => s.isAuthenticated);
+  const isCheckingSession  = useShellAuthStore(s => s.isCheckingSession);
+
+  useEffect(() => { void checkSession(); }, [checkSession]);
+
+  if (isCheckingSession) {
+    return (
+      <div style={{
+        minHeight: '100vh', background: 'var(--bg0)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--t3)', fontSize: '13px',
+      }}>
+        …
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return <LoginPage />;
+  return <>{children}</>;
+}
+
 // ── App root ──────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <BrowserRouter>
-      <NavigateBridge />
-      <AppLayout />
+      <AuthGate>
+        <NavigateBridge />
+        <AppLayout />
+      </AuthGate>
     </BrowserRouter>
   );
 }

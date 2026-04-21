@@ -1,12 +1,13 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useRef, useState, useCallback, useMemo } from 'react';
 import { Globe, Paintbrush, Sun, Moon, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuthStore }      from '../../stores/authStore';
-import { useDashboardStore } from '../../stores/dashboardStore';
-import { ProfileModal }      from '../profile/ProfileModal';
-import { PresentationMode }  from '../PresentationMode';
-import { useIsMobile }       from '../../hooks/useIsMobile';
+import { useAuthStore }        from '../../stores/authStore';
+import { useDashboardStore }   from '../../stores/dashboardStore';
+import { ProfileModal }        from '../profile/ProfileModal';
+import { PresentationMode }    from '../PresentationMode';
+import { useIsMobile }         from '../../hooks/useIsMobile';
+import { useTenantContext }    from '../../hooks/useTenantContext';
 
 // ── Navigation data ────────────────────────────────────────────────────────────
 type SectionId = 'BIFROST' | 'DALI' | 'SAGA' | 'FENRIR';
@@ -251,22 +252,41 @@ export const HeimdallHeader = memo(() => {
   const [profileOpen,      setProfileOpen]      = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
 
+  const { canManageUsers } = useTenantContext();
+
+  const appBase = useMemo(
+    () => (pathname.startsWith('/heimdall') ? '/heimdall' : ''),
+    [pathname],
+  );
+  const go = useCallback(
+    (route: string) => navigate(appBase + route),
+    [navigate, appBase],
+  );
+
+  // Only show FENRIR section when user can manage users
+  const visibleSections = SECTIONS.filter(
+    sec => sec.id !== 'FENRIR' || canManageUsers,
+  );
+
   // Active section/subtab derived from pathname
   const activeSectionId: SectionId =
-    pathname.includes('/dali') ? 'DALI' :
-    pathname.includes('/docs') ? 'SAGA' :
+    pathname.includes('/users')    ? 'FENRIR' :
+    pathname.includes('/dali')     ? 'DALI'   :
+    pathname.includes('/docs')     ? 'SAGA'   :
     'BIFROST';
 
   const activeSubId: string =
-    pathname.includes('/dali/sources')  ? 'Sources'   :
-    pathname.includes('/dali/jobrunr')  ? 'JobRunr'   :
-    pathname.includes('/dali')          ? 'Sessions'  :
-    pathname.includes('/docs')          ? 'Docs'      :
-    pathname.includes('/dashboard')     ? 'Dashboard' :
-    pathname.includes('/events')        ? 'Events'    :
+    pathname.includes('/users')          ? 'Users'     :
+    pathname.includes('/dali/sources')   ? 'Sources'   :
+    pathname.includes('/dali/jobrunr')   ? 'JobRunr'   :
+    pathname.includes('/dali')           ? 'Sessions'  :
+    pathname.includes('/docs')           ? 'Docs'      :
+    pathname.includes('/dashboard')      ? 'Dashboard' :
+    pathname.includes('/events')         ? 'Events'    :
     'Services';
 
-  const activeSection = SECTIONS.find(s => s.id === activeSectionId)!;
+  const activeSection = visibleSections.find(s => s.id === activeSectionId)
+    ?? visibleSections[0]!;
   const activeSubTab  = activeSection?.subTabs.find(s => s.id === activeSubId);
 
   const initials = user ? user.username.slice(0, 2).toUpperCase() : '??';
@@ -274,7 +294,7 @@ export const HeimdallHeader = memo(() => {
   // Navigate to a section (mobile section picker)
   const pickSection = (sec: Section) => {
     if (sec.horizon) return;
-    navigate(sec.subTabs[0]?.route ?? sec.route);
+    go(sec.subTabs[0]?.route ?? sec.route);
     setSectionPickerOpen(false);
   };
 
@@ -282,7 +302,7 @@ export const HeimdallHeader = memo(() => {
   const toggleDesktopSection = (sec: Section) => {
     if (sec.horizon) return;
     if (sec.subTabs.length <= 1) {
-      navigate(sec.subTabs[0]?.route ?? sec.route);
+      go(sec.subTabs[0]?.route ?? sec.route);
       setOpenSectionId(null);
       return;
     }
@@ -340,7 +360,7 @@ export const HeimdallHeader = memo(() => {
               {sectionPickerOpen && (
                 <DropdownMenu>
                   <DropdownHeader label="HEIMÐALLR" />
-                  {SECTIONS.map(sec => (
+                  {visibleSections.map(sec => (
                     <DropdownItem
                       key={sec.id}
                       label={sec.id}
@@ -397,7 +417,7 @@ export const HeimdallHeader = memo(() => {
                       key={sub.id}
                       label={t(sub.labelKey).toUpperCase()}
                       active={sub.id === activeSubId}
-                      onClick={() => { navigate(sub.route); setSubPickerOpen(false); }}
+                      onClick={() => { go(sub.route); setSubPickerOpen(false); }}
                     />
                   ))}
                 </DropdownMenu>
@@ -467,7 +487,7 @@ export const HeimdallHeader = memo(() => {
 
             {/* Section nav */}
             <nav style={{ display: 'flex', gap: '2px', alignItems: 'center', flexShrink: 0 }}>
-              {SECTIONS.map(sec => {
+              {visibleSections.map(sec => {
                 const isActive    = sec.id === activeSectionId;
                 const isDisabled  = !!sec.horizon;
                 const isOpen      = openSectionId === sec.id;
@@ -546,7 +566,7 @@ export const HeimdallHeader = memo(() => {
                             key={sub.id}
                             label={t(sub.labelKey).toUpperCase()}
                             active={sub.id === activeSubId}
-                            onClick={() => { navigate(sub.route); setOpenSectionId(null); }}
+                            onClick={() => { go(sub.route); setOpenSectionId(null); }}
                           />
                         ))}
                       </DropdownMenu>
@@ -586,28 +606,6 @@ export const HeimdallHeader = memo(() => {
                 }}
               >
                 ⛶
-              </button>
-
-              <HDivider />
-
-              <button
-                onClick={() => navigate('/users')}
-                style={{
-                  padding: '4px 8px', fontSize: '11px', color: 'var(--t2)',
-                  background: 'transparent', border: '1px solid transparent',
-                  borderRadius: 'var(--seer-radius-md)', cursor: 'pointer',
-                  letterSpacing: '0.06em', transition: 'color 0.12s, border-color 0.12s',
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.color = 'var(--t1)';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)';
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.color = 'var(--t2)';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'transparent';
-                }}
-              >
-                {t('nav.users').toUpperCase()}
               </button>
 
               <HDivider />
