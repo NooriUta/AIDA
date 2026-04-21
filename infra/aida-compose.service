@@ -13,6 +13,9 @@ ExecStart=/opt/seer-studio/docker-compose-start.sh
 ExecStop=/usr/bin/docker compose \
   -f docker-compose.prod.yml \
   -f docker-compose.yc.yml down
+# IF-04: retry if registry unreachable on boot (--pull missing avoids hard fail)
+Restart=on-failure
+RestartSec=30s
 TimeoutStartSec=300
 
 [Install]
