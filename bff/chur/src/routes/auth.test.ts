@@ -1,8 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { authRoutes } from './auth';
 import * as sessions from '../sessions';
+import { InMemorySessionStore } from '../store/InMemorySessionStore';
+
+// Use in-memory store so tests don't need a live FRIGG
+beforeAll(() => { sessions._setStoreForTesting(new InMemorySessionStore()); });
 
 // ── Mock keycloak.ts ─────────────────────────────────────────────────────────
 vi.mock('../keycloak', () => ({
@@ -78,7 +82,6 @@ describe('POST /auth/login', () => {
     expect(body.username).toBe('admin');
     expect(body.role).toBe('admin');
     expect(body.id).toBe('kc-001');
-    // Session cookie must be set
     expect(res.headers['set-cookie']).toMatch(/sid=/);
   });
 
@@ -116,7 +119,6 @@ describe('POST /auth/login', () => {
   });
 
   it('rate limit error message contains "Too many"', () => {
-    // Structural check — the 429 payload shape
     const rateLimitBody = { error: 'Too many login attempts. Try again later.' };
     expect(rateLimitBody.error).toContain('Too many');
   });
@@ -152,8 +154,7 @@ describe('GET /auth/me', () => {
   it('returns user info with a valid session cookie', async () => {
     const app = await buildApp();
 
-    // Create a session directly in the store
-    const sid = sessions.createSession(
+    const sid = await sessions.createSession(
       'fake-access-token',
       'fake-refresh-token',
       3600,

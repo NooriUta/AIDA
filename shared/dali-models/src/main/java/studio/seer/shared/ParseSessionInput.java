@@ -28,6 +28,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *                         in the graph (fixes the "HoundDB" stub problem for ad-hoc uploads)
  * @param appName          Optional application name — when non-null, Hound also creates a
  *                         DaliApplication vertex linked via BELONGS_TO_APP
+ * @param tenantAlias      Tenant alias derived from X-Seer-Tenant-Alias (not user-provided).
+ *                         Stored here so background jobs (ParseJob) can access tenant context
+ *                         outside request scope. Defaults to "default".
  */
 public record ParseSessionInput(
         @JsonProperty("dialect")          String  dialect,
@@ -39,13 +42,13 @@ public record ParseSessionInput(
         @JsonProperty("jdbcPassword")     String  jdbcPassword,
         @JsonProperty("jdbcSchema")       String  jdbcSchema,
         @JsonProperty("dbName")           String  dbName,
-        @JsonProperty("appName")          String  appName
+        @JsonProperty("appName")          String  appName,
+        @JsonProperty("tenantAlias")      String  tenantAlias
 ) {
     /**
      * Jackson factory — explicit {@code @JsonCreator} so that missing optional fields
-     * ({@code dbName}, {@code appName}) gracefully deserialise as {@code null} instead
-     * of failing with "not deserializable" when old serialised JSON lacks the new fields.
-     * This makes the class resilient to hot-reload class-version mismatches in dev mode.
+     * gracefully deserialise as {@code null} / default values when old serialised JSON
+     * lacks the new fields.
      */
     @JsonCreator
     public static ParseSessionInput of(
@@ -58,9 +61,11 @@ public record ParseSessionInput(
             @JsonProperty("jdbcPassword")     String  jdbcPassword,
             @JsonProperty("jdbcSchema")       String  jdbcSchema,
             @JsonProperty("dbName")           String  dbName,
-            @JsonProperty("appName")          String  appName) {
+            @JsonProperty("appName")          String  appName,
+            @JsonProperty("tenantAlias")      String  tenantAlias) {
         return new ParseSessionInput(dialect, source, preview, clearBeforeWrite, uploaded,
-                jdbcUser, jdbcPassword, jdbcSchema, dbName, appName);
+                jdbcUser, jdbcPassword, jdbcSchema, dbName, appName,
+                tenantAlias != null ? tenantAlias : "default");
     }
 
     /**
@@ -68,6 +73,18 @@ public record ParseSessionInput(
      */
     public ParseSessionInput(String dialect, String source, boolean preview,
                              boolean clearBeforeWrite, boolean uploaded) {
-        this(dialect, source, preview, clearBeforeWrite, uploaded, null, null, null, null, null);
+        this(dialect, source, preview, clearBeforeWrite, uploaded,
+                null, null, null, null, null, "default");
+    }
+
+    /**
+     * Backward-compatible full constructor without tenantAlias — defaults to "default".
+     */
+    public ParseSessionInput(String dialect, String source, boolean preview,
+                             boolean clearBeforeWrite, boolean uploaded,
+                             String jdbcUser, String jdbcPassword, String jdbcSchema,
+                             String dbName, String appName) {
+        this(dialect, source, preview, clearBeforeWrite, uploaded,
+                jdbcUser, jdbcPassword, jdbcSchema, dbName, appName, "default");
     }
 }

@@ -7,25 +7,31 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.tenantrouting.YggLineageRegistry;
+import studio.seer.tenantrouting.YggSourceArchiveRegistry;
 
 /**
- * Ensures the YGG (hound) database exists in ArcadeDB before any parse session
- * tries to write lineage data.
+ * Ensures the YGG lineage and source-archive databases exist in ArcadeDB before any
+ * parse session tries to write lineage data.
  *
- * <p>Runs at {@code @Priority(3)} — before {@code FriggSchemaInitializer} (5)
- * and {@code JobRunrLifecycle} (10).
+ * <p>DMT-05: uses {@link YggLineageRegistry} and {@link YggSourceArchiveRegistry} instead
+ * of the old {@link YggGateway} which hardcoded the database name from config.
  *
- * <p>Retries up to 12 times with 3 s delay if ArcadeDB is still starting.
+ * <p>Runs at {@code @Priority(3)} — before FriggSchemaInitializer (5) and JobRunrLifecycle (10).
  */
 @ApplicationScoped
 public class YggSchemaInitializer {
 
     private static final Logger log = LoggerFactory.getLogger(YggSchemaInitializer.class);
 
-    @Inject YggGateway ygg;
+    @Inject YggLineageRegistry       lineageRegistry;
+    @Inject YggSourceArchiveRegistry sourceRegistry;
+    @Inject YggGateway               ygg;   // kept for ensureDatabase() ping
 
     void onStart(@Observes @Priority(3) StartupEvent ev) {
-        log.info("YggSchemaInitializer: ensuring YGG database exists…");
+        String lineageDb = lineageRegistry.resourceFor("default").databaseName();
+        String sourceDb  = sourceRegistry.resourceFor("default").databaseName();
+        log.info("YggSchemaInitializer: ensuring YGG databases exist — lineage={}, source={}", lineageDb, sourceDb);
         boolean ready = false;
         for (int attempt = 1; attempt <= 12 && !ready; attempt++) {
             ready = ygg.ensureDatabase();
@@ -40,8 +46,7 @@ public class YggSchemaInitializer {
             }
         }
         if (!ready) {
-            log.warn("YggSchemaInitializer: YGG database still unavailable after 12 attempts — " +
-                     "parse sessions will fail until YGG is reachable and 'hound' database exists");
+            log.warn("YggSchemaInitializer: YGG database still unavailable — parse sessions will fail");
         }
     }
 }

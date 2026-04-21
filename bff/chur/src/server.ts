@@ -12,6 +12,7 @@ import { graphqlRoutes }  from './routes/graphql';
 import { heimdallRoutes } from './routes/heimdall';
 import { prefsRoutes }    from './routes/prefs';
 import { adminRoutes }    from './routes/admin';
+import { tenantRoutes }   from './admin/tenantRoutes';
 
 async function start(): Promise<void> {
   const app = Fastify({
@@ -61,6 +62,7 @@ async function start(): Promise<void> {
   await app.register(heimdallRoutes);
   await app.register(prefsRoutes,   { prefix: '/prefs'   });
   await app.register(adminRoutes);
+  await app.register(tenantRoutes);
 
   // ── Health ───────────────────────────────────────────────────────────────────
 

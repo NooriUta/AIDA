@@ -8,33 +8,32 @@ import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.ExploreResult;
 import studio.seer.lineage.model.GraphEdge;
 import studio.seer.lineage.model.GraphNode;
+import studio.seer.lineage.security.SeerIdentity;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.*;
 
 /**
  * L2 — explore a schema or package scope.
  *
- * Confirmed against hound DB (2026-04-04):
- *   DaliSchema:  schema_name, schema_geoid
- *   DaliTable:   table_name,  table_geoid,  schema_geoid, column_count
- *   DaliPackage: package_name, package_geoid
- *   DaliRoutine: routine_name, routine_geoid, routine_type, package_geoid
- *
- * Scope format:
- *   "schema-ODS_TRP_CDWH"  → DaliSchema.schema_name
- *   "pkg-MY_PKG"           → DaliPackage.package_name
- *   "#10:0"                → raw @rid
+ * SHT-04: All ArcadeDB queries are routed to {@code hound_{alias}} via
+ * {@link YggLineageRegistry}. The DB name is resolved once per request
+ * via {@link #lineageDb()}.
  */
 @ApplicationScoped
 public class ExploreService {
 
     private static final Logger log = Logger.getLogger(ExploreService.class);
 
-    /** Node count threshold above which the result is considered truncated. */
     static final int NODE_LIMIT = 500;
 
-    @Inject
-    ArcadeGateway arcade;
+    @Inject ArcadeGateway      arcade;
+    @Inject SeerIdentity       identity;
+    @Inject YggLineageRegistry lineageRegistry;
+
+    String lineageDb() {
+        return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
 
     public Uni<ExploreResult> explore(String scope) {
         return explore(scope, false);
@@ -290,8 +289,8 @@ public class ExploreService {
             LIMIT 4000
             """;
 
-        var baseUni = arcade.cypher(cypher, params);
-        var colUni  = arcade.cypher(columnFlowCypher, params).onFailure().recoverWithItem(List.of());
+        var baseUni = arcade.cypherIn(lineageDb(),cypher, params);
+        var colUni  = arcade.cypherIn(lineageDb(),columnFlowCypher, params).onFailure().recoverWithItem(List.of());
 
         return Uni.combine().all().unis(baseUni, colUni).asTuple()
             .map(tuple -> {
@@ -388,7 +387,7 @@ public class ExploreService {
         final String finalScopeName = scopeName;
         final boolean finalIsPackage = isPackage;
 
-        Uni<List<Map<String, Object>>> mainQuery = arcade.cypher(cypher, params);
+        Uni<List<Map<String, Object>>> mainQuery = arcade.cypherIn(lineageDb(),cypher, params);
 
         // External-routines query: only meaningful for schema scope.
         // Returns routines from other schemas that interact with tables in $scope.
@@ -396,7 +395,7 @@ public class ExploreService {
         // so sub-query reads/writes are also captured.
         Uni<List<Map<String, Object>>> extQuery = finalIsPackage
             ? Uni.createFrom().item(List.of())
-            : arcade.cypher("""
+            : arcade.cypherIn(lineageDb(),"""
                 MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(stmt:DaliStatement)-[:READS_FROM]->(tR:DaliTable)
                 WHERE extR.schema_geoid <> $scope
                   AND tR.schema_geoid = $scope
@@ -444,7 +443,7 @@ public class ExploreService {
                        'CALLS' AS edgeType, '' AS sourceHandle, '' AS targetHandle
                 LIMIT 200
                 """;
-        Uni<List<Map<String, Object>>> callsQuery = arcade.cypher(callsCypher, params)
+        Uni<List<Map<String, Object>>> callsQuery = arcade.cypherIn(lineageDb(),callsCypher, params)
             .onFailure().recoverWithItem(List.of());
 
         return Uni.combine().all().unis(List.of(mainQuery, extQuery, callsQuery))
@@ -739,15 +738,15 @@ public class ExploreService {
 
         return Uni.combine().all()
             .unis(List.of(
-                arcade.cypher(stmtsQ,        params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(directReadsQ,  params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(directWritesQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(hoistReadsQ,   params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(recordSelfQ,   params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(recordFieldsQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(bulkCollectsQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(returnsIntoQ,  params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(recordUsedInQ, params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(),stmtsQ,        params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),directReadsQ,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),directWritesQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),hoistReadsQ,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),recordSelfQ,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),recordFieldsQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),bulkCollectsQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),returnsIntoQ,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),recordUsedInQ, params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 var all = new ArrayList<Map<String, Object>>();
@@ -845,11 +844,11 @@ public class ExploreService {
 
         return Uni.combine().all()
             .unis(List.of(
-                arcade.cypher(paramsQ,    params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(varsQ,      params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(stmtsQ,     params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(callsOutQ,  params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(callsInQ,   params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(),paramsQ,    params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),varsQ,      params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),stmtsQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),callsOutQ,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),callsInQ,   params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 var all = new ArrayList<Map<String, Object>>();
@@ -970,11 +969,11 @@ public class ExploreService {
 
         return Uni.combine().all()
             .unis(List.of(
-                arcade.cypher(rootQ,      params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(childQ,     params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(readsQ,     params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(outColQ,    params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(dataFlowQ,  params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(),rootQ,      params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),childQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),readsQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),outColQ,    params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),dataFlowQ,  params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 var all = new ArrayList<Map<String, Object>>();
@@ -1038,9 +1037,9 @@ public class ExploreService {
 
         return Uni.combine().all()
             .unis(List.of(
-                arcade.cypher(recNodeQ,      params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(recFieldQ,     params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(returnsIntoQ,  params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(),recNodeQ,      params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),recFieldQ,     params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),returnsIntoQ,  params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 var all = new ArrayList<Map<String, Object>>();
@@ -1150,7 +1149,7 @@ public class ExploreService {
             LIMIT 500
             """;
 
-        return arcade.cypher(cypher, Map.of("dbName", dbName))
+        return arcade.cypherIn(lineageDb(),cypher, Map.of("dbName", dbName))
             .map(rows -> buildResult(rows, dbName, "DaliDatabase"))
             .flatMap(this::enrichDataSource);
     }
@@ -1240,7 +1239,7 @@ public class ExploreService {
         // Run COUNT and data queries in parallel. COUNT result is used only for
         // a warning log — it does not gate the data fetch.
         @SuppressWarnings("unchecked")
-        Uni<List<Map<String, Object>>> countUni = arcade.cypher(countColQ, params)
+        Uni<List<Map<String, Object>>> countUni = arcade.cypherIn(lineageDb(),countColQ, params)
             .invoke(rows -> {
                 if (rows != null && !rows.isEmpty()) {
                     Object total = rows.get(0).get("total");
@@ -1257,9 +1256,9 @@ public class ExploreService {
         return Uni.combine().all()
             .unis(List.of(
                 countUni,
-                arcade.cypher(hasColQ,    params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(hasOutColQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(hasAffColQ, params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(),hasColQ,    params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),hasOutColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),hasAffColQ, params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 // results[0] = countUni (ignored in data merge, used only for log)
@@ -1335,7 +1334,7 @@ public class ExploreService {
             """;
 
         // Phase S2.4: merge DaliRecord / DaliRecordField / RETURNS_INTO in parallel
-        var baseUni    = arcade.cypher(cypher, Map.of("pkg", packageName));
+        var baseUni    = arcade.cypherIn(lineageDb(),cypher, Map.of("pkg", packageName));
         var recordsUni = explorePackageRecords(packageName).onFailure().recoverWithItem(
             new ExploreResult(List.of(), List.of(), false));
 
@@ -1487,14 +1486,14 @@ public class ExploreService {
         // Each sub-query recovers independently so one failure doesn't kill the whole explore.
         return Uni.combine().all()
             .unis(List.of(
-                arcade.cypher(outQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(inQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(outColQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(sibColQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(sibOutColQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(stmtOutColQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(hoistReadsQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(hoistWritesQ, params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(),outQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),inQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),outColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),sibColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),sibOutColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),stmtOutColQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),hoistReadsQ, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(),hoistWritesQ, params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 var all = new ArrayList<Map<String, Object>>();
@@ -1650,7 +1649,7 @@ public class ExploreService {
                 WHERE id(t) = rid
                 RETURN id(t) AS id, coalesce(t.data_source, '') AS ds
                 """;
-        return arcade.cypher(cypher, Map.of("ids", tableIds))
+        return arcade.cypherIn(lineageDb(),cypher, Map.of("ids", tableIds))
                 .onFailure().recoverWithItem(List.of())
                 .map(rows -> {
                     Map<String, String> dsMap = new java.util.HashMap<>();
