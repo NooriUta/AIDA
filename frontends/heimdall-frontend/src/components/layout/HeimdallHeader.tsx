@@ -2,11 +2,12 @@ import { memo, useRef, useState } from 'react';
 import { Globe, Paintbrush, Sun, Moon, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuthStore }      from '../../stores/authStore';
-import { useDashboardStore } from '../../stores/dashboardStore';
-import { ProfileModal }      from '../profile/ProfileModal';
-import { PresentationMode }  from '../PresentationMode';
-import { useIsMobile }       from '../../hooks/useIsMobile';
+import { useAuthStore }        from '../../stores/authStore';
+import { useDashboardStore }   from '../../stores/dashboardStore';
+import { ProfileModal }        from '../profile/ProfileModal';
+import { PresentationMode }    from '../PresentationMode';
+import { useIsMobile }         from '../../hooks/useIsMobile';
+import { useTenantContext }    from '../../hooks/useTenantContext';
 
 // ── Navigation data ────────────────────────────────────────────────────────────
 type SectionId = 'BIFROST' | 'DALI' | 'SAGA' | 'FENRIR';
@@ -250,6 +251,8 @@ export const HeimdallHeader = memo(() => {
 
   const [profileOpen,      setProfileOpen]      = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
+
+  const { canManageUsers } = useTenantContext();
 
   // Active section/subtab derived from pathname
   const activeSectionId: SectionId =
@@ -590,27 +593,30 @@ export const HeimdallHeader = memo(() => {
 
               <HDivider />
 
-              <button
-                onClick={() => navigate('/users')}
-                style={{
-                  padding: '4px 8px', fontSize: '11px', color: 'var(--t2)',
-                  background: 'transparent', border: '1px solid transparent',
-                  borderRadius: 'var(--seer-radius-md)', cursor: 'pointer',
-                  letterSpacing: '0.06em', transition: 'color 0.12s, border-color 0.12s',
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.color = 'var(--t1)';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)';
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.color = 'var(--t2)';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'transparent';
-                }}
-              >
-                {t('nav.users').toUpperCase()}
-              </button>
-
-              <HDivider />
+              {canManageUsers && (
+                <>
+                  <button
+                    onClick={() => navigate('/users')}
+                    style={{
+                      padding: '4px 8px', fontSize: '11px', color: 'var(--t2)',
+                      background: 'transparent', border: '1px solid transparent',
+                      borderRadius: 'var(--seer-radius-md)', cursor: 'pointer',
+                      letterSpacing: '0.06em', transition: 'color 0.12s, border-color 0.12s',
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.color = 'var(--t1)';
+                      (e.currentTarget as HTMLElement).style.borderColor = 'var(--bd)';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.color = 'var(--t2)';
+                      (e.currentTarget as HTMLElement).style.borderColor = 'transparent';
+                    }}
+                  >
+                    {t('nav.users').toUpperCase()}
+                  </button>
+                  <HDivider />
+                </>
+              )}
 
               <ThemeToggle />
 

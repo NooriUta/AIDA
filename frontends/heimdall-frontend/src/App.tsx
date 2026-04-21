@@ -8,6 +8,8 @@ import { useTranslation }  from 'react-i18next';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
 import { useAuthStore }    from './stores/authStore';
+import { usePrefsStore }   from './stores/prefsStore';
+import { RoleGuard }       from './components/RoleGuard';
 
 const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
@@ -45,10 +47,19 @@ function ProtectedRoute() {
   return <Outlet />;
 }
 
-// ── Session check on mount ────────────────────────────────────────────────────
+// ── Session check on mount + prefs load on auth ───────────────────────────────
 function SessionGuard({ children }: { children: React.ReactNode }) {
   const checkSession = useAuthStore(s => s.checkSession);
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const loadPrefs = usePrefsStore(s => s.load);
+
   useEffect(() => { void checkSession(); }, [checkSession]);
+
+  // Load server-side prefs whenever the user becomes authenticated
+  useEffect(() => {
+    if (isAuthenticated) void loadPrefs();
+  }, [isAuthenticated, loadPrefs]);
+
   return <>{children}</>;
 }
 
@@ -90,7 +101,9 @@ export default function App() {
             </Route>
 
             {/* Standalone pages */}
-            <Route path="users"          element={<UsersPage />} />
+            <Route path="users" element={
+              <RoleGuard require="local-admin"><UsersPage /></RoleGuard>
+            } />
             <Route path="demodebug"      element={<ControlsPage />} />
             <Route path="docs/*"         element={<DocsPage tab="docs" />} />
             <Route path="team-docs/*"    element={<DocsPage tab="team-docs" />} />
