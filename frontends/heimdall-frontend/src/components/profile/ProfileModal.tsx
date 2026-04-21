@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { LogOut, User, Palette, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
+import { useIsMobile }  from '../../hooks/useIsMobile';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'appearance';
@@ -17,6 +18,7 @@ const PALETTES: Array<{ id: string; key: string; accent: string }> = [
 // ── ProfileModal ──────────────────────────────────────────────────────────────
 export function ProfileModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [tab, setTab]           = useState<Tab>('profile');
   const [theme, setThemeState]  = useState<string>(() => localStorage.getItem('seer-theme')   ?? 'dark');
   const [palette, setPaletteState] = useState<string>(() => localStorage.getItem('seer-palette') ?? 'amber-forest');
@@ -72,116 +74,116 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
       {/* Modal */}
       <div style={{
         position:     'fixed',
-        top:          '50%',
-        left:         '50%',
-        transform:    'translate(-50%, -50%)',
+        ...(isMobile
+          ? { inset: 0, borderRadius: 0 }
+          : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+              width: '820px', height: '560px', borderRadius: 'var(--seer-radius-xl)',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }),
         zIndex:       1000,
-        width:        '820px',
-        height:       '560px',
         background:   'var(--bg1)',
         border:       '1px solid var(--bd)',
-        borderRadius: 'var(--seer-radius-xl)',
         display:      'flex',
+        flexDirection: isMobile ? 'column' : 'row',
         overflow:     'hidden',
-        boxShadow:    '0 24px 64px rgba(0,0,0,0.5)',
       }}>
 
-        {/* ── Sidebar ──────────────────────────────────────────────────────── */}
-        <div style={{
-          width:        '220px',
-          flexShrink:   0,
-          background:   'var(--bg2)',
-          borderRight:  '1px solid var(--bd)',
-          display:      'flex',
-          flexDirection: 'column',
-          padding:      '24px 0',
+        {/* ── Sidebar / Top nav ────────────────────────────────────────────── */}
+        <div style={isMobile ? {
+          background: 'var(--bg2)',
+          borderBottom: '1px solid var(--bd)',
+          display: 'flex', flexDirection: 'row', alignItems: 'center',
+          padding: '10px 12px', gap: 8, flexShrink: 0,
+        } : {
+          width: '220px', flexShrink: 0,
+          background: 'var(--bg2)', borderRight: '1px solid var(--bd)',
+          display: 'flex', flexDirection: 'column', padding: '24px 0',
         }}>
-          {/* User avatar + name */}
-          <div style={{ padding: '0 20px 20px', borderBottom: '1px solid var(--bd)' }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: '50%',
-              background: 'color-mix(in srgb, var(--acc) 20%, transparent)',
-              border:     '1px solid color-mix(in srgb, var(--acc) 50%, transparent)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '14px', fontWeight: 600, color: 'var(--acc)',
-              marginBottom: '10px',
-            }}>{initials}</div>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', marginBottom: '3px' }}>
-              {user?.username ?? '—'}
+          {/* User avatar + name — desktop only */}
+          {!isMobile && (
+            <div style={{ padding: '0 20px 20px', borderBottom: '1px solid var(--bd)' }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%',
+                background: 'color-mix(in srgb, var(--acc) 20%, transparent)',
+                border:     '1px solid color-mix(in srgb, var(--acc) 50%, transparent)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '14px', fontWeight: 600, color: 'var(--acc)', marginBottom: '10px',
+              }}>{initials}</div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', marginBottom: '3px' }}>
+                {user?.username ?? '—'}
+              </div>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center',
+                fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                padding: '2px 6px', borderRadius: 'var(--seer-radius-sm)',
+                background: 'color-mix(in srgb, var(--acc) 15%, transparent)',
+                color: roleBadgeColor[user?.role ?? 'viewer'] ?? 'var(--t3)',
+              }}>
+                {user?.role ?? 'viewer'}
+              </div>
             </div>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center',
-              fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-              padding: '2px 6px', borderRadius: 'var(--seer-radius-sm)',
-              background: 'color-mix(in srgb, var(--acc) 15%, transparent)',
-              color: roleBadgeColor[user?.role ?? 'viewer'] ?? 'var(--t3)',
-            }}>
-              {user?.role ?? 'viewer'}
-            </div>
-          </div>
+          )}
 
           {/* Nav tabs */}
-          <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <SidebarItem icon={<User size={14} />}    label={t('profile.title')}      active={tab === 'profile'}    onClick={() => setTab('profile')} />
-            <SidebarItem icon={<Palette size={14} />} label={t('profile.appearance')} active={tab === 'appearance'} onClick={() => setTab('appearance')} />
+          <nav style={isMobile
+            ? { display: 'flex', flexDirection: 'row', gap: 4, flex: 1 }
+            : { flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }
+          }>
+            <SidebarItem icon={<User size={14} />}    label={t('profile.title')}      active={tab === 'profile'}    onClick={() => setTab('profile')}    compact={isMobile} />
+            <SidebarItem icon={<Palette size={14} />} label={t('profile.appearance')} active={tab === 'appearance'} onClick={() => setTab('appearance')} compact={isMobile} />
           </nav>
 
-          {/* Logout at bottom */}
-          <div style={{ padding: '0 8px' }}>
+          {/* Logout + close */}
+          <div style={{ display: 'flex', gap: 8, padding: isMobile ? '0' : '0 8px', flexShrink: 0 }}>
             <button
               onClick={handleLogout}
+              title={t('auth.logout')}
               style={{
-                width:        '100%',
-                display:      'flex',
-                alignItems:   'center',
-                gap:          '8px',
-                padding:      '8px 12px',
-                background:   'transparent',
-                border:       '1px solid color-mix(in srgb, var(--danger) 40%, transparent)',
+                display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 8,
+                padding: isMobile ? '6px 8px' : '8px 12px',
+                background: 'transparent',
+                border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)',
                 borderRadius: 'var(--seer-radius-md)',
-                color:        'var(--danger)',
-                fontSize:     '13px',
-                cursor:       'pointer',
-                transition:   'background 0.12s',
+                color: 'var(--danger)', fontSize: '13px', cursor: 'pointer',
+                ...(isMobile ? {} : { width: '100%' }),
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'color-mix(in srgb, var(--danger) 10%, transparent)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               <LogOut size={14} />
-              {t('auth.logout')}
+              {!isMobile && <span style={{ marginLeft: 8 }}>{t('auth.logout')}</span>}
             </button>
+            {isMobile && (
+              <button onClick={onClose} style={{
+                display: 'flex', alignItems: 'center', padding: '6px 8px',
+                background: 'transparent', border: '1px solid var(--bd)',
+                borderRadius: 'var(--seer-radius-md)', color: 'var(--t3)', cursor: 'pointer',
+              }}>
+                <X size={16} />
+              </button>
+            )}
           </div>
         </div>
 
         {/* ── Content ──────────────────────────────────────────────────────── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Header */}
-          <div style={{
-            display:      'flex',
-            alignItems:   'center',
-            justifyContent: 'space-between',
-            padding:      '20px 28px',
-            borderBottom: '1px solid var(--bd)',
-            flexShrink:   0,
-          }}>
-            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>
-              {tab === 'profile' ? t('profile.title') : t('profile.appearance')}
+          {/* Header — desktop only */}
+          {!isMobile && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '20px 28px', borderBottom: '1px solid var(--bd)', flexShrink: 0,
+            }}>
+              <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>
+                {tab === 'profile' ? t('profile.title') : t('profile.appearance')}
+              </div>
+              <button onClick={onClose} style={{
+                background: 'transparent', border: 'none', color: 'var(--t3)', cursor: 'pointer',
+                padding: '4px', borderRadius: 'var(--seer-radius-sm)', display: 'flex', alignItems: 'center',
+              }}>
+                <X size={16} />
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              style={{
-                background: 'transparent', border: 'none',
-                color: 'var(--t3)', cursor: 'pointer',
-                padding: '4px', borderRadius: 'var(--seer-radius-sm)',
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <X size={16} />
-            </button>
-          </div>
+          )}
 
           {/* Tab content */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '28px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '28px' }}>
             {tab === 'profile'    && <ProfileTab initials={initials} username={user?.username} role={user?.role} email={email} roleColor={roleBadgeColor[user?.role ?? 'viewer']} />}
             {tab === 'appearance' && <AppearanceTab theme={theme} palette={palette} onTheme={applyTheme} onPalette={applyPalette} />}
           </div>
@@ -192,8 +194,8 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
 }
 
 // ── Sidebar item ──────────────────────────────────────────────────────────────
-function SidebarItem({ icon, label, active, onClick }: {
-  icon: React.ReactNode; label: string; active: boolean; onClick: () => void;
+function SidebarItem({ icon, label, active, onClick, compact }: {
+  icon: React.ReactNode; label: string; active: boolean; onClick: () => void; compact?: boolean;
 }) {
   return (
     <button
@@ -201,21 +203,24 @@ function SidebarItem({ icon, label, active, onClick }: {
       style={{
         display:      'flex',
         alignItems:   'center',
-        gap:          '8px',
-        padding:      '8px 12px',
+        gap:          '6px',
+        padding:      compact ? '7px 10px' : '8px 12px',
         borderRadius: 'var(--seer-radius-md)',
         background:   active ? 'color-mix(in srgb, var(--acc) 12%, transparent)' : 'transparent',
         color:        active ? 'var(--acc)' : 'var(--t2)',
         fontSize:     '13px',
         fontWeight:   active ? 600 : 400,
-        border:       'none',
+        border:       compact
+          ? `1px solid ${active ? 'color-mix(in srgb, var(--acc) 30%, transparent)' : 'transparent'}`
+          : 'none',
         cursor:       'pointer',
-        width:        '100%',
+        width:        compact ? 'auto' : '100%',
         textAlign:    'left',
+        whiteSpace:   'nowrap',
         transition:   'background 0.1s, color 0.1s',
       }}
     >
-      {icon}{label}
+      {icon}<span>{label}</span>
     </button>
   );
 }
