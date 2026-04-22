@@ -271,9 +271,12 @@ export default function UsersPage() {
 
   // ── Fetch users from /chur/api/admin/users ─────────────────────────────────
   const fetchUsers = useCallback((tenant: string) => {
-    const url = tenant === ALL_TENANTS
+    // non-superadmin cannot use allTenants mode (requires aida:superadmin) — fall back to default
+    const isSuperAdmin = authUser?.role === 'super-admin';
+    const effectiveTenant = (!isSuperAdmin && tenant === ALL_TENANTS) ? 'default' : tenant;
+    const url = effectiveTenant === ALL_TENANTS
       ? `${USERS_API}?allTenants=true`
-      : `${USERS_API}?tenantAlias=${encodeURIComponent(tenant)}`;
+      : `${USERS_API}?tenantAlias=${encodeURIComponent(effectiveTenant)}`;
 
     fetch(url, { credentials: 'include' })
       .then(r => {
