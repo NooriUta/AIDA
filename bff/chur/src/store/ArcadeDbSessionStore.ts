@@ -5,6 +5,7 @@
  */
 import type { Session } from '../sessions';
 import type { SessionStore } from './SessionStore';
+import { encryptToken, decryptToken } from '../session/encryption';
 
 const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://localhost:2481').replace(/\/$/, '');
 const FRIGG_DB   = process.env.FRIGG_SESSION_DB ?? 'frigg-sessions';
@@ -19,12 +20,39 @@ const HEADERS = {
 
 const EXPIRY_GRACE_MS = 60 * 60 * 1_000; // 1 hour beyond accessExpiresAt
 
-// ── Schema bootstrap ─────────────────────────────────────────────────────────
+// ── Database + schema bootstrap ───────────────────────────────────────────────
+
+let dbBootstrapped = false;
+
+async function ensureDatabase(): Promise<void> {
+  if (dbBootstrapped) return;
+  try {
+    const res = await fetch(`${FRIGG_URL}/api/v1/databases`, {
+      headers: { 'Authorization': `Basic ${BASIC}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (res.ok) {
+      const data = await res.json() as { result: string[] };
+      if (!data.result?.includes(FRIGG_DB)) {
+        await fetch(`${FRIGG_URL}/api/v1/server`, {
+          method: 'POST',
+          headers: HEADERS,
+          body: JSON.stringify({ command: `create database ${FRIGG_DB}` }),
+          signal: AbortSignal.timeout(5_000),
+        });
+      }
+    }
+    dbBootstrapped = true;
+  } catch {
+    // Non-fatal: schema bootstrap will surface a clearer error
+  }
+}
 
 let schemaBootstrapped = false;
 
 async function ensureSchema(): Promise<void> {
   if (schemaBootstrapped) return;
+  await ensureDatabase();
   try {
     await friggSql(
       `CREATE DOCUMENT TYPE DaliChurSession IF NOT EXISTS`,
@@ -69,10 +97,12 @@ async function friggSql(command: string, params?: Record<string, unknown>): Prom
 // ── Mapping ───────────────────────────────────────────────────────────────────
 
 function sessionToDoc(sid: string, s: Session): Record<string, unknown> {
+  // MTN-59: tokens encrypted at rest via AIDA_SESSION_DEK_KEY. When the key is
+  // absent (dev), encryptToken() is a no-op and we fall back to plaintext.
   return {
     sessionId:       sid,
-    accessToken:     s.accessToken,
-    refreshToken:    s.refreshToken,
+    accessToken:     encryptToken(s.accessToken),
+    refreshToken:    encryptToken(s.refreshToken),
     accessExpiresAt: s.accessExpiresAt,
     expiresAt:       s.accessExpiresAt + EXPIRY_GRACE_MS,
     sub:             s.sub,
@@ -84,9 +114,11 @@ function sessionToDoc(sid: string, s: Session): Record<string, unknown> {
 }
 
 function docToSession(doc: Record<string, unknown>): Session {
+  // MTN-59: decryptToken() passes legacy plaintext through unchanged, so
+  // pre-MTN-59 sessions keep working until they expire naturally (5m JWT).
   return {
-    accessToken:     String(doc['accessToken']  ?? ''),
-    refreshToken:    String(doc['refreshToken'] ?? ''),
+    accessToken:     decryptToken(String(doc['accessToken']  ?? '')),
+    refreshToken:    decryptToken(String(doc['refreshToken'] ?? '')),
     accessExpiresAt: Number(doc['accessExpiresAt'] ?? 0),
     sub:             String(doc['sub']      ?? ''),
     username:        String(doc['username'] ?? ''),
