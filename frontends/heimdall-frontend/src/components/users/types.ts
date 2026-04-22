@@ -46,7 +46,9 @@ export interface UserPrefs {
 export interface AidaUser {
   id:         number;
   kcId?:      string;   // KC UUID — for /api/admin/users/:id/* calls
-  name:       string;
+  name:       string;   // KC username
+  firstName?: string;
+  lastName?:  string;
   email:      string;
   role:       UserRole;
   active:     boolean;

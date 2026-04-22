@@ -58,6 +58,10 @@ function IdentityTab({ user }: { user: AidaUser }) {
   return (
     <>
       <Section title={t('users.drawer.kcIdentity', 'KC Identity')}>
+        {(user.firstName || user.lastName) && (
+          <Field label={t('profile.displayName', 'Имя')}
+            value={[user.firstName, user.lastName].filter(Boolean).join(' ')} />
+        )}
         <Field label="username"   value={user.name} />
         <Field label="email"      value={user.email} />
         <Field label="KC UUID"    value={user.kcId} />
@@ -141,7 +145,7 @@ function BindingsTab({ user, isAdmin }: { user: AidaUser; isAdmin: boolean }) {
         </div>
       ))}
       {isAdmin && !editing && (
-        <button className="btn-secondary" style={{ marginTop: 8, fontSize: 11 }}
+        <button className="btn btn-secondary" style={{ marginTop: 8, fontSize: 11 }}
           onClick={() => { setDraft(bindings.map(b => b.sourceId).join(', ')); setEditing(true); }}>
           {t('action.edit', 'Изменить')}
         </button>
@@ -152,11 +156,11 @@ function BindingsTab({ user, isAdmin }: { user: AidaUser; isAdmin: boolean }) {
             value={draft} onChange={e => setDraft(e.target.value)}
             placeholder={t('users.drawer.sourceCSV', 'source-id-1, source-id-2, …')} />
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            <button className="btn-secondary" style={{ fontSize: 11 }}
+            <button className="btn btn-secondary" style={{ fontSize: 11 }}
               onClick={save} disabled={saving}>
               {saving ? t('status.saving', 'Сохранение…') : t('action.save', 'Сохранить')}
             </button>
-            <button className="btn-secondary" style={{ fontSize: 11 }}
+            <button className="btn btn-secondary" style={{ fontSize: 11 }}
               onClick={() => setEditing(false)} disabled={saving}>
               {t('action.cancel', 'Отмена')}
             </button>
@@ -243,8 +247,14 @@ export function UserDetailDrawer({
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)',
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--t1)' }}>{user.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--t3)' }}>{user.email}</div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--t1)' }}>
+              {(user.firstName || user.lastName)
+                ? [user.firstName, user.lastName].filter(Boolean).join(' ')
+                : user.name}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--t3)' }}>
+              {user.name}{user.email ? ` · ${user.email}` : ''}
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="badge" style={{
@@ -295,10 +305,10 @@ export function UserDetailDrawer({
         {/* Footer */}
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)',
                       display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button className="btn-secondary" style={{ fontSize: 11 }} onClick={onRefresh}>
+          <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={onRefresh}>
             {t('action.refresh', 'Обновить')}
           </button>
-          <button className="btn-secondary" style={{ fontSize: 11 }} onClick={onClose}>
+          <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={onClose}>
             {t('action.close', 'Закрыть')}
           </button>
         </div>
