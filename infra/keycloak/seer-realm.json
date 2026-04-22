@@ -79,7 +79,8 @@
         "openid",
         "profile",
         "email",
-        "roles"
+        "roles",
+        "organization"
       ],
       "optionalClientScopes": [
         "seer:read",
@@ -137,8 +138,33 @@
   ],
   "clientScopes": [
     {
+      "name": "organization",
+      "description": "KC-ORG-03: Organizations feature вЂ” adds organization.alias to JWT via user attribute (ROPC-compatible)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "organization-alias",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "organization.alias",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "organization.alias",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
       "name": "aida:admin",
-      "description": "HEIMDALL admin access — metrics, snapshots, control panel",
+      "description": "HEIMDALL admin access вЂ” metrics, snapshots, control panel",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -147,7 +173,7 @@
     },
     {
       "name": "aida:admin:destructive",
-      "description": "HEIMDALL destructive ops — reset, cancel sessions",
+      "description": "HEIMDALL destructive ops вЂ” reset, cancel sessions",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -293,6 +319,9 @@
         ],
         "source_bindings": [
           "hound,dali"
+        ],
+        "organization.alias": [
+          "default"
         ]
       }
     },
@@ -370,6 +399,9 @@
         ],
         "source_bindings": [
           "hound"
+        ],
+        "organization.alias": [
+          "default"
         ]
       }
     },
@@ -447,6 +479,9 @@
         ],
         "source_bindings": [
           ""
+        ],
+        "organization.alias": [
+          "default"
         ]
       }
     },
@@ -517,6 +552,9 @@
         ],
         "source_bindings": [
           "hound,dali"
+        ],
+        "organization.alias": [
+          "default"
         ]
       }
     },
@@ -587,6 +625,9 @@
         ],
         "source_bindings": [
           ""
+        ],
+        "organization.alias": [
+          "default"
         ]
       }
     },
@@ -657,6 +698,9 @@
         ],
         "source_bindings": [
           "hound,dali"
+        ],
+        "organization.alias": [
+          "default"
         ]
       }
     },
@@ -727,6 +771,9 @@
         ],
         "source_bindings": [
           "hound,dali"
+        ],
+        "organization.alias": [
+          "default"
         ]
       }
     }
@@ -739,16 +786,33 @@
       "enabled": true,
       "redirectUrl": "",
       "domains": [
-        { "name": "seer.io", "verified": true }
+        {
+          "name": "seer.io",
+          "verified": true
+        }
       ],
       "members": [
-        { "username": "admin" },
-        { "username": "editor" },
-        { "username": "viewer" },
-        { "username": "alexey.petrov" },
-        { "username": "sergey.ivanov" },
-        { "username": "tenant.owner" },
-        { "username": "local.admin" }
+        {
+          "username": "admin"
+        },
+        {
+          "username": "editor"
+        },
+        {
+          "username": "viewer"
+        },
+        {
+          "username": "alexey.petrov"
+        },
+        {
+          "username": "sergey.ivanov"
+        },
+        {
+          "username": "tenant.owner"
+        },
+        {
+          "username": "local.admin"
+        }
       ]
     }
   ]
