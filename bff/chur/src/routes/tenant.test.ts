@@ -60,6 +60,10 @@ async function makeSid(scopes: string[]): Promise<string> {
   return sessions.createSession('tok', 'rt', 3600, 'uid', 'admin', 'admin', scopes);
 }
 
+// MTN-44: csrfGuard requires Origin/Referer matching config.corsOrigin on
+// mutating requests. Default corsOrigin='http://localhost:5173'.
+const CSRF_HEADERS = { origin: 'http://localhost:5173' } as const;
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('GET /api/admin/tenants', () => {
@@ -92,7 +96,7 @@ describe('POST /api/admin/tenants — provisioning', () => {
     const sid = await makeSid(['aida:admin']);
     const res = await app.inject({
       method:  'POST', url: '/api/admin/tenants',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
       payload: { alias: 'ab' }, // too short → mock returns error
     });
     expect(res.statusCode).toBe(400);
@@ -102,7 +106,7 @@ describe('POST /api/admin/tenants — provisioning', () => {
     const sid = await makeSid(['aida:admin']);
     const res = await app.inject({
       method:  'POST', url: '/api/admin/tenants',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
       payload: { alias: 'acme' },
     });
     expect(res.statusCode).toBe(201);
@@ -116,13 +120,13 @@ describe('DELETE /api/admin/tenants/:alias — suspend', () => {
 
   it('403 — admin (not superadmin) cannot suspend', async () => {
     const sid = await makeSid(['aida:admin']); // no superadmin
-    const res = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid } });
+    const res = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid }, headers: CSRF_HEADERS });
     expect(res.statusCode).toBe(403);
   });
 
   it('200 — superadmin can suspend', async () => {
     const sid = await makeSid(['aida:superadmin']);
-    const res = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid } });
+    const res = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid }, headers: CSRF_HEADERS });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('SUSPENDED');
   });
@@ -137,7 +141,7 @@ describe('PUT /api/admin/tenants/:alias/retention — MTN-27 optimistic lock', (
     const res = await app.inject({
       method:  'PUT',
       url:     '/api/admin/tenants/acme/retention',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
       payload: { retainUntil: Date.now() + 86_400_000 },  // no expectedConfigVersion
     });
     expect(res.statusCode).toBe(400);
@@ -162,7 +166,7 @@ describe('PUT /api/admin/tenants/:alias/retention — MTN-27 optimistic lock', (
     const res = await app.inject({
       method:  'PUT',
       url:     '/api/admin/tenants/acme/retention',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
       payload: { retainUntil: Date.now() + 86_400_000, expectedConfigVersion: 1 },
     });
     expect(res.statusCode).toBe(200);
@@ -187,7 +191,7 @@ describe('PUT /api/admin/tenants/:alias/retention — MTN-27 optimistic lock', (
     const res = await app.inject({
       method:  'PUT',
       url:     '/api/admin/tenants/acme/retention',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
       payload: { retainUntil: Date.now() + 86_400_000, expectedConfigVersion: 3 },
     });
     expect(res.statusCode).toBe(409);
@@ -206,7 +210,7 @@ describe('POST /api/admin/tenants/:alias/force-cleanup', () => {
     const sid = await makeSid(['aida:admin']);
     const res = await app.inject({
       method:  'POST', url: '/api/admin/tenants/acme/force-cleanup',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
     });
     expect(res.statusCode).toBe(403);
   });
@@ -215,7 +219,7 @@ describe('POST /api/admin/tenants/:alias/force-cleanup', () => {
     const sid = await makeSid(['aida:admin', 'aida:admin:destructive']);
     const res = await app.inject({
       method:  'POST', url: '/api/admin/tenants/acme/force-cleanup',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
@@ -230,7 +234,7 @@ describe('POST /api/admin/tenants/:alias/reconnect', () => {
     const sid = await makeSid(['aida:admin']);
     const res = await app.inject({
       method:  'POST', url: '/api/admin/tenants/acme/reconnect',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
@@ -332,7 +336,7 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
     const sid = await makeSid(['aida:tenant:admin']);
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/default/members',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
       payload: { email: 'new@seer.io', name: 'New User', role: 'viewer' },
     });
     expect(res.statusCode).toBe(202);
@@ -346,7 +350,7 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
     const sid = await makeSid(['aida:tenant:admin']);
     const res = await app.inject({
       method: 'DELETE', url: '/api/admin/tenants/default/members/u1',
-      cookies: { sid },
+      cookies: { sid }, headers: CSRF_HEADERS,
     });
     expect(res.statusCode).toBe(200);
     expect(kc.removeOrgMember).toHaveBeenCalledWith('org-default', 'u1');
