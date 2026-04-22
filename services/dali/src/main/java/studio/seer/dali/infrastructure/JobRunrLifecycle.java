@@ -94,8 +94,16 @@ public class JobRunrLifecycle {
                     && !config.jobrunr().workerOnly();
             if (dashboardEnabled) {
                 int port = config.jobrunr().dashboard().port();
-                jrConfig = jrConfig.useDashboard(port);
-                log.info("JobRunr: dashboard enabled on :{}", port);
+                try {
+                    jrConfig = jrConfig.useDashboard(port);
+                    log.info("JobRunr: dashboard enabled on :{}", port);
+                } catch (Exception dashEx) {
+                    // Port already in use (stale Dali process); continue without dashboard.
+                    // Scheduler + BackgroundJobServer still start normally.
+                    log.warn("JobRunr: dashboard port :{} already in use — starting without dashboard. " +
+                             "Kill the process holding the port or set DALI_JOBRUNR_DASHBOARD_PORT. Cause: {}",
+                             port, dashEx.getMessage());
+                }
             } else if (config.jobrunr().workerOnly()) {
                 log.info("JobRunr: worker-only mode — dashboard suppressed");
             }
