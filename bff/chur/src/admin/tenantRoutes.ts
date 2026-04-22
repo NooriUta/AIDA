@@ -399,4 +399,43 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ok: true });
     },
   );
+
+  // ── PUT /api/admin/tenants/:alias/feature-flags — MTN-12 ────────────────────
+  // body: { flags: Record<string,boolean>, expectedConfigVersion: number }
+  app.put<{
+    Params: { alias: string };
+    Body: { flags: Record<string, boolean>; expectedConfigVersion: number };
+  }>('/api/admin/tenants/:alias/feature-flags',
+    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard] },
+    async (request, reply) => {
+      const { alias }    = request.params;
+      const { flags, expectedConfigVersion } = request.body ?? {};
+      if (!flags || typeof flags !== 'object') {
+        return reply.status(400).send({ error: 'flags (Record<string,boolean>) required' });
+      }
+      const serialized = JSON.stringify(flags);
+      const r = await casUpdateTenant('frigg-tenants', alias, expectedConfigVersion, {
+        featureFlags: serialized,
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expectedConfigVersion, r.current));
+      emitTenantAudit('seer.audit.tenant_feature_flags_updated', request.user.username, alias, { flags });
+      return reply.send({ ok: true, configVersion: r.current });
+    },
+  );
+
+  // ── GET /api/admin/tenants/:alias/feature-flags — MTN-12 ────────────────────
+  app.get<{ Params: { alias: string } }>(
+    '/api/admin/tenants/:alias/feature-flags',
+    { preHandler: [app.authenticate, requireScope('aida:admin')] },
+    async (request, reply) => {
+      const cfg = await getTenantConfig(request.params.alias).catch(() => null);
+      if (!cfg) return reply.status(404).send({ error: 'tenant_not_found' });
+      let flags: Record<string, boolean> = {};
+      if (typeof cfg.featureFlags === 'string') {
+        try { flags = JSON.parse(cfg.featureFlags as string) as Record<string, boolean>; }
+        catch { /* invalid JSON → empty */ }
+      }
+      return reply.send({ tenantAlias: request.params.alias, flags, configVersion: cfg.configVersion });
+    },
+  );
 };

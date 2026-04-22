@@ -23,6 +23,7 @@ export interface DaliTenantConfig extends TenantSummary {
   maxConcurrentJobs?: number;
   archiveS3Key?: string;
   archiveRetentionUntil?: number;
+  featureFlags?: Record<string, boolean>;  // MTN-12
   createdAt?: number;
   updatedAt?: number;
 }

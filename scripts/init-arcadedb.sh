@@ -74,6 +74,8 @@ ensure_default_tenant() {
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE VERTEX TYPE DaliTenantConfig IF NOT EXISTS"
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY DaliTenantConfig.tenantAlias IF NOT EXISTS STRING"
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE INDEX IF NOT EXISTS ON DaliTenantConfig (tenantAlias) UNIQUE"
+  # MTN-12: per-tenant feature flags (JSON-string field)
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY DaliTenantConfig.featureFlags IF NOT EXISTS STRING"
 
   # Idempotent upsert of the "default" tenant record for single-tenant dev deployments
   local row
