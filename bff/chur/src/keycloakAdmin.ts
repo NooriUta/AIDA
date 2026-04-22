@@ -345,6 +345,147 @@ export async function setUserAttributes(
   if (!putRes.ok) throw new Error(`KC setUserAttributes/put ${putRes.status}`);
 }
 
+// ── KC-ORG-04: Organization member APIs ─────────────────────────────────────
+
+/**
+ * KC-ORG-04: List members of a Keycloak Organization (26.2+ Organizations feature).
+ * Returns users belonging to the org, with the same shape as listUsers() so the UI
+ * can render the same table. Requires `keycloakOrgId` from DaliTenantConfig.
+ */
+export async function listOrgMembers(orgId: string): Promise<KcUserView[]> {
+  try {
+    const token = await getAdminToken();
+    const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/organizations/${orgId}/members?briefRepresentation=false`,
+      { headers, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) {
+      console.warn(`[KC] listOrgMembers ${res.status}`);
+      return [];
+    }
+    const kcUsers = await res.json() as KcUser[];
+
+    // Resolve realm roles for each member in parallel
+    const views = await Promise.all(
+      kcUsers.map(async (u): Promise<KcUserView> => {
+        const rolesRes = await fetch(
+          `${KC_BASE}/admin/realms/${KC_REALM}/users/${u.id}/role-mappings/realm`,
+          { headers, signal: AbortSignal.timeout(5_000) },
+        );
+        const kcRoles: KcRole[] = rolesRes.ok ? await rolesRes.json() as KcRole[] : [];
+        return buildView(u, kcRoles);
+      }),
+    );
+    return views;
+  } catch (err) {
+    console.warn('[KC] listOrgMembers unavailable:', (err as Error).message);
+    return [];
+  }
+}
+
+/**
+ * KC-ORG-04: Create a KC user, assign realm role, add them as member of the given org,
+ * and set the organization.alias attribute (KC-ORG-03 mapper reads it for JWT claim).
+ * Sends password-reset email via executeActionsEmail.
+ */
+export async function inviteUserToOrg(
+  orgId:      string,
+  orgAlias:   string,
+  email:      string,
+  name:       string,
+  role:       UserRole,
+): Promise<void> {
+  const token   = await getAdminToken();
+  const headers: HeadersInit = {
+    Authorization:  `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+
+  // 1 — Create user with organization.alias attribute (for KC-ORG-03 mapper)
+  const createRes = await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/users`,
+    {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        username:        email,
+        email,
+        firstName:       name,
+        enabled:         true,
+        emailVerified:   false,
+        requiredActions: ['UPDATE_PASSWORD'],
+        attributes:      { 'organization.alias': [orgAlias] },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  if (!createRes.ok && createRes.status !== 201) {
+    throw new Error(`KC inviteUserToOrg/create ${createRes.status}`);
+  }
+  const userId = (createRes.headers.get('Location') ?? '').split('/').pop();
+  if (!userId) throw new Error('KC inviteUserToOrg: missing Location header');
+
+  // 2 — Realm role
+  const roleRes = await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/roles/${encodeURIComponent(role)}`,
+    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+  );
+  if (!roleRes.ok) throw new Error(`KC inviteUserToOrg/getRole ${roleRes.status}`);
+  const roleObj: KcRole = await roleRes.json();
+
+  await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
+    { method: 'POST', headers, body: JSON.stringify([roleObj]),
+      signal: AbortSignal.timeout(5_000) },
+  );
+
+  // 3 — Add user to organization
+  const addRes = await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/organizations/${orgId}/members`,
+    {
+      method: 'POST', headers,
+      // KC 26.2 accepts userId in body (plain string) OR representation. We use string form.
+      body: JSON.stringify(userId),
+      signal: AbortSignal.timeout(5_000),
+    },
+  );
+  if (!addRes.ok && addRes.status !== 201 && addRes.status !== 204) {
+    throw new Error(`KC inviteUserToOrg/addMember ${addRes.status}: ${await addRes.text().catch(() => '')}`);
+  }
+
+  // 4 — Password-reset email
+  await fetch(
+    `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/execute-actions-email`,
+    { method: 'PUT', headers, body: JSON.stringify(['UPDATE_PASSWORD']),
+      signal: AbortSignal.timeout(5_000) },
+  );
+}
+
+/**
+ * KC-ORG-04: Remove a user from the given organization (does NOT delete the user from realm).
+ */
+export async function removeOrgMember(orgId: string, userId: string): Promise<void> {
+  try {
+    const token = await getAdminToken();
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/organizations/${orgId}/members/${userId}`,
+      {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+        signal:  AbortSignal.timeout(5_000),
+      },
+    );
+    if (!res.ok && res.status !== 204) {
+      console.warn(`[KC] removeOrgMember ${res.status}`);
+    }
+  } catch (err) {
+    console.warn('[KC] removeOrgMember unavailable:', (err as Error).message);
+  }
+}
+
+// ── Legacy user-oriented APIs (realm-wide, pre-KC-ORG) ──────────────────────
+
 /**
  * Create a new KC user and immediately send a password-reset email (invite flow).
  * Uses the email as username.  Assigns the given realm role.
