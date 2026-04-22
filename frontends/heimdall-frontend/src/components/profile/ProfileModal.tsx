@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LogOut, User, Palette, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore }       from '../../stores/authStore';
 import { useIsMobile }        from '../../hooks/useIsMobile';
 import { sharedPrefsStore }   from '../../stores/sharedPrefsStore';
@@ -201,7 +202,7 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
 
           {/* Tab content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '28px' }}>
-            {tab === 'profile'    && <ProfileTab initials={initials} username={user?.username} role={user?.role} email={email} roleColor={roleBadgeColor[user?.role ?? 'viewer']} />}
+            {tab === 'profile'    && <ProfileTab initials={initials} username={user?.username} role={user?.role} email={email} roleColor={roleBadgeColor[user?.role ?? 'viewer']} onClose={onClose} />}
             {tab === 'appearance' && <AppearanceTab theme={theme} palette={palette} onTheme={applyTheme} onPalette={applyPalette} />}
           </div>
         </div>
@@ -243,10 +244,15 @@ function SidebarItem({ icon, label, active, onClick, compact }: {
 }
 
 // ── Profile tab ───────────────────────────────────────────────────────────────
-function ProfileTab({ initials, username, role, email, roleColor }: {
+function ProfileTab({ initials, username, role, email, roleColor, onClose }: {
   initials: string; username?: string; role?: string; email: string; roleColor: string;
+  onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  const goto = (path: string) => { onClose(); navigate(path); };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
       {/* Avatar hero */}
@@ -281,6 +287,22 @@ function ProfileTab({ initials, username, role, email, roleColor }: {
         <InfoField label={t('profile.fieldEmail')}    value={email} mono />
         <InfoField label={t('profile.fieldRole')}     value={role ?? 'viewer'} />
         <InfoField label={t('profile.fieldPlatform')} value={t('profile.platform')} />
+      </div>
+
+      {/* Round 5 — self-service navigation shortcuts */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {t('profile.quickLinks', 'Быстрые ссылки')}
+        </span>
+        <button className="btn-secondary" onClick={() => goto('/me/profile')}>
+          {t('nav.profile', 'Профиль')} →
+        </button>
+        <button className="btn-secondary" onClick={() => goto('/me/preferences')}>
+          {t('nav.preferences', 'Настройки')} →
+        </button>
+        <button className="btn-secondary" onClick={() => goto('/me/notifications')}>
+          {t('nav.notifications', 'Уведомления')} →
+        </button>
       </div>
     </div>
   );

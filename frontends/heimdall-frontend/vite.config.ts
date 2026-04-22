@@ -45,7 +45,9 @@ export default defineConfig({
       '/auth':     { target: 'http://localhost:3000', changeOrigin: true },
       '/prefs':    { target: 'http://localhost:3000', changeOrigin: true },
       '/api/admin': { target: 'http://localhost:3000', changeOrigin: true },  // MTN-63 + tenant admin
-      '/me':       { target: 'http://localhost:3000', changeOrigin: true },  // MTN-63 self-service
+      // NOTE: `/me` is deliberately NOT proxied as a top-level path — it shadows
+      // the SPA route /me/profile etc. FE code uses `/chur/me/*` which is
+      // routed through the `/chur` proxy below.
       // Shell-style routing: '/chur/*' is prod path via shell:5175. In standalone
       // heimdall-frontend dev, strip '/chur' prefix so /chur/api/admin/tenants →
       // http://localhost:3000/api/admin/tenants. Fixes TenantsPage/UsersPage HTML

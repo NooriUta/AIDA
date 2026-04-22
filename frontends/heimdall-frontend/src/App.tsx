@@ -10,6 +10,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useTranslation }  from 'react-i18next';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
+import { ConsentModal }    from './components/ConsentModal';
 import { useAuthStore }    from './stores/authStore';
 import { usePrefsStore }   from './stores/prefsStore';
 import { RoleGuard }       from './components/RoleGuard';
@@ -27,6 +28,10 @@ const UsersPage          = React.lazy(() => import('./pages/UsersPage'));
 const DocsPage           = React.lazy(() => import('./pages/DocsPage'));
 const TenantsPage        = React.lazy(() => import('./pages/TenantsPage'));
 const TenantDetailsPage  = React.lazy(() => import('./pages/TenantDetailsPage'));
+// Round 5 self-service
+const ProfilePage        = React.lazy(() => import('./pages/ProfilePage'));
+const PreferencesPage    = React.lazy(() => import('./pages/PreferencesPage'));
+const NotificationsPage  = React.lazy(() => import('./pages/NotificationsPage'));
 
 // ── App layout (shell around the routed page) ─────────────────────────────────
 function AppLayout() {
@@ -43,6 +48,9 @@ function AppLayout() {
           <Outlet />
         </Suspense>
       </main>
+      {/* Round 5 — T&C / Privacy consent interruptor (opens when user's
+          latest accepted version is older than current) */}
+      <ConsentModal />
     </div>
   );
 }
@@ -133,6 +141,14 @@ export default function App() {
             <Route path="admin/tenants/:alias" element={
               <RoleGuard require="admin"><TenantDetailsPage /></RoleGuard>
             } />
+
+            {/* Round 5 — Self-service (any authenticated user) */}
+            <Route path="me">
+              <Route index element={<Navigate to="profile" replace />} />
+              <Route path="profile"       element={<ProfilePage />} />
+              <Route path="preferences"   element={<PreferencesPage />} />
+              <Route path="notifications" element={<NotificationsPage />} />
+            </Route>
 
             {/* Standalone pages */}
             <Route path="users" element={
