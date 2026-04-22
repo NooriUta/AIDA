@@ -15,6 +15,7 @@ import { meRoutes }       from './routes/me';
 import { adminRoutes }    from './routes/admin';
 import { tenantRoutes }   from './admin/tenantRoutes';
 import { userLifecycleRoutes } from './admin/userLifecycleRoutes';
+import { adminUsersRoutes }   from './admin/usersRoutes';
 
 async function start(): Promise<void> {
   const app = Fastify({
@@ -67,6 +68,7 @@ async function start(): Promise<void> {
   await app.register(adminRoutes);
   await app.register(tenantRoutes);
   await app.register(userLifecycleRoutes);  // MTN-61
+  await app.register(adminUsersRoutes);     // Round 5 Tier C
 
   // ── Health ───────────────────────────────────────────────────────────────────
 
