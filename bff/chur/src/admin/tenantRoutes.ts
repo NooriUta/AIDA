@@ -8,6 +8,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   validateAlias,
   provisionTenant,
+  resumeProvisioning,
   forceCleanupTenant,
 } from './provisioning';
 import {
@@ -85,7 +86,22 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
           { keycloakOrgId: result.keycloakOrgId, correlationId });
         return reply.status(201).send(result);
       } catch (e) {
-        return reply.status(500).send(e);
+        // MTN-25: structured provisioning error — includes failedStep so caller
+        // can call /resume-provisioning with the right context.
+        const msg = e instanceof Error ? e.message : String(e);
+        const failedStep        = (e as { failedStep?: number })?.failedStep;
+        const lastSuccessfulStep = (e as { lastSuccessfulStep?: number })?.lastSuccessfulStep;
+        const cause             = (e as { cause?: string })?.cause;
+        return reply.status(500).send({
+          error:              'provisioning_failed',
+          tenantAlias:        alias,
+          correlationId,
+          failedStep,
+          lastSuccessfulStep,
+          cause:              cause ?? msg,
+          message:            `Provisioning failed at step ${failedStep ?? '?'}: ${cause ?? msg}. ` +
+                              `Use POST /tenants/${alias}/resume-provisioning (superadmin) to retry.`,
+        });
       }
     },
   );
@@ -181,6 +197,32 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       await forceCleanupTenant(alias);
       emitTenantAudit('seer.audit.tenant_purged', request.user.username, alias);
       return reply.send({ ok: true });
+    },
+  );
+
+  // ── POST /api/admin/tenants/:alias/resume-provisioning — MTN-25 ────────────
+  app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/resume-provisioning',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), provisioningRateLimit] },
+    async (request, reply) => {
+      const { alias } = request.params;
+      const correlationId = randomUUID();
+      try {
+        const result = await resumeProvisioning(alias, correlationId, request.user.username);
+        emitTenantAudit('seer.audit.tenant_created', request.user.username, alias,
+          { keycloakOrgId: result.keycloakOrgId, correlationId, resumed: true });
+        return reply.status(200).send({ ok: true, ...result });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const failedStep = (e as { failedStep?: number })?.failedStep;
+        const cause      = (e as { cause?: string })?.cause;
+        return reply.status(500).send({
+          error:         'resume_provisioning_failed',
+          tenantAlias:   alias,
+          correlationId,
+          failedStep,
+          cause:         cause ?? msg,
+        });
+      }
     },
   );
 
