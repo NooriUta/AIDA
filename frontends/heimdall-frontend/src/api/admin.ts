@@ -38,7 +38,11 @@ export interface TenantMember {
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: window.location.origin,
+      ...(init?.headers ?? {}),
+    },
     ...init,
   });
   if (!res.ok) {

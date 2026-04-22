@@ -314,10 +314,13 @@ export default function UsersPage() {
         setLoadError(null);
       })
       .catch(err => {
-        setLoadError(
-          `Keycloak недоступен: ${err instanceof Error ? err.message : err}. ` +
-          `Запустите: docker-compose up keycloak`,
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        const hint = msg.includes('403')
+          ? 'Недостаточно прав (требуется aida:admin или выше)'
+          : msg.includes('401')
+          ? 'Сессия истекла — войдите снова'
+          : `Запустите: docker-compose up keycloak`;
+        setLoadError(`${msg}. ${hint}`);
       });
   }, []);
 

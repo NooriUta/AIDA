@@ -10,7 +10,7 @@ function requireInProd(name: string, value: string | undefined, fallback: string
 
 export const config = {
   port:          Number(process.env.PORT ?? 3000),
-  corsOrigin:    process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  corsOrigin:    process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:5174,http://localhost:5175',
 
   // ── Keycloak OIDC ──────────────────────────────────────────────────────────
   keycloakUrl:      process.env.KEYCLOAK_URL          ?? 'http://localhost:8180',

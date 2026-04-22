@@ -77,14 +77,14 @@ export default function PreferencesPage() {
             label={t('preferences.theme', 'Тема')}
             value={draft.theme ?? 'auto'}
             options={THEMES.map(v => ({
-              value: v!, label: t(`preferences.theme.${v}`, v!),
+              value: v!, label: t(`preferences.themeOpts.${v}`, v!),
             }))}
             onChange={v => setDraft(d => ({ ...d, theme: v as Prefs['theme'] }))}
           />
           <Select
             label={t('preferences.lang', 'Язык')}
             value={draft.lang ?? 'ru'}
-            options={LANGS.map(v => ({ value: v!, label: v! === 'ru' ? 'Русский' : 'English' }))}
+            options={LANGS.map(v => ({ value: v!, label: t(`preferences.langOpts.${v}`, v!) }))}
             onChange={v => setDraft(d => ({ ...d, lang: v as Prefs['lang'] }))}
           />
           <Field
@@ -107,14 +107,14 @@ export default function PreferencesPage() {
             label={t('preferences.density', 'Плотность')}
             value={draft.density ?? 'comfortable'}
             options={DENSITIES.map(v => ({
-              value: v!, label: t(`preferences.density.${v}`, v!),
+              value: v!, label: t(`preferences.densityOpts.${v}`, v!),
             }))}
             onChange={v => setDraft(d => ({ ...d, density: v as Prefs['density'] }))}
           />
           <Select
             label={t('preferences.fontSize', 'Размер шрифта')}
             value={draft.fontSize ?? 'md'}
-            options={FONT_SIZES.map(v => ({ value: v!, label: v! }))}
+            options={FONT_SIZES.map(v => ({ value: v!, label: t(`preferences.fontSizeOpts.${v}`, v!) }))}
             onChange={v => setDraft(d => ({ ...d, fontSize: v as Prefs['fontSize'] }))}
           />
 
