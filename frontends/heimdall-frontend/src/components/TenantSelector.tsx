@@ -30,8 +30,9 @@ export function TenantSelector({ onChange }: TenantSelectorProps) {
     try {
       const res = await fetch('/chur/api/admin/tenants', { credentials: 'include' });
       if (!res.ok) return;
-      const body = await res.json() as { tenants?: TenantOption[] };
-      setTenants((body.tenants ?? []).filter(t => t.status === 'ACTIVE'));
+      const body = await res.json() as TenantOption[];
+      const list = Array.isArray(body) ? body : ((body as unknown as { tenants?: TenantOption[] }).tenants ?? []);
+      setTenants(list.filter(t => t.status === 'ACTIVE'));
     } catch { /* silent */ }
   }, []);
 

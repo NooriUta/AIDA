@@ -1,11 +1,12 @@
 import type { TenantStatus } from '../../api/admin';
 
 const BADGE_STYLES: Record<TenantStatus, { bg: string; color: string }> = {
-  ACTIVE:       { bg: 'var(--color-success, #22c55e)', color: '#fff' },
-  PROVISIONING: { bg: 'var(--color-info, #3b82f6)',    color: '#fff' },
-  SUSPENDED:    { bg: 'var(--color-warn, #f59e0b)',    color: '#fff' },
-  ARCHIVED:     { bg: 'var(--color-muted, #6b7280)',   color: '#fff' },
-  PURGED:       { bg: 'var(--color-danger, #ef4444)',  color: '#fff' },
+  ACTIVE:               { bg: 'var(--color-success, #22c55e)', color: '#fff' },
+  PROVISIONING:         { bg: 'var(--color-info, #3b82f6)',    color: '#fff' },
+  PROVISIONING_FAILED:  { bg: 'var(--color-danger, #ef4444)',  color: '#fff' },
+  SUSPENDED:            { bg: 'var(--color-warn, #f59e0b)',    color: '#fff' },
+  ARCHIVED:             { bg: 'var(--color-muted, #6b7280)',   color: '#fff' },
+  PURGED:               { bg: 'var(--color-danger, #ef4444)',  color: '#fff' },
 };
 
 interface Props {

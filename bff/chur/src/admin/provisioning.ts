@@ -292,7 +292,7 @@ export async function provisionTenant(
     await friggDropDb(`dali_${alias}`).catch(() => {});
   });
 
-  // Step 6 — Register harvest cron (compensation: deregister; 404 OK)
+  // Step 6 — Register harvest cron (best-effort; HEIMDALL may not be up yet in dev)
   await runStep(6, async () => {
     const cron = harvestCron(alias);
     const res = await fetch(`${HEIMDALL_URL}/api/cron/harvest`, {
@@ -300,8 +300,13 @@ export async function provisionTenant(
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ tenantAlias: alias, cron, correlationId }),
       signal:  AbortSignal.timeout(5_000),
+    }).catch(e => {
+      console.warn(`[PROVISION] step 6 cron registration skipped (HEIMDALL unreachable): ${(e as Error).message}`);
+      return null;
     });
-    if (!res.ok && res.status !== 404) throw new Error(`HEIMDALL cron ${res.status}`);
+    if (res && !res.ok && res.status !== 404 && res.status !== 503) {
+      throw new Error(`HEIMDALL cron ${res.status}`);
+    }
   }, async () => {
     await fetch(`${HEIMDALL_URL}/api/cron/harvest/${encodeURIComponent(alias)}`, {
       method: 'DELETE', signal: AbortSignal.timeout(3_000),

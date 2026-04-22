@@ -1,11 +1,13 @@
 const BASE = '/chur/api/admin';
 
-export type TenantStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED' | 'PROVISIONING' | 'PURGED';
+export type TenantStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED' | 'PROVISIONING' | 'PROVISIONING_FAILED' | 'PURGED';
 
 export interface TenantSummary {
   tenantAlias: string;
   status: TenantStatus;
   configVersion: number;
+  lastFailedStep?: number;
+  lastFailedCause?: string;
 }
 
 export interface DaliTenantConfig extends TenantSummary {
@@ -47,8 +49,8 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({})) as { error?: string; message?: string; cause?: string };
+    throw new Error(body.message ?? body.cause ?? body.error ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
@@ -63,6 +65,10 @@ export function provisionTenant(alias: string): Promise<{ ok: boolean; tenantAli
 
 export function forceCleanupTenant(alias: string): Promise<{ ok: boolean }> {
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/force-cleanup`, { method: 'POST' });
+}
+
+export function resumeProvisioningTenant(alias: string): Promise<{ ok: boolean }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/resume-provisioning`, { method: 'POST' });
 }
 
 export function getTenant(alias: string, signal?: AbortSignal): Promise<DaliTenantConfig> {

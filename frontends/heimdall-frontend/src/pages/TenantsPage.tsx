@@ -7,7 +7,7 @@ import { TenantStatusBadge } from '../components/tenants/TenantStatusBadge';
 import type { TenantStatus, TenantSummary } from '../api/admin';
 import {
   suspendTenant, unsuspendTenant, archiveTenant,
-  restoreTenant, provisionTenant,
+  restoreTenant, provisionTenant, forceCleanupTenant, resumeProvisioningTenant,
 } from '../api/admin';
 
 const PAGE_SIZE = 20;
@@ -71,10 +71,10 @@ function ProvisionModal({ onDone, onClose }: { onDone: () => void; onClose: () =
         />
         {error && <p style={{ color: 'var(--danger)', fontSize: 11, marginTop: 6 }}>{error}</p>}
         <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-          <button className="btn-secondary" onClick={onClose} disabled={saving}>
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>
             {t('action.cancel', 'Отмена')}
           </button>
-          <button className="btn-secondary" onClick={submit} disabled={saving || !alias.trim()}>
+          <button className="btn btn-secondary" onClick={submit} disabled={saving || !alias.trim()}>
             {saving ? t('status.loading', 'Loading…') : t('tenants.provision.confirm', 'Создать')}
           </button>
         </div>
@@ -104,19 +104,19 @@ function TenantActions({
   return (
     <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
       {status === 'ACTIVE' && (
-        <button className="btn-secondary" style={{ fontSize: 11 }}
+        <button className="btn btn-secondary" style={{ fontSize: 11 }}
           disabled={busy} onClick={() => run(() => suspendTenant(tenantAlias))}>
           {t('tenants.action.suspend', 'Suspend')}
         </button>
       )}
       {status === 'SUSPENDED' && (
-        <button className="btn-secondary" style={{ fontSize: 11 }}
+        <button className="btn btn-secondary" style={{ fontSize: 11 }}
           disabled={busy} onClick={() => run(() => unsuspendTenant(tenantAlias))}>
           {t('tenants.action.unsuspend', 'Restore')}
         </button>
       )}
       {(status === 'ACTIVE' || status === 'SUSPENDED') && (
-        <button className="btn-secondary" style={{ fontSize: 11, color: 'var(--wrn)' }}
+        <button className="btn btn-secondary" style={{ fontSize: 11, color: 'var(--wrn)' }}
           disabled={busy}
           onClick={() => { if (confirm(t('tenants.action.archiveConfirm', 'Архивировать тенант?')))
             void run(() => archiveTenant(tenantAlias)); }}>
@@ -124,10 +124,25 @@ function TenantActions({
         </button>
       )}
       {status === 'ARCHIVED' && (
-        <button className="btn-secondary" style={{ fontSize: 11 }}
+        <button className="btn btn-secondary" style={{ fontSize: 11 }}
           disabled={busy} onClick={() => run(() => restoreTenant(tenantAlias))}>
           {t('tenants.action.restore', 'Restore')}
         </button>
+      )}
+      {status === 'PROVISIONING_FAILED' && (
+        <>
+          <button className="btn btn-secondary" style={{ fontSize: 11, color: 'var(--inf)' }}
+            disabled={busy}
+            onClick={() => run(() => resumeProvisioningTenant(tenantAlias))}>
+            {t('tenants.action.resume', 'Retry')}
+          </button>
+          <button className="btn btn-secondary" style={{ fontSize: 11, color: 'var(--danger)' }}
+            disabled={busy}
+            onClick={() => { if (confirm(t('tenants.action.forceCleanupConfirm', 'Удалить все данные тенанта?')))
+              void run(() => forceCleanupTenant(tenantAlias)); }}>
+            {t('tenants.action.forceCleanup', 'Cleanup')}
+          </button>
+        </>
       )}
     </div>
   );
@@ -168,10 +183,10 @@ export default function TenantsPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>{t('tenants.heading', 'Tenants')}</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" onClick={() => setProvisionOpen(true)}>
+          <button className="btn btn-secondary" onClick={() => setProvisionOpen(true)}>
             + {t('tenants.provision.button', 'Создать тенант')}
           </button>
-          <button className="btn-secondary" onClick={refresh} disabled={loading}>
+          <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
             {loading ? t('status.loading', 'Loading…') : t('tenants.refresh', 'Refresh')}
           </button>
         </div>
@@ -187,7 +202,7 @@ export default function TenantsPage() {
         <select className="field-input" style={{ width: 'auto' }}
           value={status} onChange={e => handleStatus(e.target.value as TenantStatus | '')}>
           <option value="">{t('tenants.allStatuses', 'Все статусы')}</option>
-          {(['ACTIVE','SUSPENDED','ARCHIVED','PROVISIONING','PURGED'] as TenantStatus[]).map(s => (
+          {(['ACTIVE','SUSPENDED','ARCHIVED','PROVISIONING','PROVISIONING_FAILED','PURGED'] as TenantStatus[]).map(s => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
@@ -220,7 +235,17 @@ export default function TenantsPage() {
                   <td style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>
                     {tenant.tenantAlias}
                   </td>
-                  <td><TenantStatusBadge status={tenant.status} /></td>
+                  <td>
+                    <TenantStatusBadge status={tenant.status} />
+                    {tenant.status === 'PROVISIONING_FAILED' && tenant.lastFailedCause && (
+                      <div style={{ fontSize: 10, color: 'var(--danger)', marginTop: 2,
+                                    maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap' }}
+                        title={tenant.lastFailedCause}>
+                        step {tenant.lastFailedStep}: {tenant.lastFailedCause}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ color: 'var(--t3)' }}>
                     {humanCron((tenant as { harvestCron?: string }).harvestCron)}
                   </td>
@@ -244,12 +269,12 @@ export default function TenantsPage() {
 
           {pageCount > 1 && (
             <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-              <button className="btn-secondary" disabled={currentPage === 0}
+              <button className="btn btn-secondary" disabled={currentPage === 0}
                 onClick={() => setPage(p => p - 1)}>←</button>
               <span style={{ color: 'var(--t3)', fontSize: 11 }}>
                 {currentPage + 1} / {pageCount}
               </span>
-              <button className="btn-secondary" disabled={currentPage >= pageCount - 1}
+              <button className="btn btn-secondary" disabled={currentPage >= pageCount - 1}
                 onClick={() => setPage(p => p + 1)}>→</button>
             </div>
           )}

@@ -67,7 +67,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate, requireScope('aida:admin'), adminRateLimit] },
     async (_req, reply) => {
       const rows = await friggSql('frigg-tenants',
-        `SELECT tenantAlias, status, configVersion FROM DaliTenantConfig`,
+        `SELECT tenantAlias, status, configVersion, lastFailedStep, lastFailedCause FROM DaliTenantConfig`,
       ).catch(() => [{ tenantAlias: 'default', status: 'ACTIVE', configVersion: 1 }]);
       return reply.send(rows);
     },
