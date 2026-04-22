@@ -90,6 +90,52 @@ ensure_default_tenant() {
     "INSERT INTO DaliTenantConfig SET tenantAlias = 'default', status = 'ACTIVE', configVersion = 1, yggLineageDbName = 'hound_default', yggSourceArchiveDbName = 'hound_src_default', friggDaliDbName = 'dali_default', harvestCron = '0 0 */6 * * ?', llmMode = 'off', dataRetentionDays = 30, maxParseSessions = 10, maxAtoms = 10000, maxSources = 5, maxConcurrentJobs = 2, createdAt = $ts, updatedAt = $ts"
 }
 
+# MTN-65: frigg-users schema — 8 vertex types for user-level application data.
+# Per Q-UA-1 (2026-04-22): separate DB (not namespace) for backup granularity +
+# IAM isolation + GDPR export. Per Q-UA-5: include nullable reserved_acl_v2 hook
+# in every vertex for future per-resource ACL without later schema migration.
+ensure_frigg_users_schema() {
+  local base_url="$1" user="$2" pass="$3"
+  local db="frigg-users"
+  log "Ensuring frigg-users schema (8 vertex types + indices):"
+  local types=(
+    UserProfile
+    UserPreferences
+    UserNotifications
+    UserConsents
+    UserSourceBindings
+    UserApplicationState
+    UserLifecycle
+    UserSessionEvents
+  )
+  for t in "${types[@]}"; do
+    run_sql "$base_url" "$user" "$pass" "$db" "CREATE VERTEX TYPE $t IF NOT EXISTS"
+    run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY $t.userId IF NOT EXISTS STRING"
+    run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY $t.configVersion IF NOT EXISTS INTEGER"
+    run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY $t.updatedAt IF NOT EXISTS LONG"
+    run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY $t.reserved_acl_v2 IF NOT EXISTS STRING"
+  done
+  # UserProfile / UserPreferences / UserNotifications / UserLifecycle / UserApplicationState:
+  #   one row per user → UNIQUE(userId)
+  for t in UserProfile UserPreferences UserNotifications UserLifecycle UserApplicationState; do
+    run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON $t (userId) UNIQUE"
+  done
+  # UserConsents / UserSessionEvents: append-only, many rows per user → NOTUNIQUE
+  for t in UserConsents UserSessionEvents; do
+    run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON $t (userId) NOTUNIQUE"
+  done
+  # UserSourceBindings: (userId, tenantAlias) composite — one binding per user per tenant
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY UserSourceBindings.tenantAlias IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON UserSourceBindings (userId, tenantAlias) UNIQUE"
+  # UserSessionEvents: index ts for retention purge (MTN-64 180d) + tenantAlias for admin view
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY UserSessionEvents.ts IF NOT EXISTS LONG"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY UserSessionEvents.tenantAlias IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON UserSessionEvents (ts) NOTUNIQUE"
+  # UserLifecycle: index dataRetentionUntil for hard-delete scheduler (MTN-61)
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY UserLifecycle.dataRetentionUntil IF NOT EXISTS LONG"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON UserLifecycle (dataRetentionUntil) NOTUNIQUE"
+}
+
 # KC-ORG-02: sync keycloakOrgId from Keycloak Organizations API into DaliTenantConfig
 # Requires KC Organizations feature enabled (KC-ORG-01: docker-compose KC_FEATURES=organization).
 # Idempotent: skips if orgId already written to frigg-tenants.
@@ -141,10 +187,12 @@ if wait_ready "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "FRIGG"; then
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "heimdall"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-tenants"
+  ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-users"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "hound_default"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "hound_src_default"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_default"
   ensure_default_tenant "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
+  ensure_frigg_users_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   sync_default_keycloak_org_id "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
 fi
 
