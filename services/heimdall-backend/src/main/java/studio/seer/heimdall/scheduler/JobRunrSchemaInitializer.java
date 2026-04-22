@@ -37,6 +37,7 @@ public class JobRunrSchemaInitializer {
     void onStart(@Observes @Priority(5) StartupEvent ev) {
         LOG.info("JobRunrSchemaInitializer: ensuring frigg-jobrunr schema...");
         try {
+            frigg.createDb();   // create database if it doesn't exist yet
             ensureTypes();
             ensureIndexes();
             ready = true;

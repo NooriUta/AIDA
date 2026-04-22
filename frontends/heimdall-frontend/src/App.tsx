@@ -23,8 +23,10 @@ const DaliSourcesPage = React.lazy(() => import('./pages/DaliSourcesPage'));
 const DaliJobRunrPage = React.lazy(() => import('./pages/DaliJobRunrPage'));
 const EventStreamPage = React.lazy(() => import('./pages/EventStreamPage'));
 const ControlsPage    = React.lazy(() => import('./pages/ControlsPage'));
-const UsersPage       = React.lazy(() => import('./pages/UsersPage'));
-const DocsPage        = React.lazy(() => import('./pages/DocsPage'));
+const UsersPage          = React.lazy(() => import('./pages/UsersPage'));
+const DocsPage           = React.lazy(() => import('./pages/DocsPage'));
+const TenantsPage        = React.lazy(() => import('./pages/TenantsPage'));
+const TenantDetailsPage  = React.lazy(() => import('./pages/TenantDetailsPage'));
 
 // ── App layout (shell around the routed page) ─────────────────────────────────
 function AppLayout() {
@@ -123,6 +125,14 @@ export default function App() {
               <Route path="sources"  element={<DaliSourcesPage />} />
               <Route path="jobrunr"  element={<DaliJobRunrPage />} />
             </Route>
+
+            {/* Tenant admin — admin+ only */}
+            <Route path="admin/tenants" element={
+              <RoleGuard require="admin"><TenantsPage /></RoleGuard>
+            } />
+            <Route path="admin/tenants/:alias" element={
+              <RoleGuard require="admin"><TenantDetailsPage /></RoleGuard>
+            } />
 
             {/* Standalone pages */}
             <Route path="users" element={

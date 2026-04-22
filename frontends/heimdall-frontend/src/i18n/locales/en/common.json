@@ -406,5 +406,19 @@
       "uploadBtn":       "Upload & Parse",
       "success":         "Uploaded — session {{id}} enqueued"
     }
+  },
+  "tenants": {
+    "pageTitle":        "Tenants",
+    "heading":          "Tenants",
+    "alias":            "Alias",
+    "status":           "Status",
+    "configVersion":    "Config v",
+    "tenant":           "Tenant",
+    "back":             "Tenants",
+    "refresh":          "Refresh",
+    "empty":            "No tenants found.",
+    "details":          "Details →",
+    "allStatuses":      "All statuses",
+    "searchPlaceholder":"Search by alias…"
   }
 }

@@ -38,6 +38,22 @@ public class JobRunrFriggGateway {
     @ConfigProperty(name = "heimdall.scheduler.jobrunr.db", defaultValue = "frigg-jobrunr")
     String db;
 
+    /**
+     * Creates the JobRunr ArcadeDB database if it doesn't already exist.
+     * ArcadeDB returns 500 when the database already exists — that is treated as success.
+     */
+    public void createDb() {
+        LOG.infof("[JR-FRIGG] ensuring database %s...", db);
+        try {
+            client.createDatabase(db, basicAuth())
+                    .onFailure().recoverWithNull()
+                    .await().atMost(TIMEOUT);
+            LOG.infof("[JR-FRIGG] database %s ready", db);
+        } catch (Exception e) {
+            LOG.warnf("[JR-FRIGG] createDatabase %s: %s (may already exist — continuing)", db, e.getMessage());
+        }
+    }
+
     public List<Map<String, Object>> sql(String query, Map<String, Object> params) {
         LOG.debugf("[JR-FRIGG:%s] %s", db, query);
         try {
