@@ -21,7 +21,7 @@ import App from './App';
 // must strip the prefix to match the route tree (which is rooted at /).
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter basename="/heimdall">
+    <BrowserRouter basename="/">
       <App />
     </BrowserRouter>
   </React.StrictMode>,

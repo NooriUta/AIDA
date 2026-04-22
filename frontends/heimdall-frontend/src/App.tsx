@@ -7,7 +7,6 @@ import './i18n/config';
 import './styles/heimdall.css';
 import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useTranslation }  from 'react-i18next';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
 import { ConsentModal }    from './components/ConsentModal';
@@ -38,16 +37,11 @@ const SoftDeletedUsersPage  = React.lazy(() => import('./pages/SoftDeletedUsersP
 
 // ── App layout (shell around the routed page) ─────────────────────────────────
 function AppLayout() {
-  const { t } = useTranslation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <HeimdallHeader />
       <main style={{ flex: 1, overflow: 'hidden' }}>
-        <Suspense fallback={
-          <div style={{ padding: 'var(--seer-space-8)', color: 'var(--t3)' }}>
-            {t('status.loading')}
-          </div>
-        }>
+        <Suspense fallback={null}>
           <Outlet />
         </Suspense>
       </main>
@@ -66,14 +60,7 @@ function ProtectedRoute() {
   const isAuthenticated   = useAuthStore(s => s.isAuthenticated);
   const isCheckingSession = useAuthStore(s => s.isCheckingSession);
 
-  if (isCheckingSession) return (
-    <div style={{
-      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: 'var(--t3)', fontSize: '13px',
-    }}>
-      …
-    </div>
-  );
+  if (isCheckingSession) return null;
   if (!isAuthenticated) return <Navigate to="login" replace />;
   return <Outlet />;
 }

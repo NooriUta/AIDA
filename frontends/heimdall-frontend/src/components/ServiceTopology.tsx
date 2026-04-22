@@ -1,11 +1,13 @@
 import {
   ReactFlow, Background, Controls,
   type Node, type Edge, MarkerType,
-  Handle, Position, useNodesState,
+  Handle, Position, useNodesState, useReactFlow, ReactFlowProvider,
 } from '@xyflow/react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import ELK, { type ELK as ELKApi } from 'elkjs/lib/elk.bundled.js';
+import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 import '@xyflow/react/dist/style.css';
-import { SERVICES, STORAGE, type ServiceSpec, type TopologyLayer } from '../config/services';
+import { SERVICES, STORAGE, type ServiceSpec } from '../config/services';
 
 // ── Docker SVG icon ────────────────────────────────────────────────────────────
 function DockerIcon({ size = 10 }: { size?: number }) {
@@ -34,7 +36,8 @@ interface ServiceNodeData {
   [key: string]: unknown;
 }
 
-// ── Nodes ──────────────────────────────────────────────────────────────────────
+// ── Node component ────────────────────────────────────────────────────────────
+// Handles on top (target) and bottom (source) — matches ELK direction = DOWN.
 function ServiceNode({ data }: { data: ServiceNodeData }) {
   const borderColor = data.statusColor ?? data.color ?? 'var(--bd)';
   const openUrl = data.extPort ? `http://localhost:${data.extPort}` : undefined;
@@ -48,20 +51,26 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
         border:       `1px solid ${borderColor}`,
         borderRadius: 'var(--seer-radius-md)',
         padding:      '5px 10px',
-        minWidth:     118,
+        width:        NODE_W,
+        height:       NODE_H,
         textAlign:    'center',
         cursor:       openUrl ? 'pointer' : 'default',
         boxShadow: data.statusColor
           ? `0 0 6px color-mix(in srgb, ${data.statusColor} 40%, transparent)`
           : undefined,
         transition: 'border-color 0.4s, box-shadow 0.4s',
+        display:        'flex',
+        flexDirection:  'column',
+        justifyContent: 'center',
+        alignItems:     'center',
+        gap:            2,
       }}>
       <Handle id="t" type="target" position={Position.Top}    style={{ background: 'var(--bd)' }} />
-      <Handle id="l" type="target" position={Position.Left}   style={{ background: 'var(--bd)' }} />
 
       <div style={{
         fontSize: '11px', fontWeight: 600, color: 'var(--t1)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+        whiteSpace: 'nowrap',
       }}>
         {data.isDocker && !data.isStorage && <DockerIcon size={10} />}
         {data.label}
@@ -71,7 +80,6 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
         <div style={{
           width: 5, height: 5, borderRadius: '50%',
           background: data.statusColor,
-          margin: '2px auto 0',
         }} />
       )}
 
@@ -79,97 +87,76 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
         <div style={{
           fontSize: '10px', fontFamily: 'var(--mono)',
           color: data.isStorage ? 'var(--t3)' : '#2496ED',
-          marginTop: data.statusColor ? 1 : 2,
         }}>
           :{data.port}
         </div>
       )}
 
       <Handle id="b" type="source" position={Position.Bottom} style={{ background: 'var(--bd)' }} />
-      <Handle id="r" type="source" position={Position.Right}  style={{ background: 'var(--bd)' }} />
     </div>
   );
 }
 
 const NODE_TYPES = { service: ServiceNode };
 
-// ── Auto-layout (horizontal) ───────────────────────────────────────────────────
-// Layers flow left-to-right: L0 (nginx edge) → L1 (shell) → … → L6 (storage).
-// Within each layer services stack vertically, centred around CENTER_Y.
-const COL_W    = 190;   // distance between layers (horizontal step)
-const ROW_H    = 95;    // distance between services in the same layer
-const CENTER_Y = 320;   // vertical centre for each column
+// ── Layout constants ──────────────────────────────────────────────────────────
+const NODE_W = 130;   // node width fed to ELK
+const NODE_H = 60;    // node height fed to ELK
 
-/** Build nodes from SERVICES (docker-mode) + STORAGE. Layer ⇒ x; index within layer ⇒ y. */
-function buildNodes(): Node[] {
-  // Group by layer
-  const byLayer = new Map<TopologyLayer, Array<{ id: string; label: string; port?: number; extPort?: number; color?: string; isStorage?: boolean; isDocker?: boolean }>>();
-  const push = (L: TopologyLayer, n: { id: string; label: string; port?: number; extPort?: number; color?: string; isStorage?: boolean; isDocker?: boolean }) => {
-    const arr = byLayer.get(L) ?? [];
-    arr.push(n);
-    byLayer.set(L, arr);
-  };
-
-  for (const svc of SERVICES) {
-    if (svc.layer == null) continue;            // undefined — not topology-visible
-    if (!svc.portDocker) continue;               // docker-only topology
-    push(svc.layer, {
-      id: svc.id, label: svc.label,
-      port: svc.portDocker, extPort: svc.portDocker,
-      color: svc.color, isDocker: true,
-    });
-  }
-  for (const s of STORAGE) {
-    push(s.layer, { id: s.id, label: s.label, port: s.portExt, color: s.color, isStorage: true });
-  }
-
-  const nodes: Node[] = [];
-  for (const [layer, items] of byLayer) {
-    const n = items.length;
-    const startY = CENTER_Y - ((n - 1) * ROW_H) / 2;
-    items.forEach((item, idx) => {
-      nodes.push({
-        id:       item.id,
-        type:     'service',
-        position: { x: layer * COL_W, y: startY + idx * ROW_H },
-        data: {
-          label:     item.label,
-          port:      item.port,
-          extPort:   item.extPort,
-          color:     item.color,
-          isStorage: item.isStorage,
-          isDocker:  item.isDocker,
-        },
-      });
-    });
-  }
-  return nodes;
+// ── ELK setup (singleton) ─────────────────────────────────────────────────────
+// Bundled build; Worker hosted via Vite's ?url import. Same-origin in dev
+// (heimdall-frontend serves at :5174); MF/cross-origin scenarios re-fetch
+// the script via blob URL — but for this small static graph we never run
+// inside an MF remote, so the simple direct-URL workerFactory suffices.
+let _elk: ELKApi | null = null;
+function getElk(): ELKApi {
+  if (_elk) return _elk;
+  _elk = new ELK({
+    workerFactory: (_url?: string) => new Worker(elkWorkerUrl),
+  });
+  return _elk;
 }
 
-/** Derive edges from `deps` + `depLabels` on each ServiceSpec. */
-function buildEdges(): Edge[] {
-  const edges: Edge[] = [];
-  const allIds = new Set<string>([
-    ...SERVICES.filter(s => s.portDocker).map(s => s.id),
-    ...STORAGE.map(s => s.id),
-  ]);
+// ── Build raw node + edge spec from SERVICES + STORAGE ────────────────────────
+interface RawNode {
+  id: string; label: string; port?: number; extPort?: number;
+  color?: string; isStorage?: boolean; isDocker?: boolean;
+  layer: number;
+}
 
-  const edgeColor = (source: ServiceSpec, _targetId: string): string => {
-    // Colour by source service accent (fallback to border)
-    return source.color ?? 'var(--bd)';
-  };
+function buildRaw(): { nodes: RawNode[]; edges: Edge[] } {
+  const nodes: RawNode[] = [];
+  const allIds = new Set<string>();
 
   for (const svc of SERVICES) {
-    if (!svc.deps) continue;
-    if (!svc.portDocker && !allIds.has(svc.id)) continue;
+    if (svc.layer == null || !svc.portDocker) continue;
+    nodes.push({
+      id: svc.id, label: svc.label,
+      port: svc.portDocker, extPort: svc.portDocker,
+      color: svc.color, isDocker: true, layer: svc.layer,
+    });
+    allIds.add(svc.id);
+  }
+  for (const s of STORAGE) {
+    nodes.push({
+      id: s.id, label: s.label,
+      port: s.portExt, color: s.color, isStorage: true, layer: s.layer,
+    });
+    allIds.add(s.id);
+  }
+
+  const edges: Edge[] = [];
+  const edgeColor = (src: ServiceSpec): string => src.color ?? 'var(--bd)';
+  for (const svc of SERVICES) {
+    if (!svc.deps || !allIds.has(svc.id)) continue;
     svc.deps.forEach((dep, i) => {
       if (!allIds.has(dep)) return;
       const label = svc.depLabels?.[i] ?? '→';
-      const color = edgeColor(svc, dep);
+      const color = edgeColor(svc);
       edges.push({
-        id:        `${svc.id}->${dep}`,
-        source:    svc.id,
-        target:    dep,
+        id:           `${svc.id}->${dep}`,
+        source:       svc.id,
+        target:       dep,
         label,
         markerEnd:    { type: MarkerType.ArrowClosed, color },
         style:        { stroke: color, strokeWidth: 1.5 },
@@ -178,7 +165,72 @@ function buildEdges(): Edge[] {
       });
     });
   }
-  return edges;
+  return { nodes, edges };
+}
+
+// ── Run ELK layered DOWN with explicit layer constraints ──────────────────────
+// Each service has a fixed layer (0 = nginx edge, 6 = storage). We feed those
+// to ELK via `layerChoiceConstraint` so the L0..L6 stacking is preserved
+// regardless of edge directions; ELK only needs to decide horizontal order
+// within each layer to minimize crossings.
+async function runLayout(raw: ReturnType<typeof buildRaw>): Promise<{
+  nodes:  Node[];
+  width:  number;
+  height: number;
+}> {
+  const elkGraph = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm':                             'layered',
+      'elk.direction':                             'DOWN',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '50',
+      'elk.spacing.nodeNode':                      '34',
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      'elk.layered.nodePlacement.strategy':        'BRANDES_KOEPF',
+      'elk.layered.unnecessaryBendpoints':         'false',
+      'elk.padding':                               '[top=12,left=12,bottom=12,right=12]',
+    },
+    children: raw.nodes.map(n => ({
+      id:     n.id,
+      width:  NODE_W,
+      height: NODE_H,
+      layoutOptions: {
+        'elk.layered.layering.layerChoiceConstraint': String(n.layer),
+      },
+    })),
+    edges: raw.edges.map(e => ({
+      id:      e.id,
+      sources: [e.source],
+      targets: [e.target],
+    })),
+  };
+
+  const result = await getElk().layout(elkGraph);
+  const posMap = new Map<string, { x: number; y: number }>();
+  for (const c of result.children ?? []) {
+    posMap.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
+  }
+
+  const nodes: Node[] = raw.nodes.map(n => ({
+    id:       n.id,
+    type:     'service',
+    position: posMap.get(n.id) ?? { x: 0, y: 0 },
+    data: {
+      label:     n.label,
+      port:      n.port,
+      extPort:   n.extPort,
+      color:     n.color,
+      isStorage: n.isStorage,
+      isDocker:  n.isDocker,
+    },
+  }));
+
+  const r = result as unknown as { width?: number; height?: number };
+  return {
+    nodes,
+    width:  Math.ceil(r.width  ?? 0),
+    height: Math.ceil(r.height ?? 0),
+  };
 }
 
 // ── Health colour helper ───────────────────────────────────────────────────────
@@ -192,18 +244,38 @@ function healthColor(status: ServiceHealth['status'] | undefined): string | unde
   }
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: ServiceHealth[] }) {
+// ── Inner — assumes ReactFlowProvider context ─────────────────────────────────
+function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHealth[] }) {
+  const raw = useMemo(buildRaw, []);
+
+  // ELK runs once on mount; layout is static (driven by services.ts config).
+  const [layout, setLayout] = useState<{ nodes: Node[]; width: number; height: number } | null>(null);
+  const [layoutErr, setLayoutErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    runLayout(raw)
+      .then(res => { if (!cancelled) setLayout(res); })
+      .catch(err => { if (!cancelled) setLayoutErr(err instanceof Error ? err.message : String(err)); });
+    return () => { cancelled = true; };
+  }, [raw]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const { fitView } = useReactFlow();
+
+  // Apply ELK output to ReactFlow state + re-fit viewport.
+  useEffect(() => {
+    if (!layout) return;
+    setNodes(layout.nodes);
+    requestAnimationFrame(() => fitView({ padding: 0.08, duration: 250 }));
+  }, [layout, setNodes, fitView]);
+
+  // Live health colour updates — touch only `data.statusColor`, preserve positions.
   const statusLookup = useMemo(() => {
     const m = new Map<string, ServiceHealth['status']>();
     for (const s of serviceStatuses) m.set(s.name, s.status);
     return m;
   }, [serviceStatuses]);
-
-  const initialNodes = useMemo(() => buildNodes(), []);
-  const edges        = useMemo(() => buildEdges(), []);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
 
   useEffect(() => {
     setNodes(prev => prev.map(n => {
@@ -215,15 +287,10 @@ export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: Se
     }));
   }, [statusLookup, setNodes]);
 
-  // Canvas height — horizontal layout ⇒ depends on the tallest column
-  // (layer with most services), not the number of layers.
-  const layerCounts = new Map<number, number>();
-  for (const s of SERVICES) if (s.portDocker && s.layer != null)
-    layerCounts.set(s.layer, (layerCounts.get(s.layer) ?? 0) + 1);
-  for (const s of STORAGE)
-    layerCounts.set(s.layer, (layerCounts.get(s.layer) ?? 0) + 1);
-  const maxCol = Math.max(...layerCounts.values(), 1);
-  const canvasHeight = Math.max(420, maxCol * ROW_H + 180);
+  const edges = useMemo(() => buildRaw().edges, []);
+
+  // Canvas height — derive from ELK output, clamped to a sensible band.
+  const canvasHeight = layout ? Math.max(360, Math.min(640, layout.height + 60)) : 420;
 
   return (
     <div style={{
@@ -246,8 +313,13 @@ export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: Se
       }}>
         Service Topology
         <span style={{ textTransform: 'none', fontFamily: 'var(--mono)', color: 'var(--t3)', opacity: 0.7 }}>
-          · derived from config/services.ts
+          · ELK layered · derived from config/services.ts
         </span>
+        {layoutErr && (
+          <span style={{ textTransform: 'none', color: 'var(--danger)', fontFamily: 'var(--mono)' }}>
+            layout: {layoutErr}
+          </span>
+        )}
         {serviceStatuses.length > 0 && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -272,7 +344,7 @@ export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: Se
           onNodesChange={onNodesChange}
           nodeTypes={NODE_TYPES}
           fitView
-          fitViewOptions={{ padding: 0.12 }}
+          fitViewOptions={{ padding: 0.08 }}
           proOptions={{ hideAttribution: true }}
           style={{ background: 'var(--bg0)' }}
         >
@@ -284,3 +356,11 @@ export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: Se
   );
 }
 
+// ── Public component — wraps inner in ReactFlowProvider so useReactFlow works ─
+export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: ServiceHealth[] }) {
+  return (
+    <ReactFlowProvider>
+      <ServiceTopologyInner serviceStatuses={serviceStatuses} />
+    </ReactFlowProvider>
+  );
+}
