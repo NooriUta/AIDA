@@ -78,6 +78,8 @@ ensure_default_tenant() {
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY DaliTenantConfig.featureFlags IF NOT EXISTS STRING"
   # MTN-35: harvest cron timezone (default UTC applied by HarvestCronRegistry)
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY DaliTenantConfig.harvestCronTimezone IF NOT EXISTS STRING"
+  # MTN-39: epoch ms when an admin last changed a role in this tenant — triggers session force-invalidation
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY DaliTenantConfig.lastRoleChangeAt IF NOT EXISTS LONG"
 
   # MTN-34: service accounts and API keys
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE VERTEX TYPE ServiceAccount IF NOT EXISTS"

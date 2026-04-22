@@ -439,4 +439,22 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ tenantAlias: request.params.alias, flags, configVersion: cfg.configVersion });
     },
   );
+
+  // ── POST /api/admin/tenants/:alias/role-change-signal — MTN-39 ─────────────
+  // Bumps lastRoleChangeAt on DaliTenantConfig. Sessions older than this
+  // timestamp are force-invalidated on their next token refresh.
+  app.post<{ Params: { alias: string } }>(
+    '/api/admin/tenants/:alias/role-change-signal',
+    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard] },
+    async (request, reply) => {
+      const { alias } = request.params;
+      const now = Date.now();
+      await friggSql('frigg-tenants',
+        `UPDATE DaliTenantConfig SET lastRoleChangeAt = :ts WHERE tenantAlias = :alias`,
+        { ts: now, alias },
+      );
+      emitTenantAudit('seer.audit.member_role_changed', request.user.username, alias, { lastRoleChangeAt: now });
+      return reply.send({ ok: true, lastRoleChangeAt: now });
+    },
+  );
 };

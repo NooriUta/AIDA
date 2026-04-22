@@ -135,13 +135,52 @@ export async function ensureValidSession(sid: string): Promise<Session> {
 
 // ── Internal ─────────────────────────────────────────────────────────────────
 
+async function fetchLastRoleChangeAt(tenantAlias: string): Promise<number | null> {
+  const FRIGG_BASIC = Buffer.from(`${config.friggUser}:${config.friggPass}`).toString('base64');
+  try {
+    const res = await fetch(
+      `${config.friggUrl}/api/v1/query/${encodeURIComponent(config.friggTenantsDb)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${FRIGG_BASIC}` },
+        body: JSON.stringify({
+          language: 'sql',
+          command: 'SELECT lastRoleChangeAt FROM DaliTenantConfig WHERE tenantAlias = :alias LIMIT 1',
+          params: { alias: tenantAlias },
+        }),
+        signal: AbortSignal.timeout(3_000),
+      },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { result?: Array<{ lastRoleChangeAt?: number | null }> };
+    return data.result?.[0]?.lastRoleChangeAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function doRefresh(sid: string, session: Session): Promise<Session> {
+  // MTN-39: force-invalidate if an admin bumped lastRoleChangeAt after session was created
+  const tenantAlias = session.activeTenantAlias ?? 'default';
+  const lastRoleChangeAt = await fetchLastRoleChangeAt(tenantAlias);
+  if (lastRoleChangeAt && session.createdAt && session.createdAt < lastRoleChangeAt) {
+    await store.delete(sid);
+    void emitSessionEvent({
+      userId:    session.sub,
+      sessionId: sid,
+      eventType: 'session_invalidated',
+      result:    'failure',
+    });
+    throw new Error('session_invalidated_role_change');
+  }
+
   const tokens = await refreshAccessToken(session.refreshToken);
   const userInfo = extractUserInfo(
     JSON.parse(Buffer.from(tokens.access_token.split('.')[1], 'base64url').toString()),
   );
 
   const updated: Session = {
+    ...session,
     accessToken:     tokens.access_token,
     refreshToken:    tokens.refresh_token,
     accessExpiresAt: Date.now() + tokens.expires_in * 1000,
@@ -149,6 +188,9 @@ async function doRefresh(sid: string, session: Session): Promise<Session> {
     username:        userInfo.username,
     role:            userInfo.role,
     scopes:          userInfo.scopes,
+    email:           userInfo.email ?? session.email,
+    firstName:       userInfo.firstName ?? session.firstName,
+    lastName:        userInfo.lastName ?? session.lastName,
   };
 
   await store.update(sid, updated);
