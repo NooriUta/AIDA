@@ -8,6 +8,7 @@ import jakarta.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.rest.SourceDTO.SchemaFilter;
+import studio.seer.dali.security.JdbcUrlValidator;
 import studio.seer.dali.storage.SourceRepository;
 
 import java.sql.Connection;
@@ -33,7 +34,8 @@ public class SourceResource {
 
     private static final Logger log = LoggerFactory.getLogger(SourceResource.class);
 
-    @Inject SourceRepository repository;
+    @Inject SourceRepository  repository;
+    @Inject JdbcUrlValidator  jdbcUrlValidator;
 
     @GET
     public Response list() {
@@ -45,6 +47,8 @@ public class SourceResource {
         if (body == null || blank(body.name()) || blank(body.dialect()) || blank(body.jdbcUrl())) {
             return bad("name, dialect, and jdbcUrl are required");
         }
+        var ssrf = jdbcUrlValidator.validate(body.jdbcUrl());
+        if (!ssrf.allowed()) return bad("source_url_rejected: " + ssrf.reason());
         SourceDTO created = repository.create(
             body.name(), body.dialect(), body.jdbcUrl(),
             body.username(), body.password(), body.schemaFilter());
@@ -57,6 +61,8 @@ public class SourceResource {
         if (body == null || blank(body.name()) || blank(body.dialect()) || blank(body.jdbcUrl())) {
             return bad("name, dialect, and jdbcUrl are required");
         }
+        var ssrf = jdbcUrlValidator.validate(body.jdbcUrl());
+        if (!ssrf.allowed()) return bad("source_url_rejected: " + ssrf.reason());
         return repository.update(id, body.name(), body.dialect(), body.jdbcUrl(),
                 body.username(), body.password(), body.schemaFilter())
                 .map(dto -> Response.ok(dto).build())
@@ -79,6 +85,8 @@ public class SourceResource {
     @Path("/test")
     public Response test(TestConnectionRequest req) {
         if (req == null || blank(req.jdbcUrl())) return bad("jdbcUrl is required");
+        var ssrf = jdbcUrlValidator.validate(req.jdbcUrl());
+        if (!ssrf.allowed()) return bad("source_url_rejected: " + ssrf.reason());
         long start = System.currentTimeMillis();
         try {
             try (Connection conn = DriverManager.getConnection(
