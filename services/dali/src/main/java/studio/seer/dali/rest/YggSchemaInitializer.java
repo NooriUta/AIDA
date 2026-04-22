@@ -7,6 +7,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.tenantrouting.TenantNotAvailableException;
 import studio.seer.tenantrouting.YggLineageRegistry;
 import studio.seer.tenantrouting.YggSourceArchiveRegistry;
 
@@ -29,8 +30,10 @@ public class YggSchemaInitializer {
     @Inject YggGateway               ygg;   // kept for ensureDatabase() ping
 
     void onStart(@Observes @Priority(3) StartupEvent ev) {
-        String lineageDb = lineageRegistry.resourceFor("default").databaseName();
-        String sourceDb  = sourceRegistry.resourceFor("default").databaseName();
+        // MTN-01: resolving "default" via the registry is for log context only —
+        // tolerate FRIGG being unavailable during tests / cold boot.
+        String lineageDb = resolveDbNameQuietly("default", lineageRegistry::resourceFor, "hound_default");
+        String sourceDb  = resolveDbNameQuietly("default", sourceRegistry::resourceFor,  "hound_src_default");
         log.info("YggSchemaInitializer: ensuring YGG databases exist — lineage={}, source={}", lineageDb, sourceDb);
         boolean ready = false;
         for (int attempt = 1; attempt <= 12 && !ready; attempt++) {
@@ -47,6 +50,18 @@ public class YggSchemaInitializer {
         }
         if (!ready) {
             log.warn("YggSchemaInitializer: YGG database still unavailable — parse sessions will fail");
+        }
+    }
+
+    private static String resolveDbNameQuietly(String alias,
+                                               java.util.function.Function<String, ? extends studio.seer.tenantrouting.ArcadeConnection> resolver,
+                                               String fallback) {
+        try {
+            return resolver.apply(alias).databaseName();
+        } catch (TenantNotAvailableException e) {
+            log.debug("YggSchemaInitializer: '{}' not in FRIGG yet ({}); logging fallback name '{}'",
+                     alias, e.reason(), fallback);
+            return fallback;
         }
     }
 }

@@ -50,6 +50,7 @@ dependencies {
 
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.quarkus:quarkus-junit5-mockito'
+    testImplementation 'org.assertj:assertj-core:3.26.3'
 }
 
 compileJava.options.encoding     = 'UTF-8'

@@ -1,0 +1,3 @@
+#
+#Wed Apr 22 12:55:59 MSK 2026
+no\ classes\ that\ reside\ in\ any\ package\ ['studio.seer.lineage.service..',\ 'studio.seer.lineage.resource..',\ 'studio.seer.lineage.storage..']\ should\ call\ method\ ArcadeGateway.sql(String)\ or\ should\ call\ method\ ArcadeGateway.sql(String,\ Map)\ or\ should\ call\ method\ ArcadeGateway.cypher(String)\ or\ should\ call\ method\ ArcadeGateway.cypher(String,\ Map),\ because\ MTN-02\:\ use\ sqlIn/cypherIn\ with\ per-tenant\ dbName\ resolved\ via\ YggLineageRegistry.resourceFor(alias).databaseName()\ \u2014\ tenant-unaware\ overloads\ are\ @Deprecated(forRemoval)=fad6afc1-b67a-43bf-9e20-80158d9630b5

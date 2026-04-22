@@ -33,7 +33,8 @@ public class AdminResource {
     @Query("tenantStats")
     @Description("Aggregated stats for all tenants (allTenants=true) or caller's tenant. Role: super-admin")
     public Uni<List<TenantStats>> tenantStats(
-            @Name("allTenants") @DefaultValue("false") boolean allTenants) {
+            @Name("allTenants") @DefaultValue("false") boolean allTenants)
+            throws GraphQLException {
 
         requireSuperadmin();
 
@@ -63,7 +64,8 @@ public class AdminResource {
 
     @Query("crossTenantSearch")
     @Description("Full-text search across all active tenants. Role: super-admin")
-    public Uni<List<SearchResult>> crossTenantSearch(@Name("query") String query) {
+    public Uni<List<SearchResult>> crossTenantSearch(@Name("query") String query)
+            throws GraphQLException {
 
         requireSuperadmin();
 
@@ -88,7 +90,7 @@ public class AdminResource {
 
     // ── internal ──────────────────────────────────────────────────────────────
 
-    private void requireSuperadmin() {
+    private void requireSuperadmin() throws GraphQLException {
         if (!"super-admin".equals(identity.role())) {
             throw new GraphQLException("Access denied: super-admin role required");
         }

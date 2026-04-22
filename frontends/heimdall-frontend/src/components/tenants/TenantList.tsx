@@ -26,19 +26,19 @@ export function TenantList({ tenants }: Props) {
         </tr>
       </thead>
       <tbody>
-        {tenants.map(t => (
+        {tenants.map(tenant => (
           <tr
-            key={t.tenantAlias}
+            key={tenant.tenantAlias}
             style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
-            onClick={() => navigate(`/admin/tenants/${t.tenantAlias}`)}
+            onClick={() => navigate(`/admin/tenants/${tenant.tenantAlias}`)}
           >
-            <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{t.tenantAlias}</td>
-            <td style={{ padding: '8px 12px' }}><TenantStatusBadge status={t.status} /></td>
-            <td style={{ padding: '8px 12px', color: 'var(--color-muted)' }}>v{t.configVersion}</td>
+            <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{tenant.tenantAlias}</td>
+            <td style={{ padding: '8px 12px' }}><TenantStatusBadge status={tenant.status} /></td>
+            <td style={{ padding: '8px 12px', color: 'var(--color-muted)' }}>v{tenant.configVersion}</td>
             <td style={{ padding: '8px 12px', textAlign: 'right' }}>
               <button
                 className="btn-secondary"
-                onClick={e => { e.stopPropagation(); navigate(`/admin/tenants/${t.tenantAlias}`); }}
+                onClick={e => { e.stopPropagation(); navigate(`/admin/tenants/${tenant.tenantAlias}`); }}
               >
                 {t('tenants.details', 'Details →')}
               </button>

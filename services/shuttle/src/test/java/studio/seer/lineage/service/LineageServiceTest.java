@@ -7,7 +7,11 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import studio.seer.lineage.client.ArcadeGateway;
+import studio.seer.lineage.security.SeerIdentity;
+import studio.seer.tenantrouting.ArcadeConnection;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.List;
 import java.util.Map;
@@ -33,11 +37,25 @@ class LineageServiceTest {
     @InjectMock
     ArcadeGateway arcade;
 
+    @InjectMock
+    SeerIdentity identity;
+
+    @InjectMock
+    YggLineageRegistry lineageRegistry;
+
     @BeforeEach
     void setUp() {
         // Return empty result for every cypher call — we only care about the query string
         when(arcade.cypher(anyString(), anyMap()))
             .thenReturn(Uni.createFrom().item(List.of()));
+        when(arcade.cypherIn(anyString(), anyString(), anyMap()))
+            .thenReturn(Uni.createFrom().item(List.of()));
+
+        // SHT-04 tenant routing — stub default tenant
+        when(identity.tenantAlias()).thenReturn("default");
+        ArcadeConnection conn = Mockito.mock(ArcadeConnection.class);
+        when(lineageRegistry.resourceFor("default")).thenReturn(conn);
+        when(conn.databaseName()).thenReturn("hound_default");
     }
 
     @Test
@@ -101,7 +119,7 @@ class LineageServiceTest {
         lineageService.expandDeep("#42:7", 3).await().indefinitely();
 
         ArgumentCaptor<Map<String, Object>> paramsCaptor = paramsCaptor();
-        verify(arcade).cypher(anyString(), paramsCaptor.capture());
+        verify(arcade).cypherIn(anyString(), anyString(), paramsCaptor.capture());
         assertEquals("#42:7", paramsCaptor.getValue().get("nodeId"),
             "nodeId must be passed as a named parameter, not interpolated");
     }
@@ -109,8 +127,9 @@ class LineageServiceTest {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private String captureQuery() {
+        // SHT-04: LineageService routes through arcade.cypherIn(db, query, params)
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(arcade, atLeastOnce()).cypher(captor.capture(), anyMap());
+        verify(arcade, atLeastOnce()).cypherIn(anyString(), captor.capture(), anyMap());
         return captor.getValue();
     }
 
