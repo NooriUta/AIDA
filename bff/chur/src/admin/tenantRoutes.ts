@@ -21,6 +21,9 @@ import {
   inviteUser,
   setUserRole,
   setUserEnabled,
+  listOrgMembers,
+  inviteUserToOrg,
+  removeOrgMember,
 } from '../keycloakAdmin';
 import { randomUUID } from 'node:crypto';
 
@@ -199,9 +202,21 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   // ── Member management (CAP-08) ──────────────────────────────────────────────
 
+  // KC-ORG-04: member routes resolve keycloakOrgId from DaliTenantConfig and
+  // call the Organization-scoped APIs (vs legacy listUsers = whole realm).
+  // Fallback to legacy listUsers() only when keycloakOrgId is missing (upgrade
+  // path for dev deployments before sync_default_keycloak_org_id was run).
+
   app.get<{ Params: { alias: string } }>('/api/admin/tenants/:alias/members',
     { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), adminRateLimit] },
-    async (_req, reply) => {
+    async (request, reply) => {
+      const cfg = await getTenantConfig(request.params.alias).catch(() => null);
+      const orgId = cfg?.keycloakOrgId as string | undefined;
+      if (orgId) {
+        const users = await listOrgMembers(orgId);
+        return reply.send(users);
+      }
+      console.warn(`[KC-ORG] /tenants/${request.params.alias}/members: no keycloakOrgId — falling back to listUsers (whole realm)`);
       const users = await listUsers().catch(() => []);
       return reply.send(users);
     },
@@ -213,8 +228,16 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { email, name, role } = request.body ?? {};
       if (!email || !role) return reply.status(400).send({ error: 'email and role are required' });
-      await inviteUser(email, name ?? email.split('@')[0], role as any);
-      emitTenantAudit('seer.audit.member_added', request.user.username, request.params.alias, { email });
+      const { alias } = request.params;
+      const cfg = await getTenantConfig(alias).catch(() => null);
+      const orgId = cfg?.keycloakOrgId as string | undefined;
+      if (orgId) {
+        await inviteUserToOrg(orgId, alias, email, name ?? email.split('@')[0], role as any);
+      } else {
+        console.warn(`[KC-ORG] invite to ${alias}: no keycloakOrgId — using legacy inviteUser (no org binding)`);
+        await inviteUser(email, name ?? email.split('@')[0], role as any);
+      }
+      emitTenantAudit('seer.audit.member_added', request.user.username, alias, { email });
       return reply.status(202).send({ ok: true });
     },
   );
@@ -238,9 +261,16 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     '/api/admin/tenants/:alias/members/:userId',
     { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), adminRateLimit] },
     async (request, reply) => {
-      const { userId } = request.params;
-      await setUserEnabled(userId, false); // disable as proxy for remove (KC org member removal)
-      emitTenantAudit('seer.audit.member_removed', request.user.username, request.params.alias, { userId });
+      const { userId, alias } = request.params;
+      const cfg = await getTenantConfig(alias).catch(() => null);
+      const orgId = cfg?.keycloakOrgId as string | undefined;
+      if (orgId) {
+        await removeOrgMember(orgId, userId);
+      } else {
+        console.warn(`[KC-ORG] remove from ${alias}: no keycloakOrgId — disabling user as fallback`);
+        await setUserEnabled(userId, false);
+      }
+      emitTenantAudit('seer.audit.member_removed', request.user.username, alias, { userId });
       return reply.send({ ok: true });
     },
   );
