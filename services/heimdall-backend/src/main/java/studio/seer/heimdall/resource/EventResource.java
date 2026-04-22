@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import studio.seer.heimdall.RingBuffer;
 import studio.seer.heimdall.metrics.MetricsCollector;
+import studio.seer.heimdall.metrics.TenantMetricsService;
 import studio.seer.shared.HeimdallEvent;
 
 import java.util.List;
@@ -39,6 +40,9 @@ public class EventResource {
     @Inject
     MetricsCollector metricsCollector;
 
+    @Inject
+    TenantMetricsService tenantMetrics;
+
     @POST
     public Response ingest(@Valid @NotNull HeimdallEvent event) {
 
@@ -57,6 +61,7 @@ public class EventResource {
 
         ringBuffer.push(enriched);
         metricsCollector.record(enriched);
+        tenantMetrics.record(enriched);
         LOG.debugf("Ingested event: %s from %s", enriched.eventType(), enriched.sourceComponent());
         return Response.accepted().build();
     }
@@ -89,6 +94,7 @@ public class EventResource {
         for (HeimdallEvent e : events) {
             ringBuffer.push(e);
             metricsCollector.record(e);
+            tenantMetrics.record(e);
         }
 
         LOG.debugf("Ingested batch of %d events", events.size());
