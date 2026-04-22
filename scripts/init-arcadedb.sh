@@ -90,6 +90,29 @@ ensure_default_tenant() {
     "INSERT INTO DaliTenantConfig SET tenantAlias = 'default', status = 'ACTIVE', configVersion = 1, yggLineageDbName = 'hound_default', yggSourceArchiveDbName = 'hound_src_default', friggDaliDbName = 'dali_default', harvestCron = '0 0 */6 * * ?', llmMode = 'off', dataRetentionDays = 30, maxParseSessions = 10, maxAtoms = 10000, maxSources = 5, maxConcurrentJobs = 2, createdAt = $ts, updatedAt = $ts"
 }
 
+# MTN-51 / ADR-MT-004: heimdall.ControlEvent — durable append-only store for
+# seer.control.* events (tenant_invalidated, suspend, archive, purge).
+# Append-only enforced at the vertex type level (the trigger lands with MTN-60
+# when the pipeline wires up). Idempotency via UNIQUE(id); consumer offsets
+# are in-memory (per-JVM) and persisted by replay-from-id on restart.
+ensure_heimdall_control_event_schema() {
+  local base_url="$1" user="$2" pass="$3"
+  local db="heimdall"
+  log "Ensuring heimdall.ControlEvent schema (MTN-51):"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE VERTEX TYPE ControlEvent IF NOT EXISTS"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY ControlEvent.id IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY ControlEvent.tenantAlias IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY ControlEvent.eventType IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY ControlEvent.fenceToken IF NOT EXISTS LONG"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY ControlEvent.schemaVersion IF NOT EXISTS INTEGER"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY ControlEvent.createdAt IF NOT EXISTS LONG"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE PROPERTY ControlEvent.payload IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON ControlEvent (id) UNIQUE"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON ControlEvent (tenantAlias) NOTUNIQUE"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON ControlEvent (createdAt) NOTUNIQUE"
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON ControlEvent (fenceToken) NOTUNIQUE"
+}
+
 # MTN-65: frigg-users schema — 8 vertex types for user-level application data.
 # Per Q-UA-1 (2026-04-22): separate DB (not namespace) for backup granularity +
 # IAM isolation + GDPR export. Per Q-UA-5: include nullable reserved_acl_v2 hook
@@ -193,6 +216,7 @@ if wait_ready "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "FRIGG"; then
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_default"
   ensure_default_tenant "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   ensure_frigg_users_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
+  ensure_heimdall_control_event_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   sync_default_keycloak_org_id "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
 fi
 
