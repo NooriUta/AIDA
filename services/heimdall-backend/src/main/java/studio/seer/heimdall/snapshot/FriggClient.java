@@ -29,14 +29,14 @@ public interface FriggClient {
     );
 
     /**
-     * Creates an ArcadeDB database.
-     * Returns 200 {"result":"ok"} if created, 500 if it already exists — callers should
-     * swallow errors from this endpoint and treat both outcomes as success.
+     * Server-level command (ArcadeDB 26.x API).
+     * Use body {@code {"command":"create database <name>"}} to create a database.
+     * ArcadeDB 26.x removed the old {@code /api/v1/create/{db}} endpoint.
      */
     @POST
-    @Path("/create/{db}")
-    Uni<String> createDatabase(
-            @PathParam("db")              String db,
-            @HeaderParam("Authorization") String authorization
+    @Path("/server")
+    Uni<String> serverCommand(
+            @HeaderParam("Authorization") String authorization,
+            FriggCommand                  body
     );
 }

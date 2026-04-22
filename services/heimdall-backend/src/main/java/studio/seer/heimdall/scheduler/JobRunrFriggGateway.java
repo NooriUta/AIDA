@@ -40,12 +40,13 @@ public class JobRunrFriggGateway {
 
     /**
      * Creates the JobRunr ArcadeDB database if it doesn't already exist.
-     * ArcadeDB returns 500 when the database already exists — that is treated as success.
+     * ArcadeDB 26.x uses /api/v1/server with {"command":"create database <name>"}.
+     * Returns 500 when already exists — treated as success.
      */
     public void createDb() {
         LOG.infof("[JR-FRIGG] ensuring database %s...", db);
         try {
-            client.createDatabase(db, basicAuth())
+            client.serverCommand(basicAuth(), new FriggCommand(null, "create database " + db, null))
                     .onFailure().recoverWithNull()
                     .await().atMost(TIMEOUT);
             LOG.infof("[JR-FRIGG] database %s ready", db);
