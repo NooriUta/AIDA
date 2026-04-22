@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { usePageTitle }  from '../hooks/usePageTitle';
 import { useTenants }    from '../hooks/useTenants';
 import { TenantStatusBadge } from '../components/tenants/TenantStatusBadge';
+import { ProvisionModal }    from '../components/tenants/ProvisionModal';
 import type { TenantStatus, TenantSummary } from '../api/admin';
 import {
   suspendTenant, unsuspendTenant, archiveTenant,
-  restoreTenant, provisionTenant, forceCleanupTenant, resumeProvisioningTenant,
+  restoreTenant, forceCleanupTenant, resumeProvisioningTenant,
 } from '../api/admin';
 
 const PAGE_SIZE = 20;
@@ -27,61 +28,7 @@ function humanCron(cron?: string): string {
   return cron;
 }
 
-// ── Provision modal ────────────────────────────────────────────────────────────
-function ProvisionModal({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
-  const { t } = useTranslation();
-  const [alias, setAlias] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError]  = useState<string | null>(null);
-
-  const submit = async () => {
-    const a = alias.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-    if (!a) { setError(t('tenants.provision.aliasRequired', 'Alias обязателен')); return; }
-    setSaving(true); setError(null);
-    try {
-      await provisionTenant(a);
-      onDone();
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
-      <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 8,
-                    padding: 24, width: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>
-          {t('tenants.provision.title', 'Создать тенант')}
-        </div>
-        <label style={{ fontSize: 12, color: 'var(--t3)', display: 'block', marginBottom: 4 }}>
-          {t('tenants.provision.aliasLabel', 'Alias (a-z, 0-9, дефис)')}
-        </label>
-        <input
-          className="field-input"
-          style={{ width: '100%' }}
-          value={alias}
-          onChange={e => setAlias(e.target.value)}
-          placeholder="my-tenant"
-          autoFocus
-          onKeyDown={e => e.key === 'Enter' && void submit()}
-        />
-        {error && <p style={{ color: 'var(--danger)', fontSize: 11, marginTop: 6 }}>{error}</p>}
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>
-            {t('action.cancel', 'Отмена')}
-          </button>
-          <button className="btn btn-secondary" onClick={submit} disabled={saving || !alias.trim()}>
-            {saving ? t('status.loading', 'Loading…') : t('tenants.provision.confirm', 'Создать')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ProvisionModal is now in components/tenants/ProvisionModal.tsx
 
 // ── Per-row action buttons ────────────────────────────────────────────────────
 function TenantActions({
