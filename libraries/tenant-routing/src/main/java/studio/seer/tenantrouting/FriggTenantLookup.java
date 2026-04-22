@@ -43,7 +43,9 @@ public class FriggTenantLookup {
             String yggSourceArchiveDbName,
             String friggDaliDbName,
             String yggInstanceUrl,
-            String keycloakOrgId
+            String keycloakOrgId,
+            /** MTN-48: per-tenant LRU slot cap override. null → inherit global. */
+            Integer connectionCap
     ) {}
 
     private final HttpClient http;
@@ -75,7 +77,7 @@ public class FriggTenantLookup {
                     "language", "sql",
                     "command",  "SELECT tenantAlias, status, configVersion, " +
                                 "yggLineageDbName, yggSourceArchiveDbName, friggDaliDbName, " +
-                                "yggInstanceUrl, keycloakOrgId " +
+                                "yggInstanceUrl, keycloakOrgId, connectionCap " +
                                 "FROM DaliTenantConfig WHERE tenantAlias = :alias LIMIT 1",
                     "params",   Map.of("alias", tenantAlias)
             ));
@@ -99,6 +101,9 @@ public class FriggTenantLookup {
                 return Optional.empty();
             }
             var row = (Map<String, Object>) rows.get(0);
+            Object rawCap = row.get("connectionCap");
+            Integer connectionCap = null;
+            if (rawCap instanceof Number n) connectionCap = n.intValue();
             return Optional.of(new TenantRouting(
                     (String) row.get("tenantAlias"),
                     (String) row.getOrDefault("status", "UNKNOWN"),
@@ -107,7 +112,8 @@ public class FriggTenantLookup {
                     (String) row.get("yggSourceArchiveDbName"),
                     (String) row.get("friggDaliDbName"),
                     (String) row.get("yggInstanceUrl"),
-                    (String) row.get("keycloakOrgId")
+                    (String) row.get("keycloakOrgId"),
+                    connectionCap
             ));
         } catch (TenantNotAvailableException e) {
             throw e;

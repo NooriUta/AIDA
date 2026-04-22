@@ -180,7 +180,8 @@ class FriggYggLineageRegistryTest {
         return new TenantRouting(
                 alias, status, version,
                 db, "hound_src_" + alias, "dali_" + alias,
-                yggUrl, "kc-" + alias);
+                yggUrl, "kc-" + alias,
+                null /* MTN-48 connectionCap */);
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {
