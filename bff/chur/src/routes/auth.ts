@@ -91,10 +91,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         userInfo.role,
         userInfo.scopes,
       );
+      // Persist KC identity claims in session for /auth/me enrichment
+      await updateSession(sid, {
+        email:     userInfo.email,
+        firstName: userInfo.firstName,
+        lastName:  userInfo.lastName,
+      });
 
       reply.setCookie('sid', sid, COOKIE_OPTS);
       emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
-      // MTN-64: emit session event for forensic audit (fire-and-forget)
       void emitSessionEvent({
         userId:     userInfo.sub,
         sessionId:  sid,
@@ -103,7 +108,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         userAgent:  String(request.headers['user-agent'] ?? ''),
         result:     'success',
       });
-      return { id: userInfo.sub, username: userInfo.username, role: userInfo.role };
+      return { id: userInfo.sub, username: userInfo.username, role: userInfo.role,
+               email: userInfo.email, firstName: userInfo.firstName, lastName: userInfo.lastName };
     },
   );
 
@@ -112,22 +118,18 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/me',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role } = request.user;
-      return { id: sub, username, role };
+      const { sub, username, role, email, firstName, lastName } = request.user;
+      return { id: sub, username, role, email, firstName, lastName };
     },
   );
 
   // ── POST /auth/refresh ──────────────────────────────────────────────────────
-  // Kept for backward compatibility. With Keycloak, lazy refresh in
-  // app.authenticate handles this transparently, but the frontend may still
-  // call /refresh explicitly.
   app.post(
     '/refresh',
     { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const { sub, username, role } = request.user;
-      // Session was already refreshed by authenticate if needed
-      return { id: sub, username, role };
+    async (request) => {
+      const { sub, username, role, email, firstName, lastName } = request.user;
+      return { id: sub, username, role, email, firstName, lastName };
     },
   );
 

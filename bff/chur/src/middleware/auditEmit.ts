@@ -17,7 +17,9 @@ export type TenantAuditEvent =
   // MTN-61 user lifecycle events
   | 'seer.audit.user_soft_deleted'
   | 'seer.audit.user_restored'
-  | 'seer.audit.user_legal_hold_set';
+  | 'seer.audit.user_legal_hold_set'
+  // MTN-12 feature flags
+  | 'seer.audit.tenant_feature_flags_updated';
 
 export function emitTenantAudit(
   event:       TenantAuditEvent,

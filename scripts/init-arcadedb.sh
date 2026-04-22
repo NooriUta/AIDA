@@ -76,6 +76,29 @@ ensure_default_tenant() {
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE INDEX IF NOT EXISTS ON DaliTenantConfig (tenantAlias) UNIQUE"
   # MTN-12: per-tenant feature flags (JSON-string field)
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY DaliTenantConfig.featureFlags IF NOT EXISTS STRING"
+  # MTN-35: harvest cron timezone (default UTC applied by HarvestCronRegistry)
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY DaliTenantConfig.harvestCronTimezone IF NOT EXISTS STRING"
+
+  # MTN-34: service accounts and API keys
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE VERTEX TYPE ServiceAccount IF NOT EXISTS"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ServiceAccount.id IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE INDEX IF NOT EXISTS ON ServiceAccount (id) UNIQUE"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ServiceAccount.tenantAlias IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ServiceAccount.name IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ServiceAccount.enabled IF NOT EXISTS BOOLEAN"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ServiceAccount.createdBy IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ServiceAccount.createdAt IF NOT EXISTS LONG"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE INDEX IF NOT EXISTS ON ServiceAccount (tenantAlias) NOTUNIQUE"
+
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE VERTEX TYPE ApiKey IF NOT EXISTS"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.keyId IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE INDEX IF NOT EXISTS ON ApiKey (keyId) UNIQUE"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.serviceAccountId IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.hashedSecret IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.expiresAt IF NOT EXISTS LONG"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.scopes IF NOT EXISTS STRING"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.createdAt IF NOT EXISTS LONG"
+  run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE INDEX IF NOT EXISTS ON ApiKey (serviceAccountId) NOTUNIQUE"
 
   # Idempotent upsert of the "default" tenant record for single-tenant dev deployments
   local row

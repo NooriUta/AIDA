@@ -14,6 +14,9 @@ export interface SeerUser {
   role:               UserRole;
   scopes:             string[];   // JWT scope claim (space-separated → array)
   activeTenantAlias?: string;     // MTN-13: last tenant switch via PATCH /auth/me/tenant
+  email?:             string;
+  firstName?:         string;
+  lastName?:          string;
 }
 
 // Extend Fastify request to carry user info after session-based authentication

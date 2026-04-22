@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LogOut, User, Palette, X } from 'lucide-react';
+import { LogOut, User, Palette, Bell, Settings, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { useAuthStore }       from '../../stores/authStore';
 import { useIsMobile }        from '../../hooks/useIsMobile';
 import { sharedPrefsStore }   from '../../stores/sharedPrefsStore';
+import { useMe }              from '../../hooks/useMe';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Tab = 'profile' | 'appearance';
+type Tab = 'profile' | 'preferences' | 'appearance' | 'notifications';
 
 const PALETTES: Array<{ id: string; key: string; colors: string[] }> = [
   { id: 'amber-forest', key: 'palette.amberForest', colors: ['#A8B860', '#1c1810', '#42382a'] },
@@ -45,7 +45,6 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
 
   const { user, logout } = useAuthStore();
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -68,7 +67,6 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
   };
 
   const initials = user?.username.slice(0, 2).toUpperCase() ?? '??';
-  const email    = `${user?.username ?? 'user'}@seer.internal`;
 
   const roleBadgeColor: Record<string, string> = {
     admin:  'var(--acc)',
@@ -95,7 +93,7 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
         ...(isMobile
           ? { inset: 0, borderRadius: 0 }
           : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-              width: '820px', height: '560px', borderRadius: 'var(--seer-radius-xl)',
+              width: '820px', height: '580px', borderRadius: 'var(--seer-radius-xl)',
               boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }),
         zIndex:       1000,
         background:   'var(--bg1)',
@@ -146,8 +144,10 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
             ? { display: 'flex', flexDirection: 'row', gap: 4, flex: 1 }
             : { flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }
           }>
-            <SidebarItem icon={<User size={14} />}    label={t('profile.tabs.profile')}     active={tab === 'profile'}    onClick={() => setTab('profile')}    compact={isMobile} />
-            <SidebarItem icon={<Palette size={14} />} label={t('profile.tabs.appearance')} active={tab === 'appearance'} onClick={() => setTab('appearance')} compact={isMobile} />
+            <SidebarItem icon={<User size={14} />}     label={t('profile.tabs.profile')}       active={tab === 'profile'}       onClick={() => setTab('profile')}       compact={isMobile} />
+            <SidebarItem icon={<Settings size={14} />} label={t('profile.tabs.preferences')}   active={tab === 'preferences'}   onClick={() => setTab('preferences')}   compact={isMobile} />
+            <SidebarItem icon={<Palette size={14} />}  label={t('profile.tabs.appearance')}    active={tab === 'appearance'}    onClick={() => setTab('appearance')}    compact={isMobile} />
+            <SidebarItem icon={<Bell size={14} />}     label={t('profile.tabs.notifications')} active={tab === 'notifications'} onClick={() => setTab('notifications')} compact={isMobile} />
           </nav>
 
           {/* Logout + close */}
@@ -189,7 +189,10 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
               padding: '20px 28px', borderBottom: '1px solid var(--bd)', flexShrink: 0,
             }}>
               <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>
-                {tab === 'profile' ? t('profile.tabs.profile') : t('profile.tabs.appearance')}
+                {tab === 'profile'       && t('profile.tabs.profile')}
+                {tab === 'preferences'   && t('profile.tabs.preferences')}
+                {tab === 'appearance'    && t('profile.tabs.appearance')}
+                {tab === 'notifications' && t('profile.tabs.notifications')}
               </div>
               <button onClick={onClose} style={{
                 background: 'transparent', border: 'none', color: 'var(--t3)', cursor: 'pointer',
@@ -202,8 +205,10 @@ export function ProfileModal({ onClose }: { onClose: () => void }) {
 
           {/* Tab content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '28px' }}>
-            {tab === 'profile'    && <ProfileTab initials={initials} username={user?.username} role={user?.role} email={email} roleColor={roleBadgeColor[user?.role ?? 'viewer']} onClose={onClose} />}
-            {tab === 'appearance' && <AppearanceTab theme={theme} palette={palette} onTheme={applyTheme} onPalette={applyPalette} />}
+            {tab === 'profile'       && <ProfileTab />}
+            {tab === 'preferences'   && <PreferencesTab />}
+            {tab === 'appearance'    && <AppearanceTab theme={theme} palette={palette} onTheme={applyTheme} onPalette={applyPalette} />}
+            {tab === 'notifications' && <NotificationsTab />}
           </div>
         </div>
       </div>
@@ -243,89 +248,274 @@ function SidebarItem({ icon, label, active, onClick, compact }: {
   );
 }
 
-// ── Profile tab ───────────────────────────────────────────────────────────────
-function ProfileTab({ initials, username, role, email, roleColor, onClose }: {
-  initials: string; username?: string; role?: string; email: string; roleColor: string;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
+// ── Profile tab — KC identity + FRIGG editable fields ────────────────────────
+interface ProfileData extends Record<string, unknown> {
+  title?:     string;
+  dept?:      string;
+  phone?:     string;
+  avatarUrl?: string;
+}
 
-  const goto = (path: string) => { onClose(); navigate(path); };
+function ProfileTab() {
+  const { t } = useTranslation();
+  const { user } = useAuthStore();
+  const { data, loading, error, conflict, save } = useMe<ProfileData>('/me/profile');
+  const [draft, setDraft]           = useState<ProfileData>({});
+  const [saving, setSaving]         = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => { if (data) setDraft(data); }, [data]);
+
+  const onSave = async () => {
+    setSaving(true);
+    const r = await save(draft);
+    setSaving(false);
+    if (r.ok) { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); }
+  };
+
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || '—';
+  const initials    = displayName.slice(0, 2).toUpperCase();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      {/* Avatar hero */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* KC identity card (read-only) */}
+      <div style={{ display: 'flex', gap: 14, padding: '12px 14px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-md)' }}>
         <div style={{
-          width: 64, height: 64, borderRadius: '50%',
+          width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
           background: 'color-mix(in srgb, var(--acc) 18%, var(--bg3))',
-          border:     '2px solid color-mix(in srgb, var(--acc) 30%, transparent)',
+          border: '2px solid color-mix(in srgb, var(--acc) 30%, transparent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '22px', fontWeight: 700, color: 'var(--acc)',
-          flexShrink: 0,
+          fontSize: '16px', fontWeight: 700, color: 'var(--acc)',
         }}>{initials}</div>
-        <div>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--t1)', marginBottom: '6px' }}>
-            {username ?? '—'}
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>{displayName}</div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
+            {user?.email ?? `${user?.username ?? ''}@seer.io`}
           </div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center',
-            fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-            padding: '3px 8px', borderRadius: 'var(--seer-radius-sm)',
-            background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
-            color: roleColor,
-          }}>
-            {role ?? 'viewer'}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--acc)', background: 'color-mix(in srgb, var(--acc) 12%, transparent)', padding: '1px 5px', borderRadius: 3 }}>{user?.role}</span>
+            <span style={{ fontSize: '10px', color: 'var(--t3)', fontFamily: 'var(--mono)' }}>{user?.username}</span>
           </div>
         </div>
       </div>
 
-      {/* Info fields */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <InfoField label={t('profile.fieldUsername')} value={username ?? '—'} mono />
-        <InfoField label={t('profile.fieldEmail')}    value={email} mono />
-        <InfoField label={t('profile.fieldRole')}     value={role ?? 'viewer'} />
-        <InfoField label={t('profile.fieldPlatform')} value={t('profile.platform')} />
+      {conflict && (
+        <div style={{ background: 'color-mix(in srgb, var(--wrn) 15%, transparent)', border: '1px solid var(--wrn)', color: 'var(--wrn)', padding: '8px 12px', borderRadius: 'var(--seer-radius-sm)', fontSize: '12px' }}>
+          {t('me.conflict', 'Данные изменены извне. Загружены свежие. Повторите изменения.')}
+        </div>
+      )}
+      {error && <div style={{ color: 'var(--danger)', fontSize: '13px' }}>⚠ {error}</div>}
+
+      {/* KC fields — read-only (SoT is Keycloak) */}
+      <div>
+        <div style={{ fontSize: '11px', color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Keycloak</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <ReadonlyField label={t('profile.firstName', 'Имя')}     value={user?.firstName ?? '—'} />
+          <ReadonlyField label={t('profile.lastName',  'Фамилия')} value={user?.lastName  ?? '—'} />
+        </div>
       </div>
 
-      {/* Round 5 — self-service navigation shortcuts */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {t('profile.quickLinks', 'Быстрые ссылки')}
-        </span>
-        <button className="btn-secondary" onClick={() => goto('/me/profile')}>
-          {t('nav.profile', 'Профиль')} →
-        </button>
-        <button className="btn-secondary" onClick={() => goto('/me/preferences')}>
-          {t('nav.preferences', 'Настройки')} →
-        </button>
-        <button className="btn-secondary" onClick={() => goto('/me/notifications')}>
-          {t('nav.notifications', 'Уведомления')} →
-        </button>
+      {/* FRIGG fields — editable */}
+      <div>
+        <div style={{ fontSize: '11px', color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>FRIGG</div>
+        {loading && !data ? (
+          <div style={{ color: 'var(--t3)', fontSize: '13px' }}>{t('status.loading', 'Loading…')}</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <ModalField label={t('profile.title', 'Должность')}       value={draft.title    ?? ''} onChange={v => setDraft(d => ({ ...d, title:    v }))} />
+            <ModalField label={t('profile.dept',  'Подразделение')}   value={draft.dept     ?? ''} onChange={v => setDraft(d => ({ ...d, dept:     v }))} />
+            <ModalField label={t('profile.phone', 'Телефон')}         value={draft.phone    ?? ''} onChange={v => setDraft(d => ({ ...d, phone:    v }))} />
+            <ModalField label={t('profile.avatarUrl', 'URL аватара')} value={draft.avatarUrl ?? ''} onChange={v => setDraft(d => ({ ...d, avatarUrl: v }))} placeholder="https://…" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button className="btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
+                {saving ? t('status.saving', 'Saving…') : t('action.save', 'Сохранить')}
+              </button>
+              {savedFlash && <span style={{ color: 'var(--suc)', fontSize: '13px' }}>✓ {t('status.saved', 'Сохранено')}</span>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function InfoField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function ReadonlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-      <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        {label}
-      </span>
-      <div style={{
-        padding:      '9px 12px',
-        background:   'var(--bg2)',
-        border:       '1px solid var(--bd)',
-        borderRadius: 'var(--seer-radius-sm)',
-        fontSize:     '13px',
-        color:        'var(--t1)',
-        fontFamily:   mono ? 'var(--mono)' : 'var(--font)',
-      }}>
-        {value}
-      </div>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span style={{ fontSize: '10px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <div style={{ fontSize: '13px', color: 'var(--t2)', padding: '7px 10px', background: 'var(--bg3)', borderRadius: 'var(--seer-radius-sm)', fontFamily: 'var(--mono)' }}>{value}</div>
+    </label>
+  );
+}
+
+function ModalField({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{label}</span>
+      <input
+        className="field-input"
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}
+        style={{ fontSize: '13px' }}
+      />
+    </label>
+  );
+}
+
+// ── Preferences tab — lang / tz / dateFmt / startPage (FRIGG) ────────────────
+interface PrefsData extends Record<string, unknown> {
+  lang?:      string;
+  tz?:        string;
+  dateFmt?:   string;
+  startPage?: string;
+}
+
+const LANG_OPTIONS    = [{ value: 'ru', label: 'Русский' }, { value: 'en', label: 'English' }];
+const DATE_FMT_OPT    = ['DD.MM.YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
+const START_PAGE_OPT  = ['dashboard', 'sources', 'lineage', 'admin'];
+
+function PreferencesTab() {
+  const { t, i18n } = useTranslation();
+  const { data, loading, error, save } = useMe<PrefsData>('/me/preferences');
+  const [draft, setDraft]           = useState<PrefsData>({});
+  const [saving, setSaving]         = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => { if (data) setDraft(data); }, [data]);
+
+  const onSave = async () => {
+    setSaving(true);
+    const r = await save(draft);
+    setSaving(false);
+    if (r.ok) {
+      if (draft.lang && draft.lang !== i18n.language) void i18n.changeLanguage(draft.lang);
+      setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {error && <div style={{ color: 'var(--danger)', fontSize: '13px' }}>⚠ {error}</div>}
+      {loading && !data ? (
+        <div style={{ color: 'var(--t3)', fontSize: '13px' }}>{t('status.loading', 'Loading…')}</div>
+      ) : (
+        <>
+          <SelectField
+            label={t('preferences.lang', 'Язык интерфейса')}
+            value={draft.lang ?? 'ru'}
+            options={LANG_OPTIONS}
+            onChange={v => setDraft(d => ({ ...d, lang: v }))}
+          />
+          <ModalField
+            label={t('preferences.tz', 'Часовой пояс')}
+            value={draft.tz ?? 'Europe/Moscow'}
+            onChange={v => setDraft(d => ({ ...d, tz: v }))}
+            placeholder="Europe/Moscow"
+          />
+          <SelectField
+            label={t('preferences.dateFmt', 'Формат даты')}
+            value={draft.dateFmt ?? 'DD.MM.YYYY'}
+            options={DATE_FMT_OPT.map(v => ({ value: v, label: v }))}
+            onChange={v => setDraft(d => ({ ...d, dateFmt: v }))}
+          />
+          <SelectField
+            label={t('preferences.startPage', 'Стартовая страница')}
+            value={draft.startPage ?? 'dashboard'}
+            options={START_PAGE_OPT.map(v => ({ value: v, label: v }))}
+            onChange={v => setDraft(d => ({ ...d, startPage: v }))}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button className="btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
+              {saving ? t('status.saving', 'Saving…') : t('action.save', 'Сохранить')}
+            </button>
+            {savedFlash && <span style={{ color: 'var(--suc)', fontSize: '13px' }}>✓ {t('status.saved', 'Сохранено')}</span>}
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function SelectField({ label, value, options, onChange }: {
+  label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void;
+}) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ fontSize: '13px', padding: '7px 10px', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-sm)', color: 'var(--t1)', fontFamily: 'inherit' }}
+      >
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+// ── Notifications tab ─────────────────────────────────────────────────────────
+interface Notif extends Record<string, unknown> {
+  email?: boolean; browser?: boolean; harvest?: boolean; errors?: boolean; digest?: boolean;
+}
+
+function NotificationsTab() {
+  const { t } = useTranslation();
+  const { data, loading, error, save } = useMe<Notif>('/me/notifications');
+  const [draft, setDraft]         = useState<Notif>({});
+  const [saving, setSaving]       = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => { if (data) setDraft(data); }, [data]);
+
+  const toggle = (key: keyof Notif) => (checked: boolean) =>
+    setDraft(d => ({ ...d, [key]: checked }));
+
+  const onSave = async () => {
+    setSaving(true);
+    const r = await save(draft);
+    setSaving(false);
+    if (r.ok) { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {error && <div style={{ color: 'var(--danger)', fontSize: '13px' }}>⚠ {error}</div>}
+      {loading && !data ? (
+        <div style={{ color: 'var(--t3)', fontSize: '13px' }}>{t('status.loading', 'Loading…')}</div>
+      ) : (
+        <>
+          <NotifRow label={t('notifications.email',   'Email')}             checked={!!draft.email}   onChange={toggle('email')} />
+          <NotifRow label={t('notifications.browser', 'Браузер (push)')}    checked={!!draft.browser} onChange={toggle('browser')} />
+          <NotifRow label={t('notifications.harvest', 'Завершение harvest')} checked={!!draft.harvest} onChange={toggle('harvest')} />
+          <NotifRow label={t('notifications.errors',  'Критические ошибки')} checked={!!draft.errors}  onChange={toggle('errors')} />
+          <NotifRow label={t('notifications.digest',  'Ежедневный дайджест')} checked={!!draft.digest}  onChange={toggle('digest')} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            <button className="btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
+              {saving ? t('status.saving', 'Saving…') : t('action.save', 'Сохранить')}
+            </button>
+            {savedFlash && <span style={{ color: 'var(--suc)', fontSize: '13px' }}>✓ {t('status.saved', 'Сохранено')}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function NotifRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '9px 14px', background: 'var(--bg2)', borderRadius: 'var(--seer-radius-sm)',
+      cursor: 'pointer', border: '1px solid var(--bd)',
+    }}>
+      <span style={{ fontSize: '13px', color: 'var(--t2)' }}>{label}</span>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ accentColor: 'var(--acc)', width: 16, height: 16 }} />
+    </label>
   );
 }
 

@@ -230,8 +230,10 @@
     "phone":         "Телефон",
     "avatarUrl":     "URL аватара",
     "tabs": {
-      "profile":    "Профиль",
-      "appearance": "Внешний вид"
+      "profile":       "Профиль",
+      "preferences":   "Настройки",
+      "appearance":    "Внешний вид",
+      "notifications": "Уведомления"
     },
     "appearance": {
       "theme":    "Тема",

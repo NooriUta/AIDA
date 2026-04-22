@@ -7,6 +7,7 @@ import org.jobrunr.scheduling.JobScheduler;
 import org.jobrunr.scheduling.cron.Cron;
 import org.jboss.logging.Logger;
 
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,12 +40,24 @@ public class HarvestCronRegistry {
      * @param cronExpr    6-field cron (second minute hour day month weekday)
      */
     public void registerHarvestJob(String tenantAlias, String cronExpr) {
+        registerHarvestJob(tenantAlias, cronExpr, "UTC");
+    }
+
+    /**
+     * Registers a recurring harvest cron for the given tenant with an explicit timezone.
+     * ZoneId is validated against the JVM's available zone IDs to prevent injection.
+     *
+     * @param tenantAlias       validated alias (regex checked)
+     * @param cronExpr          6-field cron (second minute hour day month weekday)
+     * @param timezoneId        IANA timezone (e.g. "Europe/Moscow"). Defaults to UTC if null/blank.
+     */
+    public void registerHarvestJob(String tenantAlias, String cronExpr, String timezoneId) {
         validateAlias(tenantAlias);
+        ZoneId zone = resolveZoneId(timezoneId);
         String jobId = harvestJobId(tenantAlias);
-        LOG.infof("[HarvestCronRegistry] register alias=%s cron=%s", tenantAlias, cronExpr);
-        // scheduleRecurringly enqueues a HarvestJob on Dali workers via shared frigg-jobrunr DB.
-        // Dali's CDI activator has HarvestJob; HEIMDALL's activator will throw and requeue it.
-        jobScheduler.get().scheduleRecurrently(jobId, cronExpr,
+        LOG.infof("[HarvestCronRegistry] register alias=%s cron=%s tz=%s", tenantAlias, cronExpr, zone);
+        // scheduleRecurrently enqueues a HarvestJob on Dali workers via shared frigg-jobrunr DB.
+        jobScheduler.get().scheduleRecurrently(jobId, cronExpr, zone,
                 () -> LOG.infof("[HarvestCronRegistry] harvest triggered alias=%s", tenantAlias));
         registered.put(tenantAlias, cronExpr);
     }
@@ -83,5 +96,16 @@ public class HarvestCronRegistry {
         if (alias == null || !ALIAS_REGEX.matcher(alias).matches()) {
             throw new IllegalArgumentException("Invalid tenantAlias: " + alias);
         }
+    }
+
+    /** Resolves a timezone string to a ZoneId, defaulting to UTC for null/blank/unknown values. */
+    private static ZoneId resolveZoneId(String tz) {
+        if (tz == null || tz.isBlank()) return ZoneId.of("UTC");
+        // Guard against ZoneId injection — only allow JVM-known zone IDs
+        if (!ZoneId.getAvailableZoneIds().contains(tz)) {
+            LOG.warnf("[HarvestCronRegistry] Unknown timezone '%s', falling back to UTC", tz);
+            return ZoneId.of("UTC");
+        }
+        return ZoneId.of(tz);
     }
 }

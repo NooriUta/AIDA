@@ -415,11 +415,12 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       }
       const serialized = JSON.stringify(flags);
       const r = await casUpdateTenant('frigg-tenants', alias, expectedConfigVersion, {
-        featureFlags: serialized,
+        setClause: 'featureFlags = :flags',
+        params:    { flags: serialized },
       });
       if (!r.ok) return reply.status(409).send(casConflictBody(alias, expectedConfigVersion, r.current));
       emitTenantAudit('seer.audit.tenant_feature_flags_updated', request.user.username, alias, { flags });
-      return reply.send({ ok: true, configVersion: r.current });
+      return reply.send({ ok: true, configVersion: r.configVersion });
     },
   );
 

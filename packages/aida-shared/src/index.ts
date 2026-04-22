@@ -9,9 +9,12 @@ export type UserRole =
   | 'super-admin';
 
 export interface AuthUser {
-  id: string;
-  username: string;
-  role: UserRole;
+  id:         string;
+  username:   string;
+  role:       UserRole;
+  email?:     string;
+  firstName?: string;
+  lastName?:  string;
 }
 
 export type EventLevel = 'INFO' | 'WARN' | 'ERROR';

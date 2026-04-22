@@ -51,6 +51,9 @@ const rbacPlugin: FastifyPluginAsync = async (app) => {
           role:              session.role,
           scopes:            session.scopes,
           activeTenantAlias: session.activeTenantAlias,
+          email:             session.email,
+          firstName:         session.firstName,
+          lastName:          session.lastName,
         };
       } catch {
         return reply.status(401).send({ error: 'Unauthorized' });
@@ -74,6 +77,9 @@ const rbacPlugin: FastifyPluginAsync = async (app) => {
           role:              session.role,
           scopes:            session.scopes,
           activeTenantAlias: session.activeTenantAlias,
+          email:             session.email,
+          firstName:         session.firstName,
+          lastName:          session.lastName,
         };
       } catch {
         return reply.status(401).send({ error: 'Unauthorized' });

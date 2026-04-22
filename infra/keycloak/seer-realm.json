@@ -776,6 +776,40 @@
           "default"
         ]
       }
+    },
+    {
+      "username": "superadmin",
+      "firstName": "Super",
+      "lastName": "Admin",
+      "email": "superadmin@seer.io",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "superadmin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "super-admin"
+      ],
+      "attributes": {
+        "title": [ "Platform Owner" ],
+        "dept": [ "Platform" ],
+        "phone": [ "" ],
+        "avatarColor": [ "#e05c5c" ],
+        "tz": [ "Europe/Moscow" ],
+        "dateFmt": [ "DD.MM.YYYY" ],
+        "startPage": [ "admin" ],
+        "pref.lang": [ "ru" ],
+        "notify.email": [ "true" ],
+        "notify.browser": [ "true" ],
+        "notify.harvest": [ "true" ],
+        "notify.errors": [ "true" ],
+        "notify.digest": [ "false" ],
+        "organization.alias": [ "default" ]
+      }
     }
   ],
   "organizations": [
@@ -812,6 +846,9 @@
         },
         {
           "username": "local.admin"
+        },
+        {
+          "username": "superadmin"
         }
       ]
     }

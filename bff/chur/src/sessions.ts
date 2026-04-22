@@ -11,6 +11,8 @@ import type { UserRole } from './types';
 import { ArcadeDbSessionStore } from './store/ArcadeDbSessionStore';
 import { CachedSessionStore }   from './store/CachedSessionStore';
 import type { SessionStore }    from './store/SessionStore';
+import { emitSessionEvent }     from './users/UserSessionEventsEmitter';
+import { config }               from './config';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,10 @@ export interface Session {
   role:               UserRole;
   scopes:             string[];
   activeTenantAlias?: string;   // MTN-13: last tenant switch; undefined = 'default'
+  createdAt?:         number;   // MTN-39: epoch ms when session was created (for role-change invalidation)
+  email?:             string;
+  firstName?:         string;
+  lastName?:          string;
 }
 
 export interface SessionUser {
@@ -71,7 +77,8 @@ export async function createSession(
     username,
     role,
     scopes,
-  };
+    createdAt: Date.now(),
+  }; // email/firstName/lastName populated in createSession caller via updateSession if available
   await store.create(sid, session);
   return sid;
 }

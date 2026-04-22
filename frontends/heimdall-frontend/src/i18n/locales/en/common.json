@@ -230,8 +230,10 @@
     "phone":         "Phone",
     "avatarUrl":     "Avatar URL",
     "tabs": {
-      "profile":    "Profile",
-      "appearance": "Appearance"
+      "profile":       "Profile",
+      "preferences":   "Preferences",
+      "appearance":    "Appearance",
+      "notifications": "Notifications"
     },
     "appearance": {
       "theme":    "Theme",
