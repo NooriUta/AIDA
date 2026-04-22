@@ -18,6 +18,7 @@ import {
 import { emitTenantAudit } from '../middleware/auditEmit';
 import { adminRateLimit, provisioningRateLimit } from '../middleware/rateLimit';
 import { csrfGuard } from '../middleware/csrfGuard';
+import { casUpdateTenant, casConflictBody } from './casUpdate';
 import {
   listUsers,
   inviteUser,
@@ -117,58 +118,84 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // MTN-27: status-mutating endpoints use CAS via casUpdateTenant(). Body
+  // requires `expectedConfigVersion` (when provided) — backward-compat: if
+  // absent we read current then issue CAS with that value, preserving
+  // pre-MTN-27 semantics for callers that haven't adopted optimistic-lock
+  // yet. Admin UI should send the field explicitly.
+
+  async function readCurrentVersion(alias: string): Promise<number> {
+    const rows = await friggSql('frigg-tenants',
+      `SELECT configVersion FROM DaliTenantConfig WHERE tenantAlias = :alias LIMIT 1`,
+      { alias },
+    );
+    return Number((rows[0] as { configVersion?: number } | undefined)?.configVersion ?? 0);
+  }
+
   // ── DELETE /api/admin/tenants/:alias — suspend ──────────────────────────────
-  app.delete<{ Params: { alias: string } }>('/api/admin/tenants/:alias',
+  app.delete<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias',
     { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'SUSPENDED', updatedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'SUSPENDED', updatedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
       emitTenantAudit('seer.audit.tenant_suspended', request.user.username, alias);
-      return reply.send({ ok: true, status: 'SUSPENDED' });
+      return reply.send({ ok: true, status: 'SUSPENDED', configVersion: r.configVersion });
     },
   );
 
   // ── POST /api/admin/tenants/:alias/unsuspend ────────────────────────────────
-  app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/unsuspend',
+  app.post<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias/unsuspend',
     { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'ACTIVE', updatedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
-      return reply.send({ ok: true, status: 'ACTIVE' });
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'ACTIVE', updatedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
+      return reply.send({ ok: true, status: 'ACTIVE', configVersion: r.configVersion });
     },
   );
 
   // ── POST /api/admin/tenants/:alias/archive-now ──────────────────────────────
-  app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/archive-now',
+  app.post<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias/archive-now',
     { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'ARCHIVED', updatedAt = :ts, archivedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'ARCHIVED', updatedAt = :ts, archivedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
       emitTenantAudit('seer.audit.tenant_archived', request.user.username, alias);
-      return reply.send({ ok: true, status: 'ARCHIVED' });
+      return reply.send({ ok: true, status: 'ARCHIVED', configVersion: r.configVersion });
     },
   );
 
   // ── POST /api/admin/tenants/:alias/restore ──────────────────────────────────
-  app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/restore',
+  app.post<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias/restore',
     { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'ACTIVE', updatedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'ACTIVE', updatedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
       emitTenantAudit('seer.audit.tenant_restored', request.user.username, alias);
-      return reply.send({ ok: true, status: 'ACTIVE' });
+      return reply.send({ ok: true, status: 'ACTIVE', configVersion: r.configVersion });
     },
   );
 

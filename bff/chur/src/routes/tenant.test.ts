@@ -125,10 +125,61 @@ describe('DELETE /api/admin/tenants/:alias — suspend', () => {
   });
 
   it('200 — superadmin can suspend', async () => {
+    // MTN-27: CAS requires the post-update SELECT to reflect configVersion + 1.
+    // We model that by incrementing a local counter on each SELECT.
+    let selectCount = 0;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
+      const body = init?.body ?? '';
+      if (body.includes('SELECT configVersion')) {
+        selectCount++;
+        // First SELECT (readCurrentVersion) → 1; second SELECT (post-CAS) → 2
+        return Promise.resolve({
+          ok: true, status: 200,
+          text: async () => '', headers: { get: () => null },
+          json: async () => ({ result: [{ configVersion: selectCount === 1 ? 1 : 2 }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true, status: 200,
+        text: async () => '', headers: { get: () => null },
+        json: async () => ({ result: [{ tenantAlias: 'acme', status: 'ACTIVE', configVersion: 1 }] }),
+      });
+    }));
+
     const sid = await makeSid(['aida:superadmin']);
     const res = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid }, headers: CSRF_HEADERS });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('SUSPENDED');
+    expect(res.json().configVersion).toBe(2);
+  });
+
+  it('409 — stale expectedConfigVersion returns conflict (MTN-27 ext)', async () => {
+    // Body explicitly sends stale version; mock returns higher stored version.
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
+      const body = init?.body ?? '';
+      if (body.includes('SELECT configVersion')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          text: async () => '', headers: { get: () => null },
+          json: async () => ({ result: [{ configVersion: 7 }] }),  // stale expected=3 vs current=7
+        });
+      }
+      return Promise.resolve({
+        ok: true, status: 200,
+        text: async () => '', headers: { get: () => null },
+        json: async () => ({ result: [] }),
+      });
+    }));
+
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({
+      method:  'DELETE', url: '/api/admin/tenants/acme',
+      cookies: { sid }, headers: CSRF_HEADERS,
+      payload: { expectedConfigVersion: 3 },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('config_version_conflict');
+    expect(res.json().currentConfigVersion).toBe(7);
   });
 });
 
