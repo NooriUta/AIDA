@@ -303,6 +303,56 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // ── PUT /api/admin/tenants/:alias — update editable config (HTA-08) ─────────
+  app.put<{
+    Params: { alias: string };
+    Body: Partial<{
+      maxParseSessions:   number;
+      maxAtoms:           number;
+      maxSources:         number;
+      maxConcurrentJobs:  number;
+      harvestCron:        string;
+      llmMode:            string;
+      dataRetentionDays:  number;
+    }>;
+  }>('/api/admin/tenants/:alias',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
+    async (request, reply) => {
+      const { alias } = request.params;
+      const body      = request.body ?? {};
+
+      const EDITABLE = [
+        'maxParseSessions', 'maxAtoms', 'maxSources', 'maxConcurrentJobs',
+        'harvestCron', 'llmMode', 'dataRetentionDays',
+      ] as const;
+
+      const setClauses: string[]               = [];
+      const params: Record<string, unknown>    = { alias, ts: Date.now() };
+      for (const field of EDITABLE) {
+        const v = (body as Record<string, unknown>)[field];
+        if (v !== undefined && v !== null) {
+          setClauses.push(`${field} = :${field}`);
+          params[field] = v;
+        }
+      }
+
+      if (setClauses.length === 0) {
+        return reply.status(400).send({ error: 'No editable fields provided' });
+      }
+
+      setClauses.push('updatedAt = :ts');
+      setClauses.push('configVersion = configVersion + 1');
+
+      await friggSql('frigg-tenants',
+        `UPDATE DaliTenantConfig SET ${setClauses.join(', ')} WHERE tenantAlias = :alias`,
+        params,
+      );
+      emitTenantAudit('seer.audit.tenant_config_updated', request.user.username, alias);
+      const updated = await getTenantConfig(alias);
+      return reply.send({ ok: true, tenant: updated });
+    },
+  );
+
   // ── POST /api/admin/tenants/:alias/force-cleanup — CAP-06 ───────────────────
   app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/force-cleanup',
     { preHandler: [app.authenticate, requireScope('aida:admin', 'aida:admin:destructive'), csrfGuard, provisioningRateLimit] },

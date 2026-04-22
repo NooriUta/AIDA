@@ -2,7 +2,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useTenantDetails } from '../hooks/useTenantDetails';
+import { useTenantContext } from '../hooks/useTenantContext';
 import { TenantStatusBadge } from '../components/tenants/TenantStatusBadge';
+import { TenantLifecycleActions } from '../components/tenants/TenantLifecycleActions';
 
 function Row({ label, value }: { label: string; value?: string | number | null }) {
   if (value == null || value === '') return null;
@@ -21,6 +23,7 @@ export default function TenantDetailsPage() {
   usePageTitle(alias ? `${t('tenants.tenant', 'Tenant')}: ${alias}` : t('tenants.tenant', 'Tenant'));
 
   const { tenant, loading, error, refresh } = useTenantDetails(alias);
+  const { canManageUsers, isSuperAdmin }     = useTenantContext();
 
   return (
     <div style={{ padding: '24px', maxWidth: 720 }}>
@@ -29,6 +32,22 @@ export default function TenantDetailsPage() {
         <h2 style={{ margin: 0, fontFamily: 'monospace' }}>{alias}</h2>
         {tenant && <TenantStatusBadge status={tenant.status} />}
         <div style={{ flex: 1 }} />
+        {canManageUsers && (
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate(`/admin/tenants/${alias}/members`)}
+          >
+            {t('members.heading', 'Members')}
+          </button>
+        )}
+        {isSuperAdmin && (
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate(`/admin/tenants/${alias}/config`)}
+          >
+            {t('tenants.config', 'Config')}
+          </button>
+        )}
         <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
           {t('tenants.refresh', 'Refresh')}
         </button>
@@ -38,6 +57,10 @@ export default function TenantDetailsPage() {
 
       {loading && !tenant && (
         <p style={{ color: 'var(--color-muted)' }}>{t('status.loading', 'Loading…')}</p>
+      )}
+
+      {tenant && (
+        <TenantLifecycleActions tenant={tenant} onRefresh={refresh} />
       )}
 
       {tenant && (

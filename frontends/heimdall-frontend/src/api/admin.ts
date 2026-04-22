@@ -103,6 +103,20 @@ export function extendRetention(alias: string, retainUntil: number): Promise<{ o
   });
 }
 
+export type TenantConfigPatch = Partial<Pick<DaliTenantConfig,
+  'maxParseSessions' | 'maxAtoms' | 'maxSources' | 'maxConcurrentJobs'
+  | 'harvestCron' | 'llmMode' | 'dataRetentionDays'>>;
+
+export function updateTenantConfig(
+  alias: string,
+  patch: TenantConfigPatch,
+): Promise<{ ok: boolean; tenant: DaliTenantConfig }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}`, {
+    method: 'PUT',
+    body:   JSON.stringify(patch),
+  });
+}
+
 export function listMembers(alias: string, signal?: AbortSignal): Promise<TenantMember[]> {
   return adminFetch<TenantMember[]>(`/tenants/${encodeURIComponent(alias)}/members`, { signal });
 }
