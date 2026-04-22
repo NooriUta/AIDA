@@ -48,13 +48,37 @@ public class EventStreamEndpoint {
     private final ConcurrentHashMap<String, Consumer<HeimdallEvent>> subscribers =
             new ConcurrentHashMap<>();
 
+    /** MTN-36: connectionId → {@link WebSocketConnection} for proactive close-by-tenant. */
+    private final ConcurrentHashMap<String, WebSocketConnection> connections =
+            new ConcurrentHashMap<>();
+
+    /** MTN-36: connectionId → tenantAlias (resolved at handshake). Empty = superadmin stream. */
+    private final ConcurrentHashMap<String, String> connectionTenants =
+            new ConcurrentHashMap<>();
+
     @OnOpen
     public Uni<Void> onOpen(WebSocketConnection connection) {
         LOG.infof("WebSocket connected: %s", connection.id());
 
         // Parse optional ?filter=key:value query param from raw query string
         String rawFilter = queryParam(connection.handshakeRequest().query(), "filter");
-        EventFilter filter = EventFilter.parse(rawFilter);
+        EventFilter parsed = EventFilter.parse(rawFilter);
+
+        // MTN-05: non-superadmin sessions cannot observe other tenants. The
+        // handshake carries an X-Seer-Tenant-Alias + X-Seer-Role header set by
+        // the rbac-proxy. Force filter.tenantAlias to the session tenant and
+        // record the binding for MTN-36 force-disconnect on suspend.
+        String headerAlias = connection.handshakeRequest().header("X-Seer-Tenant-Alias");
+        String headerRole  = connection.handshakeRequest().header("X-Seer-Role");
+        boolean isSuper    = "super-admin".equalsIgnoreCase(headerRole);
+        final EventFilter filter = (!isSuper && headerAlias != null && !headerAlias.isBlank())
+                ? parsed.withForcedTenantAlias(headerAlias)
+                : parsed;
+        if (filter.tenantAlias() != null) {
+            connectionTenants.put(connection.id(), filter.tenantAlias());
+        }
+        connections.put(connection.id(), connection);
+
         if (!filter.isEmpty()) {
             LOG.infof("WebSocket %s applying filter: %s", connection.id(), rawFilter);
         }
@@ -118,6 +142,42 @@ public class EventStreamEndpoint {
         if (sub != null) {
             ringBuffer.unsubscribe(sub);
         }
+        connections.remove(connectionId);
+        connectionTenants.remove(connectionId);
+    }
+
+    /**
+     * MTN-36 — Close every open WebSocket bound to {@code tenantAlias}. Called
+     * when that tenant transitions to SUSPENDED / ARCHIVED / PURGED / HIBERNATED
+     * (per ADR-MT-007 eviction matrix). Returns the count of connections that
+     * received a close frame so the caller can report SLA compliance.
+     *
+     * <p>Superadmin sessions (no forced tenant binding) are NOT closed — they
+     * observe cross-tenant streams and must stay live to see the follow-up
+     * {@code tenant_purged} event on the wire.
+     */
+    public int disconnectTenant(String tenantAlias, String reason) {
+        if (tenantAlias == null || tenantAlias.isBlank()) return 0;
+        int closed = 0;
+        for (var entry : connectionTenants.entrySet()) {
+            if (tenantAlias.equals(entry.getValue())) {
+                WebSocketConnection conn = connections.get(entry.getKey());
+                if (conn != null && conn.isOpen()) {
+                    LOG.infof("[MTN-36] closing ws %s — tenant '%s' reason='%s'",
+                            entry.getKey(), tenantAlias, reason);
+                    // Close with policy-violation code (1008) + reason for operator forensics.
+                    conn.closeAndAwait();
+                    closed++;
+                }
+                cleanup(entry.getKey());
+            }
+        }
+        return closed;
+    }
+
+    /** @return snapshot count of currently-tracked tenant-bound connections (MTN-36 metrics hook). */
+    public int boundConnectionCount() {
+        return connectionTenants.size();
     }
 
     /**

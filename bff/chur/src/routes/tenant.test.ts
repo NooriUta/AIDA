@@ -128,6 +128,76 @@ describe('DELETE /api/admin/tenants/:alias — suspend', () => {
   });
 });
 
+describe('PUT /api/admin/tenants/:alias/retention — MTN-27 optimistic lock', () => {
+  let app: App;
+  beforeEach(async () => { app = await buildApp(); });
+
+  it('400 — missing expectedConfigVersion is rejected', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({
+      method:  'PUT',
+      url:     '/api/admin/tenants/acme/retention',
+      cookies: { sid },
+      payload: { retainUntil: Date.now() + 86_400_000 },  // no expectedConfigVersion
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/expectedConfigVersion/);
+  });
+
+  it('200 — concurrent write with matching configVersion succeeds', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    // Stub sequence: (a) UPDATE returns ok, (b) SELECT returns new configVersion = 2.
+    const fetch = vi.fn(async (_url: string, init?: { body?: string }) => {
+      if (init?.body?.includes('SELECT configVersion')) {
+        return { ok: true, status: 200,
+          text: async () => '', headers: { get: () => null },
+          json: async () => ({ result: [{ configVersion: 2 }] }) };
+      }
+      return { ok: true, status: 200,
+        text: async () => '', headers: { get: () => null },
+        json: async () => ({ result: [] }) };
+    });
+    vi.stubGlobal('fetch', fetch);
+
+    const res = await app.inject({
+      method:  'PUT',
+      url:     '/api/admin/tenants/acme/retention',
+      cookies: { sid },
+      payload: { retainUntil: Date.now() + 86_400_000, expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().configVersion).toBe(2);
+  });
+
+  it('409 — stale expectedConfigVersion returns conflict with current value', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    // Stub: UPDATE does nothing (CAS mismatch); SELECT returns stored configVersion = 7.
+    const fetch = vi.fn(async (_url: string, init?: { body?: string }) => {
+      if (init?.body?.includes('SELECT configVersion')) {
+        return { ok: true, status: 200,
+          text: async () => '', headers: { get: () => null },
+          json: async () => ({ result: [{ configVersion: 7 }] }) };
+      }
+      return { ok: true, status: 200,
+        text: async () => '', headers: { get: () => null },
+        json: async () => ({ result: [] }) };
+    });
+    vi.stubGlobal('fetch', fetch);
+
+    const res = await app.inject({
+      method:  'PUT',
+      url:     '/api/admin/tenants/acme/retention',
+      cookies: { sid },
+      payload: { retainUntil: Date.now() + 86_400_000, expectedConfigVersion: 3 },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json();
+    expect(body.error).toBe('config_version_conflict');
+    expect(body.expectedConfigVersion).toBe(3);
+    expect(body.currentConfigVersion).toBe(7);
+  });
+});
+
 describe('POST /api/admin/tenants/:alias/force-cleanup', () => {
   let app: App;
   beforeEach(async () => { app = await buildApp(); });

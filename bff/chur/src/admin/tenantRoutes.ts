@@ -172,20 +172,45 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ── PUT /api/admin/tenants/:alias/retention ─────────────────────────────────
-  app.put<{ Params: { alias: string }; Body: { retainUntil: number } }>(
+  // MTN-27: body requires `expectedConfigVersion` for optimistic-lock CAS.
+  // Two concurrent admin edits can no longer lose a write silently.
+  app.put<{ Params: { alias: string }; Body: { retainUntil: number; expectedConfigVersion: number } }>(
     '/api/admin/tenants/:alias/retention',
     { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
     async (request, reply) => {
-      const { alias }       = request.params;
-      const { retainUntil } = request.body ?? {};
+      const { alias }                           = request.params;
+      const { retainUntil, expectedConfigVersion } = request.body ?? ({} as { retainUntil: number; expectedConfigVersion: number });
       if (!retainUntil || typeof retainUntil !== 'number') {
         return reply.status(400).send({ error: 'retainUntil (epoch ms) required' });
       }
+      if (typeof expectedConfigVersion !== 'number' || expectedConfigVersion < 1) {
+        return reply.status(400).send({ error: 'expectedConfigVersion (positive integer) required — MTN-27' });
+      }
+
+      // CAS: update only when stored configVersion matches; bump it on success.
       await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET archiveRetentionUntil = :until, updatedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, until: retainUntil, ts: Date.now() },
+        `UPDATE DaliTenantConfig SET archiveRetentionUntil = :until, updatedAt = :ts,
+           configVersion = configVersion + 1
+         WHERE tenantAlias = :alias AND configVersion = :expected`,
+        { alias, until: retainUntil, ts: Date.now(), expected: expectedConfigVersion },
       );
-      return reply.send({ ok: true });
+
+      // Verify the update actually landed (ArcadeDB HTTP API does not return affected-rows count).
+      const after = await friggSql('frigg-tenants',
+        `SELECT configVersion FROM DaliTenantConfig WHERE tenantAlias = :alias LIMIT 1`,
+        { alias },
+      );
+      const current = Number((after[0] as { configVersion?: number })?.configVersion ?? 0);
+      if (current !== expectedConfigVersion + 1) {
+        return reply.status(409).send({
+          error: 'config_version_conflict',
+          tenantAlias: alias,
+          expectedConfigVersion,
+          currentConfigVersion: current,
+          hint: 'GET /api/admin/tenants/:alias to read current configVersion, then retry with the new value',
+        });
+      }
+      return reply.send({ ok: true, configVersion: current });
     },
   );
 
