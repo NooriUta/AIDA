@@ -3,15 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { usePageTitle }   from '../hooks/usePageTitle';
 import { useAuthStore }   from '../stores/authStore';
 import { useIsMobile }    from '../hooks/useIsMobile';
-import { MOCK_USERS }     from '../components/users/mockUsers';
 import { UserEditModal }  from '../components/users/UserEditModal';
 import { UserInviteModal } from '../components/users/UserInviteModal';
 import { UserConfirmModal } from '../components/users/UserConfirmModal';
+import { UserDetailDrawer } from '../components/users/UserDetailDrawer';
+import { TenantSelector, useTenantSelectorValue } from '../components/TenantSelector';
 import type { AidaUser, UserRole } from '../components/users/types';
 import { ROLES, ADMIN_ROLES } from '../components/users/types';
 
-// Chur proxy → Keycloak Admin API
-const USERS_API = '/heimdall/users';
+const USERS_API = '/chur/api/admin/users';
+const ALL_TENANTS = '__all__';
 
 // Shape returned by GET /heimdall/users (mirrors KcUserView in keycloakAdmin.ts)
 interface KcUserView {
@@ -62,13 +63,15 @@ function RoleBadge({ roleId }: { roleId: UserRole }) {
 
 // ── User row ───────────────────────────────────────────────────────────────────
 function UserRow({
-  user, isAdmin,
-  onEdit, onBlock,
+  user, isAdmin, isExpanded,
+  onEdit, onBlock, onExpand,
 }: {
-  user:    AidaUser;
-  isAdmin: boolean;
-  onEdit:  (id: number) => void;
-  onBlock: (id: number) => void;
+  user:       AidaUser;
+  isAdmin:    boolean;
+  isExpanded: boolean;
+  onEdit:     (id: number) => void;
+  onBlock:    (id: number) => void;
+  onExpand:   (id: number) => void;
 }) {
   const { t } = useTranslation();
   const r       = ROLES.find(x => x.id === user.role) ?? ROLES[0];
@@ -76,7 +79,10 @@ function UserRow({
   const scopes  = r.scopes;
 
   return (
-    <tr style={{ opacity: user.active ? 1 : 0.45 }}>
+    <tr
+      style={{ opacity: user.active ? 1 : 0.45, cursor: 'pointer', background: isExpanded ? 'color-mix(in srgb, var(--inf) 6%, transparent)' : undefined }}
+      onClick={() => onExpand(user.id)}
+    >
       {/* User */}
       <td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -141,7 +147,7 @@ function UserRow({
       <td style={{ fontSize: 11, color: 'var(--t3)' }}>{user.lastActive}</td>
 
       {/* Actions */}
-      <td className="user-row-actions">
+      <td className="user-row-actions" onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
           {isAdmin && (
             <>
@@ -254,25 +260,31 @@ export default function UsersPage() {
                     .includes(authUser?.role ?? '');
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [users, setUsers]       = useState<AidaUser[]>(MOCK_USERS);
+  const [users, setUsers]         = useState<AidaUser[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [editId, setEditId]     = useState<number | null>(null);
-  const [inviteOpen, setInvite] = useState(false);
-  const [confirmId, setConfirm] = useState<number | null>(null);
+  const [crossTenant, setCrossTenant] = useState(false);
+  const [activeTenant, setActiveTenant] = useState(() => useTenantSelectorValue());
+  const [editId, setEditId]       = useState<number | null>(null);
+  const [drawerUser, setDrawerUser] = useState<AidaUser | null>(null);
+  const [inviteOpen, setInvite]   = useState(false);
+  const [confirmId, setConfirm]   = useState<number | null>(null);
 
-  // ── Fetch users from Keycloak via Chur /heimdall/users ─────────────────────
-  // Falls back to MOCK_USERS if the API is unreachable (dev without Keycloak).
-  // KcUserView → AidaUser: quotas/sources/activity are mocked until FRIGG R4.3.
-  useEffect(() => {
-    fetch(USERS_API, { credentials: 'include' })
+  // ── Fetch users from /chur/api/admin/users ─────────────────────────────────
+  const fetchUsers = useCallback((tenant: string) => {
+    const url = tenant === ALL_TENANTS
+      ? `${USERS_API}?allTenants=true`
+      : `${USERS_API}?tenantAlias=${encodeURIComponent(tenant)}`;
+
+    fetch(url, { credentials: 'include' })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<KcUserView[]>;
+        return r.json() as Promise<{ mode: string; users: KcUserView[] }>;
       })
-      .then(kcUsers => {
+      .then(({ mode, users: kcUsers }) => {
+        setCrossTenant(mode === 'cross-tenant');
         const mapped: AidaUser[] = kcUsers.map((u, i) => ({
-          // Use index+1 as numeric ID (KC uses UUID — AidaUser.id is number for now)
           id:    i + 1,
+          kcId:  u.id,
           name:  u.name,
           email: u.email,
           role:  u.role,
@@ -302,20 +314,18 @@ export default function UsersPage() {
         setLoadError(null);
       })
       .catch(err => {
-        // Keycloak not running or Chur not proxying yet — use mock data
-        setLoadError(`KC unavailable: ${err instanceof Error ? err.message : err} — showing mock data`);
+        setLoadError(
+          `Keycloak недоступен: ${err instanceof Error ? err.message : err}. ` +
+          `Запустите: docker-compose up keycloak`,
+        );
       });
   }, []);
+
+  useEffect(() => { fetchUsers(activeTenant); }, [activeTenant, fetchUsers]);
   const [roleFilter, setRole]   = useState('');
   const [statusFilter, setStatus] = useState('');
   const [search, setSearch]     = useState('');
   const toast                   = useToast();
-
-  // TODO: fetch users from API when backend ready:
-  // useEffect(() => {
-  //   fetch(`${HEIMDALL_API}/admin/tenants/default/users`)
-  //     .then(r => r.json()).then(setUsers).catch(e => console.error(e));
-  // }, []);
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const filtered = useMemo(() => users.filter(u => {
@@ -337,7 +347,13 @@ export default function UsersPage() {
   }), [users]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const editUser = useCallback((id: number) => setEditId(id), []);
+  const editUser   = useCallback((id: number) => setEditId(id), []);
+  const openDrawer = useCallback((id: number) => {
+    setDrawerUser(prev => {
+      const u = users.find(x => x.id === id) ?? null;
+      return prev?.id === id ? null : u;   // toggle
+    });
+  }, [users]);
 
   const saveUser = useCallback((updated: AidaUser) => {
     setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
@@ -399,25 +415,35 @@ export default function UsersPage() {
       {/* ── Page header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)', letterSpacing: '0.01em' }}>
-            {t('users.title')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)', letterSpacing: '0.01em' }}>
+              {t('users.title')}
+            </div>
+            {crossTenant && (
+              <span className="badge badge-warn" style={{ fontSize: 10 }}>
+                {t('users.crossTenantMode', 'cross-tenant')}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>
             {t('users.subtitle')}
           </div>
         </div>
-        {isAdmin && (
-          <button className="btn btn-secondary" onClick={() => setInvite(true)}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            {t('users.invite')}
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <TenantSelector onChange={v => { setActiveTenant(v); setCrossTenant(false); }} />
+          {isAdmin && (
+            <button className="btn btn-secondary" onClick={() => setInvite(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              {t('users.invite')}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* ── KC load error (soft warning — mock data shown) ── */}
+      {/* ── KC load error ── */}
       {loadError && (
         <div className="warn-banner" style={{ marginBottom: 16, fontSize: 11 }}>
           ⚠ {loadError}
@@ -516,7 +542,9 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {filtered.map(u => (
-                <UserRow key={u.id} user={u} isAdmin={isAdmin} onEdit={editUser} onBlock={requestBlock} />
+                <UserRow key={u.id} user={u} isAdmin={isAdmin}
+                  isExpanded={drawerUser?.id === u.id}
+                  onEdit={editUser} onBlock={requestBlock} onExpand={openDrawer} />
               ))}
               {filtered.length === 0 && (
                 <tr>
@@ -559,6 +587,16 @@ export default function UsersPage() {
           danger={confirmUser.active}
           onConfirm={() => toggleBlock(confirmUser.id)}
           onClose={() => setConfirm(null)}
+        />
+      )}
+
+      {/* ── User detail drawer ── */}
+      {drawerUser && (
+        <UserDetailDrawer
+          user={drawerUser}
+          isAdmin={isAdmin}
+          onClose={() => setDrawerUser(null)}
+          onRefresh={() => fetchUsers(activeTenant)}
         />
       )}
 

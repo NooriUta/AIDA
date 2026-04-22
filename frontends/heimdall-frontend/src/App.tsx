@@ -29,9 +29,12 @@ const DocsPage           = React.lazy(() => import('./pages/DocsPage'));
 const TenantsPage        = React.lazy(() => import('./pages/TenantsPage'));
 const TenantDetailsPage  = React.lazy(() => import('./pages/TenantDetailsPage'));
 // Round 5 self-service
-const ProfilePage        = React.lazy(() => import('./pages/ProfilePage'));
-const PreferencesPage    = React.lazy(() => import('./pages/PreferencesPage'));
-const NotificationsPage  = React.lazy(() => import('./pages/NotificationsPage'));
+const ProfilePage           = React.lazy(() => import('./pages/ProfilePage'));
+const PreferencesPage       = React.lazy(() => import('./pages/PreferencesPage'));
+const NotificationsPage     = React.lazy(() => import('./pages/NotificationsPage'));
+const SessionActivityPage   = React.lazy(() => import('./pages/SessionActivityPage'));
+// Round 5 admin
+const SoftDeletedUsersPage  = React.lazy(() => import('./pages/SoftDeletedUsersPage'));
 
 // ── App layout (shell around the routed page) ─────────────────────────────────
 function AppLayout() {
@@ -145,10 +148,16 @@ export default function App() {
             {/* Round 5 — Self-service (any authenticated user) */}
             <Route path="me">
               <Route index element={<Navigate to="profile" replace />} />
-              <Route path="profile"       element={<ProfilePage />} />
-              <Route path="preferences"   element={<PreferencesPage />} />
-              <Route path="notifications" element={<NotificationsPage />} />
+              <Route path="profile"          element={<ProfilePage />} />
+              <Route path="preferences"      element={<PreferencesPage />} />
+              <Route path="notifications"    element={<NotificationsPage />} />
+              <Route path="session-activity" element={<SessionActivityPage />} />
             </Route>
+
+            {/* Round 5 — Superadmin soft-delete management (backend also guards aida:superadmin) */}
+            <Route path="admin/users/soft-deleted" element={
+              <RoleGuard require="admin"><SoftDeletedUsersPage /></RoleGuard>
+            } />
 
             {/* Standalone pages */}
             <Route path="users" element={
