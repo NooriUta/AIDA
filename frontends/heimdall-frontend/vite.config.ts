@@ -42,32 +42,33 @@ export default defineConfig({
     cors: true,
     proxy: {
       // Auth + admin API + user self-service go to Chur as-is
-      '/auth':     { target: 'http://localhost:3000', changeOrigin: true },
-      '/prefs':    { target: 'http://localhost:3000', changeOrigin: true },
-      '/api/admin': { target: 'http://localhost:3000', changeOrigin: true },  // MTN-63 + tenant admin
+      '/auth':     { target: 'http://127.0.0.1:3000', changeOrigin: true },
+      '/prefs':    { target: 'http://127.0.0.1:3000', changeOrigin: true },
+      '/api/admin': { target: 'http://127.0.0.1:3000', changeOrigin: true },  // MTN-63 + tenant admin
       // NOTE: `/me` is deliberately NOT proxied as a top-level path — it shadows
       // the SPA route /me/profile etc. FE code uses `/chur/me/*` which is
       // routed through the `/chur` proxy below.
       // Shell-style routing: '/chur/*' is prod path via shell:5175. In standalone
       // heimdall-frontend dev, strip '/chur' prefix so /chur/api/admin/tenants →
-      // http://localhost:3000/api/admin/tenants. Fixes TenantsPage/UsersPage HTML
+      // http://127.0.0.1:3000/api/admin/tenants. Fixes TenantsPage/UsersPage HTML
       // fallback (was: Vite SPA fallback returned index.html → JSON parse error).
-      '/chur':     { target: 'http://localhost:3000', changeOrigin: true,
+      '/chur':     { target: 'http://127.0.0.1:3000', changeOrigin: true,
                      rewrite: (p: string) => p.replace(/^\/chur/, '') },
       // Heimdall API paths: dev server receives /health, /metrics etc. — rewrite to /heimdall/* on Chur
-      '/health':   { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/metrics':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/control':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/users':     { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/services':  { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/team-docs': { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
-      '/docs':      { target: 'http://localhost:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/health':   { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/metrics':  { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/control':  { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/users':     { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/services':  { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/databases': { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/team-docs': { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+      '/docs':      { target: 'http://127.0.0.1:3000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
       // WebSocket event stream — browser connects to /heimdall/ws/events (resolveWsUrl in api.ts)
-      '/heimdall/ws': { target: 'ws://localhost:3000', changeOrigin: true, ws: true },
-      '/dali/api':      { target: 'http://localhost:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
-      '/dali/q':        { target: 'http://localhost:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
-      '/jobrunr':       { target: 'http://localhost:29091', changeOrigin: true, rewrite: (p: string) => p.replace(/^\/jobrunr/, '') },
-      '/highload-plan': { target: 'http://localhost:9093', changeOrigin: true },
+      '/heimdall/ws': { target: 'ws://127.0.0.1:3000', changeOrigin: true, ws: true },
+      '/dali/api':      { target: 'http://127.0.0.1:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
+      '/dali/q':        { target: 'http://127.0.0.1:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
+      '/jobrunr':       { target: 'http://127.0.0.1:29091', changeOrigin: true, rewrite: (p: string) => p.replace(/^\/jobrunr/, '') },
+      '/highload-plan': { target: 'http://127.0.0.1:9093', changeOrigin: true },
     },
   },
 });

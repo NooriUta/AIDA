@@ -174,7 +174,7 @@ export default function App() {
             <Route path="dashboard" element={<Navigate to="../overview/dashboard" replace />} />
             <Route path="events"    element={<Navigate to="../overview/events"    replace />} />
 
-            <Route path="*" element={<Navigate to="overview/services" replace />} />
+            <Route path="*" element={<Navigate to="/overview/services" replace />} />
           </Route>
         </Route>
       </Routes>

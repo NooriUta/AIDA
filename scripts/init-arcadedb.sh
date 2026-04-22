@@ -5,7 +5,8 @@
 # Также пригоден для ручного запуска и CI/CD.
 #
 # Env-переменные (все опциональны — defaults рассчитаны на локальный dev):
-#   FRIGG_URL   FRIGG_USER   FRIGG_PASS
+#   FRIGG_URL   FRIGG_USER   FRIGG_PASS   — сессии, тенанты, users, JobRunr
+#   YGG_URL     YGG_USER     YGG_PASS     — граф линейности (hound_* базы)
 #   INIT_ARCADEDB_TIMEOUT  (сек; default 30 — скрипт не блокирует если Docker не запущен)
 
 set -euo pipefail
@@ -13,6 +14,10 @@ set -euo pipefail
 FRIGG_URL="${FRIGG_URL:-http://localhost:2481}"
 FRIGG_USER="${FRIGG_USER:-root}"
 FRIGG_PASS="${FRIGG_PASS:-playwithdata}"
+
+YGG_URL="${YGG_URL:-http://localhost:2480}"
+YGG_USER="${YGG_USER:-root}"
+YGG_PASS="${YGG_PASS:-playwithdata}"
 
 TIMEOUT="${INIT_ARCADEDB_TIMEOUT:-30}"
 INTERVAL=2
@@ -68,7 +73,7 @@ run_sql() {
     -H "Content-Type: application/json" --data "$body" >/dev/null 2>&1 || true
 }
 
-ensure_default_tenant() {
+ensure_frigg_tenants_schema() {
   local base_url="$1" user="$2" pass="$3"
   log "Ensuring DaliTenantConfig schema in frigg-tenants:"
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE VERTEX TYPE DaliTenantConfig IF NOT EXISTS"
@@ -101,20 +106,24 @@ ensure_default_tenant() {
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.scopes IF NOT EXISTS STRING"
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE PROPERTY ApiKey.createdAt IF NOT EXISTS LONG"
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" "CREATE INDEX IF NOT EXISTS ON ApiKey (serviceAccountId) NOTUNIQUE"
+}
 
-  # Idempotent upsert of the "default" tenant record for single-tenant dev deployments
+# ensure_tenant_record <frigg_url> <user> <pass> <alias> <ygg_lin_db> <ygg_src_db> <dali_db>
+ensure_tenant_record() {
+  local base_url="$1" user="$2" pass="$3" alias="$4"
+  local ygg_lin="$5" ygg_src="$6" dali_db="$7"
   local row
   row=$(curl -sf --max-time 5 -u "$user:$pass" -X POST "$base_url/api/v1/query/frigg-tenants" \
     -H "Content-Type: application/json" \
-    -d '{"language":"sql","command":"SELECT tenantAlias FROM DaliTenantConfig WHERE tenantAlias = '\''default'\'' LIMIT 1"}' 2>/dev/null || echo '{"result":[]}')
-  if echo "$row" | grep -q '"default"'; then
-    log "  DaliTenantConfig 'default' — already present, skip."
+    -d "{\"language\":\"sql\",\"command\":\"SELECT tenantAlias FROM DaliTenantConfig WHERE tenantAlias = '$alias' LIMIT 1\"}" 2>/dev/null || echo '{"result":[]}')
+  if echo "$row" | grep -q "\"$alias\""; then
+    log "  DaliTenantConfig '$alias' — already present, skip."
     return
   fi
-  log "  DaliTenantConfig 'default' — inserting."
+  log "  DaliTenantConfig '$alias' — inserting."
   local ts; ts=$(date +%s000)
   run_sql "$base_url" "$user" "$pass" "frigg-tenants" \
-    "INSERT INTO DaliTenantConfig SET tenantAlias = 'default', status = 'ACTIVE', configVersion = 1, yggLineageDbName = 'hound_default', yggSourceArchiveDbName = 'hound_src_default', friggDaliDbName = 'dali_default', harvestCron = '0 0 */6 * * ?', llmMode = 'off', dataRetentionDays = 30, maxParseSessions = 10, maxAtoms = 10000, maxSources = 5, maxConcurrentJobs = 2, createdAt = $ts, updatedAt = $ts"
+    "INSERT INTO DaliTenantConfig SET tenantAlias = '$alias', status = 'ACTIVE', configVersion = 1, yggLineageDbName = '$ygg_lin', yggSourceArchiveDbName = '$ygg_src', friggDaliDbName = '$dali_db', harvestCron = '0 0 */6 * * ?', llmMode = 'off', dataRetentionDays = 30, maxParseSessions = 10, maxAtoms = 10000, maxSources = 5, maxConcurrentJobs = 2, createdAt = $ts, updatedAt = $ts"
 }
 
 # MTN-51 / ADR-MT-004: heimdall.ControlEvent — durable append-only store for
@@ -247,13 +256,24 @@ if wait_ready "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "FRIGG"; then
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "heimdall"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-tenants"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-users"
-  ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "hound_default"
-  ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "hound_src_default"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_default"
-  ensure_default_tenant "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
+  ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_acme"
+  ensure_frigg_tenants_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
+  ensure_tenant_record "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "default" "hound_default" "hound_src_default" "dali_default"
+  ensure_tenant_record "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "acme"    "hound_acme"    "hound_src_acme"    "dali_acme"
   ensure_frigg_users_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   ensure_heimdall_control_event_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   sync_default_keycloak_org_id "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
+fi
+
+# ── YGG — lineage graph databases (per-tenant hound_* bases) ─────────────────
+# NOTE: legacy `hound` DB removed — replaced by hound_default / hound_src_default
+if wait_ready "$YGG_URL" "$YGG_USER" "$YGG_PASS" "YGG"; then
+  log "Ensuring YGG databases:"
+  ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_default"
+  ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_src_default"
+  ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_acme"
+  ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_src_acme"
 fi
 
 log "Done."

@@ -23,13 +23,24 @@ public class FriggGateway {
 
     @Inject @RestClient FriggClient client;
 
-    @ConfigProperty(name = "frigg.db")       String db;
-    @ConfigProperty(name = "frigg.user")     String user;
-    @ConfigProperty(name = "frigg.password") String password;
+    @ConfigProperty(name = "frigg.db")           String db;
+    @ConfigProperty(name = "frigg.tenants-db",
+                    defaultValue = "frigg-tenants") String tenantsDb;
+    @ConfigProperty(name = "frigg.user")          String user;
+    @ConfigProperty(name = "frigg.password")      String password;
 
     public Uni<List<Map<String, Object>>> sql(String query, Map<String, Object> params) {
-        LOG.debugf("[FRIGG] %s", query);
-        return client.command(db, basicAuth(), new FriggCommand("sql", query, params))
+        return sqlOn(db, query, params);
+    }
+
+    /** Query against frigg-tenants (DaliTenantConfig, ServiceAccount, ApiKey). */
+    public Uni<List<Map<String, Object>>> sqlTenants(String query, Map<String, Object> params) {
+        return sqlOn(tenantsDb, query, params);
+    }
+
+    private Uni<List<Map<String, Object>>> sqlOn(String database, String query, Map<String, Object> params) {
+        LOG.debugf("[FRIGG:%s] %s", database, query);
+        return client.command(database, basicAuth(), new FriggCommand("sql", query, params))
                 .map(FriggResponse::result)
                 .onFailure().invoke(ex ->
                         LOG.errorf("[FRIGG FAILED] %s: %s", query, ex.getMessage()));

@@ -8,6 +8,10 @@ export interface TenantSummary {
   configVersion: number;
   lastFailedStep?: number;
   lastFailedCause?: string;
+  harvestCron?: string;
+  membersCount?: number | null;
+  atomsCount?: number | null;
+  sourcesCount?: number | null;
 }
 
 export interface DaliTenantConfig extends TenantSummary {
@@ -55,8 +59,9 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function listTenants(signal?: AbortSignal): Promise<TenantSummary[]> {
-  return adminFetch<TenantSummary[]>('/tenants', { signal });
+export function listTenants(signal?: AbortSignal, withStats = true): Promise<TenantSummary[]> {
+  const qs = withStats ? '?withStats=true' : '';
+  return adminFetch<TenantSummary[]>(`/tenants${qs}`, { signal });
 }
 
 export function provisionTenant(alias: string): Promise<{ ok: boolean; tenantAlias: string }> {
@@ -113,4 +118,8 @@ export function removeMember(alias: string, userId: string): Promise<{ ok: boole
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/members/${userId}`, {
     method: 'DELETE',
   });
+}
+
+export function triggerHarvest(alias: string): Promise<{ harvestId: string; tenantAlias: string }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/harvest`, { method: 'POST' });
 }

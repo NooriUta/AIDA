@@ -327,7 +327,7 @@ function ProfileTab() {
             <ModalField label={t('profile.phone', 'Телефон')}         value={draft.phone    ?? ''} onChange={v => setDraft(d => ({ ...d, phone:    v }))} />
             <ModalField label={t('profile.avatarUrl', 'URL аватара')} value={draft.avatarUrl ?? ''} onChange={v => setDraft(d => ({ ...d, avatarUrl: v }))} placeholder="https://…" />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
+              <button className="btn btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
                 {saving ? t('status.saving', 'Saving…') : t('action.save', 'Сохранить')}
               </button>
               {savedFlash && <span style={{ color: 'var(--suc)', fontSize: '13px' }}>✓ {t('status.saved', 'Сохранено')}</span>}
@@ -429,7 +429,7 @@ function PreferencesTab() {
             onChange={v => setDraft(d => ({ ...d, startPage: v }))}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button className="btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
+            <button className="btn btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
               {saving ? t('status.saving', 'Saving…') : t('action.save', 'Сохранить')}
             </button>
             {savedFlash && <span style={{ color: 'var(--suc)', fontSize: '13px' }}>✓ {t('status.saved', 'Сохранено')}</span>}
@@ -495,7 +495,7 @@ function NotificationsTab() {
           <NotifRow label={t('notifications.digest',  'Ежедневный дайджест')} checked={!!draft.digest}  onChange={toggle('digest')} />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-            <button className="btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
+            <button className="btn btn-primary" onClick={onSave} disabled={saving || loading} style={{ fontSize: '13px' }}>
               {saving ? t('status.saving', 'Saving…') : t('action.save', 'Сохранить')}
             </button>
             {savedFlash && <span style={{ color: 'var(--suc)', fontSize: '13px' }}>✓ {t('status.saved', 'Сохранено')}</span>}

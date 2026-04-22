@@ -10,6 +10,7 @@ import { authRoutes }     from './routes/auth';
 import { queryRoutes }    from './routes/query';
 import { graphqlRoutes }  from './routes/graphql';
 import { heimdallRoutes } from './routes/heimdall';
+import { databasesRoutes } from './routes/databases';
 import { prefsRoutes }    from './routes/prefs';
 import { meRoutes }       from './routes/me';
 import { adminRoutes }    from './routes/admin';
@@ -64,6 +65,7 @@ async function start(): Promise<void> {
   await app.register(queryRoutes,   { prefix: '/api'     });
   await app.register(graphqlRoutes, { prefix: '/graphql' });
   await app.register(heimdallRoutes);
+  await app.register(databasesRoutes);
   await app.register(prefsRoutes,   { prefix: '/prefs'   });
   await app.register(meRoutes);   // MTN-63 /me/*
   await app.register(adminRoutes);

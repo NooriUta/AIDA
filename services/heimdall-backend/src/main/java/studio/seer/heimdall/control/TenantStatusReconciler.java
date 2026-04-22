@@ -51,7 +51,7 @@ public class TenantStatusReconciler {
     @Scheduled(every = "15s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void tick() {
         try {
-            Uni<List<Map<String, Object>>> q = frigg.sql(
+            Uni<List<Map<String, Object>>> q = frigg.sqlTenants(
                     "SELECT tenantAlias, status FROM DaliTenantConfig",
                     Map.of());
             List<Map<String, Object>> rows = q.await().atMost(Duration.ofSeconds(10));

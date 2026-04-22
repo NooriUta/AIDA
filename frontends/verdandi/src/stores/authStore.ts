@@ -6,6 +6,7 @@ export interface AuthUser {
   id: string;
   username: string;
   role: 'viewer' | 'editor' | 'admin';
+  activeTenantAlias?: string;
 }
 
 interface AuthStore {

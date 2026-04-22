@@ -107,7 +107,7 @@ export default function ProfilePage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
             <button
-              className="btn-primary"
+              className="btn btn-primary"
               onClick={onSave}
               disabled={saving || loading}
             >

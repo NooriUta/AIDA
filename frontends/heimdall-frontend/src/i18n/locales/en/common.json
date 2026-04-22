@@ -458,6 +458,12 @@
     "status":           "Status",
     "configVersion":    "Config v",
     "harvestCron":      "Harvest cron",
+    "membersCount":     "Users",
+    "membersCount.hint": "KC users in tenant organization",
+    "sourcesCount":     "Sources",
+    "sourcesCount.hint": "DaliSource count in dali_{alias}",
+    "atomsCount":       "Atoms",
+    "atomsCount.hint":  "Graph vertex count in hound_{alias}",
     "tenant":           "Tenant",
     "back":             "Tenants",
     "refresh":          "Refresh",
@@ -479,7 +485,18 @@
       "unsuspend":      "Restore",
       "archive":        "Archive",
       "archiveConfirm": "Archive this tenant?",
-      "restore":        "Restore"
+      "restore":        "Restore",
+      "resume":         "Retry",
+      "forceCleanup":   "Purge all",
+      "forceCleanupConfirm": "Permanently delete all tenant data?"
+    },
+    "statusName": {
+      "ACTIVE":              "Active",
+      "SUSPENDED":           "Suspended",
+      "ARCHIVED":            "Archived",
+      "PROVISIONING":        "Provisioning",
+      "PROVISIONING_FAILED": "Provisioning failed",
+      "PURGED":              "Purged"
     }
   },
   "tenantSelector": {

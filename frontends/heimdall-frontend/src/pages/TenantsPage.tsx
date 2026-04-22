@@ -8,7 +8,7 @@ import { ProvisionModal }    from '../components/tenants/ProvisionModal';
 import type { TenantStatus, TenantSummary } from '../api/admin';
 import {
   suspendTenant, unsuspendTenant, archiveTenant,
-  restoreTenant, forceCleanupTenant, resumeProvisioningTenant,
+  restoreTenant, forceCleanupTenant, resumeProvisioningTenant, triggerHarvest,
 } from '../api/admin';
 
 const PAGE_SIZE = 20;
@@ -26,6 +26,14 @@ function humanCron(cron?: string): string {
     if (min === '0' && /^\d+$/.test(hour)) return `daily ${hour}:00`;
   }
   return cron;
+}
+
+// Compact count formatter: null → "—", ≥1000 → "1.2k", ≥1000000 → "1.2M"
+function fmtCount(n?: number | null): string {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
 }
 
 // ProvisionModal is now in components/tenants/ProvisionModal.tsx
@@ -51,19 +59,26 @@ function TenantActions({
   return (
     <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
       {status === 'ACTIVE' && (
-        <button className="btn btn-secondary" style={{ fontSize: 11 }}
+        <button className="btn btn-primary btn-sm"
+          disabled={busy} onClick={() => run(() => triggerHarvest(tenantAlias)
+            .then(r => { alert(`Harvest queued: ${r.harvestId}`); }))}>
+          {t('tenants.action.harvest', 'Harvest')}
+        </button>
+      )}
+      {status === 'ACTIVE' && (
+        <button className="btn btn-secondary btn-sm"
           disabled={busy} onClick={() => run(() => suspendTenant(tenantAlias))}>
           {t('tenants.action.suspend', 'Suspend')}
         </button>
       )}
       {status === 'SUSPENDED' && (
-        <button className="btn btn-secondary" style={{ fontSize: 11 }}
+        <button className="btn btn-secondary btn-sm"
           disabled={busy} onClick={() => run(() => unsuspendTenant(tenantAlias))}>
           {t('tenants.action.unsuspend', 'Restore')}
         </button>
       )}
       {(status === 'ACTIVE' || status === 'SUSPENDED') && (
-        <button className="btn btn-secondary" style={{ fontSize: 11, color: 'var(--wrn)' }}
+        <button className="btn btn-secondary btn-sm"
           disabled={busy}
           onClick={() => { if (confirm(t('tenants.action.archiveConfirm', 'Архивировать тенант?')))
             void run(() => archiveTenant(tenantAlias)); }}>
@@ -71,19 +86,19 @@ function TenantActions({
         </button>
       )}
       {status === 'ARCHIVED' && (
-        <button className="btn btn-secondary" style={{ fontSize: 11 }}
+        <button className="btn btn-secondary btn-sm"
           disabled={busy} onClick={() => run(() => restoreTenant(tenantAlias))}>
           {t('tenants.action.restore', 'Restore')}
         </button>
       )}
       {status === 'PROVISIONING_FAILED' && (
         <>
-          <button className="btn btn-secondary" style={{ fontSize: 11, color: 'var(--inf)' }}
+          <button className="btn btn-primary btn-sm"
             disabled={busy}
             onClick={() => run(() => resumeProvisioningTenant(tenantAlias))}>
             {t('tenants.action.resume', 'Retry')}
           </button>
-          <button className="btn btn-secondary" style={{ fontSize: 11, color: 'var(--danger)' }}
+          <button className="btn btn-danger btn-sm"
             disabled={busy}
             onClick={() => { if (confirm(t('tenants.action.forceCleanupConfirm', 'Удалить все данные тенанта?')))
               void run(() => forceCleanupTenant(tenantAlias)); }}>
@@ -139,21 +154,22 @@ export default function TenantsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* Filters — single row */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
         <input
-          className="field-input" style={{ minWidth: 180 }}
-          placeholder={t('tenants.search', 'Поиск по alias…')}
+          className="field-input"
+          style={{ flex: '1 1 240px', minWidth: 180, maxWidth: 420, width: 'auto' }}
+          placeholder={t('tenants.search', 'Поиск по псевдониму…')}
           value={search} onChange={e => handleSearch(e.target.value)}
         />
-        <select className="field-input" style={{ width: 'auto' }}
+        <select className="field-input" style={{ width: 'auto', flex: '0 0 auto' }}
           value={status} onChange={e => handleStatus(e.target.value as TenantStatus | '')}>
           <option value="">{t('tenants.allStatuses', 'Все статусы')}</option>
           {(['ACTIVE','SUSPENDED','ARCHIVED','PROVISIONING','PROVISIONING_FAILED','PURGED'] as TenantStatus[]).map(s => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>{t(`tenants.statusName.${s}`, s)}</option>
           ))}
         </select>
-        <span style={{ fontSize: 11, color: 'var(--t3)', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 11, color: 'var(--t3)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
           {filtered.length} {t('tenants.total', 'тенантов')}
         </span>
       </div>
@@ -165,11 +181,21 @@ export default function TenantsPage() {
         <p style={{ color: 'var(--t3)' }}>{t('status.loading', 'Loading…')}</p>
       ) : (
         <>
-          <table className="data-table" style={{ width: '100%', fontSize: 12 }}>
+          <div className="data-panel">
+          <table className="data-table">
             <thead>
               <tr>
                 <th style={{ textAlign: 'left' }}>{t('tenants.alias', 'Alias')}</th>
                 <th style={{ textAlign: 'left' }}>{t('tenants.status', 'Status')}</th>
+                <th style={{ textAlign: 'right' }} title={t('tenants.membersCount.hint', 'KC-пользователи в организации')}>
+                  {t('tenants.membersCount', 'Users')}
+                </th>
+                <th style={{ textAlign: 'right' }} title={t('tenants.sourcesCount.hint', 'DaliSource в dali_{alias}')}>
+                  {t('tenants.sourcesCount', 'Sources')}
+                </th>
+                <th style={{ textAlign: 'right' }} title={t('tenants.atomsCount.hint', 'Вершины графа в hound_{alias}')}>
+                  {t('tenants.atomsCount', 'Atoms')}
+                </th>
                 <th style={{ textAlign: 'left' }}>{t('tenants.harvestCron', 'Harvest cron')}</th>
                 <th style={{ textAlign: 'right' }}>{t('tenants.configVersion', 'Config v')}</th>
                 <th />
@@ -179,8 +205,10 @@ export default function TenantsPage() {
               {pageSlice.map(tenant => (
                 <tr key={tenant.tenantAlias} style={{ cursor: 'pointer' }}
                   onClick={() => navigate(`/admin/tenants/${tenant.tenantAlias}`)}>
-                  <td style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>
-                    {tenant.tenantAlias}
+                  <td>
+                    <span style={{ fontWeight: 600, color: 'var(--t1)', fontSize: 13 }}>
+                      {tenant.tenantAlias}
+                    </span>
                   </td>
                   <td>
                     <TenantStatusBadge status={tenant.status} />
@@ -193,8 +221,17 @@ export default function TenantsPage() {
                       </div>
                     )}
                   </td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--t2)' }}>
+                    {fmtCount(tenant.membersCount)}
+                  </td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--t2)' }}>
+                    {fmtCount(tenant.sourcesCount)}
+                  </td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--t2)' }}>
+                    {fmtCount(tenant.atomsCount)}
+                  </td>
                   <td style={{ color: 'var(--t3)' }}>
-                    {humanCron((tenant as { harvestCron?: string }).harvestCron)}
+                    {humanCron(tenant.harvestCron)}
                   </td>
                   <td style={{ textAlign: 'right', color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
                     v{tenant.configVersion}
@@ -206,13 +243,14 @@ export default function TenantsPage() {
               ))}
               {pageSlice.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32 }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32 }}>
                     {t('tenants.empty', 'No tenants found.')}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
 
           {pageCount > 1 && (
             <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>

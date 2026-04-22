@@ -100,7 +100,7 @@ export function ConsentModal() {
           )}
         </ul>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-          <button className="btn-primary" onClick={onAccept} disabled={saving}>
+          <button className="btn btn-primary" onClick={onAccept} disabled={saving}>
             {saving
               ? t('status.saving', 'Saving…')
               : t('consent.accept', 'Принимаю')}

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import WebSocket from 'ws';
 
-const LINEAGE_API_URL = process.env.LINEAGE_API_URL ?? 'http://localhost:8080';
+const LINEAGE_API_URL = process.env.LINEAGE_API_URL ?? 'http://127.0.0.1:8080';
 
 function toWsUrl(httpUrl: string): string {
   return httpUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
@@ -64,14 +64,15 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
 
     // HTTP GET — introspection / GraphiQL passthrough
     handler: async (request, reply) => {
-      const { username, role } = request.user;
+      const { username, role, activeTenantAlias } = request.user;
       const qs = new URLSearchParams(request.query as Record<string, string>);
 
       try {
         const upstream = await fetch(`${LINEAGE_API_URL}/graphql?${qs}`, {
           headers: {
-            'X-Seer-Role': role,
-            'X-Seer-User': username,
+            'X-Seer-Role':         role,
+            'X-Seer-User':         username,
+            'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
           },
         });
 
@@ -85,13 +86,14 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
 
     // WebSocket upgrade — graphql-transport-ws proxy
     wsHandler: (socket, request) => {
-      const { username, role } = request.user;
+      const { username, role, activeTenantAlias } = request.user;
       const wsUrl = `${toWsUrl(LINEAGE_API_URL)}/graphql`;
 
       const upstream = new WebSocket(wsUrl, ['graphql-transport-ws'], {
         headers: {
-          'X-Seer-Role': role,
-          'X-Seer-User': username,
+          'X-Seer-Role':         role,
+          'X-Seer-User':         username,
+          'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
         },
       });
 

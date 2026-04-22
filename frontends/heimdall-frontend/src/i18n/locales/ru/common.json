@@ -162,7 +162,7 @@
   "users": {
     "title":            "Пользователи",
     "subtitle":         "Управление ролями, scopes и квотами · Extended model поверх Keycloak",
-    "invite":           "Пригласить",
+    "invite":           "Добавить пользователя",
     "edit":             "Редакт.",
     "block":            "Заблокировать",
     "unblock":          "Разблокировать",
@@ -472,6 +472,12 @@
     "status":           "Статус",
     "configVersion":    "Версия конфига",
     "harvestCron":      "Харвест cron",
+    "membersCount":     "Польз.",
+    "membersCount.hint": "KC-пользователи в организации тенанта",
+    "sourcesCount":     "Источники",
+    "sourcesCount.hint": "Количество DaliSource в dali_{alias}",
+    "atomsCount":       "Атомы",
+    "atomsCount.hint":  "Количество вершин графа в hound_{alias}",
     "tenant":           "Тенант",
     "back":             "Тенанты",
     "refresh":          "Обновить",
@@ -493,7 +499,18 @@
       "unsuspend":      "Возобновить",
       "archive":        "Архивировать",
       "archiveConfirm": "Архивировать тенант?",
-      "restore":        "Восстановить"
+      "restore":        "Восстановить",
+      "resume":         "Повторить",
+      "forceCleanup":   "Удалить всё",
+      "forceCleanupConfirm": "Удалить все данные тенанта?"
+    },
+    "statusName": {
+      "ACTIVE":              "Активен",
+      "SUSPENDED":           "Приостановлен",
+      "ARCHIVED":            "В архиве",
+      "PROVISIONING":        "Создаётся",
+      "PROVISIONING_FAILED": "Ошибка создания",
+      "PURGED":              "Удалён"
     }
   },
   "tenantSelector": {

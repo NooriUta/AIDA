@@ -118,8 +118,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/me',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role, email, firstName, lastName } = request.user;
-      return { id: sub, username, role, email, firstName, lastName };
+      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
+      return { id: sub, username, role, email, firstName, lastName,
+               activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 
@@ -128,8 +129,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/refresh',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role, email, firstName, lastName } = request.user;
-      return { id: sub, username, role, email, firstName, lastName };
+      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
+      return { id: sub, username, role, email, firstName, lastName,
+               activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 

@@ -84,7 +84,7 @@ export default function SoftDeletedUsersPage() {
     <div style={{ padding: '24px', maxWidth: 1200 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>{t('nav.softDeletedUsers', 'Soft-deleted users')}</h2>
-        <button className="btn-secondary" onClick={load} disabled={loading}>
+        <button className="btn btn-secondary" onClick={load} disabled={loading}>
           {t('action.refresh', 'Обновить')}
         </button>
       </div>
@@ -129,10 +129,10 @@ export default function SoftDeletedUsersPage() {
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn-secondary" onClick={() => onRestore(r.userId)}>
+                    <button className="btn btn-secondary" onClick={() => onRestore(r.userId)}>
                       {t('action.restore', 'Восстановить')}
                     </button>
-                    <button className="btn-secondary" onClick={() => onLegalHold(r.userId)}>
+                    <button className="btn btn-secondary" onClick={() => onLegalHold(r.userId)}>
                       {t('action.legalHold', 'Legal hold')}
                     </button>
                   </div>

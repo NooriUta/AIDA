@@ -70,7 +70,7 @@ export default function NotificationsPage() {
           <Row label={t('notifications.digest',  'Ежедневный дайджест')}  checked={!!draft.digest}  onChange={toggle('digest')} />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-            <button className="btn-primary" onClick={onSave} disabled={saving || loading}>
+            <button className="btn btn-primary" onClick={onSave} disabled={saving || loading}>
               {saving ? t('status.saving', 'Saving…') : t('action.save', 'Сохранить')}
             </button>
             {savedFlash && (

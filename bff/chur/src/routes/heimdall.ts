@@ -4,7 +4,7 @@ import { requireAdmin }                 from '../middleware/requireAdmin';
 import { ensureValidSession }           from '../sessions';
 import { listUsers, setUserEnabled }    from '../keycloakAdmin';
 
-const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://localhost:9093';
+const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
 const HEIMDALL_WS     = HEIMDALL_ORIGIN.replace(/^http/, 'ws');
 
 /**

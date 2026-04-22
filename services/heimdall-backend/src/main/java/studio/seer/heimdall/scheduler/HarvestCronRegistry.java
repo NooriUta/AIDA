@@ -3,10 +3,16 @@ package studio.seer.heimdall.scheduler;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jobrunr.scheduling.JobScheduler;
 import org.jobrunr.scheduling.cron.Cron;
 import org.jboss.logging.Logger;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +32,9 @@ public class HarvestCronRegistry {
 
     private static final Logger LOG = Logger.getLogger(HarvestCronRegistry.class);
     private static final Pattern ALIAS_REGEX = Pattern.compile("^[a-z][a-z0-9-]{2,30}[a-z0-9]$");
+
+    @ConfigProperty(name = "dali.url", defaultValue = "http://127.0.0.1:9090")
+    String daliUrl;
 
     // Track registered aliases in memory for status queries (best-effort)
     private final Map<String, String> registered = new ConcurrentHashMap<>();
@@ -56,9 +65,26 @@ public class HarvestCronRegistry {
         ZoneId zone = resolveZoneId(timezoneId);
         String jobId = harvestJobId(tenantAlias);
         LOG.infof("[HarvestCronRegistry] register alias=%s cron=%s tz=%s", tenantAlias, cronExpr, zone);
-        // scheduleRecurrently enqueues a HarvestJob on Dali workers via shared frigg-jobrunr DB.
-        jobScheduler.get().scheduleRecurrently(jobId, cronExpr, zone,
-                () -> LOG.infof("[HarvestCronRegistry] harvest triggered alias=%s", tenantAlias));
+        // scheduleRecurrently fires on Heimdall's worker thread → makes REST call to Dali.
+        // This keeps Heimdall as the scheduler authority while Dali workers do the actual work.
+        final String capturedAlias = tenantAlias;
+        final String capturedDaliUrl = daliUrl;
+        jobScheduler.get().scheduleRecurrently(jobId, cronExpr, zone, () -> {
+            LOG.infof("[HarvestCronRegistry] firing harvest alias=%s → %s", capturedAlias, capturedDaliUrl);
+            try {
+                HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(capturedDaliUrl + "/api/sessions/harvest"))
+                        .header("X-Seer-Tenant-Alias", capturedAlias)
+                        .POST(HttpRequest.BodyPublishers.noBody())
+                        .timeout(Duration.ofSeconds(10))
+                        .build();
+                HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+                LOG.infof("[HarvestCronRegistry] harvest triggered alias=%s status=%d", capturedAlias, res.statusCode());
+            } catch (Exception e) {
+                LOG.warnf("[HarvestCronRegistry] harvest trigger failed alias=%s: %s", capturedAlias, e.getMessage());
+            }
+        });
         registered.put(tenantAlias, cronExpr);
     }
 

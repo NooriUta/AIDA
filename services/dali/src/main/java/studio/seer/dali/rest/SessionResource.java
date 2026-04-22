@@ -120,20 +120,23 @@ public class SessionResource {
     }
 
     /**
-     * Trigger a full JDBC harvest via {@link HarvestJob}.
+     * Trigger a JDBC harvest for a specific tenant (used by Heimdall cron and admin UI).
+     * Tenant alias comes from the X-Seer-Tenant-Alias header set by Chur, defaulting to "default".
      */
     @POST
     @Path("/harvest")
     @Consumes(MediaType.WILDCARD)
-    public Response harvest() {
+    public Response harvest(
+            @HeaderParam("X-Seer-Tenant-Alias") @DefaultValue("default") String tenantAlias) {
         if (!jobScheduler.isResolvable()) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .entity("{\"error\":\"JobScheduler not available — Dali may still be starting\"}")
                     .build();
         }
+        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default";
         String harvestId = "harvest-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId));
-        return Response.accepted(Map.of("harvestId", harvestId, "status", "enqueued")).build();
+        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId, effectiveTenant));
+        return Response.accepted(Map.of("harvestId", harvestId, "tenantAlias", effectiveTenant, "status", "enqueued")).build();
     }
 
     @GET

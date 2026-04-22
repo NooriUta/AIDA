@@ -19,7 +19,9 @@ export type TenantAuditEvent =
   | 'seer.audit.user_restored'
   | 'seer.audit.user_legal_hold_set'
   // MTN-12 feature flags
-  | 'seer.audit.tenant_feature_flags_updated';
+  | 'seer.audit.tenant_feature_flags_updated'
+  // tenant config general update
+  | 'seer.audit.tenant_config_updated';
 
 export function emitTenantAudit(
   event:       TenantAuditEvent,

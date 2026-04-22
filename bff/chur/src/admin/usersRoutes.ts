@@ -150,6 +150,13 @@ export const adminUsersRoutes: FastifyPluginAsync = async (app) => {
       const orgId = await lookupKeycloakOrgId(alias);
       if (orgId) {
         const users = await listOrgMembers(orgId);
+        // If the org has no members yet (freshly provisioned tenant — or `default`
+        // that predates KC orgs), fall back to the realm user list so admins are
+        // not staring at an empty page. Mode marker lets the UI show a hint.
+        if (users.length === 0) {
+          const realmUsers = await listUsers();
+          return reply.send({ mode: 'single-tenant-empty-org', tenantAlias: alias, users: realmUsers });
+        }
         return reply.send({ mode: 'single-tenant', tenantAlias: alias, users });
       }
       // Legacy: no keycloakOrgId yet (pre-KC-ORG-02 dev), show whole realm
