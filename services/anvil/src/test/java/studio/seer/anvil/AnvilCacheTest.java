@@ -24,7 +24,7 @@ class AnvilCacheTest {
 
     @Test
     void putAndGet_returnsCachedResult() {
-        String key = AnvilCache.key("LOAD_FX_RATES", "downstream", 5, "hound_default");
+        String key = AnvilCache.key("default", "LOAD_FX_RATES", "downstream", 5, "hound_default");
         ImpactResult result = sampleResult();
 
         cache.put(key, result);
@@ -42,8 +42,8 @@ class AnvilCacheTest {
 
     @Test
     void invalidateDb_removesOnlyMatchingDb() {
-        String keyA = AnvilCache.key("NODE_A", "downstream", 5, "hound_default");
-        String keyB = AnvilCache.key("NODE_B", "upstream",   3, "other_db");
+        String keyA = AnvilCache.key("default", "NODE_A", "downstream", 5, "hound_default");
+        String keyB = AnvilCache.key("default", "NODE_B", "upstream",   3, "other_db");
 
         cache.put(keyA, sampleResult());
         cache.put(keyB, sampleResult());
@@ -60,6 +60,30 @@ class AnvilCacheTest {
         cache.put("k1", sampleResult());
         cache.put("k2", sampleResult());
         assertEquals(2, cache.size());
+    }
+
+    @Test
+    void key_includesTenantAlias_soCrossTenantKeysDiffer() {
+        // MTN-30: same nodeId + direction + maxHops + dbName across two tenants
+        // must not collide in the cache.
+        String keyTenantA = AnvilCache.key("acme", "NODE_X", "downstream", 3, "hound_acme");
+        String keyTenantB = AnvilCache.key("beta", "NODE_X", "downstream", 3, "hound_acme");
+        assertNotEquals(keyTenantA, keyTenantB);
+        assertTrue(keyTenantA.startsWith("acme:"));
+        assertTrue(keyTenantB.startsWith("beta:"));
+    }
+
+    @Test
+    void invalidateTenant_removesOnlyMatchingTenant() {
+        String keyAcme = AnvilCache.key("acme", "NODE_A", "downstream", 5, "hound_acme");
+        String keyBeta = AnvilCache.key("beta", "NODE_A", "downstream", 5, "hound_beta");
+        cache.put(keyAcme, sampleResult());
+        cache.put(keyBeta, sampleResult());
+
+        cache.invalidateTenant("acme");
+
+        assertNull(cache.get(keyAcme));
+        assertNotNull(cache.get(keyBeta));
     }
 
     private ImpactResult sampleResult() {

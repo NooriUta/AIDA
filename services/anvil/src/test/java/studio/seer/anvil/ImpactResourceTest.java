@@ -29,7 +29,7 @@ class ImpactResourceTest {
         );
         ImpactResult result = new ImpactResult(root, nodes, List.of(), 2, false, false, 45L);
 
-        Mockito.when(impactService.findImpact(Mockito.any(ImpactRequest.class)))
+        Mockito.when(impactService.findImpact(Mockito.any(ImpactRequest.class), Mockito.anyString()))
                .thenReturn(result);
     }
 
@@ -56,7 +56,7 @@ class ImpactResourceTest {
         ImpactNode root    = new ImpactNode("HR.EMPLOYEES.SALARY", "DaliColumn", "HR.EMPLOYEES.SALARY", 0);
         ImpactNode source  = new ImpactNode("geoid:src:10", "DaliTable", "HR.RAW_SALARIES", 1);
         ImpactResult salaryResult = new ImpactResult(root, List.of(source), List.of(), 1, false, false, 38L);
-        Mockito.when(impactService.findImpact(Mockito.any(ImpactRequest.class)))
+        Mockito.when(impactService.findImpact(Mockito.any(ImpactRequest.class), Mockito.anyString()))
                .thenReturn(salaryResult);
 
         given()
