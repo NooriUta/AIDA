@@ -9,10 +9,11 @@ export type UserRole =
   | 'super-admin';
 
 export interface SeerUser {
-  sub:      string;
-  username: string;
-  role:     UserRole;
-  scopes:   string[];   // JWT scope claim (space-separated → array)
+  sub:                string;
+  username:           string;
+  role:               UserRole;
+  scopes:             string[];   // JWT scope claim (space-separated → array)
+  activeTenantAlias?: string;     // MTN-13: last tenant switch via PATCH /auth/me/tenant
 }
 
 // Extend Fastify request to carry user info after session-based authentication

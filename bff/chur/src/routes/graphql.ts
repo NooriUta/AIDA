@@ -23,15 +23,16 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
     '/',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const { username, role } = request.user;
+      const { username, role, activeTenantAlias } = request.user;
 
       try {
         const upstream = await fetch(`${LINEAGE_API_URL}/graphql`, {
           method: 'POST',
           headers: {
-            'Content-Type':  'application/json',
-            'X-Seer-Role':   role,
-            'X-Seer-User':   username,
+            'Content-Type':          'application/json',
+            'X-Seer-Role':           role,
+            'X-Seer-User':           username,
+            'X-Seer-Tenant-Alias':   activeTenantAlias ?? 'default',
           },
           body: JSON.stringify(request.body),
         });

@@ -1,8 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
-import { createSession, deleteSession, ensureValidSession } from '../sessions';
+import { createSession, deleteSession, ensureValidSession, updateSession } from '../sessions';
 import { emitSessionEvent } from '../users/UserSessionEventsEmitter';
 import { emitToHeimdall } from '../middleware/heimdallEmit';
+import { csrfGuard } from '../middleware/csrfGuard';
 
 // ── In-memory rate limiter for /auth/login ────────────────────────────────────
 const IS_PROD      = process.env.NODE_ENV === 'production';
@@ -131,6 +132,35 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ── POST /auth/logout ───────────────────────────────────────────────────────
+  // ── PATCH /auth/me/tenant — MTN-13: active-tenant switch ───────────────────
+  app.patch<{ Body: { tenantAlias: string } }>(
+    '/me/tenant',
+    { preHandler: [app.authenticate, csrfGuard] },
+    async (request, reply) => {
+      const { tenantAlias } = request.body ?? {};
+      if (!tenantAlias || typeof tenantAlias !== 'string') {
+        return reply.status(400).send({ error: 'tenantAlias required' });
+      }
+      const sid = request.cookies.sid;
+      if (!sid) return reply.status(401).send({ error: 'no session' });
+      try {
+        await updateSession(sid, { activeTenantAlias: tenantAlias });
+      } catch (e) {
+        return reply.status(404).send({ error: (e as Error).message });
+      }
+      void emitSessionEvent({
+        userId:      request.user.sub,
+        sessionId:   sid,
+        eventType:   'tenant_switch',
+        tenantAlias,
+        ipAddress:   request.ip,
+        userAgent:   String(request.headers['user-agent'] ?? ''),
+        result:      'success',
+      });
+      return { ok: true, activeTenantAlias: tenantAlias };
+    },
+  );
+
   app.post('/logout', async (request, reply) => {
     const sid = request.cookies.sid;
     if (sid) {

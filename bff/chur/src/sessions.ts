@@ -15,13 +15,14 @@ import type { SessionStore }    from './store/SessionStore';
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface Session {
-  accessToken:      string;
-  refreshToken:     string;
-  accessExpiresAt:  number;   // Date.now() + expires_in * 1000
-  sub:              string;
-  username:         string;
-  role:             UserRole;
-  scopes:           string[];
+  accessToken:        string;
+  refreshToken:       string;
+  accessExpiresAt:    number;   // Date.now() + expires_in * 1000
+  sub:                string;
+  username:           string;
+  role:               UserRole;
+  scopes:             string[];
+  activeTenantAlias?: string;   // MTN-13: last tenant switch; undefined = 'default'
 }
 
 export interface SessionUser {
@@ -85,6 +86,13 @@ export async function deleteSession(sid: string): Promise<Session | undefined> {
   const session = await store.delete(sid);
   refreshLocks.delete(sid);
   return session;
+}
+
+/** Partially update a session (e.g. activeTenantAlias switch). */
+export async function updateSession(sid: string, patch: Partial<Session>): Promise<void> {
+  const current = await store.get(sid);
+  if (!current) throw new Error('session_not_found');
+  await store.update(sid, { ...current, ...patch });
 }
 
 /** Check if the access token is still valid (with buffer). */

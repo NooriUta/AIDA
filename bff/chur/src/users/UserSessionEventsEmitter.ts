@@ -30,7 +30,8 @@ import { friggUsersSql } from './FriggUsersClient';
 
 export type SessionEventType =
   | 'login' | 'logout' | 'refresh' | 'activity'
-  | 'mfa_challenge' | 'password_reset' | 'session_invalidated';
+  | 'mfa_challenge' | 'password_reset' | 'session_invalidated'
+  | 'tenant_switch';
 
 export interface SessionEventInput {
   userId:      string;
