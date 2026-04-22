@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
 import { createSession, deleteSession, ensureValidSession } from '../sessions';
+import { emitSessionEvent } from '../users/UserSessionEventsEmitter';
 import { emitToHeimdall } from '../middleware/heimdallEmit';
 
 // ── In-memory rate limiter for /auth/login ────────────────────────────────────
@@ -92,6 +93,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
       reply.setCookie('sid', sid, COOKIE_OPTS);
       emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
+      // MTN-64: emit session event for forensic audit (fire-and-forget)
+      void emitSessionEvent({
+        userId:     userInfo.sub,
+        sessionId:  sid,
+        eventType:  'login',
+        ipAddress:  request.ip,
+        userAgent:  String(request.headers['user-agent'] ?? ''),
+        result:     'success',
+      });
       return { id: userInfo.sub, username: userInfo.username, role: userInfo.role };
     },
   );
@@ -129,6 +139,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       if (session) {
         keycloakLogout(session.refreshToken);
         emitToHeimdall('AUTH_LOGOUT', 'INFO', { username: session.username }, sid);
+        // MTN-64: emit logout event
+        void emitSessionEvent({
+          userId:    session.sub,
+          sessionId: sid,
+          eventType: 'logout',
+          ipAddress: request.ip,
+          userAgent: String(request.headers['user-agent'] ?? ''),
+          result:    'success',
+        });
       }
     }
     reply.clearCookie('sid', { path: '/' });

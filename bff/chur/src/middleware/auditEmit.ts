@@ -13,7 +13,11 @@ export type TenantAuditEvent =
   | 'seer.audit.member_added'
   | 'seer.audit.member_removed'
   | 'seer.audit.member_role_changed'
-  | 'seer.audit.tenant_spoof_attempt';
+  | 'seer.audit.tenant_spoof_attempt'
+  // MTN-61 user lifecycle events
+  | 'seer.audit.user_soft_deleted'
+  | 'seer.audit.user_restored'
+  | 'seer.audit.user_legal_hold_set';
 
 export function emitTenantAudit(
   event:       TenantAuditEvent,
