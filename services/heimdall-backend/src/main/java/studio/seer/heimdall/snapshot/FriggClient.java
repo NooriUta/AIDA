@@ -27,4 +27,16 @@ public interface FriggClient {
             @HeaderParam("Authorization") String authorization,
             FriggCommand                  body
     );
+
+    /**
+     * Creates an ArcadeDB database.
+     * Returns 200 {"result":"ok"} if created, 500 if it already exists — callers should
+     * swallow errors from this endpoint and treat both outcomes as success.
+     */
+    @POST
+    @Path("/create/{db}")
+    Uni<String> createDatabase(
+            @PathParam("db")              String db,
+            @HeaderParam("Authorization") String authorization
+    );
 }

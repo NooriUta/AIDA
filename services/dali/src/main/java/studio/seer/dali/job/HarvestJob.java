@@ -33,7 +33,9 @@ public class HarvestJob {
     @Inject HeimdallEmitter  emitter;
     @Inject DaliConfig       config;
 
-    @Job(name = "Harvest %0", retries = 0)
+    // concurrentJobsByType is JobRunr Pro only — OSS concurrency is bounded by
+    // dali.jobrunr.worker-threads (default 4). Raise that config to allow more parallel harvests.
+    @Job(name = "Harvest %0", retries = 0, labels = {"harvest"})
     public void execute(String harvestId) {
         List<DaliConfig.Source> sources = config.sources();
         if (sources.isEmpty()) {
