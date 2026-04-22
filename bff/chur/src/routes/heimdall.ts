@@ -4,7 +4,19 @@ import { requireAdmin }                 from '../middleware/requireAdmin';
 import { ensureValidSession }           from '../sessions';
 import { listUsers, setUserEnabled }    from '../keycloakAdmin';
 
-const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
+const HEIMDALL_PRIMARY  = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
+const HEIMDALL_FALLBACK = 'http://127.0.0.1:9093';
+
+async function heimdallFetch(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    const r = await fetch(HEIMDALL_PRIMARY + path, init);
+    return r;
+  } catch {
+    return fetch(HEIMDALL_FALLBACK + path, init);
+  }
+}
+
+const HEIMDALL_ORIGIN = HEIMDALL_PRIMARY;
 const HEIMDALL_WS     = HEIMDALL_ORIGIN.replace(/^http/, 'ws');
 
 /**
@@ -27,7 +39,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /heimdall/health — unauthenticated health probe ───────────────────
   app.get('/heimdall/health', async (_req, reply) => {
     try {
-      const res  = await fetch(`${HEIMDALL_ORIGIN}/q/health`);
+      const res  = await heimdallFetch(`/q/health`);
       const body = await res.json();
       return reply.status(res.status).send(body);
     } catch {
@@ -41,7 +53,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate, requireAdmin] },
     async (request, reply) => {
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/metrics/snapshot`, {
+        const res = await heimdallFetch(`/metrics/snapshot`, {
           headers: { 'X-Seer-Role': request.user.role },
         });
         return reply.status(res.status).send(await res.json());
@@ -57,17 +69,12 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate, requireAdmin] },
     async (request, reply) => {
       const { action } = request.params as { action: string };
-      const url = new URL(`/control/${action}`, HEIMDALL_ORIGIN);
-
-      // Forward query params (e.g. ?name=baseline for /control/snapshot)
-      if (request.query && typeof request.query === 'object') {
-        for (const [k, v] of Object.entries(request.query as Record<string, string>)) {
-          url.searchParams.set(k, v);
-        }
-      }
+      const qs = request.query && typeof request.query === 'object'
+        ? '?' + new URLSearchParams(request.query as Record<string, string>).toString()
+        : '';
 
       try {
-        const res = await fetch(url.toString(), {
+        const res = await heimdallFetch(`/control/${action}${qs}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -88,7 +95,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate, requireAdmin] },
     async (request, reply) => {
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/control/snapshots`, {
+        const res = await heimdallFetch(`/control/snapshots`, {
           headers: { 'X-Seer-Role': request.user.role },
         });
         return reply.status(res.status).send(await res.json());
@@ -139,7 +146,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate, requireAdmin] },
     async (request, reply) => {
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/services/health`, {
+        const res = await heimdallFetch(`/services/health`, {
           headers: { 'X-Seer-Role': request.user.role },
         });
         return reply.status(res.status).send(await res.json());
@@ -160,7 +167,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
         ? `?mode=${(request.query as Record<string, string>).mode}`
         : '';
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/services/${name}/restart${query}`, {
+        const res = await heimdallFetch(`/services/${name}/restart${query}`, {
           method: 'POST',
           headers: { 'X-Seer-Role': request.user.role },
         });
@@ -229,7 +236,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate, requireAdmin] },
     async (request, reply) => {
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/docs`, {
+        const res = await heimdallFetch(`/docs`, {
           headers: { 'X-Seer-Role': request.user.role },
         });
         return reply.status(res.status).send(await res.json());
@@ -246,7 +253,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const filePath = (request.params as Record<string, string>)['*'];
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/docs/${filePath}`, {
+        const res = await heimdallFetch(`/docs/${filePath}`, {
           headers: { 'X-Seer-Role': request.user.role },
         });
         const text = await res.text();
@@ -264,7 +271,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate, requireAdmin] },
     async (request, reply) => {
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/team-docs`, {
+        const res = await heimdallFetch(`/team-docs`, {
           headers: { 'X-Seer-Role': request.user.role },
         });
         return reply.status(res.status).send(await res.json());
@@ -281,7 +288,7 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const filePath = (request.params as Record<string, string>)['*'];
       try {
-        const res = await fetch(`${HEIMDALL_ORIGIN}/team-docs/${filePath}`, {
+        const res = await heimdallFetch(`/team-docs/${filePath}`, {
           headers: { 'X-Seer-Role': request.user.role },
         });
         const text = await res.text();
