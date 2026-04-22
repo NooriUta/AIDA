@@ -41,7 +41,7 @@ public class ImpactService {
     @ConfigProperty(name = "ygg.password", defaultValue = "playwithdata")
     String yggPassword;
 
-    public ImpactResult findImpact(ImpactRequest req) {
+    public ImpactResult findImpact(ImpactRequest req, String tenantAlias) {
         long start = System.currentTimeMillis();
         String db        = req.dbName()    != null ? req.dbName()    : defaultDb;
         int    maxHops   = req.maxHops()   >  0    ? req.maxHops()   : 5;
@@ -49,8 +49,13 @@ public class ImpactService {
         List<String> types = (req.includeTypes() != null && !req.includeTypes().isEmpty())
                 ? req.includeTypes() : DEFAULT_INCLUDE_TYPES;
 
-        // AV-03: cache lookup
-        String cacheKey = AnvilCache.key(req.nodeId(), direction, maxHops, db);
+        if (tenantAlias == null || tenantAlias.isBlank()) {
+            throw new IllegalArgumentException("tenantAlias must be non-blank (MTN-30)");
+        }
+
+        // AV-03 + MTN-30: cache lookup — key now scoped by tenantAlias so cross-tenant
+        // requests can never read or evict each other's entries.
+        String cacheKey = AnvilCache.key(tenantAlias, req.nodeId(), direction, maxHops, db);
         ImpactResult cached = cache.get(cacheKey);
         if (cached != null) {
             events.cacheHit(req.nodeId(), direction, db);
