@@ -11,8 +11,10 @@ import { queryRoutes }    from './routes/query';
 import { graphqlRoutes }  from './routes/graphql';
 import { heimdallRoutes } from './routes/heimdall';
 import { prefsRoutes }    from './routes/prefs';
+import { meRoutes }       from './routes/me';
 import { adminRoutes }    from './routes/admin';
 import { tenantRoutes }   from './admin/tenantRoutes';
+import { userLifecycleRoutes } from './admin/userLifecycleRoutes';
 
 async function start(): Promise<void> {
   const app = Fastify({
@@ -61,8 +63,10 @@ async function start(): Promise<void> {
   await app.register(graphqlRoutes, { prefix: '/graphql' });
   await app.register(heimdallRoutes);
   await app.register(prefsRoutes,   { prefix: '/prefs'   });
+  await app.register(meRoutes);   // MTN-63 /me/*
   await app.register(adminRoutes);
   await app.register(tenantRoutes);
+  await app.register(userLifecycleRoutes);  // MTN-61
 
   // ── Health ───────────────────────────────────────────────────────────────────
 

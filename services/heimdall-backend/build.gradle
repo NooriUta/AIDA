@@ -43,6 +43,10 @@ dependencies {
     // JobRunr — same version as Dali (shared frigg-jobrunr storage)
     implementation 'org.jobrunr:jobrunr:8.5.2'
 
+    // MTN-51 / MTN-26 — Quarkus Scheduler for @Scheduled annotations
+    // (TenantStatusReconciler 15s tick, OrgDriftReconcileJob daily cron)
+    implementation 'io.quarkus:quarkus-scheduler'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
 }

@@ -121,13 +121,11 @@ function buildView(u: KcUser, kcRoles: KcRole[]): KcUserView {
     notifyHarvest:  attrBool(u, 'prefs.notify.harvest', false),
     notifyErrors:   attrBool(u, 'prefs.notify.errors',  true),
     notifyDigest:   attrBool(u, 'prefs.notify.digest',  false),
-    quotas: {
-      mimir:    parseInt(attr(u, 'quota_mimir',    '20'),     10),
-      sessions: parseInt(attr(u, 'quota_sessions', '2'),      10),
-      atoms:    parseInt(attr(u, 'quota_atoms',    '50000'),  10),
-      workers:  parseInt(attr(u, 'quota_workers',  '4'),      10),
-      anvil:    parseInt(attr(u, 'quota_anvil',    '50'),     10),
-    },
+    // MTN-58: user-level quotas decommissioned. Enforcement moved to
+    // DaliTenantConfig.maxXxx + middleware/quotaCheck.ts. Fields kept as
+    // zeros to preserve KcUserView contract with Heimdall UsersPage —
+    // FE shows tenant-level caps instead.
+    quotas: { mimir: 0, sessions: 0, atoms: 0, workers: 0, anvil: 0 },
     sources: attr(u, 'source_bindings', '').split(',').filter(Boolean),
   };
 }
@@ -230,13 +228,9 @@ export async function updateUserAttrs(
     if (patch.notifyHarvest  !== undefined) attributes['notify.harvest'] = [String(patch.notifyHarvest)];
     if (patch.notifyErrors   !== undefined) attributes['notify.errors']  = [String(patch.notifyErrors)];
     if (patch.notifyDigest   !== undefined) attributes['notify.digest']  = [String(patch.notifyDigest)];
-    if (patch.quotas !== undefined) {
-      attributes['quota_mimir']    = [String(patch.quotas.mimir)];
-      attributes['quota_sessions'] = [String(patch.quotas.sessions)];
-      attributes['quota_atoms']    = [String(patch.quotas.atoms)];
-      attributes['quota_workers']  = [String(patch.quotas.workers)];
-      attributes['quota_anvil']    = [String(patch.quotas.anvil)];
-    }
+    // MTN-58: silently ignore patch.quotas — user-level quota decommissioned;
+    // tenant-level caps set via PUT /admin/tenants/:alias instead.
+    // if (patch.quotas !== undefined) { /* no-op */ }
     if (patch.sources !== undefined) {
       attributes['source_bindings'] = [patch.sources.join(',')];
     }

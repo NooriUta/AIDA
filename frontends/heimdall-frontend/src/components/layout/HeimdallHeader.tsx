@@ -42,9 +42,10 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    id: 'FENRIR', descKey: 'nav.adminDesc', route: '/users',
+    id: 'FENRIR', descKey: 'nav.adminDesc', route: '/admin/tenants',
     subTabs: [
-      { id: 'Users', labelKey: 'nav.users', route: '/users' },
+      { id: 'Tenants', labelKey: 'nav.tenants', route: '/admin/tenants' },
+      { id: 'Users',   labelKey: 'nav.users',   route: '/users'         },
     ],
   },
 ];
@@ -274,12 +275,14 @@ export const HeimdallHeader = memo(() => {
 
   // Active section/subtab derived from pathname
   const activeSectionId: SectionId =
+    pathname.includes('/admin/tenants') ? 'FENRIR' :
     pathname.includes('/users')    ? 'FENRIR' :
     pathname.includes('/dali')     ? 'DALI'   :
     pathname.includes('/docs')     ? 'SAGA'   :
     'BIFROST';
 
   const activeSubId: string =
+    pathname.includes('/admin/tenants')  ? 'Tenants'   :
     pathname.includes('/users')          ? 'Users'     :
     pathname.includes('/dali/sources')   ? 'Sources'   :
     pathname.includes('/dali/jobrunr')   ? 'JobRunr'   :

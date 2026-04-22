@@ -17,6 +17,8 @@ import {
 } from '../middleware/requireAdmin';
 import { emitTenantAudit } from '../middleware/auditEmit';
 import { adminRateLimit, provisioningRateLimit } from '../middleware/rateLimit';
+import { csrfGuard } from '../middleware/csrfGuard';
+import { casUpdateTenant, casConflictBody } from './casUpdate';
 import {
   listUsers,
   inviteUser,
@@ -73,7 +75,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /api/admin/tenants — provision ─────────────────────────────────────
   app.post<{ Body: { alias: string } }>('/api/admin/tenants',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), provisioningRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard, provisioningRateLimit] },
     async (request, reply) => {
       const { alias } = request.body ?? {};
       const validationError = validateAlias(alias);
@@ -116,58 +118,84 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // MTN-27: status-mutating endpoints use CAS via casUpdateTenant(). Body
+  // requires `expectedConfigVersion` (when provided) — backward-compat: if
+  // absent we read current then issue CAS with that value, preserving
+  // pre-MTN-27 semantics for callers that haven't adopted optimistic-lock
+  // yet. Admin UI should send the field explicitly.
+
+  async function readCurrentVersion(alias: string): Promise<number> {
+    const rows = await friggSql('frigg-tenants',
+      `SELECT configVersion FROM DaliTenantConfig WHERE tenantAlias = :alias LIMIT 1`,
+      { alias },
+    );
+    return Number((rows[0] as { configVersion?: number } | undefined)?.configVersion ?? 0);
+  }
+
   // ── DELETE /api/admin/tenants/:alias — suspend ──────────────────────────────
-  app.delete<{ Params: { alias: string } }>('/api/admin/tenants/:alias',
-    { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
+  app.delete<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'SUSPENDED', updatedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'SUSPENDED', updatedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
       emitTenantAudit('seer.audit.tenant_suspended', request.user.username, alias);
-      return reply.send({ ok: true, status: 'SUSPENDED' });
+      return reply.send({ ok: true, status: 'SUSPENDED', configVersion: r.configVersion });
     },
   );
 
   // ── POST /api/admin/tenants/:alias/unsuspend ────────────────────────────────
-  app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/unsuspend',
-    { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
+  app.post<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias/unsuspend',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'ACTIVE', updatedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
-      return reply.send({ ok: true, status: 'ACTIVE' });
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'ACTIVE', updatedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
+      return reply.send({ ok: true, status: 'ACTIVE', configVersion: r.configVersion });
     },
   );
 
   // ── POST /api/admin/tenants/:alias/archive-now ──────────────────────────────
-  app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/archive-now',
-    { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
+  app.post<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias/archive-now',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'ARCHIVED', updatedAt = :ts, archivedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'ARCHIVED', updatedAt = :ts, archivedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
       emitTenantAudit('seer.audit.tenant_archived', request.user.username, alias);
-      return reply.send({ ok: true, status: 'ARCHIVED' });
+      return reply.send({ ok: true, status: 'ARCHIVED', configVersion: r.configVersion });
     },
   );
 
   // ── POST /api/admin/tenants/:alias/restore ──────────────────────────────────
-  app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/restore',
-    { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
+  app.post<{ Params: { alias: string }; Body?: { expectedConfigVersion?: number } }>(
+    '/api/admin/tenants/:alias/restore',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      await friggSql('frigg-tenants',
-        `UPDATE DaliTenantConfig SET status = 'ACTIVE', updatedAt = :ts WHERE tenantAlias = :alias`,
-        { alias, ts: Date.now() },
-      );
+      const expected = request.body?.expectedConfigVersion ?? await readCurrentVersion(alias);
+      const r = await casUpdateTenant('frigg-tenants', alias, expected, {
+        setClause: `status = 'ACTIVE', updatedAt = :ts`,
+        params:    { ts: Date.now() },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expected, r.current));
       emitTenantAudit('seer.audit.tenant_restored', request.user.username, alias);
-      return reply.send({ ok: true, status: 'ACTIVE' });
+      return reply.send({ ok: true, status: 'ACTIVE', configVersion: r.configVersion });
     },
   );
 
@@ -176,7 +204,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   // Two concurrent admin edits can no longer lose a write silently.
   app.put<{ Params: { alias: string }; Body: { retainUntil: number; expectedConfigVersion: number } }>(
     '/api/admin/tenants/:alias/retention',
-    { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias }                           = request.params;
       const { retainUntil, expectedConfigVersion } = request.body ?? ({} as { retainUntil: number; expectedConfigVersion: number });
@@ -216,7 +244,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /api/admin/tenants/:alias/force-cleanup — CAP-06 ───────────────────
   app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/force-cleanup',
-    { preHandler: [app.authenticate, requireScope('aida:admin', 'aida:admin:destructive'), provisioningRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:admin', 'aida:admin:destructive'), csrfGuard, provisioningRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
       await forceCleanupTenant(alias);
@@ -227,7 +255,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /api/admin/tenants/:alias/resume-provisioning — MTN-25 ────────────
   app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/resume-provisioning',
-    { preHandler: [app.authenticate, requireScope('aida:superadmin'), provisioningRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, provisioningRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
       const correlationId = randomUUID();
@@ -253,7 +281,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /api/admin/tenants/:alias/reconnect — CAP-09 / MTN-01 ─────────────
   app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/reconnect',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), adminRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
 
@@ -305,7 +333,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   // path for dev deployments before sync_default_keycloak_org_id was run).
 
   app.get<{ Params: { alias: string } }>('/api/admin/tenants/:alias/members',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), adminRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const cfg = await getTenantConfig(request.params.alias).catch(() => null);
       const orgId = cfg?.keycloakOrgId as string | undefined;
@@ -321,7 +349,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { alias: string }; Body: { email: string; name?: string; role: string } }>(
     '/api/admin/tenants/:alias/members',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), adminRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { email, name, role } = request.body ?? {};
       if (!email || !role) return reply.status(400).send({ error: 'email and role are required' });
@@ -341,7 +369,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.put<{ Params: { alias: string; userId: string }; Body: { role?: string; enabled?: boolean } }>(
     '/api/admin/tenants/:alias/members/:userId',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), adminRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { userId } = request.params;
       const { role, enabled } = request.body ?? {};
@@ -356,7 +384,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete<{ Params: { alias: string; userId: string } }>(
     '/api/admin/tenants/:alias/members/:userId',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), adminRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { userId, alias } = request.params;
       const cfg = await getTenantConfig(alias).catch(() => null);

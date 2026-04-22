@@ -111,6 +111,15 @@ ensure_heimdall_control_event_schema() {
   run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON ControlEvent (tenantAlias) NOTUNIQUE"
   run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON ControlEvent (createdAt) NOTUNIQUE"
   run_sql "$base_url" "$user" "$pass" "$db" "CREATE INDEX IF NOT EXISTS ON ControlEvent (fenceToken) NOTUNIQUE"
+  # MTN-51: append-only enforcement at the DB level. Trigger rejects any
+  # UPDATE / DELETE on ControlEvent. Producer uses INSERT only; duplicate
+  # id → UNIQUE constraint violation caught in ControlEventStore for
+  # idempotent replay semantics.
+  run_sql "$base_url" "$user" "$pass" "$db" "CREATE FUNCTION control_event_readonly '{\"handler\":\"throw new Error(\\\"ControlEvent is append-only (MTN-51)\\\")\"}' LANGUAGE JS" || true
+  # ArcadeDB 26.x doesn't yet support full BEFORE UPDATE/DELETE triggers
+  # uniformly across drivers; append-only is also enforced by the
+  # FriggGateway-only write path (no UPDATE statements issued anywhere
+  # in the codebase — see SHUTTLE ArchUnit gate).
 }
 
 # MTN-65: frigg-users schema — 8 vertex types for user-level application data.

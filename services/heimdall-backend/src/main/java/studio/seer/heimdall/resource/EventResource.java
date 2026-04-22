@@ -61,16 +61,37 @@ public class EventResource {
         return Response.accepted().build();
     }
 
+    /** HB-batch-valid: max events in one batch. Prevents DoS via oversized payloads. */
+    static final int BATCH_MAX_SIZE = 100;
+
     @POST
     @Path("/batch")
     public Response ingestBatch(@NotNull @Valid List<@Valid HeimdallEvent> events) {
 
-        long count = events.stream()
-                .filter(e -> e != null && e.sourceComponent() != null && e.eventType() != null)
-                .peek(e -> { ringBuffer.push(e); metricsCollector.record(e); })
-                .count();
+        // HB-batch-valid: atomic ingest — reject whole batch on any malformed
+        // item (null / missing required field). Previously the filter silently
+        // dropped bad items, which broke correlation chains and let partial-
+        // success masking happen.
+        if (events.size() > BATCH_MAX_SIZE) {
+            return Response.status(413)
+                    .entity("{\"error\":\"batch_too_large\",\"max\":" + BATCH_MAX_SIZE +
+                            ",\"received\":" + events.size() + "}")
+                    .build();
+        }
+        for (int i = 0; i < events.size(); i++) {
+            HeimdallEvent e = events.get(i);
+            if (e == null || e.sourceComponent() == null || e.eventType() == null) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity("{\"error\":\"malformed_event_in_batch\",\"index\":" + i + "}")
+                        .build();
+            }
+        }
+        for (HeimdallEvent e : events) {
+            ringBuffer.push(e);
+            metricsCollector.record(e);
+        }
 
-        LOG.debugf("Ingested batch of %d events", count);
+        LOG.debugf("Ingested batch of %d events", events.size());
         return Response.accepted().build();
     }
 }
