@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.rest.SourceDTO;
 import studio.seer.dali.rest.SourceDTO.SchemaFilter;
+import studio.seer.dali.secrets.SecretEncryption;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -25,6 +26,7 @@ public class SourceRepository {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Inject FriggGateway frigg;
+    @Inject SecretEncryption secretCrypto;
 
     public List<SourceDTO> findAll() {
         return frigg.sql("SELECT FROM dali_sources ORDER BY createdAt ASC")
@@ -45,7 +47,8 @@ public class SourceRepository {
         p.put("dialect",    dialect);
         p.put("jdbcUrl",    jdbcUrl);
         p.put("username",   username);
-        p.put("password",   password);
+        // MTN-47: encrypt password at rest (no-op in dev without dali.source.dek)
+        p.put("password",   secretCrypto.encrypt(password));
         p.put("atomCount",  0);
         p.put("lastHarvest", null);
         p.put("schemaInclude", toJson(schemaFilter != null ? schemaFilter.include() : List.of()));
@@ -74,7 +77,8 @@ public class SourceRepository {
             "jdbcUrl = :jdbcUrl, username = :username, " +
             "schemaInclude = :schemaInclude, schemaExclude = :schemaExclude WHERE id = :id";
         if (password != null && !password.isBlank()) {
-            p.put("password", password);
+            // MTN-47: encrypt on update path too
+            p.put("password", secretCrypto.encrypt(password));
             sql = "UPDATE dali_sources SET name = :name, dialect = :dialect, " +
                 "jdbcUrl = :jdbcUrl, username = :username, password = :password, " +
                 "schemaInclude = :schemaInclude, schemaExclude = :schemaExclude WHERE id = :id";
