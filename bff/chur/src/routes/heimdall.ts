@@ -16,8 +16,19 @@ async function heimdallFetch(path: string, init?: RequestInit): Promise<Response
   }
 }
 
-const HEIMDALL_ORIGIN = HEIMDALL_PRIMARY;
-const HEIMDALL_WS     = HEIMDALL_ORIGIN.replace(/^http/, 'ws');
+const HEIMDALL_WS_PRIMARY  = HEIMDALL_PRIMARY.replace(/^http/, 'ws');
+const HEIMDALL_WS_FALLBACK = HEIMDALL_FALLBACK.replace(/^http/, 'ws');
+
+/** Tries primary WS URL; falls back to dev URL on ECONNREFUSED. */
+function connectUpstreamWs(path: string): Promise<WebSocket> {
+  const tryConnect = (url: string) =>
+    new Promise<WebSocket>((resolve, reject) => {
+      const ws = new WebSocket(url + path);
+      ws.once('open',  () => resolve(ws));
+      ws.once('error', reject);
+    });
+  return tryConnect(HEIMDALL_WS_PRIMARY).catch(() => tryConnect(HEIMDALL_WS_FALLBACK));
+}
 
 /**
  * Proxy routes: Chur → HEIMDALL backend.
@@ -204,11 +215,17 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
         return;
       }
 
-      // Build upstream WS URL, forward filter param
+      // Build upstream WS path, forward filter param
       const filterParam = (request.query as Record<string, string>).filter ?? '';
-      const wsUrl = `${HEIMDALL_WS}/ws/events${filterParam ? `?filter=${encodeURIComponent(filterParam)}` : ''}`;
+      const wsPath = `/ws/events${filterParam ? `?filter=${encodeURIComponent(filterParam)}` : ''}`;
 
-      const upstream = new WebSocket(wsUrl);
+      let upstream: WebSocket;
+      try {
+        upstream = await connectUpstreamWs(wsPath);
+      } catch {
+        socket.close(1011, 'Upstream error');
+        return;
+      }
 
       upstream.on('message', (data) => {
         if (socket.readyState === WebSocket.OPEN) {
