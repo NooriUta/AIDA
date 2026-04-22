@@ -10,7 +10,7 @@ import org.mockito.ArgumentCaptor;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.SearchResult;
 import studio.seer.lineage.security.SeerIdentity;
-import studio.seer.tenantrouting.TenantResource;
+import studio.seer.tenantrouting.ArcadeConnection;
 import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.List;
@@ -45,8 +45,8 @@ class TenantIsolationTest {
 
     @BeforeEach
     void stubRegistry() {
-        TenantResource resA = mock(TenantResource.class);
-        TenantResource resB = mock(TenantResource.class);
+        ArcadeConnection resA = mock(ArcadeConnection.class);
+        ArcadeConnection resB = mock(ArcadeConnection.class);
         when(resA.databaseName()).thenReturn(DB_A);
         when(resB.databaseName()).thenReturn(DB_B);
         when(lineageRegistry.resourceFor("tenant-a")).thenReturn(resA);

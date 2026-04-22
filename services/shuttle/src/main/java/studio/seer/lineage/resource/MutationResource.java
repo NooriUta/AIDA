@@ -137,12 +137,13 @@ public class MutationResource {
             @Name("sessionId") String sessionId,
             @Name("maxToolCalls") @DefaultValue("5") int maxToolCalls) {
 
-        return Uni.createFrom().item(() -> {
-            String lineageDb = lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
-            return mimirClient.ask(
-                    identity.tenantAlias(),
-                    new AskInput(question, sessionId, lineageDb, maxToolCalls));
-        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+        String tenantAlias = identity.tenantAlias();
+        String lineageDb   = lineageRegistry.resourceFor(tenantAlias).databaseName();
+
+        return Uni.createFrom().item(() ->
+                mimirClient.ask(tenantAlias,
+                        new AskInput(question, sessionId, lineageDb, maxToolCalls))
+        ).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
          .onFailure().recoverWithItem(ex -> {
              Log.warnf("[SHUTTLE] MIMIR unavailable (askMimir): %s", ex.getMessage());
              return new MimirAnswer(
@@ -160,12 +161,13 @@ public class MutationResource {
             @Name("direction") @DefaultValue("downstream") String direction,
             @Name("maxHops") @DefaultValue("5") int maxHops) {
 
-        return Uni.createFrom().item(() -> {
-            String lineageDb = lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
-            return anvilClient.findImpact(
-                    identity.tenantAlias(),
-                    new ImpactRequest(nodeId, direction, lineageDb, maxHops, List.of()));
-        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+        String tenantAlias = identity.tenantAlias();
+        String lineageDb   = lineageRegistry.resourceFor(tenantAlias).databaseName();
+
+        return Uni.createFrom().item(() ->
+                anvilClient.findImpact(tenantAlias,
+                        new ImpactRequest(nodeId, direction, lineageDb, maxHops, List.of()))
+        ).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
          .onFailure().recoverWithItem(ex -> {
              Log.warnf("[SHUTTLE] ANVIL unavailable (findImpact): %s", ex.getMessage());
              return new ImpactResult(null, List.of(), List.of(), 0, false, false, 0L);

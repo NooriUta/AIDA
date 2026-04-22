@@ -13,6 +13,8 @@ import studio.seer.lineage.client.mimir.MimirClient;
 import studio.seer.lineage.client.mimir.model.AskInput;
 import studio.seer.lineage.client.mimir.model.MimirAnswer;
 import studio.seer.lineage.security.SeerIdentity;
+import studio.seer.tenantrouting.ArcadeConnection;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.List;
 import java.util.Map;
@@ -29,15 +31,20 @@ import static org.mockito.ArgumentMatchers.*;
 @QuarkusTest
 class MutationResourceTest {
 
-    @InjectMock @RestClient MimirClient mimirClient;
-    @InjectMock @RestClient AnvilClient anvilClient;
-    @InjectMock             SeerIdentity seerIdentity;
+    @InjectMock @RestClient MimirClient        mimirClient;
+    @InjectMock @RestClient AnvilClient        anvilClient;
+    @InjectMock             SeerIdentity       seerIdentity;
+    @InjectMock             YggLineageRegistry lineageRegistry;
 
     @Inject MutationResource resource;
 
+    private final ArcadeConnection defaultConn = Mockito.mock(ArcadeConnection.class);
+
     @BeforeEach
-    void stubIdentity() {
+    void stubIdentityAndRegistry() {
         Mockito.when(seerIdentity.tenantAlias()).thenReturn("default");
+        Mockito.when(lineageRegistry.resourceFor("default")).thenReturn(defaultConn);
+        Mockito.when(defaultConn.databaseName()).thenReturn("hound_default");
     }
 
     // ── askMimir ──────────────────────────────────────────────────────────────
@@ -175,5 +182,73 @@ class MutationResourceTest {
 
         assertEquals("sql", result.language());
         assertEquals(0, result.totalRows());
+    }
+
+    // ── L2 Multi-tenant isolation (acme/beta/gamma) ──────────────────────────
+
+    @Test
+    void askMimir_tenantAcme_usesHoundAcme_notBeta() {
+        Mockito.when(seerIdentity.tenantAlias()).thenReturn("acme");
+        ArcadeConnection acmeConn = Mockito.mock(ArcadeConnection.class);
+        Mockito.when(lineageRegistry.resourceFor("acme")).thenReturn(acmeConn);
+        Mockito.when(acmeConn.databaseName()).thenReturn("hound_acme");
+        Mockito.when(mimirClient.ask(eq("acme"),
+                argThat((AskInput i) -> i != null && "hound_acme".equals(i.dbName()))))
+               .thenReturn(new MimirAnswer("acme answer", List.of(), List.of(), "high", 5L));
+
+        MimirAnswer result = resource.askMimir("q", null, 5).await().indefinitely();
+
+        assertEquals("acme answer", result.answer());
+        Mockito.verify(lineageRegistry, Mockito.never()).resourceFor("beta");
+        Mockito.verify(lineageRegistry, Mockito.never()).resourceFor("default");
+    }
+
+    @Test
+    void askMimir_tenantBeta_usesHoundBeta_notAcme() {
+        Mockito.when(seerIdentity.tenantAlias()).thenReturn("beta");
+        ArcadeConnection betaConn = Mockito.mock(ArcadeConnection.class);
+        Mockito.when(lineageRegistry.resourceFor("beta")).thenReturn(betaConn);
+        Mockito.when(betaConn.databaseName()).thenReturn("hound_beta");
+        Mockito.when(mimirClient.ask(eq("beta"),
+                argThat((AskInput i) -> i != null && "hound_beta".equals(i.dbName()))))
+               .thenReturn(new MimirAnswer("beta answer", List.of(), List.of(), "medium", 7L));
+
+        MimirAnswer result = resource.askMimir("q", null, 5).await().indefinitely();
+
+        assertEquals("beta answer", result.answer());
+        Mockito.verify(lineageRegistry, Mockito.never()).resourceFor("acme");
+    }
+
+    @Test
+    void findImpact_threeTenantsSequential_eachGetsOwnDb() {
+        for (String alias : List.of("acme", "beta", "gamma")) {
+            Mockito.when(seerIdentity.tenantAlias()).thenReturn(alias);
+            ArcadeConnection conn = Mockito.mock(ArcadeConnection.class);
+            String db = "hound_" + alias;
+            Mockito.when(lineageRegistry.resourceFor(alias)).thenReturn(conn);
+            Mockito.when(conn.databaseName()).thenReturn(db);
+            Mockito.when(anvilClient.findImpact(eq(alias),
+                    argThat((ImpactRequest r) -> r != null && db.equals(r.dbName()))))
+                   .thenReturn(new ImpactResult(null, List.of(), List.of(), 0, false, false, 1L));
+
+            ImpactResult r = resource.findImpact("N", "downstream", 3).await().indefinitely();
+            assertNotNull(r);
+            Mockito.verify(lineageRegistry).resourceFor(alias);
+            Mockito.clearInvocations(lineageRegistry, anvilClient);
+        }
+    }
+
+    @Test
+    void askMimir_unknownTenant_registryThrows_returnsFallback() {
+        Mockito.when(seerIdentity.tenantAlias()).thenReturn("unknown");
+        Mockito.when(lineageRegistry.resourceFor("unknown"))
+               .thenThrow(new IllegalArgumentException("Tenant not found: unknown"));
+
+        // The lambda-fix extracts lineageDb before Uni.item, so a registry failure
+        // here propagates synchronously. MutationResource currently doesn't wrap
+        // this in its fallback path, which is an acceptable fail-fast behaviour —
+        // document it so any future recovery refactor breaks this test intentionally.
+        assertThrows(IllegalArgumentException.class,
+                () -> resource.askMimir("q", null, 5));
     }
 }

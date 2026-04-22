@@ -184,19 +184,49 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // ── POST /api/admin/tenants/:alias/reconnect — CAP-09 ──────────────────────
+  // ── POST /api/admin/tenants/:alias/reconnect — CAP-09 / MTN-01 ─────────────
   app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/reconnect',
     { preHandler: [app.authenticate, requireScope('aida:admin'), adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
-      // Broadcast registry invalidation to all JVM services via Heimdall
+
+      // MTN-01: Broadcast registry invalidation directly to each JVM service's
+      // /api/internal/tenant-invalidate endpoint. Fan-out is fire-and-forget —
+      // a single service being down should not block the other invalidations.
+      // Adding new services later: append to targets list.
+      const internalSecret = process.env.AIDA_INTERNAL_SHARED_SECRET ?? 'aida-internal-dev-secret';
+      const targets = [
+        { name: 'shuttle',  url: process.env.SHUTTLE_URL  ?? 'http://localhost:8080' },
+        // { name: 'dali',     url: process.env.DALI_URL     ?? 'http://localhost:9090' },
+        // { name: 'anvil',    url: process.env.ANVIL_URL    ?? 'http://localhost:9095' },
+      ];
+      const results = await Promise.all(targets.map(async t => {
+        try {
+          const res = await fetch(`${t.url}/api/internal/tenant-invalidate`, {
+            method:  'POST',
+            headers: {
+              'Content-Type':   'application/json',
+              'X-Internal-Auth': internalSecret,
+            },
+            body:   JSON.stringify({ tenantAlias: alias }),
+            signal: AbortSignal.timeout(3_000),
+          });
+          return { target: t.name, status: res.status, ok: res.ok };
+        } catch (e) {
+          return { target: t.name, status: 0, ok: false, error: (e as Error).message };
+        }
+      }));
+
+      // Legacy heimdall broadcast — keep for now, future sprints can remove
+      // once all services listen via /tenant-invalidate.
       fetch(`${HEIMDALL_URL}/api/control/registry-invalidated`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ tenantAlias: alias }),
         signal:  AbortSignal.timeout(3_000),
       }).catch(() => {});
-      return reply.send({ ok: true, message: `Registry invalidation broadcast for ${alias}` });
+
+      return reply.send({ ok: true, tenantAlias: alias, targets: results });
     },
   );
 

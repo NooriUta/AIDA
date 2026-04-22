@@ -11,7 +11,7 @@ import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.SearchResult;
 import studio.seer.lineage.model.TenantStats;
 import studio.seer.lineage.security.SeerIdentity;
-import studio.seer.tenantrouting.TenantResource;
+import studio.seer.tenantrouting.ArcadeConnection;
 import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.List;
@@ -43,7 +43,7 @@ class AdminResourceTest {
         when(identity.role()).thenReturn("super-admin");
         when(identity.tenantAlias()).thenReturn("default");
 
-        TenantResource res = mock(TenantResource.class);
+        ArcadeConnection res = mock(ArcadeConnection.class);
         when(res.databaseName()).thenReturn("hound_default");
         when(lineageRegistry.resourceFor(anyString())).thenReturn(res);
 
@@ -94,7 +94,7 @@ class AdminResourceTest {
     // ── Super-admin access ────────────────────────────────────────────────────
 
     @Test
-    void tenantStats_allTenants_returnsBothTenants() {
+    void tenantStats_allTenants_returnsBothTenants() throws Exception {
         List<TenantStats> stats = resource.tenantStats(true).await().indefinitely();
 
         assertNotNull(stats);
@@ -104,7 +104,7 @@ class AdminResourceTest {
     }
 
     @Test
-    void tenantStats_allTenants_countsAreCorrect() {
+    void tenantStats_allTenants_countsAreCorrect() throws Exception {
         List<TenantStats> stats = resource.tenantStats(true).await().indefinitely();
 
         stats.forEach(s -> {
@@ -114,7 +114,7 @@ class AdminResourceTest {
     }
 
     @Test
-    void tenantStats_singleTenant_returnsSelf() {
+    void tenantStats_singleTenant_returnsSelf() throws Exception {
         when(identity.tenantAlias()).thenReturn("default");
         when(arcade.sqlIn(anyString(), contains("DaliSession"), anyMap()))
                 .thenReturn(Uni.createFrom().item(List.of(Map.of("cnt", 7L))));
@@ -127,19 +127,19 @@ class AdminResourceTest {
     }
 
     @Test
-    void crossTenantSearch_emptyQuery_returnsEmpty() {
+    void crossTenantSearch_emptyQuery_returnsEmpty() throws Exception {
         List<SearchResult> results = resource.crossTenantSearch("").await().indefinitely();
         assertTrue(results.isEmpty());
     }
 
     @Test
-    void crossTenantSearch_blankQuery_returnsEmpty() {
+    void crossTenantSearch_blankQuery_returnsEmpty() throws Exception {
         List<SearchResult> results = resource.crossTenantSearch("   ").await().indefinitely();
         assertTrue(results.isEmpty());
     }
 
     @Test
-    void crossTenantSearch_matchingQuery_returnsResultsFromAllTenants() {
+    void crossTenantSearch_matchingQuery_returnsResultsFromAllTenants() throws Exception {
         // FRIGG returns only ACTIVE tenants for search
         when(arcade.sqlIn(eq("frigg-tenants"), anyString(), anyMap()))
                 .thenReturn(Uni.createFrom().item(List.of(
@@ -147,9 +147,9 @@ class AdminResourceTest {
                         Map.of("tenantAlias", "tenant-b")
                 )));
 
-        TenantResource resA = mock(TenantResource.class);
+        ArcadeConnection resA = mock(ArcadeConnection.class);
         when(resA.databaseName()).thenReturn("hound_tenant-a");
-        TenantResource resB = mock(TenantResource.class);
+        ArcadeConnection resB = mock(ArcadeConnection.class);
         when(resB.databaseName()).thenReturn("hound_tenant-b");
         when(lineageRegistry.resourceFor("tenant-a")).thenReturn(resA);
         when(lineageRegistry.resourceFor("tenant-b")).thenReturn(resB);
@@ -172,12 +172,12 @@ class AdminResourceTest {
     }
 
     @Test
-    void crossTenantSearch_oneTenantFails_doesNotLeakData() {
+    void crossTenantSearch_oneTenantFails_doesNotLeakData() throws Exception {
         // If tenant-b query fails, tenant-a results should not include tenant-b data
         when(arcade.sqlIn(eq("frigg-tenants"), anyString(), anyMap()))
                 .thenReturn(Uni.createFrom().item(List.of(Map.of("tenantAlias", "tenant-a"))));
 
-        TenantResource res = mock(TenantResource.class);
+        ArcadeConnection res = mock(ArcadeConnection.class);
         when(res.databaseName()).thenReturn("hound_tenant-a");
         when(lineageRegistry.resourceFor("tenant-a")).thenReturn(res);
 
@@ -196,7 +196,7 @@ class AdminResourceTest {
     // ── DB isolation: FRIGG queries go to frigg-tenants, not hound ───────────
 
     @Test
-    void tenantStats_tenantListQueriesCorrectDb() {
+    void tenantStats_tenantListQueriesCorrectDb() throws Exception {
         resource.tenantStats(true).await().indefinitely();
 
         verify(arcade, atLeastOnce()).sqlIn(eq("frigg-tenants"), anyString(), anyMap());
