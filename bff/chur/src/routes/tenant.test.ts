@@ -24,10 +24,14 @@ vi.mock('../admin/provisioning', () => ({
 }));
 
 vi.mock('../keycloakAdmin', () => ({
-  listUsers:      vi.fn().mockResolvedValue([]),
-  inviteUser:     vi.fn().mockResolvedValue(undefined),
-  setUserRole:    vi.fn().mockResolvedValue(undefined),
-  setUserEnabled: vi.fn().mockResolvedValue(undefined),
+  listUsers:       vi.fn().mockResolvedValue([]),
+  inviteUser:      vi.fn().mockResolvedValue(undefined),
+  setUserRole:     vi.fn().mockResolvedValue(undefined),
+  setUserEnabled:  vi.fn().mockResolvedValue(undefined),
+  // KC-ORG-04 wire
+  listOrgMembers:   vi.fn().mockResolvedValue([]),
+  inviteUserToOrg:  vi.fn().mockResolvedValue(undefined),
+  removeOrgMember:  vi.fn().mockResolvedValue(undefined),
 }));
 
 // Stub FRIGG HTTP calls
@@ -160,5 +164,122 @@ describe('POST /api/admin/tenants/:alias/reconnect', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
+  });
+});
+
+// ── KC-ORG-05: Two-tenant members isolation ─────────────────────────────────
+import * as kc from '../keycloakAdmin';
+
+describe('KC-ORG — member isolation via keycloakOrgId', () => {
+  let app: App;
+
+  beforeEach(async () => {
+    // Per-tenant FRIGG stub: tenantAlias → keycloakOrgId mapping
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init: any) => {
+      const body = typeof init?.body === 'string' ? init.body : '';
+      if (body.includes("'default'") || body.includes('"default"')) {
+        return Promise.resolve({
+          ok: true, status: 200, text: () => Promise.resolve(''),
+          json: () => Promise.resolve({ result: [{
+            tenantAlias: 'default', status: 'ACTIVE', configVersion: 1,
+            keycloakOrgId: 'org-default',
+          }]}),
+          headers: { get: () => null },
+        });
+      }
+      if (body.includes("'acme'") || body.includes('"acme"')) {
+        return Promise.resolve({
+          ok: true, status: 200, text: () => Promise.resolve(''),
+          json: () => Promise.resolve({ result: [{
+            tenantAlias: 'acme', status: 'ACTIVE', configVersion: 1,
+            keycloakOrgId: 'org-acme',
+          }]}),
+          headers: { get: () => null },
+        });
+      }
+      return Promise.resolve({
+        ok: true, status: 200, text: () => Promise.resolve(''),
+        json: () => Promise.resolve({ result: [] }),
+        headers: { get: () => null },
+      });
+    }));
+
+    // Per-orgId member mocks
+    vi.mocked(kc.listOrgMembers).mockImplementation(async (orgId: string) => {
+      if (orgId === 'org-default') {
+        return [
+          { id: 'u1', name: 'admin',    email: 'admin@seer.io',   firstName: '', lastName: '', role: 'admin' as const,        active: true, title:'', dept:'', phone:'', avatarColor:'', lang:'', tz:'', dateFmt:'', startPage:'', notifyEmail:false, notifyBrowser:false, notifyHarvest:false, notifyErrors:false, notifyDigest:false, quotas:{mimir:0,sessions:0,atoms:0,workers:0,anvil:0}, sources:[] },
+          { id: 'u2', name: 'editor',   email: 'editor@seer.io',  firstName: '', lastName: '', role: 'editor' as const,       active: true, title:'', dept:'', phone:'', avatarColor:'', lang:'', tz:'', dateFmt:'', startPage:'', notifyEmail:false, notifyBrowser:false, notifyHarvest:false, notifyErrors:false, notifyDigest:false, quotas:{mimir:0,sessions:0,atoms:0,workers:0,anvil:0}, sources:[] },
+        ];
+      }
+      if (orgId === 'org-acme') {
+        return [
+          { id: 'a1', name: 'acme-owner', email: 'owner@acme.com', firstName: '', lastName: '', role: 'tenant-owner' as const, active: true, title:'', dept:'', phone:'', avatarColor:'', lang:'', tz:'', dateFmt:'', startPage:'', notifyEmail:false, notifyBrowser:false, notifyHarvest:false, notifyErrors:false, notifyDigest:false, quotas:{mimir:0,sessions:0,atoms:0,workers:0,anvil:0}, sources:[] },
+        ];
+      }
+      return [];
+    });
+    vi.mocked(kc.inviteUserToOrg).mockResolvedValue(undefined);
+    vi.mocked(kc.removeOrgMember).mockResolvedValue(undefined);
+
+    app = await buildApp();
+  });
+
+  it('GET /tenants/default/members — returns only default-org members (not realm-wide)', async () => {
+    const sid = await makeSid(['aida:tenant:admin']);
+    const res = await app.inject({
+      method: 'GET', url: '/api/admin/tenants/default/members', cookies: { sid },
+    });
+    expect(res.statusCode).toBe(200);
+    const members = res.json() as Array<{ name: string }>;
+    expect(members.map(m => m.name).sort()).toEqual(['admin', 'editor']);
+    expect(kc.listOrgMembers).toHaveBeenCalledWith('org-default');
+    expect(kc.listUsers).not.toHaveBeenCalled();
+  });
+
+  it('GET /tenants/acme/members — returns only acme-org members (1 user)', async () => {
+    const sid = await makeSid(['aida:tenant:admin']);
+    const res = await app.inject({
+      method: 'GET', url: '/api/admin/tenants/acme/members', cookies: { sid },
+    });
+    expect(res.statusCode).toBe(200);
+    const members = res.json() as Array<{ name: string }>;
+    expect(members.map(m => m.name)).toEqual(['acme-owner']);
+    expect(kc.listOrgMembers).toHaveBeenCalledWith('org-acme');
+  });
+
+  it('default members and acme members are DISJOINT (no cross-tenant leak)', async () => {
+    const sid = await makeSid(['aida:tenant:admin']);
+    const d = await app.inject({ method: 'GET', url: '/api/admin/tenants/default/members', cookies: { sid } });
+    const a = await app.inject({ method: 'GET', url: '/api/admin/tenants/acme/members',    cookies: { sid } });
+    const dIds = new Set((d.json() as Array<{ id: string }>).map(u => u.id));
+    const aIds = new Set((a.json() as Array<{ id: string }>).map(u => u.id));
+    const intersection = [...dIds].filter(id => aIds.has(id));
+    expect(intersection).toEqual([]);
+  });
+
+  it('POST /tenants/default/members invite → inviteUserToOrg("org-default", "default", ...)', async () => {
+    const sid = await makeSid(['aida:tenant:admin']);
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/tenants/default/members',
+      cookies: { sid },
+      payload: { email: 'new@seer.io', name: 'New User', role: 'viewer' },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(kc.inviteUserToOrg).toHaveBeenCalledWith(
+      'org-default', 'default', 'new@seer.io', 'New User', 'viewer',
+    );
+    expect(kc.inviteUser).not.toHaveBeenCalled();
+  });
+
+  it('DELETE /tenants/default/members/:userId → removeOrgMember (not setUserEnabled)', async () => {
+    const sid = await makeSid(['aida:tenant:admin']);
+    const res = await app.inject({
+      method: 'DELETE', url: '/api/admin/tenants/default/members/u1',
+      cookies: { sid },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(kc.removeOrgMember).toHaveBeenCalledWith('org-default', 'u1');
+    expect(kc.setUserEnabled).not.toHaveBeenCalled();
   });
 });
