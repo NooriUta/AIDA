@@ -1,7 +1,7 @@
 {
   "realm": "seer",
   "enabled": true,
-  "organizationsEnabled": false,
+  "organizationsEnabled": true,
   "registrationAllowed": false,
   "loginWithEmailAllowed": false,
   "duplicateEmailsAllowed": true,
@@ -729,6 +729,27 @@
           "hound,dali"
         ]
       }
+    }
+  ],
+  "organizations": [
+    {
+      "name": "default",
+      "alias": "default",
+      "description": "Default tenant for single-tenant dev deployments",
+      "enabled": true,
+      "redirectUrl": "",
+      "domains": [
+        { "name": "seer.io", "verified": true }
+      ],
+      "members": [
+        { "username": "admin" },
+        { "username": "editor" },
+        { "username": "viewer" },
+        { "username": "alexey.petrov" },
+        { "username": "sergey.ivanov" },
+        { "username": "tenant.owner" },
+        { "username": "local.admin" }
+      ]
     }
   ]
 }
