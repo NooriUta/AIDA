@@ -37,18 +37,32 @@ public class ArcadeGateway {
 
     // ── Public API ────────────────────────────────────────────────────────────
 
+    /**
+     * @deprecated MTN-02: Tenant-unaware overload. Routes all queries to the default
+     * database regardless of the caller's tenant context. New code MUST use
+     * {@link #sqlIn(String, String, Map)} with an explicit db name resolved via
+     * {@code YggLineageRegistry.resourceFor(identity.tenantAlias()).databaseName()}.
+     * Existing usages are tracked via ArchUnit freeze; do not add more.
+     */
+    @Deprecated(forRemoval = true, since = "MTN-02")
     public Uni<List<Map<String, Object>>> sql(String query) {
         return sqlIn(db, query, null);
     }
 
+    /** @deprecated MTN-02 — see {@link #sql(String)}. */
+    @Deprecated(forRemoval = true, since = "MTN-02")
     public Uni<List<Map<String, Object>>> sql(String query, Map<String, Object> params) {
         return sqlIn(db, query, params);
     }
 
+    /** @deprecated MTN-02 — see {@link #sql(String)}. */
+    @Deprecated(forRemoval = true, since = "MTN-02")
     public Uni<List<Map<String, Object>>> cypher(String query) {
         return cypherIn(db, query, null);
     }
 
+    /** @deprecated MTN-02 — see {@link #sql(String)}. */
+    @Deprecated(forRemoval = true, since = "MTN-02")
     public Uni<List<Map<String, Object>>> cypher(String query, Map<String, Object> params) {
         return cypherIn(db, query, params);
     }

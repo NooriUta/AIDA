@@ -137,9 +137,10 @@ public class ParseJob {
         if (input.preview()) {
             return HoundConfig.defaultDisabled(input.dialect());
         }
-        // DMT-04/05: resolve target lineage DB via registry (tenant-aware in Phase 2;
-        // single pool in Phase 1 → always hound_default)
-        String tenantAlias = input.tenantAlias() != null ? input.tenantAlias() : "default";
+        // MTN-04: fail-fast on missing tenantAlias — no silent "default" fallback.
+        // Every ParseSessionInput MUST carry alias resolved from JWT/header at
+        // session-create time. If this fires, the dispatcher forgot to inject it.
+        String tenantAlias = requireTenantAlias(input, "buildConfig");
         String lineageDb = yggLineageRegistry.resourceFor(tenantAlias).databaseName();
         return new HoundConfig(
                 input.dialect(),
@@ -204,7 +205,7 @@ public class ParseJob {
         fetchListener.onFetchCompleted(fetchResult.stats());
 
         // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup against hound_src_{alias})
-        String tenantAlias = input.tenantAlias() != null ? input.tenantAlias() : "default";
+        String tenantAlias = requireTenantAlias(input, "runJdbc/sourceArchive");
         List<SqlSource> sources = sourceArchiveService.upsertAll(tenantAlias, fetchResult.files());
 
         if (sources.isEmpty()) {
@@ -448,5 +449,21 @@ public class ParseJob {
 
         return new ParseResult(source, atoms, vertices, edges, droppedEdges,
                 aggMap, rate, atomsResolved, atomsUnresolved, warnings, errors, duration);
+    }
+
+    /**
+     * MTN-04: Extracts and validates the tenant alias from a ParseSessionInput.
+     * Throws IllegalStateException if missing — this is a deliberate fail-fast:
+     * any path reaching here without alias is a bug in the dispatcher that must
+     * be fixed upstream (no silent routing to "default").
+     */
+    private static String requireTenantAlias(ParseSessionInput input, String context) {
+        String alias = input.tenantAlias();
+        if (alias == null || alias.isBlank()) {
+            throw new IllegalStateException(
+                    "MTN-04 [" + context + "]: ParseSessionInput.tenantAlias is required " +
+                    "(refusing to default). TenantAwareJobDispatcher must inject alias at enqueue time.");
+        }
+        return alias;
     }
 }

@@ -105,14 +105,26 @@ public class SessionService {
         }
     }
 
-    /** Enqueue a new parse session. The tenantAlias in input is derived from TenantContext. */
+    /**
+     * Enqueue a new parse session. The tenantAlias in input is derived from TenantContext.
+     *
+     * <p>MTN-04: fail-fast on missing alias. Caller (SessionResource, FileUploadResource,
+     * HarvestJob) MUST populate {@code input.tenantAlias()} from the resolved
+     * {@code TenantContext} — no silent "default" fallback here.
+     */
     public Session enqueue(ParseSessionInput input) {
         if (!schemaInitializer.isSchemaReady()) {
             throw new IllegalStateException(
                 "FRIGG schema is not fully initialised — Dali started with a broken FRIGG connection. " +
                 "Check startup logs and restart the service.");
         }
-        String tenantAlias = input.tenantAlias() != null ? input.tenantAlias() : "default";
+        String tenantAlias = input.tenantAlias();
+        if (tenantAlias == null || tenantAlias.isBlank()) {
+            throw new IllegalStateException(
+                "MTN-04: ParseSessionInput.tenantAlias is required — caller must inject it " +
+                "from TenantContext before enqueue(). Refusing to default to 'default' which " +
+                "would leak parse data into the wrong tenant database.");
+        }
 
         if (!input.preview()) {
             if (input.clearBeforeWrite()) {
