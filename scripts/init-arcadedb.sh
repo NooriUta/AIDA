@@ -258,6 +258,7 @@ if wait_ready "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "FRIGG"; then
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-users"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_default"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_acme"
+  ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-jobrunr"
   ensure_frigg_tenants_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   ensure_tenant_record "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "default" "hound_default" "hound_src_default" "dali_default"
   ensure_tenant_record "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "acme"    "hound_acme"    "hound_src_acme"    "dali_acme"
