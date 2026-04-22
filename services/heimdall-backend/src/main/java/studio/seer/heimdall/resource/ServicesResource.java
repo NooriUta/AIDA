@@ -2,6 +2,7 @@ package studio.seer.heimdall.resource;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -185,8 +186,10 @@ public class ServicesResource {
                 new ServiceStatus(svc.name(), svc.port(), svc.mode(), "self", 0, versionFor(svc)));
         }
         // TCP — just check the port is open (Vite dev servers, etc.)
+        // InetSocketAddress(hostname, port) does a blocking DNS lookup; Socket.connect() is
+        // blocking I/O. Both must run on a worker thread, not the Vert.x event loop.
         if (svc.tcp()) {
-            return Uni.createFrom().item(() -> {
+            return Uni.createFrom().<ServiceStatus>item(() -> {
                 long start = System.currentTimeMillis();
                 try (Socket s = new Socket()) {
                     s.connect(new InetSocketAddress(svc.pingHost(), svc.pingPort()), 1500);
@@ -194,7 +197,7 @@ public class ServicesResource {
                 } catch (Exception e) {
                     return new ServiceStatus(svc.name(), svc.port(), svc.mode(), "down", System.currentTimeMillis() - start, null);
                 }
-            });
+            }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
         }
         return Uni.createFrom().item(System::currentTimeMillis)
                 .onItem().transformToUni(start -> {
