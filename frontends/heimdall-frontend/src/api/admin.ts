@@ -52,6 +52,14 @@ export function listTenants(signal?: AbortSignal): Promise<TenantSummary[]> {
   return adminFetch<TenantSummary[]>('/tenants', { signal });
 }
 
+export function provisionTenant(alias: string): Promise<{ ok: boolean; tenantAlias: string }> {
+  return adminFetch('/tenants', { method: 'POST', body: JSON.stringify({ alias }) });
+}
+
+export function forceCleanupTenant(alias: string): Promise<{ ok: boolean }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/force-cleanup`, { method: 'POST' });
+}
+
 export function getTenant(alias: string, signal?: AbortSignal): Promise<DaliTenantConfig> {
   return adminFetch<DaliTenantConfig>(`/tenants/${encodeURIComponent(alias)}`, { signal });
 }
