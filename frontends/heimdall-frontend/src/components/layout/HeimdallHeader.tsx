@@ -243,19 +243,18 @@ function TenantPickerButton() {
 
   const isSuperAdmin = user?.role === 'super-admin';
   const isAdmin      = user?.role === 'admin' || isSuperAdmin;
+  const canFetch     = isAdmin;
 
   useEffect(() => {
-    if (!isSuperAdmin) return;
-    fetch('/chur/api/admin/tenants', { credentials: 'include' })
+    if (!canFetch) return;
+    fetch('/admin/tenants', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then((body: unknown) => {
-        const arr = Array.isArray(body)
-          ? (body as { tenantAlias: string; status: string }[])
-          : ((body as { tenants?: { tenantAlias: string; status: string }[] }).tenants ?? []);
-        setTenants(arr.filter(t => t.status === 'ACTIVE'));
+        const arr = Array.isArray(body) ? (body as { id: string; name: string }[]) : [];
+        setTenants(arr.map(t => ({ tenantAlias: t.id })));
       })
       .catch(() => {});
-  }, [isSuperAdmin]);
+  }, [canFetch]);
 
   useEffect(() => {
     const h = (e: Event) => {
@@ -266,18 +265,12 @@ function TenantPickerButton() {
     return () => window.removeEventListener('aida:tenant', h);
   }, []);
 
-  // Non-super-admins always show their own tenant (ignore stale localStorage).
-  const displayActive = isSuperAdmin ? active : (user?.activeTenantAlias ?? active);
+  const displayActive = user?.activeTenantAlias ?? active;
 
   if (!isAdmin) return null;
 
-  const displayTenants = isSuperAdmin
-    ? tenants
-    : user?.activeTenantAlias
-      ? [{ tenantAlias: user.activeTenantAlias }]
-      : [];
-
-  const canSwitch = isSuperAdmin && displayTenants.length > 0;
+  const displayTenants = tenants;
+  const canSwitch = isAdmin && displayTenants.length > 1;
 
   const pick = (alias: string) => {
     setActive(alias);
