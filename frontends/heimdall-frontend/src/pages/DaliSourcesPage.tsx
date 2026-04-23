@@ -6,7 +6,8 @@ import {
   testConnection, uploadAndParse,
   type DaliDialect,
 } from '../api/dali';
-import { usePageTitle } from '../hooks/usePageTitle';
+import { useAuthStore }  from '../stores/authStore';
+import { usePageTitle }  from '../hooks/usePageTitle';
 import css from '../components/dali/dali.module.css';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -488,6 +489,29 @@ function FileUploadCard() {
 
 export default function DaliSourcesPage() {
   const { t } = useTranslation();
+  const sessionUser = useAuthStore(s => s.user);
+
+  const [tenantAlias, setTenantAlias] = useState<string>(() => {
+    const stored = localStorage.getItem('seer-active-tenant');
+    if (stored && stored !== '__all__') return stored;
+    return sessionUser?.activeTenantAlias ?? 'default';
+  });
+
+  useEffect(() => {
+    if (sessionUser && sessionUser.role !== 'super-admin') {
+      setTenantAlias(sessionUser.activeTenantAlias ?? 'default');
+    }
+  }, [sessionUser?.id, sessionUser?.role]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const alias = (e as CustomEvent<{ activeTenant: string }>).detail?.activeTenant;
+      if (alias && alias !== '__all__') setTenantAlias(alias);
+    };
+    window.addEventListener('aida:tenant', handler);
+    return () => window.removeEventListener('aida:tenant', handler);
+  }, []);
+
   const [sources,    setSources]    = useState<DaliSource[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [modal,      setModal]      = useState<'add' | 'edit' | null>(null);
@@ -506,20 +530,20 @@ export default function DaliSourcesPage() {
 
   async function load() {
     setLoading(true);
-    try { setSources(await getSources()); }
+    try { setSources(await getSources(tenantAlias)); }
     catch { addToast.current(t('sources.loadError'), 'err'); }
     finally { setLoading(false); }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [tenantAlias]);
 
   async function handleSave(input: CreateSourceInput) {
     if (modal === 'edit' && editTarget) {
-      const updated = await updateSource(editTarget.id, input);
+      const updated = await updateSource(editTarget.id, input, tenantAlias);
       setSources(prev => prev.map(s => s.id === updated.id ? updated : s));
       addToast.current(t('sources.savedToast', { name: updated.name }), 'suc');
     } else {
-      const created = await createSource(input);
+      const created = await createSource(input, tenantAlias);
       setSources(prev => [...prev, created]);
       addToast.current(t('sources.createdToast', { name: created.name }), 'suc');
     }
@@ -527,7 +551,7 @@ export default function DaliSourcesPage() {
 
   async function handleDelete() {
     if (!delTarget) return;
-    await deleteSource(delTarget.id);
+    await deleteSource(delTarget.id, tenantAlias);
     setSources(prev => prev.filter(s => s.id !== delTarget.id));
     addToast.current(t('sources.deletedToast', { name: delTarget.name }), 'inf');
     setDelTarget(null);
