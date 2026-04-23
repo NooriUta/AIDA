@@ -23,11 +23,12 @@ public class JobRunrSchemaInitializer {
 
     private static final String[][] DOCUMENT_TYPES_AND_PROPS = {
         // { typeName, propertyName, arcadeDbType }
-        { "jobrunr_jobs",           "id",      "STRING" },
-        { "jobrunr_jobs",           "state",   "STRING" },
-        { "jobrunr_recurring_jobs", "id",      "STRING" },
-        { "jobrunr_servers",        "id",      "STRING" },
-        { "jobrunr_metadata",       "id",      "STRING" },
+        { "jobrunr_jobs",                   "id",    "STRING" },
+        { "jobrunr_jobs",                   "state", "STRING" },
+        { "jobrunr_recurring_jobs",         "id",    "STRING" },
+        { "jobrunr_servers",                "id",    "STRING" },
+        { "jobrunr_metadata",               "id",    "STRING" },
+        { "jobrunr_backgroundjobservers",   "id",    "STRING" },
     };
 
     @Inject JobRunrFriggGateway frigg;

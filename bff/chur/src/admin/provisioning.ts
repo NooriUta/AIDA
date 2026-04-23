@@ -53,17 +53,17 @@ export interface ProvisionError {
 const KC_BASE  = config.keycloakUrl;
 const KC_REALM = config.keycloakRealm;
 
-const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://localhost:2481').replace(/\/$/, '');
+const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, '');
 const FRIGG_USER = process.env.FRIGG_USER  ?? 'root';
 const FRIGG_PASS = process.env.FRIGG_PASS  ?? 'playwithdata';
 const FRIGG_BASIC = Buffer.from(`${FRIGG_USER}:${FRIGG_PASS}`).toString('base64');
 
-const YGG_URL  = (process.env.YGG_URL  ?? 'http://localhost:2480').replace(/\/$/, '');
+const YGG_URL  = (process.env.YGG_URL  ?? 'http://127.0.0.1:2480').replace(/\/$/, '');
 const YGG_USER = process.env.YGG_USER  ?? 'root';
 const YGG_PASS = process.env.YGG_PASS  ?? 'playwithdata';
 const YGG_BASIC = Buffer.from(`${YGG_USER}:${YGG_PASS}`).toString('base64');
 
-const HEIMDALL_URL = (process.env.HEIMDALL_URL ?? 'http://localhost:9093').replace(/\/$/, '');
+const HEIMDALL_URL = (process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093').replace(/\/$/, '');
 
 // ── Low-level helpers ─────────────────────────────────────────────────────────
 
@@ -107,7 +107,9 @@ async function yggCreateDb(dbName: string): Promise<void> {
     headers: { 'Authorization': `Basic ${YGG_BASIC}` },
     signal:  AbortSignal.timeout(15_000),
   });
-  if (!res.ok && res.status !== 409) { // 409 = already exists
+  if (!res.ok && res.status !== 409) {
+    const body = await res.text().catch(() => '');
+    if (/already exists/i.test(body)) return;
     throw new Error(`YGG create db ${dbName}: ${res.status}`);
   }
 }
@@ -119,6 +121,8 @@ async function friggCreateDb(dbName: string): Promise<void> {
     signal:  AbortSignal.timeout(15_000),
   });
   if (!res.ok && res.status !== 409) {
+    const body = await res.text().catch(() => '');
+    if (/already exists/i.test(body)) return;
     throw new Error(`FRIGG create db ${dbName}: ${res.status}`);
   }
 }
@@ -224,16 +228,26 @@ export async function provisionTenant(
   // Step 1 — Keycloak Organization (compensation: delete org)
   keycloakOrgId = await runStep(1, async () => {
     const token = await kcAdminToken();
+    // KC 26+ requires at least one domain on org create.
+    const orgDomain = `${alias}.aida.local`;
     const res = await fetch(
       `${KC_BASE}/admin/realms/${KC_REALM}/organizations`,
       {
         method:  'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ name: alias, alias, enabled: true }),
+        body:    JSON.stringify({
+          name: alias,
+          alias,
+          enabled: true,
+          domains: [{ name: orgDomain, verified: false }],
+        }),
         signal:  AbortSignal.timeout(10_000),
       },
     );
-    if (!res.ok && res.status !== 409) throw new Error(`KC org ${res.status}`);
+    if (!res.ok && res.status !== 409) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`KC org ${res.status}${body ? `: ${body.slice(0, 300)}` : ''}`);
+    }
     const loc = res.headers.get('Location') ?? '';
     return loc.split('/').pop() ?? alias;
   }, async () => {
@@ -246,19 +260,25 @@ export async function provisionTenant(
   });
 
   // Step 2 — DaliTenantConfig PROVISIONING (compensation: delete row)
+  // Defaults mirror the `default` tenant row so UI/quota logic sees identical shape.
   await runStep(2, async () => {
     await friggSql('frigg-tenants',
       `INSERT INTO DaliTenantConfig SET
          tenantAlias = :alias, keycloakOrgId = :orgId, status = 'PROVISIONING',
          yggLineageDbName = :lineageDb, yggSourceArchiveDbName = :sourceDb,
-         friggDaliDbName = :daliDb, configVersion = 1, createdAt = :ts, updatedAt = :ts`,
+         friggDaliDbName = :daliDb, configVersion = 1,
+         harvestCron = :harvestCron, llmMode = 'off',
+         dataRetentionDays = 30, maxParseSessions = 10, maxAtoms = 10000,
+         maxSources = 5, maxConcurrentJobs = 2,
+         createdAt = :ts, updatedAt = :ts`,
       {
         alias,
-        orgId:     keycloakOrgId,
-        lineageDb: `hound_${alias}`,
-        sourceDb:  `hound_src_${alias}`,
-        daliDb:    `dali_${alias}`,
-        ts:        Date.now(),
+        orgId:       keycloakOrgId,
+        lineageDb:   `hound_${alias}`,
+        sourceDb:    `hound_src_${alias}`,
+        daliDb:      `dali_${alias}`,
+        harvestCron: harvestCron(alias),
+        ts:          Date.now(),
       },
     );
   }, async () => {
@@ -292,7 +312,7 @@ export async function provisionTenant(
     await friggDropDb(`dali_${alias}`).catch(() => {});
   });
 
-  // Step 6 — Register harvest cron (compensation: deregister; 404 OK)
+  // Step 6 — Register harvest cron (best-effort; HEIMDALL may not be up yet in dev)
   await runStep(6, async () => {
     const cron = harvestCron(alias);
     const res = await fetch(`${HEIMDALL_URL}/api/cron/harvest`, {
@@ -300,8 +320,13 @@ export async function provisionTenant(
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ tenantAlias: alias, cron, correlationId }),
       signal:  AbortSignal.timeout(5_000),
+    }).catch(e => {
+      console.warn(`[PROVISION] step 6 cron registration skipped (HEIMDALL unreachable): ${(e as Error).message}`);
+      return null;
     });
-    if (!res.ok && res.status !== 404) throw new Error(`HEIMDALL cron ${res.status}`);
+    if (res && !res.ok && res.status !== 404 && res.status !== 503) {
+      throw new Error(`HEIMDALL cron ${res.status}`);
+    }
   }, async () => {
     await fetch(`${HEIMDALL_URL}/api/cron/harvest/${encodeURIComponent(alias)}`, {
       method: 'DELETE', signal: AbortSignal.timeout(3_000),
@@ -361,13 +386,13 @@ async function yggDropDb(dbName: string): Promise<void> {
   await fetch(`${YGG_URL}/api/v1/drop/${encodeURIComponent(dbName)}`, {
     method: 'POST', headers: { 'Authorization': `Basic ${YGG_BASIC}` },
     signal: AbortSignal.timeout(10_000),
-  });
+  }).catch(() => {});
 }
 async function friggDropDb(dbName: string): Promise<void> {
   await fetch(`${FRIGG_URL}/api/v1/drop/${encodeURIComponent(dbName)}`, {
     method: 'POST', headers: { 'Authorization': `Basic ${FRIGG_BASIC}` },
     signal: AbortSignal.timeout(10_000),
-  });
+  }).catch(() => {});
 }
 
 /**
@@ -416,19 +441,11 @@ export async function forceCleanupTenant(alias: string): Promise<void> {
 
   // Drop YGG DBs (best-effort)
   for (const db of [`hound_${alias}`, `hound_src_${alias}`]) {
-    await fetch(`${YGG_URL}/api/v1/drop/${encodeURIComponent(db)}`, {
-      method:  'DELETE',
-      headers: { 'Authorization': `Basic ${YGG_BASIC}` },
-      signal:  AbortSignal.timeout(10_000),
-    }).catch(() => {});
+    await yggDropDb(db);
   }
 
   // Drop FRIGG dali DB (best-effort)
-  await fetch(`${FRIGG_URL}/api/v1/drop/${encodeURIComponent(`dali_${alias}`)}`, {
-    method:  'DELETE',
-    headers: { 'Authorization': `Basic ${FRIGG_BASIC}` },
-    signal:  AbortSignal.timeout(10_000),
-  }).catch(() => {});
+  await friggDropDb(`dali_${alias}`);
 
   // Delete tenant config row
   await friggSql('frigg-tenants',

@@ -1,15 +1,13 @@
 package studio.seer.heimdall.control;
 
 import io.quarkus.runtime.StartupEvent;
-import io.smallrye.mutiny.Uni;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
-import studio.seer.heimdall.snapshot.FriggGateway;
+import studio.seer.heimdall.scheduler.JobRunrFriggGateway;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,7 +44,7 @@ public class FenceTokenProvider {
 
     private static final long SEED_GAP = 1_000L;
 
-    @Inject FriggGateway frigg;
+    @Inject JobRunrFriggGateway frigg;
 
     private final AtomicLong counter = new AtomicLong(0L);
 
@@ -78,10 +76,9 @@ public class FenceTokenProvider {
 
     private long safeSeed() {
         try {
-            Uni<List<Map<String, Object>>> query = frigg.sql(
+            List<Map<String, Object>> rows = frigg.sql(
                     "SELECT max(id) as maxId FROM jobrunr_backgroundjobservers",
                     Map.of());
-            List<Map<String, Object>> rows = query.await().atMost(Duration.ofSeconds(5));
             if (rows != null && !rows.isEmpty()) {
                 Object raw = rows.get(0).get("maxId");
                 if (raw instanceof Number n) {

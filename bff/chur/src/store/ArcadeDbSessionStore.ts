@@ -7,7 +7,7 @@ import type { Session } from '../sessions';
 import type { SessionStore } from './SessionStore';
 import { encryptToken, decryptToken } from '../session/encryption';
 
-const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://localhost:2481').replace(/\/$/, '');
+const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, '');
 const FRIGG_DB   = process.env.FRIGG_SESSION_DB ?? 'frigg-sessions';
 const FRIGG_USER = process.env.FRIGG_USER ?? 'root';
 const FRIGG_PASS = process.env.FRIGG_PASS ?? 'playwithdata';

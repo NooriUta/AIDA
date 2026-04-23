@@ -1,8 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
-import { createSession, deleteSession, ensureValidSession } from '../sessions';
+import { createSession, deleteSession, ensureValidSession, updateSession } from '../sessions';
 import { emitSessionEvent } from '../users/UserSessionEventsEmitter';
 import { emitToHeimdall } from '../middleware/heimdallEmit';
+import { csrfGuard } from '../middleware/csrfGuard';
 
 // ── In-memory rate limiter for /auth/login ────────────────────────────────────
 const IS_PROD      = process.env.NODE_ENV === 'production';
@@ -90,10 +91,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         userInfo.role,
         userInfo.scopes,
       );
+      // Persist KC identity claims in session for /auth/me enrichment
+      await updateSession(sid, {
+        email:     userInfo.email,
+        firstName: userInfo.firstName,
+        lastName:  userInfo.lastName,
+      });
 
       reply.setCookie('sid', sid, COOKIE_OPTS);
       emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
-      // MTN-64: emit session event for forensic audit (fire-and-forget)
       void emitSessionEvent({
         userId:     userInfo.sub,
         sessionId:  sid,
@@ -102,7 +108,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         userAgent:  String(request.headers['user-agent'] ?? ''),
         result:     'success',
       });
-      return { id: userInfo.sub, username: userInfo.username, role: userInfo.role };
+      return { id: userInfo.sub, username: userInfo.username, role: userInfo.role,
+               email: userInfo.email, firstName: userInfo.firstName, lastName: userInfo.lastName };
     },
   );
 
@@ -111,26 +118,53 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/me',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role } = request.user;
-      return { id: sub, username, role };
+      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
+      return { id: sub, username, role, email, firstName, lastName,
+               activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 
   // ── POST /auth/refresh ──────────────────────────────────────────────────────
-  // Kept for backward compatibility. With Keycloak, lazy refresh in
-  // app.authenticate handles this transparently, but the frontend may still
-  // call /refresh explicitly.
   app.post(
     '/refresh',
     { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const { sub, username, role } = request.user;
-      // Session was already refreshed by authenticate if needed
-      return { id: sub, username, role };
+    async (request) => {
+      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
+      return { id: sub, username, role, email, firstName, lastName,
+               activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 
   // ── POST /auth/logout ───────────────────────────────────────────────────────
+  // ── PATCH /auth/me/tenant — MTN-13: active-tenant switch ───────────────────
+  app.patch<{ Body: { tenantAlias: string } }>(
+    '/me/tenant',
+    { preHandler: [app.authenticate, csrfGuard] },
+    async (request, reply) => {
+      const { tenantAlias } = request.body ?? {};
+      if (!tenantAlias || typeof tenantAlias !== 'string') {
+        return reply.status(400).send({ error: 'tenantAlias required' });
+      }
+      const sid = request.cookies.sid;
+      if (!sid) return reply.status(401).send({ error: 'no session' });
+      try {
+        await updateSession(sid, { activeTenantAlias: tenantAlias });
+      } catch (e) {
+        return reply.status(404).send({ error: (e as Error).message });
+      }
+      void emitSessionEvent({
+        userId:      request.user.sub,
+        sessionId:   sid,
+        eventType:   'tenant_switch',
+        tenantAlias,
+        ipAddress:   request.ip,
+        userAgent:   String(request.headers['user-agent'] ?? ''),
+        result:      'success',
+      });
+      return { ok: true, activeTenantAlias: tenantAlias };
+    },
+  );
+
   app.post('/logout', async (request, reply) => {
     const sid = request.cookies.sid;
     if (sid) {

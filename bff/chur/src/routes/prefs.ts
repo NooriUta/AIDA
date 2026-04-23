@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 
-const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://localhost:9093';
+const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
 
 /**
  * User UI preferences — proxied to heimdall-backend → FRIGG.

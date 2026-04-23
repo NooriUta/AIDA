@@ -7,9 +7,9 @@ import './i18n/config';
 import './styles/heimdall.css';
 import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useTranslation }  from 'react-i18next';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
+import { ConsentModal }    from './components/ConsentModal';
 import { useAuthStore }    from './stores/authStore';
 import { usePrefsStore }   from './stores/prefsStore';
 import { RoleGuard }       from './components/RoleGuard';
@@ -27,22 +27,27 @@ const UsersPage          = React.lazy(() => import('./pages/UsersPage'));
 const DocsPage           = React.lazy(() => import('./pages/DocsPage'));
 const TenantsPage        = React.lazy(() => import('./pages/TenantsPage'));
 const TenantDetailsPage  = React.lazy(() => import('./pages/TenantDetailsPage'));
+// Round 5 self-service
+const ProfilePage           = React.lazy(() => import('./pages/ProfilePage'));
+const PreferencesPage       = React.lazy(() => import('./pages/PreferencesPage'));
+const NotificationsPage     = React.lazy(() => import('./pages/NotificationsPage'));
+const SessionActivityPage   = React.lazy(() => import('./pages/SessionActivityPage'));
+// Round 5 admin
+const SoftDeletedUsersPage  = React.lazy(() => import('./pages/SoftDeletedUsersPage'));
 
 // ── App layout (shell around the routed page) ─────────────────────────────────
 function AppLayout() {
-  const { t } = useTranslation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <HeimdallHeader />
       <main style={{ flex: 1, overflow: 'hidden' }}>
-        <Suspense fallback={
-          <div style={{ padding: 'var(--seer-space-8)', color: 'var(--t3)' }}>
-            {t('status.loading')}
-          </div>
-        }>
+        <Suspense fallback={null}>
           <Outlet />
         </Suspense>
       </main>
+      {/* Round 5 — T&C / Privacy consent interruptor (opens when user's
+          latest accepted version is older than current) */}
+      <ConsentModal />
     </div>
   );
 }
@@ -55,14 +60,7 @@ function ProtectedRoute() {
   const isAuthenticated   = useAuthStore(s => s.isAuthenticated);
   const isCheckingSession = useAuthStore(s => s.isCheckingSession);
 
-  if (isCheckingSession) return (
-    <div style={{
-      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: 'var(--t3)', fontSize: '13px',
-    }}>
-      …
-    </div>
-  );
+  if (isCheckingSession) return null;
   if (!isAuthenticated) return <Navigate to="login" replace />;
   return <Outlet />;
 }
@@ -134,6 +132,20 @@ export default function App() {
               <RoleGuard require="admin"><TenantDetailsPage /></RoleGuard>
             } />
 
+            {/* Round 5 — Self-service (any authenticated user) */}
+            <Route path="me">
+              <Route index element={<Navigate to="profile" replace />} />
+              <Route path="profile"          element={<ProfilePage />} />
+              <Route path="preferences"      element={<PreferencesPage />} />
+              <Route path="notifications"    element={<NotificationsPage />} />
+              <Route path="session-activity" element={<SessionActivityPage />} />
+            </Route>
+
+            {/* Round 5 — Superadmin soft-delete management (backend also guards aida:superadmin) */}
+            <Route path="admin/users/soft-deleted" element={
+              <RoleGuard require="admin"><SoftDeletedUsersPage /></RoleGuard>
+            } />
+
             {/* Standalone pages */}
             <Route path="users" element={
               <RoleGuard require="local-admin"><UsersPage /></RoleGuard>
@@ -149,7 +161,7 @@ export default function App() {
             <Route path="dashboard" element={<Navigate to="../overview/dashboard" replace />} />
             <Route path="events"    element={<Navigate to="../overview/events"    replace />} />
 
-            <Route path="*" element={<Navigate to="overview/services" replace />} />
+            <Route path="*" element={<Navigate to="/overview/services" replace />} />
           </Route>
         </Route>
       </Routes>

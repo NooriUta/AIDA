@@ -231,6 +231,29 @@ export const Header = memo(() => {
 
       <ToolbarDivider />
 
+      {/* ── Active tenant badge (tells user which tenant's data they see) ── */}
+      {user?.activeTenantAlias && (
+        <>
+          <span
+            title={t('tenant.activeHint', { defaultValue: 'Active tenant — все данные в этом пространстве' })}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              padding: '3px 8px',
+              fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em',
+              color: 'var(--acc)',
+              background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--acc) 35%, transparent)',
+              borderRadius: 'var(--seer-radius-sm)',
+              textTransform: 'uppercase', flexShrink: 0,
+            }}
+          >
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--acc)' }} />
+            {user.activeTenantAlias}
+          </span>
+          <ToolbarDivider />
+        </>
+      )}
+
       {isMobile ? (
         /* ── Mobile: V dropdown + active tab only ──────────────────────── */
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>

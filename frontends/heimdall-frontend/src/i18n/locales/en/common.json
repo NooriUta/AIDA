@@ -11,21 +11,26 @@
     ]
   },
   "nav": {
-    "services":     "Services",
-    "dashboard":    "Dashboard",
-    "dali":         "Ðali",
-    "sources":      "Sources",
-    "events":       "Event Stream",
-    "demodebug":    "DEMODEBUG",
-    "users":        "Users",
-    "tenants":      "Tenants",
-    "overviewDesc": "Service monitoring and events",
-    "daliDesc":     "SQL parsing and session management",
-    "adminDesc":    "Tenants, users, settings",
-    "docsDesc":     "Documentation and references",
-    "docs":         "DOCS",
-    "sessions":     "Sessions",
-    "jobrunr":      "JobRunr"
+    "services":         "Services",
+    "dashboard":        "Dashboard",
+    "dali":             "Ðali",
+    "sources":          "Sources",
+    "events":           "Event Stream",
+    "demodebug":        "DEMODEBUG",
+    "users":            "Users",
+    "tenants":          "Tenants",
+    "overviewDesc":     "Service monitoring and events",
+    "daliDesc":         "SQL parsing and session management",
+    "adminDesc":        "Tenants, users, settings",
+    "docsDesc":         "Documentation and references",
+    "docs":             "DOCS",
+    "sessions":         "Sessions",
+    "jobrunr":          "JobRunr",
+    "profile":          "Profile",
+    "preferences":      "Preferences",
+    "notifications":    "Notifications",
+    "sessionActivity":  "Session Activity",
+    "softDeletedUsers": "Soft-deleted users"
   },
   "auth": {
     "login":    "Sign in",
@@ -54,7 +59,20 @@
   "status": {
     "loading":      "Loading…",
     "error":        "Failed to load data",
-    "unauthorized": "Session expired. Please sign in again."
+    "unauthorized": "Session expired. Please sign in again.",
+    "saved":        "Saved",
+    "saving":       "Saving…",
+    "active":       "active",
+    "disabled":     "disabled"
+  },
+  "action": {
+    "refresh":   "Refresh",
+    "restore":   "Restore",
+    "legalHold": "Legal hold",
+    "edit":      "Edit",
+    "save":      "Save",
+    "cancel":    "Cancel",
+    "close":     "Close"
   },
   "ws": {
     "open":       "connected",
@@ -142,23 +160,24 @@
     "deleteConfirm":    "Delete this snapshot? This action cannot be undone."
   },
   "users": {
-    "title":          "Users",
-    "subtitle":       "Role, scope and quota management · Extended model over Keycloak",
-    "invite":         "Invite",
-    "edit":           "Edit",
-    "block":          "Block",
-    "unblock":        "Unblock",
-    "save":           "Save changes",
-    "cancel":         "Cancel",
-    "confirm":        "Confirm",
-    "total":          "Total users",
-    "active":         "Active",
-    "admins":         "Admin rights",
-    "sourceBindings": "Source bindings",
-    "filterRole":     "All roles",
-    "filterStatus":   "All statuses",
-    "filterSearch":   "Name or email…",
-    "clearFilters":   "Clear",
+    "title":            "Users",
+    "subtitle":         "Role, scope and quota management · Extended model over Keycloak",
+    "invite":           "Invite",
+    "edit":             "Edit",
+    "block":            "Block",
+    "unblock":          "Unblock",
+    "save":             "Save changes",
+    "cancel":           "Cancel",
+    "confirm":          "Confirm",
+    "total":            "Total users",
+    "active":           "Active",
+    "admins":           "Admin rights",
+    "sourceBindings":   "Source bindings",
+    "filterRole":       "All roles",
+    "filterStatus":     "All statuses",
+    "filterSearch":     "Name or email…",
+    "clearFilters":     "Clear",
+    "crossTenantMode":  "cross-tenant",
     "sections": {
       "profile":     "Profile",
       "role":        "Role",
@@ -167,6 +186,22 @@
       "sources":     "Sources",
       "activity":    "Activity",
       "prefs":       "Settings"
+    },
+    "drawer": {
+      "kcIdentity":    "KC Identity",
+      "status":        "status",
+      "roleScopes":    "Role & Scopes",
+      "role":          "role",
+      "tier":          "tier",
+      "profile":       "Profile",
+      "sourceBindings":"Source Bindings",
+      "allSources":    "Access to all sources (no restriction)",
+      "sourceCSV":     "source-id-1, source-id-2, …",
+      "lifecycle":     "Lifecycle",
+      "notSoftDeleted":"User is active — no soft-delete applied.",
+      "tabIdentity":   "Profile",
+      "tabBindings":   "Sources",
+      "tabLifecycle":  "Lifecycle"
     }
   },
   "daliWidget": {
@@ -188,9 +223,17 @@
     "fieldRole":     "Role",
     "fieldPlatform": "Platform",
     "themeHint":     "Theme preferences are saved locally and shared across all AIÐA apps.",
+    "desc":          "Your personal profile data.",
+    "firstName":     "First name",
+    "lastName":      "Last name",
+    "dept":          "Department",
+    "phone":         "Phone",
+    "avatarUrl":     "Avatar URL",
     "tabs": {
-      "profile":    "Profile",
-      "appearance": "Appearance"
+      "profile":       "Profile",
+      "preferences":   "Preferences",
+      "appearance":    "Appearance",
+      "notifications": "Notifications"
     },
     "appearance": {
       "theme":    "Theme",
@@ -414,12 +457,109 @@
     "alias":            "Alias",
     "status":           "Status",
     "configVersion":    "Config v",
+    "harvestCron":      "Harvest cron",
+    "membersCount":     "Users",
+    "membersCount.hint": "KC users in tenant organization",
+    "sourcesCount":     "Sources",
+    "sourcesCount.hint": "DaliSource count in dali_{alias}",
+    "atomsCount":       "Atoms",
+    "atomsCount.hint":  "Graph vertex count in hound_{alias}",
     "tenant":           "Tenant",
     "back":             "Tenants",
     "refresh":          "Refresh",
     "empty":            "No tenants found.",
     "details":          "Details →",
     "allStatuses":      "All statuses",
-    "searchPlaceholder":"Search by alias…"
+    "searchPlaceholder":"Search by alias…",
+    "search":           "Search by alias…",
+    "total":            "tenants",
+    "provision": {
+      "button":        "+ New Tenant",
+      "title":         "Create Tenant",
+      "aliasLabel":    "Alias (a-z, 0-9, hyphen)",
+      "aliasRequired": "Alias is required",
+      "confirm":       "Create"
+    },
+    "action": {
+      "suspend":        "Suspend",
+      "unsuspend":      "Restore",
+      "archive":        "Archive",
+      "archiveConfirm": "Archive this tenant?",
+      "restore":        "Restore",
+      "resume":         "Retry",
+      "forceCleanup":   "Purge all",
+      "forceCleanupConfirm": "Permanently delete all tenant data?"
+    },
+    "statusName": {
+      "ACTIVE":              "Active",
+      "SUSPENDED":           "Suspended",
+      "ARCHIVED":            "Archived",
+      "PROVISIONING":        "Provisioning",
+      "PROVISIONING_FAILED": "Provisioning failed",
+      "PURGED":              "Purged"
+    }
+  },
+  "tenantSelector": {
+    "label": "Tenant:",
+    "all":   "All tenants"
+  },
+  "softDelete": {
+    "confirmRestore": "Restore this user?",
+    "holdDaysPrompt": "Set legal-hold for N days:",
+    "expired":        "expired",
+    "daysLeft":       "{{n}}d left",
+    "desc":           "Users soft-deleted. After dataRetentionUntil they will be permanently purged unless legalHoldUntil is set.",
+    "empty":          "No soft-deleted users.",
+    "col": {
+      "deletedAt":  "Deleted at",
+      "by":         "By",
+      "reason":     "Reason",
+      "retention":  "Until purge",
+      "hold":       "Legal hold",
+      "actions":    "Actions"
+    }
+  },
+  "sessionActivity": {
+    "desc":  "Session events for the last 180 days.",
+    "empty": "No events found.",
+    "col": {
+      "ts":        "Time",
+      "eventType": "Event",
+      "tenant":    "Tenant",
+      "ip":        "IP",
+      "result":    "Result"
+    }
+  },
+  "preferences": {
+    "desc":      "Personal UI settings. Applied across all platform modules.",
+    "theme":     "Theme",
+    "themeOpts": { "light": "Light", "dark": "Dark", "auto": "System" },
+    "lang":      "Language",
+    "langOpts":  { "ru": "Русский", "en": "English" },
+    "tz":        "Timezone",
+    "dateFmt":   "Date format",
+    "startPage": "Start page",
+    "density":   "Density",
+    "densityOpts": { "comfortable": "Comfortable", "compact": "Compact" },
+    "fontSize":  "Font size",
+    "fontSizeOpts": { "sm": "Small", "md": "Medium", "lg": "Large" }
+  },
+  "notifications": {
+    "desc":    "Choose how you receive notifications from the platform.",
+    "email":   "Email",
+    "browser": "Browser",
+    "harvest": "Harvest events",
+    "errors":  "Errors",
+    "digest":  "Daily digest"
+  },
+  "me": {
+    "conflict": "Data was changed externally. Fresh version loaded. Re-apply your edits."
+  },
+  "consent": {
+    "title":   "Terms & Privacy",
+    "desc":    "Please review and accept the updated Terms of Service and Privacy Policy to continue.",
+    "tos":     "Terms of Service",
+    "privacy": "Privacy Policy",
+    "accept":  "Accept"
   }
 }

@@ -32,6 +32,31 @@ export const requireAdmin       = requireScope('aida:admin');
 export const requireDestructive = requireScope('aida:admin', 'aida:admin:destructive');
 
 /**
+ * Round 5 — requires at least ONE of the listed scopes (OR semantics).
+ * Use when an endpoint accepts multiple admin levels (e.g. tenant-admin
+ * OR platform-admin OR superadmin).
+ */
+export function requireAnyScope(...scopes: string[]) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const sessionScopes: string[] = request.user?.scopes ?? [];
+    const hasAny = scopes.some((s) => sessionScopes.includes(s));
+    if (!hasAny) {
+      console.warn(
+        `[RBAC] 403 — user=${request.user?.username ?? '?'} ` +
+        `role=${request.user?.role ?? '?'} ` +
+        `needed_any_of=${scopes.join(',')} ` +
+        `session_scopes=${sessionScopes.join(',') || '(empty)'}`,
+      );
+      return reply.status(403).send({
+        error:    'Forbidden',
+        requiredAnyOf: scopes,
+        message:  `Missing required scope — at least one of: ${scopes.join(', ')}`,
+      });
+    }
+  };
+}
+
+/**
  * CAP-10/15: Blocks cross-tenant access and enforces JWT ↔ header alias consistency.
  *
  * Phase 2 (multi-tenant): validates that the JWT organization.alias claim matches

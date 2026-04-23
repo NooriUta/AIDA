@@ -32,11 +32,11 @@ import { randomUUID } from 'node:crypto';
 
 // ── FRIGG helpers ─────────────────────────────────────────────────────────────
 
-const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://localhost:2481').replace(/\/$/, '');
+const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, '');
 const FRIGG_USER = process.env.FRIGG_USER  ?? 'root';
 const FRIGG_PASS = process.env.FRIGG_PASS  ?? 'playwithdata';
 const FRIGG_BASIC = Buffer.from(`${FRIGG_USER}:${FRIGG_PASS}`).toString('base64');
-const HEIMDALL_URL = (process.env.HEIMDALL_URL ?? 'http://localhost:9093').replace(/\/$/, '');
+const HEIMDALL_URL = (process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093').replace(/\/$/, '');
 
 async function friggSql(db: string, command: string, params?: Record<string, unknown>): Promise<unknown[]> {
   const res = await fetch(`${FRIGG_URL}/api/v1/command/${encodeURIComponent(db)}`, {
@@ -62,14 +62,75 @@ async function getTenantConfig(alias: string): Promise<Record<string, unknown> |
 
 export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
-  // ── GET /api/admin/tenants ──────────────────────────────────────────────────
-  app.get('/api/admin/tenants',
+  // ── GET /api/admin/tenants[?withStats=true] ─────────────────────────────────
+  // Base columns are cheap (single FRIGG query). withStats=true adds per-tenant
+  // counts (members from KC, atoms from YGG, sources from FRIGG dali_{alias}).
+  // Bounded concurrency of 5 keeps KC/YGG/FRIGG pressure flat even for many
+  // tenants. On per-tenant fetch failure the count is returned as `null`
+  // (FE shows "—") so one bad tenant never breaks the whole table.
+  app.get<{ Querystring: { withStats?: string } }>('/api/admin/tenants',
     { preHandler: [app.authenticate, requireScope('aida:admin'), adminRateLimit] },
-    async (_req, reply) => {
-      const rows = await friggSql('frigg-tenants',
-        `SELECT tenantAlias, status, configVersion FROM DaliTenantConfig`,
-      ).catch(() => [{ tenantAlias: 'default', status: 'ACTIVE', configVersion: 1 }]);
-      return reply.send(rows);
+    async (request, reply) => {
+      type Row = {
+        tenantAlias: string; status: string; configVersion: number;
+        keycloakOrgId?: string;
+        yggLineageDbName?: string; friggDaliDbName?: string;
+        harvestCron?: string;
+        lastFailedStep?: number; lastFailedCause?: string;
+      };
+      const rows = (await friggSql('frigg-tenants',
+        `SELECT tenantAlias, status, configVersion, keycloakOrgId,
+                yggLineageDbName, friggDaliDbName, harvestCron,
+                lastFailedStep, lastFailedCause
+         FROM DaliTenantConfig`,
+      ).catch(() => [{ tenantAlias: 'default', status: 'ACTIVE', configVersion: 1 }])) as Row[];
+
+      const withStats = request.query.withStats === 'true' || request.query.withStats === '1';
+      if (!withStats) return reply.send(rows);
+
+      const CONCURRENCY = 5;
+      const yggBasic = Buffer.from(`${process.env.YGG_USER ?? 'root'}:${process.env.YGG_PASS ?? 'playwithdata'}`).toString('base64');
+      const YGG_URL = (process.env.YGG_URL ?? 'http://127.0.0.1:2480').replace(/\/$/, '');
+
+      const countYgg = async (db: string): Promise<number | null> => {
+        try {
+          const res = await fetch(`${YGG_URL}/api/v1/query/${encodeURIComponent(db)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Basic ${yggBasic}` },
+            body: JSON.stringify({ language: 'sql', command: 'SELECT count(*) AS c FROM V' }),
+            signal: AbortSignal.timeout(5_000),
+          });
+          if (!res.ok) return null;
+          const data = (await res.json()) as { result?: Array<{ c?: number }> };
+          return Number(data.result?.[0]?.c ?? 0);
+        } catch { return null; }
+      };
+      const countFriggDali = async (db: string): Promise<number | null> => {
+        try {
+          const r = await friggSql(db, 'SELECT count(*) AS c FROM DaliSource');
+          return Number((r[0] as { c?: number } | undefined)?.c ?? 0);
+        } catch { return null; }
+      };
+      const countMembers = async (orgId?: string): Promise<number | null> => {
+        if (!orgId) return null;
+        try { return (await listOrgMembers(orgId)).length; }
+        catch { return null; }
+      };
+
+      const enriched: Array<Row & { atomsCount: number|null; sourcesCount: number|null; membersCount: number|null }> = [];
+      for (let i = 0; i < rows.length; i += CONCURRENCY) {
+        const slice = rows.slice(i, i + CONCURRENCY);
+        const part = await Promise.all(slice.map(async r => {
+          const [atomsCount, sourcesCount, membersCount] = await Promise.all([
+            r.yggLineageDbName ? countYgg(r.yggLineageDbName) : Promise.resolve(null),
+            r.friggDaliDbName  ? countFriggDali(r.friggDaliDbName) : Promise.resolve(null),
+            countMembers(r.keycloakOrgId),
+          ]);
+          return { ...r, atomsCount, sourcesCount, membersCount };
+        }));
+        enriched.push(...part);
+      }
+      return reply.send(enriched);
     },
   );
 
@@ -291,7 +352,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       // Adding new services later: append to targets list.
       const internalSecret = process.env.AIDA_INTERNAL_SHARED_SECRET ?? 'aida-internal-dev-secret';
       const targets = [
-        { name: 'shuttle',  url: process.env.SHUTTLE_URL  ?? 'http://localhost:8080' },
+        { name: 'shuttle',  url: process.env.SHUTTLE_URL  ?? 'http://127.0.0.1:8080' },
         // { name: 'dali',     url: process.env.DALI_URL     ?? 'http://localhost:9090' },
         // { name: 'anvil',    url: process.env.ANVIL_URL    ?? 'http://localhost:9095' },
       ];
@@ -397,6 +458,164 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       }
       emitTenantAudit('seer.audit.member_removed', request.user.username, alias, { userId });
       return reply.send({ ok: true });
+    },
+  );
+
+  // ── PUT /api/admin/tenants/:alias/feature-flags — MTN-12 ────────────────────
+  // body: { flags: Record<string,boolean>, expectedConfigVersion: number }
+  app.put<{
+    Params: { alias: string };
+    Body: { flags: Record<string, boolean>; expectedConfigVersion: number };
+  }>('/api/admin/tenants/:alias/feature-flags',
+    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard] },
+    async (request, reply) => {
+      const { alias }    = request.params;
+      const { flags, expectedConfigVersion } = request.body ?? {};
+      if (!flags || typeof flags !== 'object') {
+        return reply.status(400).send({ error: 'flags (Record<string,boolean>) required' });
+      }
+      const serialized = JSON.stringify(flags);
+      const r = await casUpdateTenant('frigg-tenants', alias, expectedConfigVersion, {
+        setClause: 'featureFlags = :flags',
+        params:    { flags: serialized },
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expectedConfigVersion, r.current));
+      emitTenantAudit('seer.audit.tenant_feature_flags_updated', request.user.username, alias, { flags });
+      return reply.send({ ok: true, configVersion: r.configVersion });
+    },
+  );
+
+  // ── GET /api/admin/tenants/:alias/feature-flags — MTN-12 ────────────────────
+  app.get<{ Params: { alias: string } }>(
+    '/api/admin/tenants/:alias/feature-flags',
+    { preHandler: [app.authenticate, requireScope('aida:admin')] },
+    async (request, reply) => {
+      const cfg = await getTenantConfig(request.params.alias).catch(() => null);
+      if (!cfg) return reply.status(404).send({ error: 'tenant_not_found' });
+      let flags: Record<string, boolean> = {};
+      if (typeof cfg.featureFlags === 'string') {
+        try { flags = JSON.parse(cfg.featureFlags as string) as Record<string, boolean>; }
+        catch { /* invalid JSON → empty */ }
+      }
+      return reply.send({ tenantAlias: request.params.alias, flags, configVersion: cfg.configVersion });
+    },
+  );
+
+  // ── PUT /api/admin/tenants/:alias/config — scheduling + quotas (superadmin) ─
+  // Editable fields: harvestCron, llmMode, dataRetentionDays, maxParseSessions,
+  // maxSources, maxConcurrentJobs. CAS via expectedConfigVersion.
+  app.put<{
+    Params: { alias: string };
+    Body: {
+      expectedConfigVersion: number;
+      harvestCron?:        string;
+      llmMode?:            'off' | 'local' | 'cloud';
+      dataRetentionDays?:  number;
+      maxParseSessions?:   number;
+      maxSources?:         number;
+      maxConcurrentJobs?:  number;
+    };
+  }>('/api/admin/tenants/:alias/config',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), csrfGuard, adminRateLimit] },
+    async (request, reply) => {
+      const { alias } = request.params;
+      const body = request.body ?? ({} as Record<string, unknown>);
+      const expectedConfigVersion = Number((body as { expectedConfigVersion?: unknown }).expectedConfigVersion);
+      if (!Number.isFinite(expectedConfigVersion) || expectedConfigVersion < 1) {
+        return reply.status(400).send({ error: 'expectedConfigVersion (positive integer) required' });
+      }
+
+      // Whitelist + per-field validation; build dynamic SET clause safely.
+      const sets: string[] = [];
+      const params: Record<string, unknown> = { ts: Date.now() };
+
+      if (typeof body.harvestCron === 'string') {
+        const c = body.harvestCron.trim();
+        if (c.split(/\s+/).length < 5 || c.length > 64) {
+          return reply.status(400).send({ error: 'invalid harvestCron' });
+        }
+        sets.push('harvestCron = :harvestCron'); params.harvestCron = c;
+      }
+      if (body.llmMode !== undefined) {
+        if (!['off', 'local', 'cloud'].includes(body.llmMode)) {
+          return reply.status(400).send({ error: 'llmMode must be off|local|cloud' });
+        }
+        sets.push('llmMode = :llmMode'); params.llmMode = body.llmMode;
+      }
+      const numField = (key: 'dataRetentionDays'|'maxParseSessions'|'maxSources'|'maxConcurrentJobs', min: number, max: number): string | null => {
+        const v = body[key];
+        if (v === undefined) return null;
+        if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
+          return `${key} must be integer in [${min},${max}]`;
+        }
+        sets.push(`${key} = :${key}`); params[key] = v;
+        return null;
+      };
+      for (const err of [
+        numField('dataRetentionDays', 1, 3650),
+        numField('maxParseSessions', 1, 1000),
+        numField('maxSources', 1, 1000),
+        numField('maxConcurrentJobs', 1, 100),
+      ]) if (err) return reply.status(400).send({ error: err });
+
+      if (sets.length === 0) {
+        return reply.status(400).send({ error: 'no editable fields in body' });
+      }
+      sets.push('updatedAt = :ts');
+
+      const r = await casUpdateTenant('frigg-tenants', alias, expectedConfigVersion, {
+        setClause: sets.join(', '),
+        params,
+      });
+      if (!r.ok) return reply.status(409).send(casConflictBody(alias, expectedConfigVersion, r.current));
+      emitTenantAudit('seer.audit.tenant_config_updated', request.user.username, alias,
+        Object.fromEntries(Object.entries(body).filter(([k]) => k !== 'expectedConfigVersion')));
+      return reply.send({ ok: true, configVersion: r.configVersion });
+    },
+  );
+
+  // ── POST /api/admin/tenants/:alias/role-change-signal — MTN-39 ─────────────
+  // Bumps lastRoleChangeAt on DaliTenantConfig. Sessions older than this
+  // timestamp are force-invalidated on their next token refresh.
+  app.post<{ Params: { alias: string } }>(
+    '/api/admin/tenants/:alias/role-change-signal',
+    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard] },
+    async (request, reply) => {
+      const { alias } = request.params;
+      const now = Date.now();
+      await friggSql('frigg-tenants',
+        `UPDATE DaliTenantConfig SET lastRoleChangeAt = :ts WHERE tenantAlias = :alias`,
+        { ts: now, alias },
+      );
+      emitTenantAudit('seer.audit.member_role_changed', request.user.username, alias, { lastRoleChangeAt: now });
+      return reply.send({ ok: true, lastRoleChangeAt: now });
+    },
+  );
+
+  // ── POST /api/admin/tenants/:alias/harvest — trigger Dali harvest ────────────
+  // Admin-only. Forwards to Dali's /api/sessions/harvest with tenant header.
+  const DALI_URL = (process.env.DALI_URL ?? 'http://127.0.0.1:9090').replace(/\/$/, '');
+
+  app.post<{ Params: { alias: string } }>(
+    '/api/admin/tenants/:alias/harvest',
+    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard, adminRateLimit] },
+    async (request, reply) => {
+      const { alias } = request.params;
+      try {
+        const res = await fetch(`${DALI_URL}/api/sessions/harvest`, {
+          method:  'POST',
+          headers: {
+            'X-Seer-Tenant-Alias': alias,
+            'X-Seer-Role':         request.user.role,
+          },
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body = await res.json().catch(() => ({}));
+        return reply.status(res.status).send(body);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return reply.status(503).send({ error: 'dali_unreachable', detail: msg });
+      }
     },
   );
 };

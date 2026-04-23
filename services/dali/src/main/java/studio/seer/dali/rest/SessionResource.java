@@ -13,6 +13,7 @@ import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.ParseSessionInput;
 import studio.seer.tenantrouting.TenantContext;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -90,8 +91,13 @@ public class SessionResource {
 
     @GET
     @Path("/archive")
-    public Response archive(@QueryParam("limit") @DefaultValue("200") int limit) {
-        return Response.ok(sessionRepository.findAll(tenantCtx.tenantAlias(), limit)).build();
+    public Response archive(
+            @QueryParam("limit") @DefaultValue("200") int limit,
+            @QueryParam("allTenants") @DefaultValue("false") boolean allTenants) {
+        List<studio.seer.shared.Session> sessions = (allTenants && tenantCtx.isSuperadmin())
+                ? sessionRepository.findAllTenants(limit)
+                : sessionRepository.findAll(tenantCtx.tenantAlias(), limit);
+        return Response.ok(sessions).build();
     }
 
     /**
@@ -120,20 +126,23 @@ public class SessionResource {
     }
 
     /**
-     * Trigger a full JDBC harvest via {@link HarvestJob}.
+     * Trigger a JDBC harvest for a specific tenant (used by Heimdall cron and admin UI).
+     * Tenant alias comes from the X-Seer-Tenant-Alias header set by Chur, defaulting to "default".
      */
     @POST
     @Path("/harvest")
     @Consumes(MediaType.WILDCARD)
-    public Response harvest() {
+    public Response harvest(
+            @HeaderParam("X-Seer-Tenant-Alias") @DefaultValue("default") String tenantAlias) {
         if (!jobScheduler.isResolvable()) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .entity("{\"error\":\"JobScheduler not available — Dali may still be starting\"}")
                     .build();
         }
+        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default";
         String harvestId = "harvest-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId));
-        return Response.accepted(Map.of("harvestId", harvestId, "status", "enqueued")).build();
+        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId, effectiveTenant));
+        return Response.accepted(Map.of("harvestId", harvestId, "tenantAlias", effectiveTenant, "status", "enqueued")).build();
     }
 
     @GET

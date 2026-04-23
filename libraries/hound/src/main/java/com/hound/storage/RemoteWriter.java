@@ -2024,8 +2024,9 @@ class RemoteWriter {
             } catch (Exception e) {
                 lastEx = e;
                 String msg = e.getMessage();
-                boolean isTimeout = msg != null && (msg.contains("Timeout") || msg.contains("locking"));
-                if (!isTimeout || attempt == RCMD_MAX_RETRIES) break;
+                boolean isRetryable = msg != null && (msg.contains("Timeout") || msg.contains("locking")
+                        || msg.contains("Concurrent modification") || msg.contains("ConcurrentModification"));
+                if (!isRetryable || attempt == RCMD_MAX_RETRIES) break;
                 long delay = RCMD_RETRY_BASE_MS * (1L << attempt);
                 logger.debug("Remote cmd timeout (attempt {}/{}), retrying in {}ms: {}",
                         attempt + 1, RCMD_MAX_RETRIES, delay,

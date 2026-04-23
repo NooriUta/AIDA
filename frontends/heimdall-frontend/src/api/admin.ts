@@ -1,11 +1,17 @@
 const BASE = '/chur/api/admin';
 
-export type TenantStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED' | 'PROVISIONING' | 'PURGED';
+export type TenantStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED' | 'PROVISIONING' | 'PROVISIONING_FAILED' | 'PURGED';
 
 export interface TenantSummary {
   tenantAlias: string;
   status: TenantStatus;
   configVersion: number;
+  lastFailedStep?: number;
+  lastFailedCause?: string;
+  harvestCron?: string;
+  membersCount?: number | null;
+  atomsCount?: number | null;
+  sourcesCount?: number | null;
 }
 
 export interface DaliTenantConfig extends TenantSummary {
@@ -23,6 +29,7 @@ export interface DaliTenantConfig extends TenantSummary {
   maxConcurrentJobs?: number;
   archiveS3Key?: string;
   archiveRetentionUntil?: number;
+  featureFlags?: Record<string, boolean>;  // MTN-12
   createdAt?: number;
   updatedAt?: number;
 }
@@ -38,18 +45,35 @@ export interface TenantMember {
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: window.location.origin,
+      ...(init?.headers ?? {}),
+    },
     ...init,
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({})) as { error?: string; message?: string; cause?: string };
+    throw new Error(body.message ?? body.cause ?? body.error ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
 
-export function listTenants(signal?: AbortSignal): Promise<TenantSummary[]> {
-  return adminFetch<TenantSummary[]>('/tenants', { signal });
+export function listTenants(signal?: AbortSignal, withStats = true): Promise<TenantSummary[]> {
+  const qs = withStats ? '?withStats=true' : '';
+  return adminFetch<TenantSummary[]>(`/tenants${qs}`, { signal });
+}
+
+export function provisionTenant(alias: string): Promise<{ ok: boolean; tenantAlias: string }> {
+  return adminFetch('/tenants', { method: 'POST', body: JSON.stringify({ alias }) });
+}
+
+export function forceCleanupTenant(alias: string): Promise<{ ok: boolean }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/force-cleanup`, { method: 'POST' });
+}
+
+export function resumeProvisioningTenant(alias: string): Promise<{ ok: boolean }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/resume-provisioning`, { method: 'POST' });
 }
 
 export function getTenant(alias: string, signal?: AbortSignal): Promise<DaliTenantConfig> {
@@ -94,4 +118,8 @@ export function removeMember(alias: string, userId: string): Promise<{ ok: boole
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/members/${userId}`, {
     method: 'DELETE',
   });
+}
+
+export function triggerHarvest(alias: string): Promise<{ harvestId: string; tenantAlias: string }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/harvest`, { method: 'POST' });
 }

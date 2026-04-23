@@ -18,7 +18,7 @@
  *   });
  */
 
-const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://localhost:2481').replace(/\/$/, '');
+const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, '');
 const FRIGG_USER = process.env.FRIGG_USER  ?? 'root';
 const FRIGG_PASS = process.env.FRIGG_PASS  ?? 'playwithdata';
 const FRIGG_BASIC = Buffer.from(`${FRIGG_USER}:${FRIGG_PASS}`).toString('base64');

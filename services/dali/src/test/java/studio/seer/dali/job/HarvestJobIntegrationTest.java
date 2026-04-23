@@ -36,12 +36,12 @@ class HarvestJobIntegrationTest {
     void harvestJob_is_injectable_and_runs_without_sources() {
         // With no dali.sources[*] configured in test profile, job should complete as no-op
         String harvestId = "test-" + UUID.randomUUID().toString().substring(0, 8);
-        assertDoesNotThrow(() -> harvestJob.execute(harvestId));
+        assertDoesNotThrow(() -> harvestJob.execute(harvestId, "default"));
     }
 
     @Test
     void harvestJob_handles_empty_harvestId_gracefully() {
         // harvestId is just a correlation string — any non-null value should work
-        assertDoesNotThrow(() -> harvestJob.execute("test-empty-sources"));
+        assertDoesNotThrow(() -> harvestJob.execute("test-empty-sources", "default"));
     }
 }

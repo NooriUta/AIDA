@@ -117,7 +117,7 @@ public class OrgDriftReconciler {
     // ── Data loading ──────────────────────────────────────────────────────────
 
     List<FriggRow> loadFriggRows() {
-        Uni<List<Map<String, Object>>> q = frigg.sql(
+        Uni<List<Map<String, Object>>> q = frigg.sqlTenants(
                 "SELECT tenantAlias, keycloakOrgId, status FROM DaliTenantConfig",
                 Map.of());
         List<Map<String, Object>> rows = q.await().atMost(Duration.ofSeconds(10));

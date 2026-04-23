@@ -37,7 +37,7 @@ export function TenantList({ tenants }: Props) {
             <td style={{ padding: '8px 12px', color: 'var(--color-muted)' }}>v{tenant.configVersion}</td>
             <td style={{ padding: '8px 12px', textAlign: 'right' }}>
               <button
-                className="btn-secondary"
+                className="btn btn-secondary"
                 onClick={e => { e.stopPropagation(); navigate(`/admin/tenants/${tenant.tenantAlias}`); }}
               >
                 {t('tenants.details', 'Details →')}

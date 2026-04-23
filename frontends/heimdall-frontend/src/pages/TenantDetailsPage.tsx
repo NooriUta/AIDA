@@ -25,11 +25,11 @@ export default function TenantDetailsPage() {
   return (
     <div style={{ padding: '24px', maxWidth: 720 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button className="btn-secondary" onClick={() => navigate('/admin/tenants')}>← {t('tenants.back', 'Tenants')}</button>
+        <button className="btn btn-secondary" onClick={() => navigate('/admin/tenants')}>← {t('tenants.back', 'Tenants')}</button>
         <h2 style={{ margin: 0, fontFamily: 'monospace' }}>{alias}</h2>
         {tenant && <TenantStatusBadge status={tenant.status} />}
         <div style={{ flex: 1 }} />
-        <button className="btn-secondary" onClick={refresh} disabled={loading}>
+        <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
           {t('tenants.refresh', 'Refresh')}
         </button>
       </div>

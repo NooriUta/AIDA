@@ -13,7 +13,7 @@ import {
   setUserAttributes,
 } from '../keycloakAdmin';
 
-const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://localhost:9093';
+const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
 
 /**
  * Admin routes — R4.2/R4.11 (Sprint 4).

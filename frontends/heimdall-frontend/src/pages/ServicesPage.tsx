@@ -1,325 +1,335 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useTranslation }    from 'react-i18next';
-import { usePageTitle }      from '../hooks/usePageTitle';
-import { useNavigate }       from 'react-router-dom';
-import { HEIMDALL_API }      from '../api';
-import { useAuthStore }      from '../stores/authStore';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate }    from 'react-router-dom';
+import { usePageTitle }   from '../hooks/usePageTitle';
+import { HEIMDALL_API }   from '../api';
+import { useAuthStore }   from '../stores/authStore';
 import { ServiceTopology } from '../components/ServiceTopology';
+import {
+  SERVICES, BY_ID,
+  LATENCY_GOOD_MAX, LATENCY_WARN_MAX,
+} from '../config/services';
+import { useDatabases, type ClusterHealth } from '../hooks/useDatabases';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface ServiceStatus {
+type Health = 'up' | 'deg' | 'down' | 'idle';
+
+interface RawService {
   name:      string;
   port:      number;
   mode:      'dev' | 'docker';
   status:    'up' | 'degraded' | 'down' | 'self';
   latencyMs: number;
+  /** Only populated when peer Quarkus service exposes /q/info/build. Currently only heimdall-backend returns its own version. */
+  version?:  string | null;
 }
 
-type ServiceGroup = {
-  name:      string;
-  instances: ServiceStatus[];
-};
-
-// ── Config ────────────────────────────────────────────────────────────────────
-const DISPLAY_NAMES: Record<string, string> = {
-  shuttle:           'Shuttle (GraphQL)',
-  'heimdall-backend':'Heimðallr (Monitor)',
-  'heimdall-frontend':'Heimðallr UI',
-  chur:              'Chur (BFF)',
-  verdandi:          'Seiðr Studio',
-  shell:             'Shell (Platform)',
-  keycloak:          'Keycloak (Auth)',
-  frigg:             'Frigg (Store)',
-  ygg:               'Yggðrasil (DB)',
-  dali:              'Ðali (Parser)',
-  mimir:             'Mímir (Memory)',
-  anvil:             'Anvil (Indexer)',
-};
-
-// Display order for grouped cards
-const SERVICE_ORDER = [
-  'shuttle', 'chur', 'heimdall-backend', 'verdandi',
-  'heimdall-frontend', 'shell', 'keycloak', 'frigg', 'ygg',
-  'dali', 'mimir', 'anvil',
-];
-
-// Frontend-only WIP stubs — not pinged by backend
-const WIP_SERVICES = ['mimir', 'anvil'];
-
-// Heimdall-backend must not be restartable from its own UI
-const NO_RESTART = new Set(['heimdall-backend']);
+interface Card {
+  id:         string;         // stable key for keyed rendering
+  name:       string;
+  meta:       string;         // short meta line (":3000", "graph · 312 MB")
+  health:     Health;
+  latency?:   string;         // "38 ms", "SUSPENDED", "—"
+  latencyMs?: number | null;  // raw number for threshold coloring
+  tenant?:    string;         // filters by activeTenantAlias when set
+  onOpen?:    () => void;     // click handler (drawer / navigate)
+}
 
 const POLL_MS = 10_000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function dotColor(status: ServiceStatus['status']): string {
-  switch (status) {
-    case 'up':       return 'var(--suc)';
-    case 'self':     return 'var(--suc)';
-    case 'degraded': return 'var(--wrn)';
-    case 'down':     return 'var(--danger)';
-    default:         return 'var(--t3)';
-  }
+function mapStatus(s: RawService['status']): Health {
+  if (s === 'up' || s === 'self') return 'up';
+  if (s === 'degraded')            return 'deg';
+  return 'down';
 }
 
-function statusBadgeClass(status: ServiceStatus['status']): string {
-  switch (status) {
-    case 'up':       return 'badge badge-suc';
-    case 'self':     return 'badge badge-suc';
-    case 'degraded': return 'badge badge-warn';
-    case 'down':     return 'badge badge-err';
-    default:         return 'badge';
-  }
+function healthColor(h: Health): string {
+  return h === 'up'   ? 'var(--suc)'
+       : h === 'deg'  ? 'var(--wrn)'
+       : h === 'down' ? 'var(--danger)'
+       :                'var(--t3)';
 }
 
-function groupAndSort(list: ServiceStatus[]): ServiceGroup[] {
-  const map = new Map<string, ServiceStatus[]>();
-  for (const svc of list) {
-    if (!map.has(svc.name)) map.set(svc.name, []);
-    map.get(svc.name)!.push(svc);
-  }
-  // Sort instances within group: dev first, then docker
-  for (const instances of map.values()) {
-    instances.sort((a, b) => (a.mode === 'dev' ? -1 : 1) - (b.mode === 'dev' ? -1 : 1));
-  }
-  return SERVICE_ORDER
-    .filter(n => map.has(n) || WIP_SERVICES.includes(n))
-    .map(n => ({ name: n, instances: map.get(n) ?? [] }));
+/** Latency tier color — kept aligned with alerting thresholds. */
+function latencyColor(ms: number | null): string {
+  if (ms == null)                return 'var(--t3)';
+  if (ms <= LATENCY_GOOD_MAX)    return 'var(--suc)';
+  if (ms <= LATENCY_WARN_MAX)    return 'var(--wrn)';
+  return 'var(--danger)';
 }
 
-function upCount(instances: ServiceStatus[]): number {
-  return instances.filter(s => s.status !== 'down').length;
+function healthWord(h: Health, t: (k: string) => string): string {
+  return h === 'up'  ? t('services.up')
+       : h === 'deg' ? t('services.degraded')
+       : h === 'down'? t('services.down')
+       :               'IDLE';
 }
 
-function isUp(status: ServiceStatus['status']): boolean {
-  return status === 'up' || status === 'self' || status === 'degraded';
+// ── Shared inline styles ──────────────────────────────────────────────────────
+const CARD_BASE: React.CSSProperties = {
+  position:      'relative',
+  padding:       '7px 10px 8px',
+  background:    'var(--bg1)',
+  border:        '1px solid var(--bd)',
+  borderLeftWidth: 3,
+  borderRadius:  'var(--seer-radius-sm, 4px)',
+  cursor:        'pointer',
+  display:       'flex',
+  flexDirection: 'column',
+  gap:           2,
+  minHeight:     58,
+};
+
+const GRID: React.CSSProperties = {
+  display:             'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+  gap:                 6,
+};
+
+function statusPillStyles(h: Health, latencyMs: number | null) {
+  const c = healthColor(h);
+  return {
+    word: {
+      padding:       '2px 6px',
+      borderRadius:  3,
+      fontSize:      9,
+      letterSpacing: '0.08em',
+      background:    `color-mix(in srgb, ${c} 18%, transparent)`,
+      color:         c,
+      fontFamily:    'var(--mono)',
+      fontWeight:    600,
+    } as React.CSSProperties,
+    lat: {
+      color:      latencyColor(h === 'up' || h === 'deg' ? latencyMs : null),
+      fontSize:   11,
+      fontWeight: 600,
+      fontFamily: 'var(--mono)',
+      marginLeft: 6,
+    } as React.CSSProperties,
+  };
 }
 
-// ── Docker icon ───────────────────────────────────────────────────────────────
-function DockerIcon({ size = 12 }: { size?: number }) {
+// ── Pieces ────────────────────────────────────────────────────────────────────
+function StatusPill({ health, text, latencyMs }: {
+  health:     Health;
+  text?:      string;
+  latencyMs?: number | null;
+}) {
+  const { t } = useTranslation();
+  const s = statusPillStyles(health, latencyMs ?? null);
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', marginTop: 'auto' }}>
+      <span style={s.word}>{healthWord(health, t)}</span>
+      <span style={s.lat}>{text ?? '—'}</span>
+    </span>
+  );
+}
+
+function DockerIcon({ size = 11 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#2496ED" aria-hidden="true" style={{ flexShrink: 0 }}>
       <path d="M13.983 11.078h2.119a.186.186 0 0 0 .186-.185V9.006a.186.186 0 0 0-.186-.186h-2.119a.185.185 0 0 0-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 0 0 .186-.186V3.574a.186.186 0 0 0-.186-.185h-2.118a.185.185 0 0 0-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 0 0 .186-.186V6.29a.186.186 0 0 0-.186-.185h-2.118a.185.185 0 0 0-.185.185v1.887c0 .102.082.186.185.186m-2.93 0h2.12a.186.186 0 0 0 .184-.186V6.29a.185.185 0 0 0-.185-.185H8.1a.185.185 0 0 0-.185.185v1.887c0 .102.083.186.185.186m-2.964 0h2.119a.186.186 0 0 0 .185-.186V6.29a.185.185 0 0 0-.185-.185H5.136a.186.186 0 0 0-.186.185v1.887c0 .102.084.186.186.186m5.893 2.715h2.118a.186.186 0 0 0 .186-.185V9.006a.186.186 0 0 0-.186-.186h-2.118a.185.185 0 0 0-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 0 0 .184-.185V9.006a.185.185 0 0 0-.184-.186h-2.12a.185.185 0 0 0-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 0 0 .185-.185V9.006a.185.185 0 0 0-.184-.186h-2.12a.186.186 0 0 0-.186.185v1.888c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 0 0 .184-.185V9.006a.185.185 0 0 0-.184-.186h-2.12a.185.185 0 0 0-.185.185v1.888c0 .102.083.185.185.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 0 0-.75.748 11.376 11.376 0 0 0 .692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 0 0 3.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z"/>
     </svg>
   );
 }
 
-// ── InstanceRow ───────────────────────────────────────────────────────────────
-function InstanceRow({ svc, isAdmin, onRefresh }: {
-  svc:       ServiceStatus;
-  isAdmin:   boolean;
-  onRefresh: () => void;
+function ServiceTile({ card, dashed = false, docker = false }: {
+  card:    Card;
+  dashed?: boolean;
+  docker?: boolean;
 }) {
-  const { t } = useTranslation();
-  const canRestart = isAdmin && svc.mode === 'docker' && !NO_RESTART.has(svc.name);
-  const [restarting, setRestarting] = useState(false);
-  const [msg,        setMsg]        = useState<string | null>(null);
+  const border = healthColor(card.health);
+  return (
+    <div
+      role="button"
+      onClick={card.onOpen}
+      style={{
+        ...CARD_BASE,
+        borderLeftColor: border,
+        borderStyle:     dashed ? 'dashed' : 'solid',
+        borderLeftStyle: 'solid',
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 10, right: 10,
+        width: 7, height: 7, borderRadius: '50%',
+        background: border,
+        boxShadow: card.health === 'up' || card.health === 'deg'
+          ? `0 0 0 3px color-mix(in srgb, ${border} 18%, transparent)`
+          : 'none',
+      }} />
+      <div style={{
+        fontWeight: 600, color: 'var(--t1)', fontSize: 13,
+        display: 'flex', alignItems: 'center', gap: 5,
+      }}>
+        {docker && <DockerIcon />}
+        <span>{card.name}</span>
+      </div>
+      <div style={{ color: 'var(--t3)', fontSize: 11, fontFamily: 'var(--mono)' }}>{card.meta}</div>
+      <StatusPill health={card.health} text={card.latency} latencyMs={card.latencyMs} />
+    </div>
+  );
+}
 
-  const handleRestart = useCallback(async () => {
-    setRestarting(true);
-    setMsg(null);
-    try {
-      const res = await fetch(`${HEIMDALL_API}/services/${svc.name}/restart?mode=docker`, {
-        method: 'POST', headers: { 'X-Seer-Role': 'admin' },
-      });
-      const ok = res.ok;
-      setMsg(ok ? t('services.restartOk') : t('services.restartFail'));
-      if (ok) setTimeout(onRefresh, 3000);
-    } catch {
-      setMsg(t('services.restartFail'));
-    } finally {
-      setRestarting(false);
-    }
-  }, [svc.name, onRefresh, t]);
+function formatBytes(b: number | null): string {
+  if (b == null) return '—';
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
 
-  const isDocker = svc.mode === 'docker';
-
+/** Live cluster tile — driven by chur `/heimdall/databases` (probeCluster). */
+function ClusterTile({ cluster }: { cluster: ClusterHealth }) {
+  const health: Health = cluster.health === 'up' ? 'up' : 'down';
+  const border = healthColor(health);
+  const m = cluster.metrics;
   return (
     <div style={{
-      background:   'var(--bg0)',
-      border:       '1px solid var(--bd)',
-      borderRadius: 'var(--seer-radius-sm)',
-      padding:      '6px 8px',
-      display:      'flex',
-      flexDirection:'column',
-      gap:          2,
+      ...CARD_BASE,
+      padding: '8px 10px 10px',
+      minHeight: 'unset',
+      borderLeftColor: border,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '11px' }}>
-        {/* Status dot — fixed width so dots align across rows */}
-        <div style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: dotColor(svc.status), flexShrink: 0,
-        }} />
-
-        {/* Mode label — fixed width 52px so ports start at the same column */}
-        <span style={{
-          width: 52, flexShrink: 0,
-          fontFamily: 'var(--mono)', fontSize: '9px', textTransform: 'uppercase',
-          color: isDocker ? '#2496ED' : 'var(--t3)',
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-        }}>
-          {isDocker && <DockerIcon size={9} />}
-          {isDocker ? 'Docker' : 'IDE'}
-        </span>
-
-        {/* Port — fixed width 52px */}
-        <span style={{
-          width: 52, flexShrink: 0,
-          fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: '11px',
-        }}>
-          :{svc.port}
-        </span>
-
-        {/* Latency — fixed width 44px, color-coded by speed */}
-        <span style={{
-          width: 44, flexShrink: 0,
-          fontFamily: 'var(--mono)', fontSize: '10px',
-          color: !isUp(svc.status)      ? 'transparent'
-               : svc.status === 'self'  ? 'var(--t3)'
-               : svc.latencyMs < 50    ? 'var(--suc)'
-               : svc.latencyMs < 200   ? 'var(--t2)'
-               : svc.latencyMs < 500   ? 'var(--wrn)'
-               :                         'var(--danger)',
-        }}>
-          {svc.status === 'self' ? 'self' : isUp(svc.status) ? `${svc.latencyMs}ms` : ''}
-        </span>
-
-        <span style={{ flex: 1 }} />
-
-        {/* Status badge */}
-        <span className={statusBadgeClass(svc.status)} style={{ fontSize: '9px', flexShrink: 0 }}>
-          {svc.status === 'self' ? 'SELF' : t(`services.${svc.status}`)}
-        </span>
-
-        {/* Restart — Docker + admin only, not protected services */}
-        {canRestart && (
-          <button
-            onClick={handleRestart}
-            disabled={restarting}
-            title={t('services.restart')}
-            style={{
-              width: 22, padding: '1px 0', textAlign: 'center',
-              background: 'none', border: '1px solid var(--bd)',
-              borderRadius: 'var(--seer-radius-sm)',
-              color: restarting ? 'var(--t3)' : 'var(--t2)',
-              fontSize: '10px', fontFamily: 'var(--mono)',
-              cursor: restarting ? 'default' : 'pointer', flexShrink: 0,
-            }}
-          >
-            {restarting ? '…' : '↺'}
-          </button>
+      <span style={{
+        position: 'absolute', top: 10, right: 10,
+        width: 7, height: 7, borderRadius: '50%',
+        background: border,
+        boxShadow: health === 'up'
+          ? `0 0 0 3px color-mix(in srgb, ${border} 18%, transparent)` : 'none',
+      }} />
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontWeight: 600, color: 'var(--t1)', fontSize: 13 }}>{cluster.id}</span>
+        <span style={{ color: 'var(--t3)', fontSize: 11, fontFamily: 'var(--mono)' }}>:{cluster.port}</span>
+        {cluster.version && (
+          <span
+            title={cluster.version}
+            style={{ color: 'var(--t3)', fontSize: 10, fontFamily: 'var(--mono)' }}>
+            v{cluster.version.split(' ')[0]}
+          </span>
         )}
+        <span style={{
+          fontSize: 10, color: latencyColor(cluster.latencyMs),
+          fontFamily: 'var(--mono)', marginLeft: 'auto', fontWeight: 600,
+        }}>{cluster.latencyMs != null ? `${cluster.latencyMs} ms` : '—'}</span>
       </div>
 
-      {/* Restart feedback */}
-      {msg && (
-        <span style={{
-          fontSize: '10px', fontFamily: 'var(--mono)', paddingLeft: '14px',
-          color: msg === t('services.restartOk') ? 'var(--suc)' : 'var(--danger)',
+      {/* Metrics row (profiler) */}
+      {m && (
+        <div style={{
+          marginTop: 6, display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)', gap: 6,
+          fontSize: 10, fontFamily: 'var(--mono)',
         }}>
-          {msg}
-        </span>
+          <MetricCell label="cache" value={m.cacheHitPct != null ? `${m.cacheHitPct}%` : '—'} />
+          <MetricCell label="q/min" value={m.queriesPerMin != null ? String(m.queriesPerMin) : '—'} />
+          <MetricCell label="wal"   value={formatBytes(m.walBytesWritten)} />
+          <MetricCell label="files" value={m.openFiles != null ? String(m.openFiles) : '—'} />
+        </div>
       )}
+
+      {/* Databases */}
+      <div style={{
+        marginTop: 6, borderTop: '1px solid var(--bd)', paddingTop: 6,
+        display: 'flex', flexDirection: 'column', gap: 3,
+      }}>
+        {cluster.dbs.length === 0 && (
+          <div style={{ color: 'var(--t3)', fontSize: 11, fontStyle: 'italic' }}>
+            {cluster.error ?? 'no databases'}
+          </div>
+        )}
+        {cluster.dbs.map(db => (
+          <div key={db} style={{
+            display: 'flex', alignItems: 'baseline', gap: 8,
+            fontSize: 11, fontFamily: 'var(--mono)',
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: healthColor(health),
+              display: 'inline-block', flexShrink: 0,
+            }} />
+            <span style={{ color: 'var(--t1)', fontWeight: 500 }}>{db}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-// ── ServiceCard ───────────────────────────────────────────────────────────────
-function ServiceCard({ group, isAdmin, onRefresh, onEventsClick }: {
-  group:         ServiceGroup;
-  isAdmin:       boolean;
-  onRefresh:     () => void;
-  onEventsClick: (name: string) => void;
-}) {
-  const { t }  = useTranslation();
-  const isWip  = WIP_SERVICES.includes(group.name);
-  const total  = group.instances.length;
-  const up     = upCount(group.instances);
-
+function MetricCell({ label, value }: { label: string; value: string }) {
   return (
     <div style={{
-      background:    'var(--bg1)',
-      border:        `1px solid ${!isWip && up === 0 && total > 0 ? 'color-mix(in srgb, var(--danger) 35%, var(--bd))' : 'var(--bd)'}`,
-      borderRadius:  'var(--seer-radius-md)',
-      padding:       'var(--seer-space-4)',
-      display:       'flex',
-      flexDirection: 'column',
-      gap:           'var(--seer-space-3)',
-      opacity:       isWip ? 0.65 : 1,
+      background: 'var(--bg2)', padding: '3px 5px',
+      borderRadius: 3, textAlign: 'center',
     }}>
-
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-2)' }}>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>
-            {DISPLAY_NAMES[group.name] ?? group.name}
-          </span>
-        </div>
-
-        {isWip ? (
-          <span className="badge badge-neutral" style={{ fontSize: '9px' }}>
-            {t('services.underConstruction')}
-          </span>
-        ) : total > 0 ? (
-          <span style={{
-            fontSize: '10px', fontFamily: 'var(--mono)',
-            color: up === total ? 'var(--suc)' : up > 0 ? 'var(--wrn)' : 'var(--danger)',
-          }}>
-            {up}/{total}
-          </span>
-        ) : null}
-      </div>
-
-      {/* ── Instance rows ── */}
-      {!isWip && group.instances.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--seer-space-2)' }}>
-          {group.instances.map(svc => (
-            <InstanceRow
-              key={`${svc.mode}-${svc.port}`}
-              svc={svc}
-              isAdmin={isAdmin}
-              onRefresh={onRefresh}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ── Events link ── */}
-      {!isWip && (
-        <button
-          onClick={() => onEventsClick(group.name)}
-          style={{
-            padding: '2px 0', background: 'none', border: 'none',
-            color: 'var(--inf)', fontSize: '11px', fontFamily: 'var(--font)',
-            cursor: 'pointer', textAlign: 'left',
-          }}
-        >
-          {t('services.viewEvents')} →
-        </button>
-      )}
+      <div style={{ color: 'var(--t3)', fontSize: 9, letterSpacing: '0.06em' }}>{label}</div>
+      <div style={{ color: 'var(--t1)', fontWeight: 600 }}>{value}</div>
     </div>
   );
 }
 
-// ── ServicesPage ──────────────────────────────────────────────────────────────
+function SectionHeader({ title, count, collapsed, onToggle }: {
+  title:     string;
+  count?:    string;
+  collapsed: boolean;
+  onToggle:  () => void;
+}) {
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+        userSelect: 'none', marginBottom: 10,
+      }}
+    >
+      <span style={{
+        color: 'var(--t3)', fontSize: 10,
+        transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .12s',
+      }}>▼</span>
+      <span style={{
+        fontSize: 12, fontWeight: 600, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: 'var(--t2)',
+      }}>{title}</span>
+      {count && <span style={{ color: 'var(--t3)', fontSize: 11 }}>{count}</span>}
+    </div>
+  );
+}
+
+// ── Env flag — Dev tools visible only in vite dev build + super-admin ─────────
+function useDevVisible(): boolean {
+  const role = useAuthStore(s => s.user?.role);
+  return import.meta.env.DEV && role === 'super-admin';
+}
+
+// ── ArcadeDB clusters ────────────────────────────────────────────────────────
+// Two ArcadeDB instances, probed live by chur `GET /heimdall/databases`:
+//   · frigg :2481 — profiles + tenant-config + jobrunr scheduler state
+//   · ygg   :2480 — per-tenant `ygg-<alias>` lineage graphs
+// Each cluster renders as a single card with version, profiler metrics,
+// and the real list of databases inside.
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function ServicesPage() {
-  const { t }   = useTranslation();
+  const { t }    = useTranslation();
   usePageTitle(t('nav.services'));
   const navigate = useNavigate();
   const user     = useAuthStore(s => s.user);
-  const isAdmin  = user?.role === 'admin';
+  const isSuper  = user?.role === 'super-admin';
+  const devVisible = useDevVisible();
 
-  const [services, setServices] = useState<ServiceStatus[] | null>(null);
-  const [error,    setError]    = useState<string | null>(null);
+  // ── Health polling (platform + workers + integrations come from one API) ──
+  const [raw, setRaw]     = useState<RawService[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchHealth = useCallback(() => {
     fetch(`${HEIMDALL_API}/services/health`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<ServiceStatus[]>;
+        return r.json() as Promise<RawService[]>;
       })
-      .then(data => { setServices(data); setError(null); })
-      .catch(e  => { setError(e instanceof Error ? e.message : 'error'); });
+      .then(data => { setRaw(data); setError(null); })
+      .catch(e => setError(e instanceof Error ? e.message : 'error'));
   }, []);
 
   useEffect(() => {
@@ -328,50 +338,401 @@ export default function ServicesPage() {
     return () => clearInterval(id);
   }, [fetchHealth]);
 
-  const groups = groupAndSort(services ?? []);
+  // ── Tenant filter ─────────────────────────────────────────────────────────
+  const [tenant, setTenant] = useState<string>(user?.activeTenantAlias ?? 'default');
+  const [showAll, setShowAll] = useState(isSuper);
+
+  // ── Section collapse (Dev collapsed by default) ───────────────────────────
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ dev: true });
+  const toggle = (k: string) => setCollapsed(s => ({ ...s, [k]: !s[k] }));
+
+  // ── Detail drawer — click on any service card opens this ──────────────────
+  const [selected, setSelected] = useState<RawService | null>(null);
+
+  // ── Bucket API services into sections ─────────────────────────────────────
+  // Platform/Workers/Integrations show ONLY docker-mode entries; dev-mode
+  // entries are surfaced exclusively under "Dev mode services" to avoid
+  // double-listing (e.g. chur:3000 dev + chur:13000 docker).
+  //
+  // Sort each bucket by service id so card order stays stable between polls
+  // (backend returns entries in probe-completion order — non-deterministic).
+  // Split by topology layer: Front = L0..L2 (edge + browser-facing UIs),
+  //                         Middleware = L3..L5 (BFF, backend services, auth).
+  const { front, middleware, workers, integrations } = useMemo(() => {
+    const out = {
+      front:        [] as Card[],
+      middleware:   [] as Card[],
+      workers:      [] as Card[],
+      integrations: [] as Card[],
+    };
+    for (const svc of raw ?? []) {
+      if (svc.mode === 'dev') continue;
+      const spec = BY_ID[svc.name];
+      const base: Card = {
+        id:        `${svc.name}-${svc.mode}-${svc.port}`,
+        name:      spec?.label ?? svc.name,
+        meta:      `:${svc.port}`,
+        health:    mapStatus(svc.status),
+        latency:   svc.status === 'self' ? '—' : `${svc.latencyMs} ms`,
+        latencyMs: svc.status === 'self' ? null : svc.latencyMs,
+        onOpen:    () => setSelected(svc),
+      };
+      const cat   = spec?.category;
+      const layer = spec?.layer ?? 99;
+      if (cat === 'platform') {
+        if (layer <= 2) out.front.push(base);
+        else            out.middleware.push(base);
+      }
+      else if (cat === 'worker')      out.workers.push(base);
+      else if (cat === 'integration') out.integrations.push(base);
+    }
+    const byName = (a: Card, b: Card) => a.name.localeCompare(b.name);
+    out.front.sort(byName);
+    out.middleware.sort(byName);
+    out.workers.sort(byName);
+    out.integrations.sort(byName);
+    return out;
+  }, [raw, navigate]);
+
+  // ArcadeDB clusters — live via chur /heimdall/databases
+  const { clusters: liveClusters, error: dbError } = useDatabases();
+  const clusters = liveClusters ?? [];
+  const totalDbs = clusters.reduce((n, c) => n + c.dbs.length, 0);
+
+  const filteredWorkers = showAll
+    ? workers
+    : workers; // chur /services/health has no tenant dim yet — TODO: per-tenant workers
+  const filteredIntegrations = integrations;
 
   return (
-    <div style={{ padding: 'var(--seer-space-6)', height: '100%', overflowY: 'auto', background: 'var(--bg0)' }}>
+    <div style={{
+      padding: 'var(--seer-space-6, 18px)',
+      height: '100%', overflowY: 'auto', background: 'var(--bg0)',
+    }}>
 
-      {/* Title row */}
+      {/* ── Top bar: tenant pills + error ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 'var(--seer-space-4)',
+        display: 'flex', alignItems: 'center', gap: 12,
+        marginBottom: 16, flexWrap: 'wrap',
       }}>
-        <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {t('services.title')}
+        <TenantPills
+          current={showAll ? '__all__' : tenant}
+          onPick={(v) => { if (v === '__all__') setShowAll(true); else { setShowAll(false); setTenant(v); } }}
+          allowAll={isSuper}
+        />
+        <span style={{ color: 'var(--t3)', fontSize: 11 }}>
+          {showAll ? 'ALL TENANTS scope · Platform always global' : `scoped to ${tenant}`}
         </span>
+        <span style={{ flex: 1 }} />
         {error && (
-          <span style={{ color: 'var(--danger)', fontSize: '11px', fontFamily: 'var(--mono)' }}>
+          <span style={{ color: 'var(--danger)', fontSize: 11, fontFamily: 'var(--mono)' }}>
             {error}
           </span>
         )}
+        <button
+          onClick={fetchHealth}
+          style={{
+            background: 'var(--bg2)', border: '1px solid var(--bd)',
+            borderRadius: 'var(--seer-radius-sm, 4px)', color: 'var(--t2)',
+            fontSize: 11, padding: '4px 10px', cursor: 'pointer',
+          }}
+        >
+          ↺ {t('services.refresh', 'Refresh')}
+        </button>
       </div>
 
-      {/* Loading */}
-      {services === null && !error && (
-        <div style={{ color: 'var(--t3)', fontSize: '13px' }}>{t('status.loading')}</div>
+      {/* ── Dev mode — our own services running locally (pnpm dev / quarkus dev)
+           rather than in Docker. Hidden entirely in Docker-only stacks. ── */}
+      {devVisible && (raw ?? []).some(r => r.mode === 'dev') && (
+        <section style={{
+          marginBottom: 22, paddingBottom: 12,
+          borderBottom: '1px dashed var(--bd)',
+        }}>
+          <SectionHeader
+            title="Dev mode services"
+            count="local pnpm/quarkus dev"
+            collapsed={collapsed.dev}
+            onToggle={() => toggle('dev')}
+          />
+          {!collapsed.dev && <DevGrid raw={raw ?? []} onPick={setSelected} />}
+        </section>
       )}
 
-      {/* Grid */}
-      <div style={{
-        display:             'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap:                 'var(--seer-space-4)',
-      }}>
-        {groups.map(group => (
-          <ServiceCard
-            key={group.name}
-            group={group}
-            isAdmin={isAdmin}
-            onRefresh={fetchHealth}
-            onEventsClick={name => navigate(`../events?comp=${name}`)}
-          />
-        ))}
-      </div>
+      {/* ── Front (edge + UIs: L0..L2) ── */}
+      <section style={{ marginBottom: 22 }}>
+        <SectionHeader
+          title="Front"
+          count={`${front.length} · edge + UIs`}
+          collapsed={!!collapsed.front}
+          onToggle={() => toggle('front')}
+        />
+        {!collapsed.front && (raw == null
+          ? <div style={{ color: 'var(--t3)', fontSize: 13 }}>{t('services.loading')}</div>
+          : <div style={GRID}>{front.map(c => <ServiceTile key={c.id} card={c} docker />)}</div>
+        )}
+      </section>
 
-      {/* Topology diagram — passes live health data so nodes are coloured by state */}
-      <ServiceTopology serviceStatuses={services ?? []} />
+      {/* ── Middleware (BFF + backend services + auth: L3..L5) ── */}
+      <section style={{ marginBottom: 22 }}>
+        <SectionHeader
+          title="Middleware"
+          count={`${middleware.length} · BFF + services`}
+          collapsed={!!collapsed.middleware}
+          onToggle={() => toggle('middleware')}
+        />
+        {!collapsed.middleware && (raw == null
+          ? <div style={{ color: 'var(--t3)', fontSize: 13 }}>{t('services.loading')}</div>
+          : <div style={GRID}>{middleware.map(c => <ServiceTile key={c.id} card={c} docker />)}</div>
+        )}
+      </section>
+
+      {/* ── Tenant workers (before DBs per user preference) ── */}
+      {filteredWorkers.length > 0 && (
+        <section style={{ marginBottom: 22 }}>
+          <SectionHeader
+            title="Tenant workers"
+            count={`${filteredWorkers.length} workers`}
+            collapsed={!!collapsed.workers}
+            onToggle={() => toggle('workers')}
+          />
+          {!collapsed.workers && (
+            <div style={GRID}>
+              {filteredWorkers.map(c => <ServiceTile key={c.id} card={c} docker />)}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── ArcadeDB clusters — each card shows its databases inside ── */}
+      <section style={{ marginBottom: 22 }}>
+        <SectionHeader
+          title="ArcadeDB clusters"
+          count={liveClusters == null
+            ? 'loading…'
+            : `${clusters.length} clusters · ${totalDbs} databases`}
+          collapsed={!!collapsed.db}
+          onToggle={() => toggle('db')}
+        />
+        {!collapsed.db && (
+          liveClusters == null
+            ? <div style={{ color: 'var(--t3)', fontSize: 13 }}>{t('services.loading')}</div>
+            : <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                gap: 8,
+              }}>
+                {clusters.map(c => <ClusterTile key={c.id} cluster={c} />)}
+                {dbError && (
+                  <div style={{ color: 'var(--danger)', fontSize: 11, fontFamily: 'var(--mono)' }}>
+                    {dbError}
+                  </div>
+                )}
+              </div>
+        )}
+      </section>
+
+      {/* ── Integrations ── */}
+      {filteredIntegrations.length > 0 && (
+        <section style={{ marginBottom: 22 }}>
+          <SectionHeader
+            title="Integrations"
+            count={`${filteredIntegrations.length} external`}
+            collapsed={!!collapsed.integrations}
+            onToggle={() => toggle('integrations')}
+          />
+          {!collapsed.integrations && (
+            <div style={GRID}>
+              {filteredIntegrations.map(c => <ServiceTile key={c.id} card={c} />)}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── Topology (existing) — L1…L5 service map; dev entries excluded ── */}
+      <ServiceTopology serviceStatuses={(raw ?? []).filter(r => r.mode !== 'dev')} />
+
+      {selected && <ServiceDetailDrawer svc={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
+}
+
+// ── Service detail drawer — slides in from the left with extra info ──────────
+function ServiceDetailDrawer({ svc, onClose }: {
+  svc:     RawService;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const spec     = BY_ID[svc.name];
+  const health   = mapStatus(svc.status);
+  const url      = svc.mode === 'dev' ? spec?.devUrl : spec?.dockerUrl;
+  const border   = healthColor(health);
+  const { t }    = useTranslation();
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+          zIndex: 90,
+        }}
+      />
+      <aside style={{
+        position:   'fixed', top: 0, right: 0, bottom: 0, width: 400,
+        background: 'var(--bg1)', borderLeft: '1px solid var(--bd)',
+        zIndex:     91, display: 'flex', flexDirection: 'column',
+        boxShadow:  '-2px 0 16px rgba(0,0,0,0.35)',
+      }}>
+        <header style={{
+          padding: '14px 16px', borderBottom: '1px solid var(--bd)',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{
+            width: 10, height: 10, borderRadius: '50%', background: border,
+            boxShadow: health === 'up' || health === 'deg'
+              ? `0 0 0 3px color-mix(in srgb, ${border} 18%, transparent)` : 'none',
+          }} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)' }}>
+            {spec?.label ?? svc.name}
+          </span>
+          <span style={{
+            fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--t3)',
+            background: 'var(--bg2)', padding: '2px 6px', borderRadius: 3,
+          }}>{svc.mode}</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', color: 'var(--t2)',
+            cursor: 'pointer', fontSize: 18, lineHeight: 1,
+          }}>×</button>
+        </header>
+
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
+          <DetailRow label="Status" value={healthWord(health, t)} valueStyle={{ color: border, fontWeight: 600 }} />
+          <DetailRow label="Latency"
+                     value={svc.status === 'self' ? '—' : `${svc.latencyMs} ms`}
+                     valueStyle={{ color: latencyColor(svc.status === 'self' ? null : svc.latencyMs), fontWeight: 600 }} />
+          <DetailRow label="Port (active)" value={`:${svc.port}`} mono />
+          {spec?.portDev && <DetailRow label="Dev port"    value={`:${spec.portDev}`}    mono />}
+          {spec?.portDocker && <DetailRow label="Docker port" value={`:${spec.portDocker}`} mono />}
+          <DetailRow label="Category" value={spec?.category ?? 'unknown'} />
+          {svc.version && <DetailRow label="Build" value={`v${svc.version}`} mono />}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            {url && (
+              <a href={url} target="_blank" rel="noopener noreferrer" style={ACTION_BTN}>
+                Open UI ↗
+              </a>
+            )}
+            <button
+              onClick={() => { navigate(`../events?comp=${svc.name}`); onClose(); }}
+              style={ACTION_BTN}
+            >
+              View events
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function DetailRow({ label, value, valueStyle, mono }: {
+  label:       string;
+  value:       string;
+  valueStyle?: React.CSSProperties;
+  mono?:       boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+      <span style={{ color: 'var(--t3)', fontSize: 11, width: 110, flexShrink: 0 }}>{label}</span>
+      <span style={{
+        color: 'var(--t1)', fontSize: 13,
+        fontFamily: mono ? 'var(--mono)' : 'inherit',
+        ...(valueStyle ?? {}),
+      }}>{value}</span>
+    </div>
+  );
+}
+
+const ACTION_BTN: React.CSSProperties = {
+  padding: '6px 12px',
+  background: 'var(--bg2)',
+  border: '1px solid var(--bd)',
+  borderRadius: 'var(--seer-radius-sm, 4px)',
+  color: 'var(--t1)',
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: 'pointer',
+  textDecoration: 'none',
+};
+
+// ── Tenant pills ──────────────────────────────────────────────────────────────
+const DEMO_TENANTS = ['default', 'acme', 'beta-corp']; // TODO: fetch from /api/admin/tenants
+
+function TenantPills({ current, onPick, allowAll }: {
+  current:  string;
+  onPick:   (v: string) => void;
+  allowAll: boolean;
+}) {
+  const btn = (val: string, label: string, accent = false): React.ReactElement => {
+    const active = current === val;
+    const color = accent ? 'var(--wrn)' : 'var(--inf)';
+    return (
+      <button
+        key={val}
+        onClick={() => onPick(val)}
+        style={{
+          background:   active ? `color-mix(in srgb, ${color} 18%, transparent)` : 'transparent',
+          color:        active ? color : 'var(--t2)',
+          border:       'none',
+          borderRight:  '1px solid var(--bd)',
+          padding:      '6px 11px',
+          fontSize:     11, fontWeight: 500, letterSpacing: '0.03em',
+          cursor:       'pointer',
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <span style={{
+      display: 'inline-flex', background: 'var(--bg2)',
+      border: '1px solid var(--bd)', borderRadius: 'var(--seer-radius-sm, 6px)',
+      overflow: 'hidden',
+    }}>
+      {allowAll && btn('__all__', 'All tenants', true)}
+      {DEMO_TENANTS.map(ten => btn(ten, ten))}
+    </span>
+  );
+}
+
+// ── Dev grid — our own services currently running in dev mode (pnpm dev /
+// quarkus dev) rather than Docker. One tile per service from SERVICES.
+// Hidden entirely when no service is in dev mode (full-Docker stack).
+function DevGrid({ raw, onPick }: { raw: RawService[]; onPick: (svc: RawService) => void }) {
+  const devServices = SERVICES
+    .filter(s => s.category !== 'integration' && s.portDev)
+    .slice()
+    .sort((a, b) => a.label.localeCompare(b.label));
+  return (
+    <div style={{ ...GRID, opacity: 0.9 }}>
+      {devServices.map(spec => {
+        const match = raw.find(r => r.name === spec.id && r.mode === 'dev');
+        const health: Health = match ? mapStatus(match.status) : 'idle';
+        const latency =
+          match ? (match.status === 'self' ? '—' : `${match.latencyMs} ms`) : 'not running';
+        const card: Card = {
+          id:        `dev:${spec.id}`,
+          name:      spec.label,
+          meta:      `:${spec.portDev}`,
+          health,
+          latency,
+          latencyMs: match?.latencyMs ?? null,
+          onOpen:    match ? () => onPick(match) : undefined,
+        };
+        return <ServiceTile key={card.id} card={card} dashed />;
+      })}
     </div>
   );
 }

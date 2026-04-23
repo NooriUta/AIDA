@@ -5,6 +5,7 @@ import css from './dali.module.css';
 
 interface ParseFormProps {
   onSessionCreated: (session: DaliSession) => void;
+  tenantAlias?: string;
 }
 
 const DIALECTS: { value: DaliDialect; label: string }[] = [
@@ -15,7 +16,7 @@ const DIALECTS: { value: DaliDialect; label: string }[] = [
 
 type Mode = 'path' | 'upload';
 
-export function ParseForm({ onSessionCreated }: ParseFormProps) {
+export function ParseForm({ onSessionCreated, tenantAlias }: ParseFormProps) {
   const { t } = useTranslation();
   const [mode,             setMode]             = useState<Mode>('path');
   const [dialect,          setDialect]          = useState<DaliDialect>('plsql');
@@ -44,13 +45,13 @@ export function ParseForm({ onSessionCreated }: ParseFormProps) {
       const resolvedDbName = dbName.trim() || undefined;
       if (mode === 'upload') {
         if (!file) { setError(t('dali.form.errSelectFile')); return; }
-        session = await uploadAndParse(file, dialect, preview, clearBeforeWrite, resolvedDbName);
+        session = await uploadAndParse(file, dialect, preview, clearBeforeWrite, resolvedDbName, undefined, tenantAlias);
         setFile(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
       } else {
         const src = source.trim().replace(/[\t\r\n\u00a0\ufeff]+/g, '');
         if (!src) { setError(t('dali.form.errSourceRequired')); return; }
-        session = await postSession({ dialect, source: src, preview, clearBeforeWrite, dbName: resolvedDbName });
+        session = await postSession({ dialect, source: src, preview, clearBeforeWrite, dbName: resolvedDbName }, tenantAlias);
         setSource('');
       }
       onSessionCreated(session);
