@@ -99,7 +99,7 @@ export default function EventStreamPage() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--seer-space-4) var(--seer-space-6)', gap: 'var(--seer-space-3)' }}>
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-3)', flexShrink: 0, flexWrap: 'wrap' }}>
+      <div className="event-filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-3)', flexShrink: 0, flexWrap: 'wrap' }}>
         <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {t('eventStream.filter')}
         </span>
@@ -162,7 +162,7 @@ export default function EventStreamPage() {
       </div>
 
       {/* Stats bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-4)', fontSize: '12px', fontFamily: 'var(--mono)', flexShrink: 0, color: 'var(--t3)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-4)', fontSize: '12px', fontFamily: 'var(--mono)', flexShrink: 0, color: 'var(--t3)', flexWrap: 'wrap' }}>
         <span>{displayedEvents.length} {t('eventStream.events')}</span>
         <span>·</span>
         <span>{eventsPerSec}/sec</span>

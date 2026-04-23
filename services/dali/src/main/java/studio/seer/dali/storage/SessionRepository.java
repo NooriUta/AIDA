@@ -10,7 +10,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.shared.Session;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,24 +39,19 @@ public class SessionRepository {
     @Inject FriggGateway frigg;
 
     /**
-     * Upserts a session into FRIGG.
+     * Upserts a session into the tenant-specific FRIGG database (dali_{alias}).
      * Uses DELETE + INSERT to avoid partial-update complexity with ArcadeDB.
      *
      * <p>Key performance stats are stored as top-level indexed properties alongside the
-     * full {@code sessionJson} blob so they are directly queryable from ArcadeDB SQL:
-     * <pre>
-     *   SELECT id, dialect, status, durationMs, atomCount, resolutionRate
-     *   FROM dali_sessions WHERE status = 'COMPLETED' ORDER BY durationMs DESC
-     * </pre>
+     * full {@code sessionJson} blob so they are directly queryable from ArcadeDB SQL.
      */
     public void save(Session session) {
+        String dbName = frigg.tenantDb(session.tenantAlias());
         try {
             String json = MAPPER.writeValueAsString(session);
-            // Delete existing record (idempotent)
-            frigg.sql("DELETE FROM dali_sessions WHERE id = :id",
+            frigg.sqlIn(dbName, "DELETE FROM dali_sessions WHERE id = :id",
                     Map.of("id", session.id()));
 
-            // Build params with nulls allowed (Map.of() forbids null values)
             boolean terminal = isTerminal(session.status());
             Map<String, Object> params = new LinkedHashMap<>();
             params.put("id",              session.id());
@@ -71,7 +68,7 @@ public class SessionRepository {
             params.put("resolutionRate",  session.resolutionRate());
             params.put("json",            json);
 
-            frigg.sql(
+            frigg.sqlIn(dbName,
                 "INSERT INTO dali_sessions SET " +
                 "id = :id, startedAt = :startedAt, finishedAt = :finishedAt, " +
                 "status = :status, dialect = :dialect, instanceId = :instanceId, " +
@@ -83,7 +80,7 @@ public class SessionRepository {
         } catch (JsonProcessingException e) {
             log.error("[SessionRepository] Failed to serialise session {}: {}", session.id(), e.getMessage());
         } catch (Exception e) {
-            log.warn("[SessionRepository] Failed to save session {}: {}", session.id(), e.getMessage());
+            log.warn("[SessionRepository] Failed to save session {} in {}: {}", session.id(), dbName, e.getMessage());
         }
     }
 
@@ -94,11 +91,12 @@ public class SessionRepository {
     }
 
     /**
-     * Returns all sessions from FRIGG, newest first (by startedAt).
+     * Returns all sessions for a tenant from FRIGG, newest first (by startedAt).
      */
-    public List<Session> findAll(int limit) {
+    public List<Session> findAll(String tenantAlias, int limit) {
+        String dbName = frigg.tenantDb(tenantAlias);
         try {
-            List<Map<String, Object>> rows = frigg.sql(
+            List<Map<String, Object>> rows = frigg.sqlIn(dbName,
                     "SELECT sessionJson FROM dali_sessions ORDER BY startedAt DESC LIMIT " + limit);
             if (rows == null) return Collections.emptyList();
             return rows.stream()
@@ -109,17 +107,52 @@ public class SessionRepository {
                     .map(Optional::get)
                     .toList();
         } catch (Exception e) {
-            log.warn("[SessionRepository] findAll failed: {}", e.getMessage());
+            log.warn("[SessionRepository] findAll({}) failed: {}", tenantAlias, e.getMessage());
             return Collections.emptyList();
         }
     }
 
+    /** Backward-compat overload — uses "default" tenant. */
+    public List<Session> findAll(int limit) {
+        return findAll("default", limit);
+    }
+
     /**
-     * Returns a single session by id, or empty if not found.
+     * Super-admin consolidated view: queries frigg-tenants for all known tenant aliases,
+     * reads each dali_{alias} database, merges and returns newest-first up to limit.
      */
-    public Optional<Session> findById(String id) {
+    public List<Session> findAllTenants(int limit) {
+        List<String> aliases = new ArrayList<>();
         try {
-            List<Map<String, Object>> rows = frigg.sql(
+            List<Map<String, Object>> rows = frigg.sqlIn("frigg-tenants",
+                    "SELECT tenantAlias FROM DaliTenantConfig " +
+                    "WHERE status IN ['ACTIVE', 'PROVISIONING', 'SUSPENDED']");
+            for (Map<String, Object> row : rows) {
+                Object a = row.get("tenantAlias");
+                if (a != null) aliases.add(a.toString());
+            }
+        } catch (Exception e) {
+            log.warn("[SessionRepository] findAllTenants: could not list tenants: {}", e.getMessage());
+        }
+        if (aliases.isEmpty()) {
+            log.debug("[SessionRepository] findAllTenants: no tenants in frigg-tenants, falling back to default");
+            return findAll("default", limit);
+        }
+        List<Session> merged = new ArrayList<>();
+        for (String alias : aliases) {
+            merged.addAll(findAll(alias, limit));
+        }
+        merged.sort(Comparator.comparing(Session::startedAt).reversed());
+        return merged.size() > limit ? merged.subList(0, limit) : merged;
+    }
+
+    /**
+     * Returns a single session by id within a tenant's DB, or empty if not found.
+     */
+    public Optional<Session> findById(String id, String tenantAlias) {
+        String dbName = frigg.tenantDb(tenantAlias);
+        try {
+            List<Map<String, Object>> rows = frigg.sqlIn(dbName,
                     "SELECT sessionJson FROM dali_sessions WHERE id = :id LIMIT 1",
                     Map.of("id", id));
             if (rows == null) return Optional.empty();
@@ -131,46 +164,63 @@ public class SessionRepository {
                     .map(Optional::get)
                     .findFirst();
         } catch (Exception e) {
-            log.warn("[SessionRepository] findById {} failed: {}", id, e.getMessage());
+            log.warn("[SessionRepository] findById {} ({}) failed: {}", id, tenantAlias, e.getMessage());
             return Optional.empty();
         }
     }
 
+    /** Backward-compat overload — uses "default" tenant. */
+    public Optional<Session> findById(String id) {
+        return findById(id, "default");
+    }
+
     /**
-     * Deletes sessions older than {@code cutoff} (by {@code startedAt}).
+     * Deletes sessions older than {@code cutoff} from a tenant's DB.
      * Returns the number of records deleted.
      */
-    public int deleteOlderThan(java.time.Instant cutoff) {
+    public int deleteOlderThan(java.time.Instant cutoff, String tenantAlias) {
+        String dbName = frigg.tenantDb(tenantAlias);
         try {
             String cutoffStr = cutoff.toString();
-            List<Map<String, Object>> cnt = frigg.sql(
+            List<Map<String, Object>> cnt = frigg.sqlIn(dbName,
                     "SELECT count(*) as cnt FROM dali_sessions WHERE startedAt < :cutoff",
                     Map.of("cutoff", cutoffStr));
             int count = (cnt != null && !cnt.isEmpty() && cnt.get(0).get("cnt") instanceof Number)
                     ? ((Number) cnt.get(0).get("cnt")).intValue() : 0;
             if (count > 0) {
-                frigg.sql("DELETE FROM dali_sessions WHERE startedAt < :cutoff",
+                frigg.sqlIn(dbName, "DELETE FROM dali_sessions WHERE startedAt < :cutoff",
                         Map.of("cutoff", cutoffStr));
             }
-            log.debug("[SessionRepository] deleteOlderThan {}: removed {} records", cutoff, count);
+            log.debug("[SessionRepository] deleteOlderThan {}: removed {} records from {}", cutoff, count, dbName);
             return count;
         } catch (Exception e) {
-            log.warn("[SessionRepository] deleteOlderThan failed: {}", e.getMessage());
+            log.warn("[SessionRepository] deleteOlderThan failed ({}): {}", tenantAlias, e.getMessage());
             return 0;
         }
     }
 
+    /** Backward-compat overload — uses "default" tenant. */
+    public int deleteOlderThan(java.time.Instant cutoff) {
+        return deleteOlderThan(cutoff, "default");
+    }
+
     /**
-     * Deletes all session records from FRIGG.
-     * Intended for use in tests ({@code @AfterEach}) to prevent cross-run accumulation.
+     * Deletes all session records from a tenant's FRIGG database.
+     * Intended for use in tests ({@code @AfterEach}).
      */
-    public void deleteAll() {
+    public void deleteAll(String tenantAlias) {
+        String dbName = frigg.tenantDb(tenantAlias);
         try {
-            frigg.sql("DELETE FROM `dali_sessions`");
-            log.debug("[SessionRepository] deleteAll: cleared all session records");
+            frigg.sqlIn(dbName, "DELETE FROM `dali_sessions`");
+            log.debug("[SessionRepository] deleteAll({}): cleared all session records", tenantAlias);
         } catch (Exception e) {
-            log.warn("[SessionRepository] deleteAll failed: {}", e.getMessage());
+            log.warn("[SessionRepository] deleteAll({}) failed: {}", tenantAlias, e.getMessage());
         }
+    }
+
+    /** Backward-compat overload — uses "default" tenant. */
+    public void deleteAll() {
+        deleteAll("default");
     }
 
     private Optional<Session> deserialise(String json) {

@@ -17,10 +17,16 @@ export interface KeycloakTokenResponse {
 }
 
 export interface KeycloakUserInfo {
-  sub:      string;
-  username: string;
-  role:     UserRole;
-  scopes:   string[];   // from JWT scope claim
+  sub:            string;
+  username:       string;
+  role:           UserRole;
+  scopes:         string[];   // from JWT scope claim
+  email?:         string;
+  firstName?:     string;
+  lastName?:      string;
+  emailVerified?: boolean;
+  /** Tenant alias from KC — `seer_tenant` custom claim or first KC Organization key. */
+  tenantAlias?:   string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -148,7 +154,20 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
   const hasAidaScopes = jwtScopes.some((s) => s.startsWith('aida:') || s.startsWith('seer:'));
   const scopes = hasAidaScopes ? jwtScopes : [...jwtScopes, ...deriveAidaScopes(roles)];
 
-  return { sub, username, role, scopes };
+  const email         = (payload as { email?: string }).email;
+  const firstName     = (payload as { given_name?: string }).given_name;
+  const lastName      = (payload as { family_name?: string }).family_name;
+  const emailVerified = (payload as { email_verified?: boolean }).email_verified;
+
+  // Tenant resolution (priority order):
+  //   1. seer_tenant — custom KC protocol mapper attribute
+  //   2. organization — KC 24+ Organizations claim (first key = org alias = tenant alias)
+  const seerTenant = (payload as { seer_tenant?: string }).seer_tenant;
+  const orgClaim   = (payload as { organization?: Record<string, unknown> }).organization;
+  const orgAlias   = orgClaim && typeof orgClaim === 'object' ? Object.keys(orgClaim)[0] : undefined;
+  const tenantAlias = seerTenant ?? orgAlias;
+
+  return { sub, username, role, scopes, email, firstName, lastName, emailVerified, tenantAlias };
 }
 
 /** Server-side logout: invalidate the refresh token in Keycloak. */

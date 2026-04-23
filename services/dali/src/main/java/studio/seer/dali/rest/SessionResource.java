@@ -11,7 +11,9 @@ import studio.seer.dali.service.CancelResult;
 import studio.seer.dali.service.SessionService;
 import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.ParseSessionInput;
+import studio.seer.tenantrouting.TenantContext;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -22,6 +24,7 @@ import java.util.UUID;
  * GET   /api/sessions             — list recent sessions (newest first) → 200 OK + Session[]
  * POST  /api/sessions             — enqueue a new parse session         → 202 Accepted + Session
  * GET   /api/sessions/{id}        — poll session status                 → 200 OK + Session | 404
+ * POST  /api/sessions/{id}/cancel — cancel session (tenant-scoped)      → 202 | 403 | 404 | 409
  * </pre>
  */
 @Path("/api/sessions")
@@ -32,10 +35,11 @@ public class SessionResource {
     @Inject SessionService          sessionService;
     @Inject SessionRepository       sessionRepository;
     @Inject Instance<JobScheduler>  jobScheduler;
+    @Inject TenantContext           tenantCtx;
 
     @GET
     public Response list(@QueryParam("limit") @DefaultValue("50") int limit) {
-        return Response.ok(sessionService.listRecent(limit)).build();
+        return Response.ok(sessionService.listRecent(tenantCtx.tenantAlias(), limit)).build();
     }
 
     @POST
@@ -46,7 +50,7 @@ public class SessionResource {
                     .build();
         }
         try {
-            return Response.accepted(sessionService.enqueue(body.toInput())).build();
+            return Response.accepted(sessionService.enqueue(body.toInput(tenantCtx.tenantAlias()))).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.CONFLICT)
                     .entity("{\"error\":\"" + e.getMessage() + "\"}")
@@ -54,84 +58,102 @@ public class SessionResource {
         }
     }
 
-    /** JSON body for POST /api/sessions — does not expose the internal {@code uploaded} flag. */
-    private record SessionRequest(String dialect, String source, boolean preview, boolean clearBeforeWrite) {
-        ParseSessionInput toInput() {
-            return new ParseSessionInput(dialect, source, preview, clearBeforeWrite, false);
+    /** JSON body for POST /api/sessions. */
+    private record SessionRequest(String dialect, String source, boolean preview, boolean clearBeforeWrite,
+                                  String dbName, String appName) {
+        ParseSessionInput toInput(String tenantAlias) {
+            return new ParseSessionInput(
+                    dialect, source, preview, clearBeforeWrite, false,
+                    null, null, null,
+                    dbName  != null && !dbName.isBlank()  ? dbName.strip()  : null,
+                    appName != null && !appName.isBlank() ? appName.strip() : null,
+                    tenantAlias);
         }
     }
 
     @GET
     @Path("/{id}")
     public Response get(@PathParam("id") String id) {
-        return sessionService.find(id)
+        return sessionService.findForTenant(id, tenantCtx.tenantAlias())
                 .map(s -> Response.ok(s).build())
-                .orElse(Response.status(Response.Status.NOT_FOUND)
-                        .entity("{\"error\":\"session not found\"}")
-                        .build());
+                .orElseGet(() -> {
+                    // Check if session exists at all (might belong to different tenant → 403)
+                    if (sessionService.find(id).isPresent()) {
+                        return Response.status(Response.Status.FORBIDDEN)
+                                .entity("{\"error\":\"session belongs to a different tenant\"}")
+                                .build();
+                    }
+                    return Response.status(Response.Status.NOT_FOUND)
+                            .entity("{\"error\":\"session not found\"}")
+                            .build();
+                });
     }
 
-    /**
-     * FRIGG archive — sessions stored in FRIGG, bypassing the in-memory cache.
-     * Used by the UI "Archive" section to show the authoritative historical record.
-     */
     @GET
     @Path("/archive")
-    public Response archive(@QueryParam("limit") @DefaultValue("200") int limit) {
-        return Response.ok(sessionRepository.findAll(limit)).build();
+    public Response archive(
+            @QueryParam("limit") @DefaultValue("200") int limit,
+            @QueryParam("allTenants") @DefaultValue("false") boolean allTenants) {
+        List<studio.seer.shared.Session> sessions = (allTenants && tenantCtx.isSuperadmin())
+                ? sessionRepository.findAllTenants(limit)
+                : sessionRepository.findAll(tenantCtx.tenantAlias(), limit);
+        return Response.ok(sessions).build();
     }
 
     /**
-     * Cancel a session.
+     * Cancel a session. DMT-08: enforces tenant isolation — 403 if session belongs to another tenant.
+     * Superadmin (scope aida:superadmin) can cancel any session.
      *
      * <pre>
-     * 202 Accepted  — cancellation requested (status = CANCELLING)
+     * 202 Accepted  — cancellation requested
+     * 403 Forbidden — session belongs to different tenant
      * 404 Not Found — session not found
-     * 409 Conflict  — session already in terminal state
+     * 409 Conflict  — session already terminal
      * </pre>
      */
     @POST
     @Path("/{id}/cancel")
-    @Consumes(MediaType.WILDCARD)   // no request body — accept any (or missing) Content-Type
+    @Consumes(MediaType.WILDCARD)
     public Response cancel(@PathParam("id") String id) {
-        CancelResult result = sessionService.cancelSession(id);
+        String alias = tenantCtx.isSuperadmin() ? null : tenantCtx.tenantAlias();
+        CancelResult result = sessionService.cancelSession(id, alias);
         return switch (result.status()) {
-            case "NOT_FOUND"    -> Response.status(Response.Status.NOT_FOUND).entity(result).build();
-            case "ALREADY_DONE" -> Response.status(Response.Status.CONFLICT).entity(result).build();
-            default             -> Response.accepted(result).build();
+            case "NOT_FOUND"   -> Response.status(Response.Status.NOT_FOUND).entity(result).build();
+            case "FORBIDDEN"   -> Response.status(Response.Status.FORBIDDEN).entity(result).build();
+            case "ALREADY_DONE"-> Response.status(Response.Status.CONFLICT).entity(result).build();
+            default            -> Response.accepted(result).build();
         };
     }
 
     /**
-     * Trigger a full JDBC harvest via {@link HarvestJob} (C.3.2 / DS-03).
-     *
-     * <pre>
-     * 202 Accepted  — HarvestJob enqueued, harvestId in response body
-     * 503 Service Unavailable — JobScheduler not yet initialised
-     * </pre>
+     * Trigger a JDBC harvest for a specific tenant (used by Heimdall cron and admin UI).
+     * Tenant alias comes from the X-Seer-Tenant-Alias header set by Chur, defaulting to "default".
      */
     @POST
     @Path("/harvest")
     @Consumes(MediaType.WILDCARD)
-    public Response harvest() {
+    public Response harvest(
+            @HeaderParam("X-Seer-Tenant-Alias") @DefaultValue("default") String tenantAlias) {
         if (!jobScheduler.isResolvable()) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .entity("{\"error\":\"JobScheduler not available — Dali may still be starting\"}")
                     .build();
         }
+        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default";
         String harvestId = "harvest-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId));
-        return Response.accepted(Map.of("harvestId", harvestId, "status", "enqueued")).build();
+        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId, effectiveTenant));
+        return Response.accepted(Map.of("harvestId", harvestId, "tenantAlias", effectiveTenant, "status", "enqueued")).build();
     }
 
     @GET
     @Path("/health")
     public Response health() {
         boolean friggOk = sessionService.isFriggHealthy();
-        int sessionCount = sessionService.listRecent(200).size();
+        int sessionCount = sessionService.listRecent(tenantCtx.tenantAlias(), 200).size();
         return Response.ok(Map.of(
                 "frigg",    friggOk ? "ok" : "error",
-                "sessions", sessionCount
+                "sessions", sessionCount,
+                "tenant",   tenantCtx.tenantAlias()
         )).build();
     }
 }

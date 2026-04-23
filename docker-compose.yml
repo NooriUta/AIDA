@@ -52,7 +52,7 @@ services:
   # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
-    command: start-dev --import-realm
+    command: start-dev --import-realm --features=organization
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
@@ -62,6 +62,10 @@ services:
       KC_PROXY_HEADERS: "xforwarded"   # KC 26: replaces deprecated KC_PROXY=edge
       KC_HOSTNAME: "localhost"
       KC_HOSTNAME_STRICT: "false"
+      # KC-ORG-01: Keycloak 26.2 Organizations feature (Technology Preview) —
+      # enables /admin/realms/{realm}/organizations API required by tenant provisioning
+      # (FRIGG_TENANT_SCHEMA §4 Step 1) and the Organization Membership JWT claim.
+      KC_FEATURES: "organization"
     ports:
       - "127.0.0.1:18180:8180"
     volumes:
@@ -119,6 +123,11 @@ services:
       ARCADEDB_DB:           ${ARCADEDB_DB:-hound}
       ARCADEDB_USER:         ${ARCADEDB_USER:-root}
       ARCADEDB_PASS:         ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      # FRIGG (session store — ArcadeDB, separate instance)
+      FRIGG_URL:             http://frigg:2480
+      FRIGG_SESSION_DB:      frigg-sessions
+      FRIGG_USER:            root
+      FRIGG_PASS:            ${FRIGG_ROOT_PASSWORD:-playwithdata}
       # SHUTTLE (internal network)
       LINEAGE_API_URL:       http://shuttle:8080
       # HEIMDALL (internal network)
@@ -135,6 +144,8 @@ services:
         condition: service_started
       ygg:
         condition: service_healthy
+      init-frigg:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
@@ -312,6 +323,33 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # ── init-frigg (one-shot DB initialiser) ─────────────────────────────────────
+  # Создаёт нужные базы в FRIGG после того, как контейнер здоров.
+  # restart: no — запускается один раз; chur зависит от service_completed_successfully.
+  init-frigg:
+    image: curlimages/curl:latest
+    restart: "no"
+    depends_on:
+      frigg:
+        condition: service_healthy
+    environment:
+      FRIGG_PASS: ${FRIGG_ROOT_PASSWORD:-playwithdata}
+    command: >
+      sh -c "
+        create_db() {
+          local db=$$1
+          result=$$(curl -sf --max-time 5 -u root:$$FRIGG_PASS -X POST http://frigg:2480/api/v1/server
+            -H 'Content-Type: application/json'
+            -d \"{\\\"command\\\":\\\"create database $$db\\\"}\" 2>/dev/null || echo error)
+          echo \"[init-frigg] $$db: $$result\"
+        }
+        dbs=$$(curl -sf -u root:$$FRIGG_PASS http://frigg:2480/api/v1/databases 2>/dev/null || echo '')
+        echo $$dbs | grep -q '\"frigg-sessions\"' || create_db frigg-sessions
+        echo $$dbs | grep -q '\"dali\"'           || create_db dali
+        echo $$dbs | grep -q '\"heimdall\"'       || create_db heimdall
+        echo '[init-frigg] done.'
+      "
 
 volumes:
   nginx_certs:

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation }              from 'react-i18next';
 import { type DaliSession, type FileResult, cancelSession } from '../../api/dali';
 import { useDaliSession } from '../../hooks/useDaliSession';
+import { useIsMobile }    from '../../hooks/useIsMobile';
 import css from './dali.module.css';
 
 const TERMINAL = new Set<string>(['COMPLETED', 'FAILED', 'CANCELLED']);
@@ -138,36 +139,81 @@ function ProgressBar({ session }: { session: DaliSession }) {
 }
 
 // ── Source cell: path + BATCH / FILE tag ─────────────────────────────────────
-function SourceCell({ session }: { session: DaliSession }) {
+function SourceCell({ session, tenantAlias }: { session: DaliSession; tenantAlias?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span
-        style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)' }}
-        title={session.source ?? ''}
-      >
-        {truncSource(session.source)}
-      </span>
-      {session.batch ? (
-        <span style={{
-          fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
-          padding: '1px 5px', borderRadius: 3,
-          background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
-          color: 'var(--acc)',
-          border: '1px solid color-mix(in srgb, var(--acc) 28%, transparent)',
-          whiteSpace: 'nowrap',
-        }}>
-          BATCH{session.total > 0 ? ` ${session.total}` : ''}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span
+          style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)' }}
+          title={session.source ?? ''}
+        >
+          {truncSource(session.source)}
         </span>
-      ) : (
+        {session.batch ? (
+          <span style={{
+            fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
+            padding: '1px 5px', borderRadius: 3,
+            background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
+            color: 'var(--acc)',
+            border: '1px solid color-mix(in srgb, var(--acc) 28%, transparent)',
+            whiteSpace: 'nowrap',
+          }}>
+            BATCH{session.total > 0 ? ` ${session.total}` : ''}
+          </span>
+        ) : (
+          <span style={{
+            fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
+            padding: '1px 5px', borderRadius: 3,
+            background: 'var(--bg3)', color: 'var(--t3)',
+            border: '1px solid var(--bd)', whiteSpace: 'nowrap',
+          }}>
+            FILE
+          </span>
+        )}
+      </div>
+      {session.dbName && (
         <span style={{
           fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
-          padding: '1px 5px', borderRadius: 3,
-          background: 'var(--bg3)', color: 'var(--t3)',
-          border: '1px solid var(--bd)', whiteSpace: 'nowrap',
-        }}>
-          FILE
+          color: 'var(--suc)', letterSpacing: '0.04em',
+        }}
+          title={`Database: ${session.dbName}`}
+        >
+          DB: {session.dbName}
         </span>
       )}
+      {/* Tenant + clear-before-write — always shown so operator sees write context */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 1 }}>
+        {tenantAlias && (
+          <span style={{
+            fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
+            padding: '1px 5px', borderRadius: 3,
+            background: 'color-mix(in srgb, var(--inf) 12%, transparent)',
+            color: 'var(--inf)',
+            border: '1px solid color-mix(in srgb, var(--inf) 28%, transparent)',
+            whiteSpace: 'nowrap',
+          }}
+            title={`Writing to tenant: ${tenantAlias}`}
+          >
+            → {tenantAlias}
+          </span>
+        )}
+        <span style={{
+          fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
+          padding: '1px 5px', borderRadius: 3,
+          background: session.clearBeforeWrite
+            ? 'color-mix(in srgb, var(--danger) 12%, transparent)'
+            : 'color-mix(in srgb, var(--suc) 10%, transparent)',
+          color: session.clearBeforeWrite ? 'var(--danger)' : 'var(--suc)',
+          border: `1px solid ${session.clearBeforeWrite
+            ? 'color-mix(in srgb, var(--danger) 28%, transparent)'
+            : 'color-mix(in srgb, var(--suc) 22%, transparent)'}`,
+          whiteSpace: 'nowrap',
+        }}
+          title={session.clearBeforeWrite ? 'YGG was cleared before this write' : 'YGG was NOT cleared — append mode'}
+        >
+          {session.clearBeforeWrite ? '↺ cleared' : '+ append'}
+        </span>
+      </div>
     </div>
   );
 }
@@ -210,7 +256,7 @@ function DurationTimeline({ files }: { files: FileResult[] }) {
   const withDur = files.filter(f => f.durationMs > 0);
   if (withDur.length < 3) return null;
 
-  const W = 600, H = 52, PX = 8, PY = 6;
+  const W = 800, H = 80, PX = 10, PY = 8;
   const maxMs = Math.max(...withDur.map(f => f.durationMs));
   const n = withDur.length;
 
@@ -224,11 +270,12 @@ function DurationTimeline({ files }: { files: FileResult[] }) {
   const hovFilename = hov ? hov.path.replace(/\\/g, '/').split('/').pop() : '';
 
   return (
-    <div style={{ marginTop: 12, marginBottom: 2 }}>
+    <div style={{ marginTop: 12, marginBottom: 2, marginLeft: -14, marginRight: -14 }}>
       <div style={{
         fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--t3)',
         textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
         display: 'flex', justifyContent: 'space-between',
+        paddingLeft: 14, paddingRight: 14,
       }}>
         <span>{t('dali.sessions.parseTimeline', { count: n })}</span>
         {hov && (
@@ -427,7 +474,7 @@ function FileRow({ fr, index }: { fr: FileResult; index: number }) {
       </tr>
       {open && fr.warnings.map((w, i) => (
         <tr key={i}>
-          <td colSpan={6} style={{ padding: '2px 8px 2px 32px' }}>
+          <td colSpan={20} style={{ padding: '2px 8px 2px 32px' }}>
             <div className={css.warnItem}>{w}</div>
           </td>
         </tr>
@@ -437,7 +484,7 @@ function FileRow({ fr, index }: { fr: FileResult; index: number }) {
 }
 
 // ── Detail expand row ─────────────────────────────────────────────────────────
-function DetailRow({ session }: { session: DaliSession }) {
+function DetailRow({ session, tenantAlias }: { session: DaliSession; tenantAlias?: string }) {
   const { t } = useTranslation();
   const [warningsOpen, setWarningsOpen] = useState(false);
   const [errorsOpen,   setErrorsOpen]   = useState(true);   // errors open by default
@@ -458,7 +505,7 @@ function DetailRow({ session }: { session: DaliSession }) {
 
   return (
     <tr>
-      <td colSpan={6} className={css.detailTd}>
+      <td colSpan={20} className={css.detailTd}>
         <div className={css.detailInner}>
 
           {/* Error banner for FAILED sessions */}
@@ -546,12 +593,26 @@ function DetailRow({ session }: { session: DaliSession }) {
             </div>
           </div>
 
-          {/* Timing row — start / finish timestamps */}
+          {/* Timing row — start / finish timestamps + tenant */}
           <div style={{
             display: 'flex', gap: 24, marginTop: 10, marginBottom: 2,
             fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t3)',
-            borderTop: '1px solid var(--bd)', paddingTop: 8,
+            borderTop: '1px solid var(--bd)', paddingTop: 8, flexWrap: 'wrap', alignItems: 'center',
           }}>
+            {tenantAlias && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em' }}>tenant</span>
+                <span style={{
+                  fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                  padding: '1px 6px', borderRadius: 3,
+                  background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
+                  color: 'var(--acc)',
+                  border: '1px solid color-mix(in srgb, var(--acc) 30%, transparent)',
+                }}>
+                  {tenantAlias}
+                </span>
+              </div>
+            )}
             <div>
               <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 6 }}>{t('dali.sessions.timingStarted')}</span>
               <span title={session.startedAt} style={{ color: 'var(--t2)' }}>
@@ -706,16 +767,20 @@ function DetailRow({ session }: { session: DaliSession }) {
 
 // ── Session row with per-row polling ─────────────────────────────────────────
 interface SessionRowProps {
-  session: DaliSession;
+  session:  DaliSession;
   expanded: boolean;
   onToggle: () => void;
   onUpdate: (s: DaliSession) => void;
+  hideCols?: boolean;
+  tenantAlias?: string;
 }
 
-function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) {
+function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = false, tenantAlias }: SessionRowProps) {
   const { t } = useTranslation();
   const isTerminal = TERMINAL.has(session.status);
-  const live = useDaliSession(session.id, !isTerminal);
+  // Use the tenant stored in the session itself (set by server at creation time)
+  const effectiveTenant = session.tenantAlias ?? tenantAlias;
+  const live = useDaliSession(session.id, !isTerminal, effectiveTenant);
   const [cancelling, setCancelling] = useState(false);
   // Track last updatedAt we propagated so we don't depend on the session prop
   const reportedAtRef = useRef('');
@@ -736,7 +801,7 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
     e.stopPropagation();
     setCancelling(true);
     try {
-      await cancelSession(s.id);
+      await cancelSession(s.id, effectiveTenant);
       onUpdate({ ...s, status: 'CANCELLING' });
     } catch { /* polling will reflect true state */ }
     finally { setCancelling(false); }
@@ -795,27 +860,31 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
           </div>
         </td>
         <td><StatusBadge status={s.status} /></td>
-        <td>
-          <span style={{ fontFamily: 'var(--mono)', color: 'var(--t2)', fontSize: 12 }}>
-            {DIALECT_LABEL[s.dialect] ?? s.dialect}
-          </span>
-        </td>
-        <td><SourceCell session={s} /></td>
+        {!hideCols && (
+          <td>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t2)', fontSize: 12 }}>
+              {DIALECT_LABEL[s.dialect] ?? s.dialect}
+            </span>
+          </td>
+        )}
+        <td><SourceCell session={s} tenantAlias={effectiveTenant} /></td>
         <td>
           <ProgressBar session={s} />
           <RowMetrics session={s} />
         </td>
-        <td>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 11 }}>
-              {fmtDuration(s.durationMs)}
-            </span>
-            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 9, opacity: 0.7 }}
-                  title={s.startedAt}>
-              {fmtDateShort(s.startedAt)}
-            </span>
-          </div>
-        </td>
+        {!hideCols && (
+          <td>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 11 }}>
+                {fmtDuration(s.durationMs)}
+              </span>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 9, opacity: 0.7 }}
+                    title={s.startedAt}>
+                {fmtDateShort(s.startedAt)}
+              </span>
+            </div>
+          </td>
+        )}
         <td style={{ textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
             {(s.status === 'QUEUED' || s.status === 'RUNNING') && (
@@ -851,7 +920,7 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
           </div>
         </td>
       </tr>
-      {expanded && <DetailRow session={s} />}
+      {expanded && <DetailRow session={s} tenantAlias={effectiveTenant} />}
     </>
   );
 }
@@ -860,10 +929,12 @@ function SessionRow({ session, expanded, onToggle, onUpdate }: SessionRowProps) 
 interface SessionListProps {
   sessions: DaliSession[];
   onSessionUpdate: (s: DaliSession) => void;
+  tenantAlias?: string;
 }
 
-export function SessionList({ sessions, onSessionUpdate }: SessionListProps) {
-  const { t } = useTranslation();
+export function SessionList({ sessions, onSessionUpdate, tenantAlias }: SessionListProps) {
+  const { t }       = useTranslation();
+  const isMobile    = useIsMobile();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function toggleExpand(id: string) {
@@ -901,30 +972,34 @@ export function SessionList({ sessions, onSessionUpdate }: SessionListProps) {
           </div>
         </div>
       ) : (
-        <table className={css.sessionTable}>
-          <thead>
-            <tr>
-              <th style={{ width: 90  }}>{t('dali.sessions.colSessionId')}</th>
-              <th style={{ width: 120 }}>{t('dali.sessions.colStatus')}</th>
-              <th style={{ width: 100 }}>{t('dali.sessions.colDialect')}</th>
-              <th>{t('dali.sessions.colSource')}</th>
-              <th style={{ width: 130 }}>{t('dali.sessions.colProgress')}</th>
-              <th style={{ width: 72  }}>{t('dali.sessions.colDuration')}</th>
-              <th style={{ width: 36  }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map(s => (
-              <SessionRow
-                key={s.id}
-                session={s}
-                expanded={expandedId === s.id}
-                onToggle={() => toggleExpand(s.id)}
-                onUpdate={onSessionUpdate}
-              />
-            ))}
-          </tbody>
-        </table>
+        <div style={{ overflowX: 'auto' }}>
+          <table className={css.sessionTable} style={{ minWidth: isMobile ? 480 : undefined }}>
+            <thead>
+              <tr>
+                <th style={{ width: isMobile ? 70 : 90  }}>{t('dali.sessions.colSessionId')}</th>
+                <th style={{ width: 120 }}>{t('dali.sessions.colStatus')}</th>
+                {!isMobile && <th style={{ width: 100 }}>{t('dali.sessions.colDialect')}</th>}
+                <th>{t('dali.sessions.colSource')}</th>
+                <th style={{ width: isMobile ? 110 : 130 }}>{t('dali.sessions.colProgress')}</th>
+                {!isMobile && <th style={{ width: 72 }}>{t('dali.sessions.colDuration')}</th>}
+                <th style={{ width: 36 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map(s => (
+                <SessionRow
+                  key={s.id}
+                  session={s}
+                  expanded={expandedId === s.id}
+                  onToggle={() => toggleExpand(s.id)}
+                  onUpdate={onSessionUpdate}
+                  hideCols={isMobile}
+                  tenantAlias={tenantAlias}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

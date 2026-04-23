@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../../stores/loomStore';
 
@@ -8,7 +8,7 @@ const UI_FONTS = [
   { id: 'DM Sans',       label: 'DM Sans',        sub: 'Rounded humanist' },
   { id: 'Inter',         label: 'Inter',          sub: 'Neutral grotesque' },
   { id: 'IBM Plex Sans', label: 'IBM Plex Sans',  sub: 'Technical · IDE-like' },
-  { id: 'Geist',         label: 'Geist ✦',        sub: 'Vercel · Ultra-clean' },
+  { id: 'Geist Variable',label: 'Geist ✦',         sub: 'Vercel · Ultra-clean' },
   { id: 'Oxanium',       label: 'Oxanium ✦',      sub: 'Sci-fi · Data terminal' },
   { id: 'Exo 2',         label: 'Exo 2 ✦',        sub: 'Geometric · Futuristic' },
 ];
@@ -17,7 +17,7 @@ const MONO_FONTS = [
   { id: 'IBM Plex Mono',   label: 'IBM Plex Mono',   sub: 'Brand mono · Clean' },
   { id: 'Fira Code',       label: 'Fira Code',        sub: 'Ligatures' },
   { id: 'JetBrains Mono',  label: 'JetBrains Mono',   sub: 'Ligatures · Wide' },
-  { id: 'Geist Mono',      label: 'Geist Mono ✦',     sub: 'Vercel · Minimal' },
+  { id: 'Geist Mono Variable', label: 'Geist Mono ✦',  sub: 'Vercel · Minimal' },
   { id: 'Source Code Pro', label: 'Source Code Pro',  sub: 'Geometric · Adobe' },
 ];
 
@@ -39,27 +39,71 @@ export const ProfileTabAppearance = memo(() => {
   const [density,  setDensity]  = useState<'compact' | 'normal'>(() =>
     (localStorage.getItem('seer-density') as 'compact' | 'normal') ?? 'compact'
   );
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
 
-  // Apply font changes immediately
+  // Skip first-mount effect so initial render doesn't trigger saves
+  const mounted = useRef(false);
+
+  // Apply font/density changes immediately to DOM + localStorage
   useEffect(() => {
     document.documentElement.style.setProperty('--font', `'${uiFont}', system-ui, sans-serif`);
     localStorage.setItem('seer-ui-font', uiFont);
+    if (mounted.current) setSaved(false);
   }, [uiFont]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--mono', `'${monoFont}', monospace`);
     localStorage.setItem('seer-mono-font', monoFont);
+    if (mounted.current) setSaved(false);
   }, [monoFont]);
 
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize}px`;
     localStorage.setItem('seer-font-size', String(fontSize));
+    if (mounted.current) setSaved(false);
   }, [fontSize]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-density', density);
     localStorage.setItem('seer-density', density);
+    if (mounted.current) setSaved(false);
   }, [density]);
+
+  useEffect(() => { mounted.current = true; }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    // 1. Cookie (365-day fallback cache)
+    try {
+      const snap = {
+        uiFont, monoFont, fontSize: String(fontSize), density,
+        theme:   localStorage.getItem('seer-theme')   ?? 'dark',
+        palette: localStorage.getItem('seer-palette') ?? 'amber-forest',
+      };
+      const exp = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = `seer-prefs=${encodeURIComponent(JSON.stringify(snap))}; expires=${exp}; path=/; SameSite=Lax`;
+    } catch { /* ignore */ }
+    // 2. Persist to Keycloak / FRIGG via Chur
+    try {
+      await fetch('/admin/me/prefs', {
+        method: 'PUT', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme:              localStorage.getItem('seer-theme')      ?? 'dark',
+          density,
+          verdandiPalette:    localStorage.getItem('seer-palette')    ?? 'amber-forest',
+          verdandiUiFont:     uiFont,
+          verdandiMonoFont:   monoFont,
+          verdandiFontSize:   String(fontSize),
+          verdandiGraphPrefs: localStorage.getItem('seer-graph-prefs'),
+        }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch { /* silent */ }
+    setSaving(false);
+  }
 
   return (
     <div>
@@ -142,7 +186,7 @@ export const ProfileTabAppearance = memo(() => {
             }}
           >
             {uiFont === f.id && <span style={{ position: 'absolute', top: '6px', right: '8px', fontSize: '11px', color: 'var(--acc)', fontWeight: 700 }}>✓</span>}
-            <div style={{ fontSize: '11px', fontWeight: 600, color: uiFont === f.id ? 'var(--acc)' : 'var(--t2)', letterSpacing: '0.03em', marginBottom: '5px' }}>{f.label}</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: uiFont === f.id ? 'var(--acc)' : 'var(--t2)', letterSpacing: '0.02em', marginBottom: '5px', fontFamily: `'${f.id}', system-ui, sans-serif` }}>{f.label}</div>
             <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--t1)', fontFamily: `'${f.id}', sans-serif`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               LOOM · orders · L2
             </div>
@@ -168,7 +212,7 @@ export const ProfileTabAppearance = memo(() => {
             }}
           >
             {monoFont === f.id && <span style={{ position: 'absolute', top: '6px', right: '8px', fontSize: '11px', color: 'var(--acc)', fontWeight: 700 }}>✓</span>}
-            <div style={{ fontSize: '11px', fontWeight: 600, color: monoFont === f.id ? 'var(--acc)' : 'var(--t2)', letterSpacing: '0.03em', marginBottom: '5px' }}>{f.label}</div>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: monoFont === f.id ? 'var(--acc)' : 'var(--t2)', letterSpacing: '0.02em', marginBottom: '5px', fontFamily: `'${f.id}', monospace` }}>{f.label}</div>
             <div style={{ fontSize: '12px', color: 'var(--t1)', fontFamily: `'${f.id}', monospace` }}>order_id  uuid  →</div>
             <div style={{ fontSize: '10px', color: 'var(--t3)', marginTop: '3px' }}>{f.sub}</div>
           </button>
@@ -221,6 +265,25 @@ export const ProfileTabAppearance = memo(() => {
           </button>
         ))}
       </div>
+
+      {/* Save */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        style={{
+          width: '100%', padding: '10px 0', borderRadius: 'var(--seer-radius-md)',
+          border: `1.5px solid ${saved ? 'var(--suc)' : 'var(--acc)'}`,
+          cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit',
+          background: saved
+            ? 'color-mix(in srgb, var(--suc) 12%, var(--bg2))'
+            : 'color-mix(in srgb, var(--acc) 10%, var(--bg2))',
+          color: saved ? 'var(--suc)' : 'var(--acc)',
+          fontSize: '12px', fontWeight: 600, letterSpacing: '0.05em',
+          transition: 'all 0.15s',
+        }}
+      >
+        {saving ? '…' : saved ? `${t('common.saved', { defaultValue: 'Saved' })} ✓` : t('common.save', { defaultValue: 'Save' })}
+      </button>
     </div>
   );
 });

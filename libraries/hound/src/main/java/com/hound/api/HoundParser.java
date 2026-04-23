@@ -37,6 +37,25 @@ public interface HoundParser {
     ParseResult parse(Path file, HoundConfig config, HoundEventListener listener);
 
     /**
+     * Parse a single SQL file with database context (creates DaliDatabase + CONTAINS_SCHEMA).
+     *
+     * <p>When {@code dbName} is non-null the implementation calls
+     * {@code writer.ensureCanonicalPool(dbName, appName, appName)} so that every
+     * DaliSchema produced from this file is linked to a named DaliDatabase vertex.
+     * This is the preferred overload for Dali FILE-upload sessions where the user
+     * explicitly names the target database.
+     *
+     * @param file     path to the SQL file
+     * @param config   typed Hound configuration
+     * @param dbName   database name for CONTAINS_SCHEMA grouping; null = ad-hoc mode
+     * @param appName  optional application name for BELONGS_TO_APP grouping; null = skip
+     * @param listener event listener; use {@link NoOpHoundEventListener#INSTANCE} if not needed
+     * @return parse result
+     */
+    ParseResult parse(Path file, HoundConfig config, String dbName, String appName,
+                      HoundEventListener listener);
+
+    /**
      * Parse multiple SQL sources in parallel (preferred API since SI-03).
      *
      * <p>Supports both on-disk ({@link SqlSource.FromFile}) and in-memory

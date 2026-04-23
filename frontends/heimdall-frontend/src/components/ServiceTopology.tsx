@@ -1,10 +1,13 @@
 import {
   ReactFlow, Background, Controls,
   type Node, type Edge, MarkerType,
-  Handle, Position, useNodesState,
+  Handle, Position, useNodesState, useReactFlow, ReactFlowProvider,
 } from '@xyflow/react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import ELK, { type ELK as ELKApi } from 'elkjs/lib/elk.bundled.js';
+import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 import '@xyflow/react/dist/style.css';
+import { SERVICES, STORAGE, type ServiceSpec } from '../config/services';
 
 // ── Docker SVG icon ────────────────────────────────────────────────────────────
 function DockerIcon({ size = 10 }: { size?: number }) {
@@ -16,8 +19,6 @@ function DockerIcon({ size = 10 }: { size?: number }) {
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-/** Minimal health snapshot used by the topology to colour nodes. */
 export interface ServiceHealth {
   name:   string;
   mode:   'dev' | 'docker';
@@ -26,202 +27,211 @@ export interface ServiceHealth {
 
 interface ServiceNodeData {
   label:        string;
-  port:         string;   // internal / dev port
-  extPort?:     string;   // host-mapped port (Docker only)
-  mode?:        'dev' | 'docker';
-  color?:       string;   // static type colour — shown when health is unknown
-  statusColor?: string;   // live health colour — overrides `color` when present
+  port?:        number;
+  extPort?:     number;
+  color?:       string;
+  statusColor?: string;
+  isStorage?:   boolean;
+  isDocker?:    boolean;
   [key: string]: unknown;
 }
 
-interface LaneNodeData {
-  label:    string;
-  isDocker: boolean;
-  [key: string]: unknown;
-}
-
-// ── Service node ───────────────────────────────────────────────────────────────
+// ── Node component ────────────────────────────────────────────────────────────
+// Handles on top (target) and bottom (source) — matches ELK direction = DOWN.
 function ServiceNode({ data }: { data: ServiceNodeData }) {
-  const isDocker = data.mode === 'docker';
-
-  // Health colour takes priority; fall back to static type colour
-  const borderColor = data.statusColor
-    ? data.statusColor
-    : isDocker
-      ? 'color-mix(in srgb, #2496ED 50%, var(--bd))'
-      : (data.color ?? 'var(--bd)');
-
-  const hostPort = isDocker ? (data.extPort ?? data.port) : data.port;
-
-  const handleDoubleClick = () => {
-    window.open(`http://localhost:${hostPort}`, '_blank', 'noopener,noreferrer');
-  };
+  const borderColor = data.statusColor ?? data.color ?? 'var(--bd)';
+  const openUrl = data.extPort ? `http://localhost:${data.extPort}` : undefined;
 
   return (
     <div
-      onDoubleClick={handleDoubleClick}
-      title={`Double-click to open http://localhost:${hostPort}`}
+      onDoubleClick={() => openUrl && window.open(openUrl, '_blank', 'noopener,noreferrer')}
+      title={openUrl ? `Double-click to open ${openUrl}` : undefined}
       style={{
         background:   'var(--bg1)',
         border:       `1px solid ${borderColor}`,
         borderRadius: 'var(--seer-radius-md)',
         padding:      '5px 10px',
-        minWidth:     118,
+        width:        NODE_W,
+        height:       NODE_H,
         textAlign:    'center',
-        cursor:       'pointer',
-        // Glow when health status is known
+        cursor:       openUrl ? 'pointer' : 'default',
         boxShadow: data.statusColor
           ? `0 0 6px color-mix(in srgb, ${data.statusColor} 40%, transparent)`
           : undefined,
         transition: 'border-color 0.4s, box-shadow 0.4s',
+        display:        'flex',
+        flexDirection:  'column',
+        justifyContent: 'center',
+        alignItems:     'center',
+        gap:            2,
       }}>
       <Handle id="t" type="target" position={Position.Top}    style={{ background: 'var(--bd)' }} />
-      <Handle id="l" type="target" position={Position.Left}   style={{ background: 'var(--bd)' }} />
 
-      {/* Label row */}
       <div style={{
         fontSize: '11px', fontWeight: 600, color: 'var(--t1)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+        whiteSpace: 'nowrap',
       }}>
-        {isDocker && <DockerIcon size={10} />}
+        {data.isDocker && !data.isStorage && <DockerIcon size={10} />}
         {data.label}
       </div>
 
-      {/* Health indicator dot (only when health is known) */}
       {data.statusColor && (
         <div style={{
           width: 5, height: 5, borderRadius: '50%',
           background: data.statusColor,
-          margin: '2px auto 0',
         }} />
       )}
 
-      {/* Internal port */}
-      <div style={{
-        fontSize: '10px', fontFamily: 'var(--mono)',
-        color: isDocker ? '#2496ED' : 'var(--t3)',
-        marginTop: data.statusColor ? 1 : 2,
-      }}>
-        :{data.port}
-      </div>
-
-      {/* Host-mapped port (Docker only) */}
-      {data.extPort && (
-        <div style={{ fontSize: '9px', fontFamily: 'var(--mono)', color: 'var(--t3)', marginTop: 1 }}>
-          ext :{data.extPort}
+      {data.port && (
+        <div style={{
+          fontSize: '10px', fontFamily: 'var(--mono)',
+          color: data.isStorage ? 'var(--t3)' : '#2496ED',
+        }}>
+          :{data.port}
         </div>
       )}
 
       <Handle id="b" type="source" position={Position.Bottom} style={{ background: 'var(--bd)' }} />
-      <Handle id="r" type="source" position={Position.Right}  style={{ background: 'var(--bd)' }} />
     </div>
   );
 }
 
-// ── Lane label node ────────────────────────────────────────────────────────────
-function LaneNode({ data }: { data: LaneNodeData }) {
-  return (
-    <div style={{
-      padding:       '3px 14px',
-      background:    data.isDocker
-        ? 'color-mix(in srgb, #2496ED 10%, transparent)'
-        : 'color-mix(in srgb, var(--acc) 10%, transparent)',
-      border: `1px solid ${data.isDocker
-        ? 'color-mix(in srgb, #2496ED 25%, transparent)'
-        : 'color-mix(in srgb, var(--acc) 25%, transparent)'}`,
-      borderRadius:  'var(--seer-radius-sm)',
-      fontSize:      '9px',
-      fontFamily:    'var(--mono)',
-      fontWeight:    600,
-      letterSpacing: '0.08em',
-      textTransform: 'uppercase',
-      color:         data.isDocker ? '#2496ED' : 'var(--acc)',
-      display:       'flex',
-      alignItems:    'center',
-      gap:           5,
-      userSelect:    'none',
-      cursor:        'default',
-    }}>
-      {data.isDocker && <DockerIcon size={9} />}
-      {data.label}
-    </div>
-  );
+const NODE_TYPES = { service: ServiceNode };
+
+// ── Layout constants ──────────────────────────────────────────────────────────
+const NODE_W = 130;   // node width fed to ELK
+const NODE_H = 60;    // node height fed to ELK
+
+// ── ELK setup (singleton) ─────────────────────────────────────────────────────
+// Bundled build; Worker hosted via Vite's ?url import. Same-origin in dev
+// (heimdall-frontend serves at :5174); MF/cross-origin scenarios re-fetch
+// the script via blob URL — but for this small static graph we never run
+// inside an MF remote, so the simple direct-URL workerFactory suffices.
+let _elk: ELKApi | null = null;
+function getElk(): ELKApi {
+  if (_elk) return _elk;
+  _elk = new ELK({
+    workerFactory: (_url?: string) => new Worker(elkWorkerUrl),
+  });
+  return _elk;
 }
 
-const NODE_TYPES = { service: ServiceNode, lane: LaneNode };
+// ── Build raw node + edge spec from SERVICES + STORAGE ────────────────────────
+interface RawNode {
+  id: string; label: string; port?: number; extPort?: number;
+  color?: string; isStorage?: boolean; isDocker?: boolean;
+  layer: number;
+}
 
-// ── Base nodes (static — health colours are applied dynamically) ───────────────
-//
-//  IDE lane (left)          Docker lane (right)        Shared (centre)
-//  ───────────────          ───────────────────        ───────────────
-//  port = dev port          port = internal container  port = external access
-//                           extPort = host-mapped
-//
-//  Keycloak — ONE shared instance (accessed by both IDE and Docker clients):
-//    IDE clients:    localhost:8180
-//    Docker clients: keycloak:8180  (internal docker net)  ext :18180
-//    → single node centred between the two lanes at (350, 430)
-//
-//  Ygg — shared ArcadeDB (HoundArcade external container): single node
-//  Frigg — separate IDE (localhost:2481) vs Docker (frigg:2480) paths
-const BASE_NODES: Node[] = [
-  // ── Lane headers ─────────────────────────────────────────────────────────────
-  { id: 'lane-dev',    type: 'lane', selectable: false, draggable: false,
-    position: { x: 110, y: -55 }, data: { label: 'IDE / Dev', isDocker: false } },
-  { id: 'lane-docker', type: 'lane', selectable: false, draggable: false,
-    position: { x: 570, y: -55 }, data: { label: 'Docker', isDocker: true } },
+function buildRaw(): { nodes: RawNode[]; edges: Edge[] } {
+  const nodes: RawNode[] = [];
+  const allIds = new Set<string>();
 
-  // ── Row 0: Shell ─────────────────────────────────────────────────────────────
-  { id: 'shell-dev',    type: 'service', position: { x: 130, y: 0 },
-    data: { label: 'Shell',  port: '5175', mode: 'dev',    color: 'var(--acc)' } },
-  { id: 'shell-docker', type: 'service', position: { x: 590, y: 0 },
-    data: { label: 'Shell',  port: '5175', extPort: '25175', mode: 'docker', color: 'var(--acc)' } },
+  for (const svc of SERVICES) {
+    if (svc.layer == null || !svc.portDocker) continue;
+    nodes.push({
+      id: svc.id, label: svc.label,
+      port: svc.portDocker, extPort: svc.portDocker,
+      color: svc.color, isDocker: true, layer: svc.layer,
+    });
+    allIds.add(svc.id);
+  }
+  for (const s of STORAGE) {
+    nodes.push({
+      id: s.id, label: s.label,
+      port: s.portExt, color: s.color, isStorage: true, layer: s.layer,
+    });
+    allIds.add(s.id);
+  }
 
-  // ── Row 1: MF remotes ────────────────────────────────────────────────────────
-  { id: 'verdandi-dev',    type: 'service', position: { x: 0,   y: 140 },
-    data: { label: 'Seiðr Studio', port: '5173', mode: 'dev',    color: 'var(--inf)' } },
-  { id: 'verdandi-docker', type: 'service', position: { x: 470, y: 140 },
-    data: { label: 'Seiðr Studio', port: '5173', extPort: '15173', mode: 'docker', color: 'var(--inf)' } },
-  { id: 'hf-dev',          type: 'service', position: { x: 270, y: 140 },
-    data: { label: 'Heimðallr UI',  port: '5174', mode: 'dev',    color: 'var(--inf)' } },
-  { id: 'hf-docker',       type: 'service', position: { x: 740, y: 140 },
-    data: { label: 'Heimðallr UI',  port: '5174', extPort: '25174', mode: 'docker', color: 'var(--inf)' } },
+  const edges: Edge[] = [];
+  const edgeColor = (src: ServiceSpec): string => src.color ?? 'var(--bd)';
+  for (const svc of SERVICES) {
+    if (!svc.deps || !allIds.has(svc.id)) continue;
+    svc.deps.forEach((dep, i) => {
+      if (!allIds.has(dep)) return;
+      const label = svc.depLabels?.[i] ?? '→';
+      const color = edgeColor(svc);
+      edges.push({
+        id:           `${svc.id}->${dep}`,
+        source:       svc.id,
+        target:       dep,
+        label,
+        markerEnd:    { type: MarkerType.ArrowClosed, color },
+        style:        { stroke: color, strokeWidth: 1.5 },
+        labelStyle:   { fill: 'var(--t3)', fontSize: 9, fontFamily: 'var(--mono)' },
+        labelBgStyle: { fill: 'var(--bg0)', opacity: 0.85 },
+      });
+    });
+  }
+  return { nodes, edges };
+}
 
-  // ── Row 2: BFF + backend ─────────────────────────────────────────────────────
-  { id: 'chur-dev',    type: 'service', position: { x: 0,   y: 290 },
-    data: { label: 'Chur (BFF)',  port: '3000', mode: 'dev',    color: 'var(--suc)' } },
-  { id: 'chur-docker', type: 'service', position: { x: 470, y: 290 },
-    data: { label: 'Chur (BFF)',  port: '3000', extPort: '13000', mode: 'docker', color: 'var(--suc)' } },
-  { id: 'hb-dev',      type: 'service', position: { x: 270, y: 290 },
-    data: { label: 'Heimdall Bk', port: '9093', mode: 'dev',    color: 'var(--suc)' } },
-  { id: 'hb-docker',   type: 'service', position: { x: 740, y: 290 },
-    data: { label: 'Heimdall Bk', port: '9093', extPort: '19093', mode: 'docker', color: 'var(--suc)' } },
+// ── Run ELK layered DOWN with explicit layer constraints ──────────────────────
+// Each service has a fixed layer (0 = nginx edge, 6 = storage). We feed those
+// to ELK via `layerChoiceConstraint` so the L0..L6 stacking is preserved
+// regardless of edge directions; ELK only needs to decide horizontal order
+// within each layer to minimize crossings.
+async function runLayout(raw: ReturnType<typeof buildRaw>): Promise<{
+  nodes:  Node[];
+  width:  number;
+  height: number;
+}> {
+  const elkGraph = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm':                             'layered',
+      'elk.direction':                             'DOWN',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '50',
+      'elk.spacing.nodeNode':                      '34',
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      'elk.layered.nodePlacement.strategy':        'BRANDES_KOEPF',
+      'elk.layered.unnecessaryBendpoints':         'false',
+      'elk.padding':                               '[top=12,left=12,bottom=12,right=12]',
+    },
+    children: raw.nodes.map(n => ({
+      id:     n.id,
+      width:  NODE_W,
+      height: NODE_H,
+      layoutOptions: {
+        'elk.layered.layering.layerChoiceConstraint': String(n.layer),
+      },
+    })),
+    edges: raw.edges.map(e => ({
+      id:      e.id,
+      sources: [e.source],
+      targets: [e.target],
+    })),
+  };
 
-  // ── Row 3: Auth + GraphQL ────────────────────────────────────────────────────
-  // Keycloak: ONE shared instance — centred between the two lanes
-  { id: 'keycloak',        type: 'service', position: { x: 350, y: 430 },
-    data: { label: 'Keycloak', port: '8180', extPort: '18180', color: 'var(--wrn)' } },
-  { id: 'shuttle-dev',     type: 'service', position: { x: 80,  y: 430 },
-    data: { label: 'Shuttle',  port: '8080', mode: 'dev',    color: 'var(--suc)' } },
-  { id: 'shuttle-docker',  type: 'service', position: { x: 640, y: 430 },
-    data: { label: 'Shuttle',  port: '8080', extPort: '18080', mode: 'docker', color: 'var(--suc)' } },
+  const result = await getElk().layout(elkGraph);
+  const posMap = new Map<string, { x: number; y: number }>();
+  for (const c of result.children ?? []) {
+    posMap.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
+  }
 
-  // ── Row 4: Ðali (async PL/SQL parser, port 9090) ─────────────────────────────
-  { id: 'dali-dev',    type: 'service', position: { x: 80,  y: 570 },
-    data: { label: 'Ðali (Parser)', port: '9090', mode: 'dev',    color: 'var(--acc)' } },
-  { id: 'dali-docker', type: 'service', position: { x: 640, y: 570 },
-    data: { label: 'Ðali (Parser)', port: '9090', extPort: '19090', mode: 'docker', color: 'var(--acc)' } },
+  const nodes: Node[] = raw.nodes.map(n => ({
+    id:       n.id,
+    type:     'service',
+    position: posMap.get(n.id) ?? { x: 0, y: 0 },
+    data: {
+      label:     n.label,
+      port:      n.port,
+      extPort:   n.extPort,
+      color:     n.color,
+      isStorage: n.isStorage,
+      isDocker:  n.isDocker,
+    },
+  }));
 
-  // ── Row 5: Storage ────────────────────────────────────────────────────────────
-  // Ygg = HoundArcade — shared external container
-  { id: 'ygg',         type: 'service', position: { x: 350, y: 710 },
-    data: { label: 'Ygg (HoundArcade)', port: '2480', color: 'var(--t3)' } },
-  // Frigg — ONE shared ArcadeDB instance (Heimðallr + Ðali persistence)
-  //   IDE access:    localhost:2481  (host-mapped)
-  //   Docker access: frigg:2480      (internal docker net)  ext :2481
-  { id: 'frigg', type: 'service', position: { x: 640, y: 710 },
-    data: { label: 'Frigg', port: '2481', extPort: '2481', color: 'var(--t3)' } },
-];
+  const r = result as unknown as { width?: number; height?: number };
+  return {
+    nodes,
+    width:  Math.ceil(r.width  ?? 0),
+    height: Math.ceil(r.height ?? 0),
+  };
+}
 
 // ── Health colour helper ───────────────────────────────────────────────────────
 function healthColor(status: ServiceHealth['status'] | undefined): string | undefined {
@@ -234,103 +244,53 @@ function healthColor(status: ServiceHealth['status'] | undefined): string | unde
   }
 }
 
-// ── Node → service mapping ─────────────────────────────────────────────────────
-// Maps each topology node ID to the service name + mode used for health lookup.
-// mode='any' = pick whichever instance is available (for shared/single nodes).
-const NODE_SERVICE_MAP: Record<string, { name: string; mode: 'dev' | 'docker' | 'any' }> = {
-  'shell-dev':       { name: 'shell',             mode: 'dev'    },
-  'shell-docker':    { name: 'shell',             mode: 'docker' },
-  'verdandi-dev':    { name: 'verdandi',          mode: 'dev'    },
-  'verdandi-docker': { name: 'verdandi',          mode: 'docker' },
-  'hf-dev':          { name: 'heimdall-frontend', mode: 'dev'    },
-  'hf-docker':       { name: 'heimdall-frontend', mode: 'docker' },
-  'chur-dev':        { name: 'chur',              mode: 'dev'    },
-  'chur-docker':     { name: 'chur',              mode: 'docker' },
-  'hb-dev':          { name: 'heimdall-backend',  mode: 'dev'    },
-  'hb-docker':       { name: 'heimdall-backend',  mode: 'docker' },
-  'keycloak':        { name: 'keycloak',          mode: 'any'    },  // single shared instance
-  'shuttle-dev':     { name: 'shuttle',           mode: 'dev'    },
-  'shuttle-docker':  { name: 'shuttle',           mode: 'docker' },
-  'dali-dev':        { name: 'dali',              mode: 'dev'    },
-  'dali-docker':     { name: 'dali',              mode: 'docker' },
-  'ygg':             { name: 'ygg',               mode: 'any'    },
-  'frigg':           { name: 'frigg',             mode: 'any'    },
-};
+// ── Inner — assumes ReactFlowProvider context ─────────────────────────────────
+function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHealth[] }) {
+  const raw = useMemo(buildRaw, []);
 
-// ── Edge factory ──────────────────────────────────────────────────────────────
-function e(
-  id: string, src: string, tgt: string, label: string,
-  color = 'var(--bd)', animated = false,
-): Edge {
-  return {
-    id, source: src, target: tgt, label, animated,
-    markerEnd:    { type: MarkerType.ArrowClosed, color },
-    style:        { stroke: color, strokeWidth: 1.5 },
-    labelStyle:   { fill: 'var(--t3)', fontSize: 9, fontFamily: 'var(--mono)' },
-    labelBgStyle: { fill: 'var(--bg0)', opacity: 0.85 },
-  };
-}
+  // ELK runs once on mount; layout is static (driven by services.ts config).
+  const [layout, setLayout] = useState<{ nodes: Node[]; width: number; height: number } | null>(null);
+  const [layoutErr, setLayoutErr] = useState<string | null>(null);
 
-const EDGES: Edge[] = [
-  // ── IDE lane ─────────────────────────────────────────────────────────────────
-  e('sd-vd',    'shell-dev',    'verdandi-dev',    'MF',         'var(--inf)'),
-  e('sd-hfd',   'shell-dev',    'hf-dev',          'MF',         'var(--inf)'),
-  e('vd-cd',    'verdandi-dev', 'chur-dev',        'auth/proxy', 'var(--suc)'),
-  e('hfd-hbd',  'hf-dev',       'hb-dev',          'REST/WS',    'var(--suc)', true),
-  e('cd-kc',    'chur-dev',     'keycloak',        'OAuth2',     'var(--wrn)'),   // → shared KC
-  e('cd-std',   'chur-dev',     'shuttle-dev',     'GraphQL',    'var(--acc)'),
-  e('cd-hbd',   'chur-dev',     'hb-dev',          'events',     'var(--t3)'),
-  e('std-ygg',   'shuttle-dev',  'ygg',             'ArcadeDB',   'var(--t3)'),
-  e('hbd-fri',   'hb-dev',       'frigg',           'ArcadeDB',   'var(--t3)'),
-  e('cd-dali',   'chur-dev',     'dali-dev',        'REST',       'var(--acc)'),
-  e('dali-fri',  'dali-dev',     'frigg',           'JobRunr',    'var(--t3)'),
+  useEffect(() => {
+    let cancelled = false;
+    runLayout(raw)
+      .then(res => { if (!cancelled) setLayout(res); })
+      .catch(err => { if (!cancelled) setLayoutErr(err instanceof Error ? err.message : String(err)); });
+    return () => { cancelled = true; };
+  }, [raw]);
 
-  // ── Docker lane (internal ports, docker network) ──────────────────────────
-  e('sk-vk',     'shell-docker',    'verdandi-docker',    'MF',         'var(--inf)'),
-  e('sk-hfk',    'shell-docker',    'hf-docker',          'MF',         'var(--inf)'),
-  e('vk-ck',     'verdandi-docker', 'chur-docker',        'auth/proxy', 'var(--suc)'),
-  e('hfk-hbk',   'hf-docker',      'hb-docker',          'REST/WS',    'var(--suc)', true),
-  e('ck-kc',     'chur-docker',     'keycloak',           'OAuth2',     'var(--wrn)'),  // → shared KC
-  e('ck-stk',    'chur-docker',     'shuttle-docker',     'GraphQL',    'var(--acc)'),
-  e('ck-hbk',    'chur-docker',     'hb-docker',          'events',     'var(--t3)'),
-  e('stk-ygg',   'shuttle-docker',  'ygg',                'ArcadeDB',   'var(--t3)'),
-  e('hbk-frik',  'hb-docker',       'frigg',              'ArcadeDB',   'var(--t3)'),  // → shared Frigg
-  e('ck-dalik',  'chur-docker',     'dali-docker',        'REST',       'var(--acc)'),
-  e('dalik-frik','dali-docker',     'frigg',              'JobRunr',    'var(--t3)'),
-];
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const { fitView } = useReactFlow();
 
-// ── Component ─────────────────────────────────────────────────────────────────
-export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: ServiceHealth[] }) {
-  // Build fast lookup: "name:mode" → status
+  // Apply ELK output to ReactFlow state + re-fit viewport.
+  useEffect(() => {
+    if (!layout) return;
+    setNodes(layout.nodes);
+    requestAnimationFrame(() => fitView({ padding: 0.08, duration: 250 }));
+  }, [layout, setNodes, fitView]);
+
+  // Live health colour updates — touch only `data.statusColor`, preserve positions.
   const statusLookup = useMemo(() => {
     const m = new Map<string, ServiceHealth['status']>();
-    for (const s of serviceStatuses) m.set(`${s.name}:${s.mode}`, s.status);
+    for (const s of serviceStatuses) m.set(s.name, s.status);
     return m;
   }, [serviceStatuses]);
 
-  // Controlled nodes — ReactFlow manages drag positions; we only update `data`
-  const [nodes, setNodes, onNodesChange] = useNodesState(BASE_NODES);
-
-  // Re-apply health colours whenever statuses are refreshed (every 10s)
   useEffect(() => {
     setNodes(prev => prev.map(n => {
-      const mapping = NODE_SERVICE_MAP[n.id];
-      if (!mapping) return n;
-
-      let status: ServiceHealth['status'] | undefined;
-      if (mapping.mode === 'any') {
-        status = statusLookup.get(`${mapping.name}:dev`)
-              ?? statusLookup.get(`${mapping.name}:docker`);
-      } else {
-        status = statusLookup.get(`${mapping.name}:${mapping.mode}`);
-      }
-
+      const status = statusLookup.get(n.id);
       const hc = healthColor(status);
-      const prev_hc = (n.data as ServiceNodeData).statusColor;
-      if (hc === prev_hc) return n; // no change — avoid re-render
+      const prevHc = (n.data as ServiceNodeData).statusColor;
+      if (hc === prevHc) return n;
       return { ...n, data: { ...n.data, statusColor: hc } };
     }));
   }, [statusLookup, setNodes]);
+
+  const edges = useMemo(() => buildRaw().edges, []);
+
+  // Canvas height — derive from ELK output, clamped to a sensible band.
+  const canvasHeight = layout ? Math.max(360, Math.min(640, layout.height + 60)) : 420;
 
   return (
     <div style={{
@@ -352,6 +312,14 @@ export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: Se
         gap:          'var(--seer-space-3)',
       }}>
         Service Topology
+        <span style={{ textTransform: 'none', fontFamily: 'var(--mono)', color: 'var(--t3)', opacity: 0.7 }}>
+          · ELK layered · derived from config/services.ts
+        </span>
+        {layoutErr && (
+          <span style={{ textTransform: 'none', color: 'var(--danger)', fontFamily: 'var(--mono)' }}>
+            layout: {layoutErr}
+          </span>
+        )}
         {serviceStatuses.length > 0 && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -369,14 +337,14 @@ export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: Se
           </span>
         )}
       </div>
-      <div style={{ height: 880 }}>
+      <div style={{ height: canvasHeight }}>
         <ReactFlow
           nodes={nodes}
-          edges={EDGES}
+          edges={edges}
           onNodesChange={onNodesChange}
           nodeTypes={NODE_TYPES}
           fitView
-          fitViewOptions={{ padding: 0.12 }}
+          fitViewOptions={{ padding: 0.08 }}
           proOptions={{ hideAttribution: true }}
           style={{ background: 'var(--bg0)' }}
         >
@@ -385,5 +353,14 @@ export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: Se
         </ReactFlow>
       </div>
     </div>
+  );
+}
+
+// ── Public component — wraps inner in ReactFlowProvider so useReactFlow works ─
+export function ServiceTopology({ serviceStatuses = [] }: { serviceStatuses?: ServiceHealth[] }) {
+  return (
+    <ReactFlowProvider>
+      <ServiceTopologyInner serviceStatuses={serviceStatuses} />
+    </ReactFlowProvider>
   );
 }

@@ -28,6 +28,7 @@ import studio.seer.dali.service.SessionService;
 import studio.seer.shared.FileResult;
 import studio.seer.shared.ParseSessionInput;
 import studio.seer.shared.VertexTypeStat;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -70,9 +71,9 @@ public class ParseJob {
     @Inject HeimdallEmitter      emitter;
     @Inject SkadiFetcherRegistry skadiFetcherRegistry;
     @Inject SourceArchiveService sourceArchiveService;
+    @Inject YggLineageRegistry   yggLineageRegistry;
 
     @ConfigProperty(name = "ygg.url")      String yggUrl;
-    @ConfigProperty(name = "ygg.db")       String yggDb;
     @ConfigProperty(name = "ygg.user")     String yggUser;
     @ConfigProperty(name = "ygg.password") String yggPassword;
     // Optional — absent when HEIMDALL_URL env var is not set (e.g. CI, local dev without Heimdall).
@@ -89,6 +90,8 @@ public class ParseJob {
 
         try {
             HoundConfig config = buildConfig(input);
+            log.info("[ParseJob] sid={} preview={} writeMode={} clear={}",
+                    sessionId, input.preview(), config.writeMode(), input.clearBeforeWrite());
             emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(),
                     input.clearBeforeWrite(), config.workerThreads());
 
@@ -112,7 +115,7 @@ public class ParseJob {
             if (Files.isDirectory(sourcePath)) {
                 runBatch(sessionId, sourcePath, config, input);
             } else {
-                runSingle(sessionId, sourcePath, config);
+                runSingle(sessionId, sourcePath, config, input);
             }
 
         } catch (Exception e) {
@@ -134,22 +137,29 @@ public class ParseJob {
         if (input.preview()) {
             return HoundConfig.defaultDisabled(input.dialect());
         }
+        // MTN-04: fail-fast on missing tenantAlias — no silent "default" fallback.
+        // Every ParseSessionInput MUST carry alias resolved from JWT/header at
+        // session-create time. If this fires, the dispatcher forgot to inject it.
+        String tenantAlias = requireTenantAlias(input, "buildConfig");
+        String lineageDb = yggLineageRegistry.resourceFor(tenantAlias).databaseName();
         return new HoundConfig(
                 input.dialect(),
                 null,                           // targetSchema — no namespace isolation
                 ArcadeWriteMode.REMOTE_BATCH,
-                yggUrl, yggDb, yggUser, yggPassword,
+                yggUrl, lineageDb, yggUser, yggPassword,
                 Runtime.getRuntime().availableProcessors(),
                 false, 5000, null);
     }
 
     // ── Single file ────────────────────────────────────────────────────────────
 
-    private void runSingle(String sessionId, Path file, HoundConfig config) {
+    private void runSingle(String sessionId, Path file, HoundConfig config, ParseSessionInput input) {
         sessionService.startSession(sessionId, false, 1);
 
         HoundEventListener listener = buildListener(sessionId, config);
-        ParseResult result = houndParser.parse(file, config, listener);
+        ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
+                ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
+                : houndParser.parse(file, config, listener);
 
         FileResult fr = toFileResult(result);
         sessionService.completeSession(sessionId, result, List.of(fr));
@@ -194,8 +204,9 @@ public class ParseJob {
         SkadiFetchResult fetchResult = fetcher.fetchScripts(skConfig);
         fetchListener.onFetchCompleted(fetchResult.stats());
 
-        // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup)
-        List<SqlSource> sources = sourceArchiveService.upsertAll(fetchResult.files());
+        // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup against hound_src_{alias})
+        String tenantAlias = requireTenantAlias(input, "runJdbc/sourceArchive");
+        List<SqlSource> sources = sourceArchiveService.upsertAll(tenantAlias, fetchResult.files());
 
         if (sources.isEmpty()) {
             log.info("[{}] SKADI: no SQL sources to parse (adapter={}, fetched={})",
@@ -251,7 +262,7 @@ public class ParseJob {
         // Per-file retry absorbs transient ArcadeDB MVCC conflicts without aborting the entire
         // batch — a single file failure no longer cascades into a full session retry (JobRunr).
         for (Path file : files) {
-            FileResult fr = parseFileWithRetry(sessionId, file, config);
+            FileResult fr = parseFileWithRetry(sessionId, file, config, input);
             fileResults.add(fr);
             sessionService.recordFileComplete(sessionId, fr);
             if (fr.success()) {
@@ -279,12 +290,15 @@ public class ParseJob {
      * <p>On permanent failure the file is recorded as {@code success=false} in the batch
      * result, but processing continues for the remaining files.
      */
-    private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config) {
+    private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config,
+                                          ParseSessionInput input) {
         Exception lastEx = null;
         for (int attempt = 1; attempt <= FILE_MAX_RETRIES; attempt++) {
             try {
                 HoundEventListener listener = buildListener(sessionId, config);
-                ParseResult result = houndParser.parse(file, config, listener);
+                ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
+                        ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
+                        : houndParser.parse(file, config, listener);
                 if (attempt > 1) {
                     log.info("[{}] File recovered on attempt {}/{}: {}",
                             sessionId, attempt, FILE_MAX_RETRIES, file.getFileName());
@@ -435,5 +449,21 @@ public class ParseJob {
 
         return new ParseResult(source, atoms, vertices, edges, droppedEdges,
                 aggMap, rate, atomsResolved, atomsUnresolved, warnings, errors, duration);
+    }
+
+    /**
+     * MTN-04: Extracts and validates the tenant alias from a ParseSessionInput.
+     * Throws IllegalStateException if missing — this is a deliberate fail-fast:
+     * any path reaching here without alias is a bug in the dispatcher that must
+     * be fixed upstream (no silent routing to "default").
+     */
+    private static String requireTenantAlias(ParseSessionInput input, String context) {
+        String alias = input.tenantAlias();
+        if (alias == null || alias.isBlank()) {
+            throw new IllegalStateException(
+                    "MTN-04 [" + context + "]: ParseSessionInput.tenantAlias is required " +
+                    "(refusing to default). TenantAwareJobDispatcher must inject alias at enqueue time.");
+        }
+        return alias;
     }
 }

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation }                            from 'react-i18next';
 import { type DaliSession, type YggStats, getDaliHealth, getSessions, getSessionsArchive, getYggStats } from '../api/dali';
-import { usePageTitle } from '../hooks/usePageTitle';
-import { ParseForm }    from '../components/dali/ParseForm';
-import { SessionList }  from '../components/dali/SessionList';
+import { usePageTitle }    from '../hooks/usePageTitle';
+import { ParseForm }       from '../components/dali/ParseForm';
+import { SessionList }     from '../components/dali/SessionList';
+import { useAuthStore }    from '../stores/authStore';
 import css from '../components/dali/dali.module.css';
 
 // ── Dali health ───────────────────────────────────────────────────────────────
@@ -35,6 +36,31 @@ function Sep() {
 // ── DaliPage ─────────────────────────────────────────────────────────────────
 export default function DaliPage() {
   const { t } = useTranslation();
+  const sessionUser = useAuthStore(s => s.user);
+
+  // Seed from localStorage so super-admin's last pick survives navigation.
+  const [tenantAlias, setTenantAlias] = useState<string>(() => {
+    const stored = localStorage.getItem('seer-active-tenant');
+    if (stored && stored !== '__all__') return stored;
+    return sessionUser?.activeTenantAlias ?? 'default';
+  });
+
+  // Non-super-admins must always see their own tenant, regardless of localStorage.
+  useEffect(() => {
+    if (sessionUser && sessionUser.role !== 'super-admin') {
+      setTenantAlias(sessionUser.activeTenantAlias ?? 'default');
+    }
+  }, [sessionUser?.id, sessionUser?.role]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const alias = (e as CustomEvent<{ activeTenant: string }>).detail?.activeTenant;
+      if (alias && alias !== '__all__') setTenantAlias(alias);
+    };
+    window.addEventListener('aida:tenant', handler);
+    return () => window.removeEventListener('aida:tenant', handler);
+  }, []);
+
   const [sessions,      setSessions]      = useState<DaliSession[]>([]);
   const [archive,       setArchive]       = useState<DaliSession[]>([]);
   const [archiveOpen,   setArchiveOpen]   = useState(false);
@@ -52,7 +78,8 @@ export default function DaliPage() {
 
   // Load sessions + check Dali availability; auto-retry until online
   function loadSessions() {
-    getSessions(50)
+    const alias = tenantAlias;
+    getSessions(50, alias)
       .then(data => {
         setSessions(data);
         setDaliState('online');
@@ -62,12 +89,11 @@ export default function DaliPage() {
         setDaliState('offline');
         if (!retryRef.current) {
           retryRef.current = setInterval(() => {
-            getSessions(1).then(data => {
+            getSessions(1, alias).then(data => {
               setSessions(data);
               setDaliState('online');
               if (retryRef.current) { clearInterval(retryRef.current); retryRef.current = null; }
-              // Full reload once we're back
-              getSessions(50).then(setSessions).catch(() => {});
+              getSessions(50, alias).then(d => setSessions(d)).catch(() => {});
             }).catch(() => setDaliState('offline'));
           }, RETRY_MS);
         }
@@ -75,32 +101,38 @@ export default function DaliPage() {
   }
 
   useEffect(() => {
+    // Reset archive state so switching tenant forces a fresh fetch
+    setArchive([]);
+    setArchiveLoaded(false);
+    setArchiveOpen(false);
     loadSessions();
     return () => { if (retryRef.current) clearInterval(retryRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tenantAlias]);
 
   // FRIGG health polling — independent of Dali availability, every 15s
   useEffect(() => {
     function checkFrigg() {
-      getDaliHealth()
+      getDaliHealth(tenantAlias)
         .then(h => setFriggHealthy(h.frigg === 'ok'))
         .catch(() => setFriggHealthy(false));
     }
     checkFrigg();
     friggPollRef.current = setInterval(checkFrigg, 15_000);
     return () => { if (friggPollRef.current) clearInterval(friggPollRef.current); };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantAlias]);
 
   // YGG stats polling — every 30s
   useEffect(() => {
     function fetchYgg() {
-      getYggStats().then(setYggStats).catch(() => {});
+      getYggStats(tenantAlias).then(setYggStats).catch(() => {});
     }
     fetchYgg();
     yggPollRef.current = setInterval(fetchYgg, 30_000);
     return () => { if (yggPollRef.current) clearInterval(yggPollRef.current); };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantAlias]);
 
   usePageTitle('Ðali');
 
@@ -125,7 +157,9 @@ export default function DaliPage() {
   }
 
   const handleSessionUpdate = useCallback((updated: DaliSession) => {
-    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+    setSessions(prev => prev.map(s =>
+      s.id === updated.id ? updated : s,
+    ));
     if (updated.status === 'COMPLETED') {
       addToastRef.current(
         t('dali.page.toastCompleted', { id: updated.id.slice(0, 8), atoms: (updated.atomCount ?? 0).toLocaleString() }),
@@ -136,17 +170,15 @@ export default function DaliPage() {
     }
   }, [t]);
 
-  function loadArchive() {
+  const isSuperAdmin = sessionUser?.role === 'super-admin';
+
+  function loadArchive(allTenants = false) {
     setArchiveLoading(true);
-    getSessionsArchive(200)
+    const alias = tenantAlias;
+    getSessionsArchive(200, alias, allTenants)
       .then(data => { setArchive(data); setArchiveLoaded(true); })
       .catch(() => addToastRef.current(t('dali.page.toastArchiveErr'), 'err'))
       .finally(() => setArchiveLoading(false));
-  }
-
-  function toggleArchive() {
-    if (!archiveOpen && !archiveLoaded) loadArchive();
-    setArchiveOpen(o => !o);
   }
 
   // Derived stats
@@ -176,16 +208,18 @@ export default function DaliPage() {
               {t('dali.page.description')}
             </div>
           </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={loadSessions}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="23 4 23 10 17 10"/>
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-            </svg>
-            {t('dali.page.refreshBtn')}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={loadSessions}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              {t('dali.page.refreshBtn')}
+            </button>
+          </div>
         </div>
 
         {/* Stats strip — in-memory session counters */}
@@ -262,7 +296,7 @@ export default function DaliPage() {
             </>
           )}
           <button
-            onClick={() => getYggStats().then(setYggStats).catch(() => {})}
+            onClick={() => getYggStats(tenantAlias).then(setYggStats).catch(() => {})}
             style={{
               marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--t4)', padding: '2px 4px', borderRadius: 3,
@@ -306,15 +340,18 @@ export default function DaliPage() {
         )}
 
         {/* Parse form */}
-        <ParseForm onSessionCreated={handleSessionCreated} />
+        <ParseForm onSessionCreated={handleSessionCreated} tenantAlias={tenantAlias} />
 
         {/* Active sessions (current Dali process, in-memory) */}
-        <SessionList sessions={sessions} onSessionUpdate={handleSessionUpdate} />
+        <SessionList sessions={sessions} onSessionUpdate={handleSessionUpdate} tenantAlias={tenantAlias} />
 
         {/* FRIGG Archive — lazy-loaded on expand */}
         <div style={{ marginTop: 16, marginBottom: 16 }}>
           <button
-            onClick={toggleArchive}
+            onClick={() => {
+              if (!archiveOpen && !archiveLoaded) loadArchive(false);
+              setArchiveOpen(o => !o);
+            }}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               width: '100%', padding: '9px 14px',
@@ -343,18 +380,34 @@ export default function DaliPage() {
             )}
             <div style={{
               marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5,
-              fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)',
             }}>
-              <div style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: friggHealthy === null ? 'var(--wrn)' : friggHealthy ? 'var(--suc)' : 'var(--danger)',
-              }}/>
-              frigg :2481
+              {isSuperAdmin && (
+                <button
+                  onClick={e => { e.stopPropagation(); setArchive([]); setArchiveLoaded(false); loadArchive(true); setArchiveOpen(true); }}
+                  style={{
+                    fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
+                    padding: '2px 7px', borderRadius: 3, cursor: 'pointer',
+                    background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
+                    color: 'var(--acc)',
+                    border: '1px solid color-mix(in srgb, var(--acc) 30%, transparent)',
+                  }}
+                  title="Load sessions from ALL tenant databases"
+                >
+                  ALL
+                </button>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--t3)' }}>
+                <div style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: friggHealthy === null ? 'var(--wrn)' : friggHealthy ? 'var(--suc)' : 'var(--danger)',
+                }}/>
+                frigg :2481
+              </div>
             </div>
           </button>
           {archiveOpen && (
             <div style={{ border: '1px solid var(--bd)', borderTop: 'none', borderRadius: '0 0 6px 6px', overflow: 'hidden' }}>
-              <SessionList sessions={archive} onSessionUpdate={() => {}} />
+              <SessionList sessions={archive} onSessionUpdate={() => {}} tenantAlias={tenantAlias} />
             </div>
           )}
         </div>

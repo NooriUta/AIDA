@@ -22,6 +22,9 @@ COPY services/heimdall-backend/docker-build.gradle    build.gradle
 COPY shared/dali-models                               shared/dali-models
 COPY services/heimdall-backend/build.gradle           services/heimdall-backend/build.gradle
 COPY services/heimdall-backend/gradle.properties      services/heimdall-backend/gradle.properties
+# Dependency cache layer — rebuilt only when build.gradle / dali-models change.
+# src is copied separately below so code changes don't bust this layer.
+RUN gradle :services:heimdall-backend:dependencies --no-daemon -q
 COPY services/heimdall-backend/src                    services/heimdall-backend/src
 
 RUN gradle :services:heimdall-backend:build -x test --no-daemon \

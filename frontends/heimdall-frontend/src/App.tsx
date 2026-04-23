@@ -2,12 +2,19 @@
 // ensures it runs when App is loaded as an MF remote (main.tsx is not
 // executed in that case).
 import './i18n/config';
+// heimdall.css must also be imported here so styles load in MF-remote mode
+// (main.tsx is not executed when Shell imports heimdall-frontend/App).
+import './styles/heimdall.css';
 import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useTranslation }  from 'react-i18next';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
+import { ConsentModal }    from './components/ConsentModal';
 import { useAuthStore }    from './stores/authStore';
+import { usePrefsStore }   from './stores/prefsStore';
+import { RoleGuard }       from './components/RoleGuard';
+import { applyPrefs }      from './stores/sharedPrefsStore';
+import type { SharedPrefs } from './stores/sharedPrefsStore';
 
 const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
@@ -16,39 +23,61 @@ const DaliSourcesPage = React.lazy(() => import('./pages/DaliSourcesPage'));
 const DaliJobRunrPage = React.lazy(() => import('./pages/DaliJobRunrPage'));
 const EventStreamPage = React.lazy(() => import('./pages/EventStreamPage'));
 const ControlsPage    = React.lazy(() => import('./pages/ControlsPage'));
-const UsersPage       = React.lazy(() => import('./pages/UsersPage'));
-const DocsPage        = React.lazy(() => import('./pages/DocsPage'));
+const UsersPage          = React.lazy(() => import('./pages/UsersPage'));
+const DocsPage           = React.lazy(() => import('./pages/DocsPage'));
+const TenantsPage        = React.lazy(() => import('./pages/TenantsPage'));
+const TenantDetailsPage  = React.lazy(() => import('./pages/TenantDetailsPage'));
+// Round 5 self-service
+const ProfilePage           = React.lazy(() => import('./pages/ProfilePage'));
+const PreferencesPage       = React.lazy(() => import('./pages/PreferencesPage'));
+const NotificationsPage     = React.lazy(() => import('./pages/NotificationsPage'));
+const SessionActivityPage   = React.lazy(() => import('./pages/SessionActivityPage'));
+// Round 5 admin
+const SoftDeletedUsersPage  = React.lazy(() => import('./pages/SoftDeletedUsersPage'));
 
 // ── App layout (shell around the routed page) ─────────────────────────────────
 function AppLayout() {
-  const { t } = useTranslation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <HeimdallHeader />
       <main style={{ flex: 1, overflow: 'hidden' }}>
-        <Suspense fallback={
-          <div style={{ padding: 'var(--seer-space-8)', color: 'var(--t3)' }}>
-            {t('status.loading')}
-          </div>
-        }>
+        <Suspense fallback={null}>
           <Outlet />
         </Suspense>
       </main>
+      {/* Round 5 — T&C / Privacy consent interruptor (opens when user's
+          latest accepted version is older than current) */}
+      <ConsentModal />
     </div>
   );
 }
 
 // ── Protected layout route ────────────────────────────────────────────────────
+// In Shell mode: Shell's AuthGate has already validated the session, so
+// isAuthenticated is already true when this renders.
+// In standalone mode: waits for checkSession to complete before redirecting.
 function ProtectedRoute() {
-  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const isAuthenticated   = useAuthStore(s => s.isAuthenticated);
+  const isCheckingSession = useAuthStore(s => s.isCheckingSession);
+
+  if (isCheckingSession) return null;
   if (!isAuthenticated) return <Navigate to="login" replace />;
   return <Outlet />;
 }
 
-// ── Session check on mount ────────────────────────────────────────────────────
+// ── Session check on mount + prefs load on auth ───────────────────────────────
 function SessionGuard({ children }: { children: React.ReactNode }) {
   const checkSession = useAuthStore(s => s.checkSession);
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const loadPrefs = usePrefsStore(s => s.load);
+
   useEffect(() => { void checkSession(); }, [checkSession]);
+
+  // Load server-side prefs whenever the user becomes authenticated
+  useEffect(() => {
+    if (isAuthenticated) void loadPrefs();
+  }, [isAuthenticated, loadPrefs]);
+
   return <>{children}</>;
 }
 
@@ -62,6 +91,12 @@ function SessionGuard({ children }: { children: React.ReactNode }) {
  * in both standalone (base "/") and Shell (base "/heimdall/") contexts.
  */
 export default function App() {
+  useEffect(() => {
+    const h = (e: Event) => applyPrefs((e as CustomEvent<Partial<SharedPrefs>>).detail);
+    window.addEventListener('aida:prefs', h);
+    return () => window.removeEventListener('aida:prefs', h);
+  }, []);
+
   return (
     <SessionGuard>
       <Routes>
@@ -89,8 +124,32 @@ export default function App() {
               <Route path="jobrunr"  element={<DaliJobRunrPage />} />
             </Route>
 
+            {/* Tenant admin — admin+ only */}
+            <Route path="admin/tenants" element={
+              <RoleGuard require="admin"><TenantsPage /></RoleGuard>
+            } />
+            <Route path="admin/tenants/:alias" element={
+              <RoleGuard require="admin"><TenantDetailsPage /></RoleGuard>
+            } />
+
+            {/* Round 5 — Self-service (any authenticated user) */}
+            <Route path="me">
+              <Route index element={<Navigate to="profile" replace />} />
+              <Route path="profile"          element={<ProfilePage />} />
+              <Route path="preferences"      element={<PreferencesPage />} />
+              <Route path="notifications"    element={<NotificationsPage />} />
+              <Route path="session-activity" element={<SessionActivityPage />} />
+            </Route>
+
+            {/* Round 5 — Superadmin soft-delete management (backend also guards aida:superadmin) */}
+            <Route path="admin/users/soft-deleted" element={
+              <RoleGuard require="admin"><SoftDeletedUsersPage /></RoleGuard>
+            } />
+
             {/* Standalone pages */}
-            <Route path="users"          element={<UsersPage />} />
+            <Route path="users" element={
+              <RoleGuard require="local-admin"><UsersPage /></RoleGuard>
+            } />
             <Route path="demodebug"      element={<ControlsPage />} />
             <Route path="docs/*"         element={<DocsPage tab="docs" />} />
             <Route path="team-docs/*"    element={<DocsPage tab="team-docs" />} />
@@ -98,11 +157,11 @@ export default function App() {
             <Route path="highload/*"     element={<DocsPage tab="highload" />} />
 
             {/* Backward compat: old flat routes redirect to new paths */}
-            <Route path="services"  element={<Navigate to="/overview/services"  replace />} />
-            <Route path="dashboard" element={<Navigate to="/overview/dashboard" replace />} />
-            <Route path="events"    element={<Navigate to="/overview/events"    replace />} />
+            <Route path="services"  element={<Navigate to="../overview/services"  replace />} />
+            <Route path="dashboard" element={<Navigate to="../overview/dashboard" replace />} />
+            <Route path="events"    element={<Navigate to="../overview/events"    replace />} />
 
-            <Route path="*" element={<Navigate to="overview/services" replace />} />
+            <Route path="*" element={<Navigate to="/overview/services" replace />} />
           </Route>
         </Route>
       </Routes>

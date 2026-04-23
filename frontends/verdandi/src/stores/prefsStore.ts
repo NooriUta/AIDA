@@ -83,7 +83,7 @@ function writeLS(partial: Partial<ServerPrefs>): void {
 
 // ── DOM application ──────────────────────────────────────────────────────────
 
-function applyDom(prefs: Partial<ServerPrefs>): void {
+export function applyDom(prefs: Partial<ServerPrefs>): void {
   const root = document.documentElement;
   if (prefs.theme)   root.setAttribute('data-theme', prefs.theme);
   if (prefs.density) root.setAttribute('data-density', prefs.density);
@@ -94,15 +94,23 @@ function applyDom(prefs: Partial<ServerPrefs>): void {
       root.setAttribute('data-palette', prefs.palette);
     }
   }
-  if (prefs.uiFont)   root.style.setProperty('--ui-font',   prefs.uiFont);
-  if (prefs.monoFont) root.style.setProperty('--mono-font', prefs.monoFont);
-  if (prefs.fontSize) root.style.setProperty('--font-size', `${prefs.fontSize}px`);
+  if (prefs.uiFont)   root.style.setProperty('--font', `'${prefs.uiFont}', system-ui, sans-serif`);
+  if (prefs.monoFont) root.style.setProperty('--mono', `'${prefs.monoFont}', monospace`);
+  if (prefs.fontSize) root.style.fontSize = `${prefs.fontSize}px`;
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
 
 const PREFS_URL = '/prefs';
 const DEBOUNCE  = 1500;
+const COOKIE    = 'seer-prefs';
+
+function writeCookie(prefs: ServerPrefs): void {
+  try {
+    const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `${COOKIE}=${encodeURIComponent(JSON.stringify(prefs))}; expires=${expires}; path=/; SameSite=Lax`;
+  } catch { /* ignore */ }
+}
 
 export const usePrefsStore = create<PrefsStore>()((set, get) => ({
   synced: false,
@@ -116,6 +124,7 @@ export const usePrefsStore = create<PrefsStore>()((set, get) => ({
       // Server wins — overwrite localStorage and apply to DOM
       writeLS(server);
       applyDom(server);
+      writeCookie(server);
       set({ synced: true });
     } catch {
       // FRIGG down / offline — localStorage is already applied (verdandi reads it on mount)
@@ -123,24 +132,34 @@ export const usePrefsStore = create<PrefsStore>()((set, get) => ({
   },
 
   savePrefs: (partial) => {
-    // 1. Instant localStorage write + DOM
+    // 1. Instant localStorage write + DOM + cookie
     writeLS(partial);
     applyDom(partial);
+    writeCookie(readLS());
 
-    // 2. Debounced server sync
+    // 2. Cross-MF broadcast (same tab — HEIMDALL and others react without reload)
+    try {
+      window.dispatchEvent(new CustomEvent('aida:prefs', { detail: partial }));
+    } catch { /* non-browser env */ }
+
+    // 3. Debounced server sync
     const { _timer } = get();
     if (_timer) clearTimeout(_timer);
 
     const timer = setTimeout(async () => {
       try {
-        await fetch(PREFS_URL, {
+        const resp = await fetch(PREFS_URL, {
           method:      'PUT',
           credentials: 'include',
           headers:     { 'Content-Type': 'application/json' },
           body:        JSON.stringify(readLS()),
+          signal:      AbortSignal.timeout(5_000),
         });
-      } catch {
-        // fire-and-forget — localStorage remains the device cache
+        if (!resp.ok) {
+          console.warn(`[prefsStore] PUT /prefs failed: ${resp.status}`);
+        }
+      } catch (err) {
+        console.warn('[prefsStore] sync failed:', (err as Error).message);
       }
       set({ _timer: null });
     }, DEBOUNCE);

@@ -143,8 +143,9 @@ public class LineageResource {
         if (!"harvest".equals(action)) {
             return Uni.createFrom().failure(new GraphQLException("Unknown aida: scope: " + scope));
         }
+        String tenantAlias = identity.tenantAlias();
         return Uni.createFrom()
-                .item(() -> daliClient.startHarvest())
+                .item(() -> daliClient.startHarvest(tenantAlias))
                 .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
                 .map(resp -> {
                     String harvestId = resp.getOrDefault("harvestId", "unknown");

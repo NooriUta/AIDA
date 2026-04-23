@@ -36,54 +36,37 @@ public class SessionService {
 
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
-    // Instance<> defers resolution until first use — JobScheduler is not available
-    // at StartupEvent time (JobRunrLifecycle initialises it in its own onStart handler).
     @Inject Instance<JobScheduler>   jobScheduler;
     @Inject SessionRepository        repository;
     @Inject HeimdallEmitter          emitter;
-    @Inject FriggSchemaInitializer   schemaInitializer;   // BUG-SS-012: guard enqueue()
+    @Inject FriggSchemaInitializer   schemaInitializer;
 
-    /**
-     * Dali instance identifier — set via {@code dali.instance.id} / {@code DALI_INSTANCE_ID} env.
-     * Absent / empty = "untagged" / single-instance mode (backward-compat).
-     * Present non-empty = used to isolate sessions when multiple Dali instances share one FRIGG.
-     */
     @ConfigProperty(name = "dali.instance.id")
     Optional<String> instanceId;
 
-    private final ConcurrentMap<String, Session> sessions    = new ConcurrentHashMap<>();
-    /** Maps sessionId → JobRunr job UUID for cancel support. Not persisted — rebuilt on restart. */
+    private final ConcurrentMap<String, Session> sessions     = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, UUID>    jobRunrIdMap = new ConcurrentHashMap<>();
 
     private volatile boolean friggHealthy = false;
 
-    /** Effective instance tag: null when absent or blank (untagged/backward-compat). */
     private String myInstanceId() {
         return instanceId.filter(s -> !s.isBlank()).map(String::trim).orElse(null);
     }
 
     /**
      * Loads persisted sessions from FRIGG into the in-memory cache on startup.
-     * Guaranteed to run after {@link FriggSchemaInitializer} ({@code @Priority(5)}) and
-     * {@code JobRunrLifecycle} ({@code @Priority(10)}) due to {@code @Priority(20)} on this bean.
-     *
-     * <p>Instance isolation: if {@code dali.instance.id} is set, only sessions whose
-     * {@code instanceId} matches (or is null for backward-compat untagged sessions) are loaded.
+     * Loads only from the "default" tenant DB in single-tenant mode.
      */
     void onStart(@Observes @Priority(20) StartupEvent ev) {
         try {
-            List<Session> persisted = repository.findAll(500);
+            List<Session> persisted = repository.findAll("default", 500);
             String myId = myInstanceId();
             int loaded = 0, reset = 0, skipped = 0;
             for (Session s : persisted) {
-                // Instance isolation: skip sessions belonging to other instances
                 if (myId != null && s.instanceId() != null && !myId.equals(s.instanceId())) {
                     skipped++;
                     continue;
                 }
-                // JobRunr jobs survived the restart (ArcadeDB-backed), but sessions in
-                // QUEUED or RUNNING state may have been interrupted mid-execution.
-                // Mark them FAILED so they don't get stuck forever.
                 if (s.status() == SessionStatus.QUEUED || s.status() == SessionStatus.RUNNING) {
                     Session failed = new Session(
                             s.id(), SessionStatus.FAILED,
@@ -96,46 +79,57 @@ public class SessionService {
                             s.warnings(),
                             List.of("Server restarted — session was QUEUED/RUNNING and could not be recovered"),
                             s.fileResults(),
-                            false, s.instanceId());
+                            false, s.instanceId(), s.dbName(), s.tenantAlias());
                     sessions.put(failed.id(), failed);
                     persist(failed);
                     reset++;
                 } else {
-                    // Sessions loaded from FRIGG are by definition persisted
                     Session withFrigg = s.friggPersisted() ? s : new Session(
                             s.id(), s.status(), s.progress(), s.total(), s.batch(),
                             s.clearBeforeWrite(), s.dialect(), s.source(),
                             s.startedAt(), s.updatedAt(),
                             s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                             s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                            s.warnings(), s.errors(), s.fileResults(), true, s.instanceId());
+                            s.warnings(), s.errors(), s.fileResults(), true, s.instanceId(), s.dbName(),
+                            s.tenantAlias());
                     sessions.put(withFrigg.id(), withFrigg);
                     loaded++;
                 }
             }
             friggHealthy = true;
-            log.info("SessionService: loaded {} session(s) from FRIGG, reset {} stale QUEUED/RUNNING → FAILED, skipped {} (other instances)",
+            log.info("SessionService: loaded {} session(s) from FRIGG, reset {} stale, skipped {} (other instances)",
                     loaded, reset, skipped);
         } catch (Exception e) {
             friggHealthy = false;
-            log.warn("SessionService: could not load sessions from FRIGG (FRIGG may be unavailable): {}",
-                    e.getMessage());
+            log.warn("SessionService: could not load sessions from FRIGG: {}", e.getMessage());
         }
     }
 
-    /** Enqueue a new parse session. */
+    /**
+     * Enqueue a new parse session. The tenantAlias in input is derived from TenantContext.
+     *
+     * <p>MTN-04: fail-fast on missing alias. Caller (SessionResource, FileUploadResource,
+     * HarvestJob) MUST populate {@code input.tenantAlias()} from the resolved
+     * {@code TenantContext} — no silent "default" fallback here.
+     */
     public Session enqueue(ParseSessionInput input) {
-        // BUG-SS-012: refuse new jobs if the FRIGG schema is not ready
         if (!schemaInitializer.isSchemaReady()) {
             throw new IllegalStateException(
                 "FRIGG schema is not fully initialised — Dali started with a broken FRIGG connection. " +
                 "Check startup logs and restart the service.");
         }
-        // Concurrency guard for clearBeforeWrite operations
+        String tenantAlias = input.tenantAlias();
+        if (tenantAlias == null || tenantAlias.isBlank()) {
+            throw new IllegalStateException(
+                "MTN-04: ParseSessionInput.tenantAlias is required — caller must inject it " +
+                "from TenantContext before enqueue(). Refusing to default to 'default' which " +
+                "would leak parse data into the wrong tenant database.");
+        }
+
         if (!input.preview()) {
             if (input.clearBeforeWrite()) {
-                // clearBeforeWrite=true: no other active session allowed
                 boolean conflict = sessions.values().stream()
+                        .filter(s -> tenantAlias.equals(s.tenantAlias()))
                         .anyMatch(s -> s.status() == SessionStatus.QUEUED
                                     || s.status() == SessionStatus.RUNNING);
                 if (conflict) {
@@ -144,8 +138,8 @@ public class SessionService {
                             "Wait for it to complete first.");
                 }
             } else {
-                // clearBeforeWrite=false: block if a clear-session is active
                 boolean clearRunning = sessions.values().stream()
+                        .filter(s -> tenantAlias.equals(s.tenantAlias()))
                         .anyMatch(s -> (s.status() == SessionStatus.QUEUED
                                      || s.status() == SessionStatus.RUNNING)
                                      && s.clearBeforeWrite());
@@ -165,12 +159,12 @@ public class SessionService {
                 input.dialect(), input.source(),
                 now, now,
                 null, null, null, null, List.of(), null, null,
-                List.of(), List.of(), List.of(), false, myInstanceId());
+                List.of(), List.of(), List.of(), false, myInstanceId(),
+                (input.dbName() != null && !input.dbName().isBlank()) ? input.dbName().strip() : null,
+                tenantAlias);
         sessions.put(sessionId, session);
         persist(session);
         emitter.jobEnqueued(sessionId, input.source(), input.dialect());
-        // BUG-SS-011: jobScheduler producer throws IllegalStateException if JobRunr
-        // failed to initialise at startup; surface as a meaningful error rather than NPE.
         try {
             org.jobrunr.jobs.JobId jrJobId =
                 jobScheduler.get().<ParseJob>enqueue(j -> j.execute(sessionId, input));
@@ -180,7 +174,8 @@ public class SessionService {
             throw new IllegalStateException(
                 "Job scheduling unavailable (JobRunr did not initialise — check startup logs): " + e.getMessage(), e);
         }
-        log.info("Session enqueued: id={} dialect={} source={} instance={}", sessionId, input.dialect(), input.source(), myInstanceId());
+        log.info("Session enqueued: id={} dialect={} source={} tenant={} instance={}",
+                sessionId, input.dialect(), input.source(), tenantAlias, myInstanceId());
         return session;
     }
 
@@ -189,7 +184,12 @@ public class SessionService {
         return Optional.ofNullable(sessions.get(id));
     }
 
-    /** Called by ParseJob when it begins — sets RUNNING and marks batch/total. */
+    /** Returns a session only if it belongs to the given tenant (cross-tenant guard). */
+    public Optional<Session> findForTenant(String id, String tenantAlias) {
+        return Optional.ofNullable(sessions.get(id))
+                .filter(s -> tenantAlias.equals(s.tenantAlias()));
+    }
+
     public void startSession(String id, boolean batch, int total) {
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
                 s.id(), SessionStatus.RUNNING,
@@ -197,12 +197,11 @@ public class SessionService {
                 s.clearBeforeWrite(),
                 s.dialect(), s.source(), s.startedAt(), Instant.now(),
                 null, null, null, null, List.of(), null, null,
-                List.of(), List.of(), List.of(), false, s.instanceId()));
+                List.of(), List.of(), List.of(), false, s.instanceId(), s.dbName(), s.tenantAlias()));
         if (updated != null) persist(updated);
         log.debug("Session started: id={} batch={} total={}", id, batch, total);
     }
 
-    /** Called after each file completes in a batch — increments progress, appends FileResult. */
     public void recordFileComplete(String id, FileResult fileResult) {
         Session updated = sessions.computeIfPresent(id, (k, s) -> {
             var list = new java.util.ArrayList<>(s.fileResults());
@@ -215,12 +214,12 @@ public class SessionService {
                     s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                     s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), s.errors(), List.copyOf(list), false, s.instanceId());
+                    s.warnings(), s.errors(), List.copyOf(list), false, s.instanceId(), s.dbName(),
+                    s.tenantAlias());
         });
         if (updated != null) persist(updated);
     }
 
-    /** Called by ParseJob for RUNNING→FAILED transition. */
     public void updateStatus(String id, SessionStatus status) {
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
                 s.id(), status, s.progress(), s.total(), s.batch(),
@@ -229,15 +228,12 @@ public class SessionService {
                 s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                 s.vertexStats(),
                 s.resolutionRate(), s.durationMs(),
-                s.warnings(), s.errors(), s.fileResults(), false, s.instanceId()));
+                s.warnings(), s.errors(), s.fileResults(), false, s.instanceId(), s.dbName(),
+                s.tenantAlias()));
         if (updated != null) persist(updated);
         log.debug("Session status updated: id={} status={}", id, status);
     }
 
-    /**
-     * Called by ParseJob when parse fails — stores error message in session errors list.
-     * Preserves any partial file results already recorded.
-     */
     public void failSession(String id, String errorMessage) {
         Session updated = sessions.computeIfPresent(id, (k, s) -> {
             var errors = new java.util.ArrayList<>(s.errors() != null ? s.errors() : List.of());
@@ -251,13 +247,13 @@ public class SessionService {
                     s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                     s.vertexStats(),
                     s.resolutionRate(), s.durationMs(),
-                    s.warnings(), List.copyOf(errors), s.fileResults(), false, s.instanceId());
+                    s.warnings(), List.copyOf(errors), s.fileResults(), false, s.instanceId(), s.dbName(),
+                    s.tenantAlias());
         });
         if (updated != null) persist(updated);
         log.debug("Session failed: id={} error={}", id, errorMessage);
     }
 
-    /** Called when parse finishes successfully — stores aggregate result. */
     public void completeSession(String id, ParseResult result, List<FileResult> fileResults) {
         List<VertexTypeStat> vtxStats = toVertexTypeStats(result.vertexStats());
         Session updated = sessions.computeIfPresent(id, (k, s) -> new Session(
@@ -276,29 +272,32 @@ public class SessionService {
                 result.durationMs(),
                 result.warnings() != null ? result.warnings() : List.of(),
                 result.errors()   != null ? result.errors()   : List.of(),
-                fileResults, false, s.instanceId()));
+                fileResults, false, s.instanceId(), s.dbName(), s.tenantAlias()));
         if (updated != null) persist(updated);
-        log.info("Session completed: id={} atoms={} files={} duration={}ms",
-                id, result.atomCount(), fileResults.size(), result.durationMs());
+        log.info("Session completed: id={} atoms={} files={} duration={}ms tenant={}",
+                id, result.atomCount(), fileResults.size(), result.durationMs(),
+                updated != null ? updated.tenantAlias() : "?");
     }
 
-    /** Returns the most recent sessions, newest first. */
-    public List<Session> listRecent(int limit) {
+    /**
+     * Returns the most recent sessions for a tenant, newest first.
+     */
+    public List<Session> listRecent(String tenantAlias, int limit) {
         return sessions.values().stream()
+                .filter(s -> tenantAlias.equals(s.tenantAlias()))
                 .sorted(Comparator.comparing(Session::startedAt).reversed())
                 .limit(limit)
                 .toList();
     }
 
-    /** Returns true if the last FRIGG operation succeeded. */
+    /** Backward-compat overload — returns sessions for "default" tenant. */
+    public List<Session> listRecent(int limit) {
+        return listRecent("default", limit);
+    }
+
     public boolean isFriggHealthy() { return friggHealthy; }
 
-    /**
-     * Purges terminal sessions older than {@code cutoff} from in-memory cache and FRIGG.
-     * Active (QUEUED/RUNNING) sessions are never evicted regardless of age.
-     */
     public void purgeExpired(java.time.Instant cutoff) {
-        // Evict from in-memory cache — skip active sessions
         int evicted = 0;
         for (var it = sessions.entrySet().iterator(); it.hasNext(); ) {
             Session s = it.next().getValue();
@@ -309,25 +308,29 @@ public class SessionService {
                 evicted++;
             }
         }
-        // Delete from FRIGG
-        int deleted = repository.deleteOlderThan(cutoff);
-        log.info("SessionRetention: evicted {} from memory, deleted {} from FRIGG (older than {})",
+        // Purge from all tenant DBs represented in memory
+        sessions.values().stream()
+                .map(Session::tenantAlias)
+                .distinct()
+                .forEach(alias -> repository.deleteOlderThan(cutoff, alias));
+        int deleted = repository.deleteOlderThan(cutoff, "default");
+        log.info("SessionRetention: evicted {} from memory, deleted {} from FRIGG default (older than {})",
                 evicted, deleted, cutoff);
     }
 
     /**
-     * Cancels a session: removes it from the JobRunr queue (if still QUEUED/ENQUEUED)
-     * and transitions it to CANCELLED state.
-     *
-     * <p>If the job is already RUNNING the cancellation is best-effort — the job
-     * may still complete, but the session is marked CANCELLED immediately.
-     *
-     * @return {@code CancelResult} with status CANCELLING | NOT_FOUND | ALREADY_DONE
+     * Cancels a session. Enforces tenant isolation — only the owning tenant can cancel.
+     * Pass {@code null} as tenantAlias to bypass tenant check (superadmin).
      */
-    public CancelResult cancelSession(String sessionId) {
+    public CancelResult cancelSession(String sessionId, String tenantAlias) {
         Session session = sessions.get(sessionId);
         if (session == null) {
             return new CancelResult("NOT_FOUND", "Session not found: " + sessionId);
+        }
+        // Tenant isolation check (null = superadmin bypass)
+        if (tenantAlias != null && !tenantAlias.equals(session.tenantAlias())) {
+            return new CancelResult("FORBIDDEN",
+                    "Session " + sessionId + " does not belong to tenant " + tenantAlias);
         }
         if (session.status() == SessionStatus.COMPLETED
                 || session.status() == SessionStatus.FAILED
@@ -336,7 +339,6 @@ public class SessionService {
                     "Session already in terminal state: " + session.status());
         }
 
-        // Ask JobRunr to delete the job (no-op if already picked up by a worker)
         UUID jrId = jobRunrIdMap.remove(sessionId);
         if (jrId != null) {
             try {
@@ -350,25 +352,29 @@ public class SessionService {
             log.warn("[cancelSession] No JobRunr ID tracked for session {} — may have restarted", sessionId);
         }
 
-        // Transition session to CANCELLED and persist
         sessions.computeIfPresent(sessionId, (k, s) -> new Session(
                 s.id(), SessionStatus.CANCELLED, s.progress(), s.total(), s.batch(),
-                s.clearBeforeWrite(), s.dialect(), s.source(), s.startedAt(), java.time.Instant.now(),
+                s.clearBeforeWrite(), s.dialect(), s.source(), s.startedAt(), Instant.now(),
                 s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                 s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                s.warnings(), List.of("Cancelled by user"), s.fileResults(), false, s.instanceId()));
+                s.warnings(), List.of("Cancelled by user"), s.fileResults(), false, s.instanceId(),
+                s.dbName(), s.tenantAlias()));
 
         Session cancelled = sessions.get(sessionId);
         if (cancelled != null) persist(cancelled);
 
         emitter.sessionCancelled(sessionId);
-        log.info("[cancelSession] Session {} marked CANCELLED", sessionId);
+        log.info("[cancelSession] Session {} marked CANCELLED (tenant={})", sessionId, tenantAlias);
         return new CancelResult("CANCELLING", "Session marked CANCELLED; JobRunr deletion requested");
+    }
+
+    /** Backward-compat — no tenant check. */
+    public CancelResult cancelSession(String sessionId) {
+        return cancelSession(sessionId, null);
     }
 
     // ── Internal ───────────────────────────────────────────────────────────────
 
-    /** Converts ParseResult's internal Map<type,[ins,dup]> to shared VertexTypeStat list. */
     private static List<VertexTypeStat> toVertexTypeStats(java.util.Map<String, int[]> map) {
         if (map == null || map.isEmpty()) return List.of();
         var out = new java.util.ArrayList<VertexTypeStat>(map.size());
@@ -380,7 +386,6 @@ public class SessionService {
         try {
             repository.save(session);
             friggHealthy = true;
-            // Mark as persisted in the in-memory map (only if the session is still there)
             if (!session.friggPersisted()) {
                 sessions.computeIfPresent(session.id(), (k, s) -> new Session(
                         s.id(), s.status(), s.progress(), s.total(), s.batch(),
@@ -388,7 +393,8 @@ public class SessionService {
                         s.startedAt(), s.updatedAt(),
                         s.atomCount(), s.vertexCount(), s.edgeCount(), s.droppedEdgeCount(),
                         s.vertexStats(), s.resolutionRate(), s.durationMs(),
-                        s.warnings(), s.errors(), s.fileResults(), true, s.instanceId()));
+                        s.warnings(), s.errors(), s.fileResults(), true, s.instanceId(), s.dbName(),
+                        s.tenantAlias()));
             }
         } catch (Exception e) {
             friggHealthy = false;

@@ -1,7 +1,8 @@
-import { Globe, Paintbrush, Sun, Moon } from 'lucide-react';
+import { Globe, Paintbrush, Sun, Moon, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
-import { useShellStore }   from '../stores/shellStore';
+import { useShellStore }     from '../stores/shellStore';
+import { useShellAuthStore } from '../stores/authStore';
 
 // ── Design tokens: palettes (синхронизировано с globals.css + tokens.css) ─────
 const PALETTES: Array<{ id: string; key: string; accent: string }> = [
@@ -223,13 +224,15 @@ export function AidaNav() {
   const { t }      = useTranslation();
   const currentApp = useShellStore(s => s.currentApp);
   const navigateTo = useShellStore(s => s.navigateTo);
+  const logout     = useShellAuthStore(s => s.logout);
 
   return (
     <nav style={{
       display:      'flex',
       alignItems:   'center',
       gap:          '6px',
-      padding:      'var(--seer-space-3) var(--seer-space-6)',
+      height:       '42px',
+      padding:      '0 12px',
       background:   'var(--bg1)',
       borderBottom: '1px solid var(--bd)',
       flexShrink:   0,
@@ -268,6 +271,18 @@ export function AidaNav() {
         <LanguageSwitcher />
         <PaletteDropdown />
         <ThemeToggle />
+        <button
+          onClick={logout}
+          title={t('auth.logout')}
+          style={{
+            background: 'transparent', border: '1px solid var(--bd)',
+            borderRadius: 'var(--seer-radius-md)', padding: '5px 7px',
+            cursor: 'pointer', color: 'var(--t2)', display: 'flex', alignItems: 'center',
+            transition: 'border-color 0.12s, color 0.12s',
+          }}
+        >
+          <LogOut size={13} />
+        </button>
       </div>
     </nav>
   );

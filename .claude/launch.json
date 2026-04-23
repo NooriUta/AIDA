@@ -34,7 +34,7 @@
     {
       "name": "heimdall-frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev", "--", "--force"],
       "port": 5174,
       "cwd": "frontends/heimdall-frontend"
     },
@@ -51,6 +51,13 @@
       "runtimeArgs": [":services:dali:quarkusDev"],
       "port": 9090,
       "autoPort": false,
+      "cwd": "."
+    },
+    {
+      "name": "docs-specs",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5199", "--directory", "C:/AIDA/docs/current/specs"],
+      "port": 5199,
       "cwd": "."
     }
   ]

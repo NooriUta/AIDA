@@ -2,6 +2,7 @@ import { memo, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { KnotTable, KnotStatement, KnotTableDetail, KnotColumn } from '../../services/lineage';
 import { fetchKnotTableDetail } from '../../services/lineage';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 interface Props {
   sessionId: string;
@@ -23,6 +24,7 @@ function stmtShortLabel(st: KnotStatement): string {
 
 export const KnotStructure = memo(({ sessionId, tables, statements }: Props) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Lazy detail: geoid → KnotTableDetail | 'loading' | 'error'
@@ -259,7 +261,7 @@ export const KnotStructure = memo(({ sessionId, tables, statements }: Props) => 
                 isOpen && (
                   <tr key={`${tb.id}-exp`}>
                     <td colSpan={9} style={{ padding: 0, background: 'var(--bg3)', borderBottom: '2px solid var(--acc)' }}>
-                      <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                      <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 20 }}>
 
                         {/* Left: Columns table */}
                         <div>

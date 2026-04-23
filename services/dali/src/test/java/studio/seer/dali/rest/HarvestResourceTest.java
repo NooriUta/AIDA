@@ -7,6 +7,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import studio.seer.dali.storage.SessionRepository;
 
+import io.restassured.specification.RequestSpecification;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
@@ -25,6 +27,10 @@ class HarvestResourceTest {
     @Inject
     SessionRepository repository;
 
+    private static RequestSpecification withTenant() {
+        return given().header("X-Seer-Tenant-Alias", "default");
+    }
+
     @AfterEach
     void cleanup() {
         repository.deleteAll();
@@ -34,7 +40,7 @@ class HarvestResourceTest {
 
     @Test
     void postHarvest_returns202WithHarvestId() {
-        given()
+        withTenant()
         .when()
             .post("/api/sessions/harvest")
         .then()
@@ -47,11 +53,11 @@ class HarvestResourceTest {
 
     @Test
     void postHarvest_harvestIdIsUnique() {
-        String id1 = given()
+        String id1 = withTenant()
             .when().post("/api/sessions/harvest")
             .then().statusCode(202).extract().path("harvestId");
 
-        String id2 = given()
+        String id2 = withTenant()
             .when().post("/api/sessions/harvest")
             .then().statusCode(202).extract().path("harvestId");
 
@@ -61,7 +67,7 @@ class HarvestResourceTest {
 
     @Test
     void postHarvest_withContentTypeJson_stillAccepted() {
-        given()
+        withTenant()
             .contentType(ContentType.JSON)
         .when()
             .post("/api/sessions/harvest")

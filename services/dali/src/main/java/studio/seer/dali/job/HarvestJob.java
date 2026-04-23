@@ -33,15 +33,18 @@ public class HarvestJob {
     @Inject HeimdallEmitter  emitter;
     @Inject DaliConfig       config;
 
-    @Job(name = "Harvest %0", retries = 0)
-    public void execute(String harvestId) {
+    // concurrentJobsByType is JobRunr Pro only — OSS concurrency is bounded by
+    // dali.jobrunr.worker-threads (default 4). Raise that config to allow more parallel harvests.
+    @Job(name = "Harvest %0 tenant=%1", retries = 0, labels = {"harvest"})
+    public void execute(String harvestId, String tenantAlias) {
         List<DaliConfig.Source> sources = config.sources();
         if (sources.isEmpty()) {
             log.warn("[{}] HarvestJob: no JDBC sources configured — skipping (add dali.sources[*] to application.properties)", harvestId);
             return;
         }
 
-        log.info("[{}] HarvestJob: starting harvest for {} source(s)", harvestId, sources.size());
+        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default";
+        log.info("[{}] HarvestJob: starting harvest for {} source(s) tenant={}", harvestId, sources.size(), effectiveTenant);
         emitter.sessionStarted(harvestId, "all", "multi", false, false, sources.size());
 
         int enqueued = 0;
@@ -55,11 +58,14 @@ public class HarvestJob {
                         false,
                         src.username(),
                         src.password(),
-                        src.schema().orElse(null)
+                        src.schema().orElse(null),
+                        null,           // dbName — JDBC sources use targetSchema from config
+                        null,           // appName
+                        effectiveTenant
                 );
                 sessionService.enqueue(input);
-                log.info("[{}] HarvestJob: enqueued ParseJob for source '{}' (dialect={})",
-                        harvestId, src.name(), src.dialect());
+                log.info("[{}] HarvestJob: enqueued ParseJob for source '{}' (dialect={} tenant={})",
+                        harvestId, src.name(), src.dialect(), effectiveTenant);
                 enqueued++;
             } catch (Exception e) {
                 log.error("[{}] HarvestJob: failed to enqueue source '{}': {}", harvestId, src.name(), e.getMessage(), e);

@@ -1,7 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
-import { createSession, deleteSession, ensureValidSession } from '../sessions';
+import { createSession, deleteSession, ensureValidSession, updateSession } from '../sessions';
+import { emitSessionEvent } from '../users/UserSessionEventsEmitter';
 import { emitToHeimdall } from '../middleware/heimdallEmit';
+import { csrfGuard } from '../middleware/csrfGuard';
 
 // ── In-memory rate limiter for /auth/login ────────────────────────────────────
 const IS_PROD      = process.env.NODE_ENV === 'production';
@@ -80,7 +82,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       );
       const userInfo = extractUserInfo(payload);
 
-      const sid = createSession(
+      const sid = await createSession(
         tokens.access_token,
         tokens.refresh_token,
         tokens.expires_in,
@@ -89,10 +91,34 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         userInfo.role,
         userInfo.scopes,
       );
+      // Persist KC identity claims in session for /auth/me enrichment
+      await updateSession(sid, {
+        email:         userInfo.email,
+        firstName:     userInfo.firstName,
+        lastName:      userInfo.lastName,
+        emailVerified: userInfo.emailVerified,
+        // Persist tenant from KC JWT so subsequent /auth/me calls see it.
+        // Only set when KC actually emits the claim; undefined keeps session default.
+        ...(userInfo.tenantAlias ? { activeTenantAlias: userInfo.tenantAlias } : {}),
+      });
 
+      const activeTenantAlias = userInfo.tenantAlias ?? 'default';
       reply.setCookie('sid', sid, COOKIE_OPTS);
       emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
-      return { id: userInfo.sub, username: userInfo.username, role: userInfo.role };
+      void emitSessionEvent({
+        userId:     userInfo.sub,
+        sessionId:  sid,
+        eventType:  'login',
+        ipAddress:  request.ip,
+        userAgent:  String(request.headers['user-agent'] ?? ''),
+        tenantAlias: activeTenantAlias,
+        result:     'success',
+      });
+      return { id: userInfo.sub, username: userInfo.username, role: userInfo.role,
+               scopes: userInfo.scopes, email: userInfo.email,
+               firstName: userInfo.firstName, lastName: userInfo.lastName,
+               emailVerified: userInfo.emailVerified,
+               activeTenantAlias };
     },
   );
 
@@ -101,34 +127,72 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/me',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role } = request.user;
-      return { id: sub, username, role };
+      const { sub, username, role, scopes, email, firstName, lastName,
+              emailVerified, activeTenantAlias } = request.user;
+      return { id: sub, username, role, scopes, email, firstName, lastName,
+               emailVerified, activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 
   // ── POST /auth/refresh ──────────────────────────────────────────────────────
-  // Kept for backward compatibility. With Keycloak, lazy refresh in
-  // app.authenticate handles this transparently, but the frontend may still
-  // call /refresh explicitly.
   app.post(
     '/refresh',
     { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const { sub, username, role } = request.user;
-      // Session was already refreshed by authenticate if needed
-      return { id: sub, username, role };
+    async (request) => {
+      const { sub, username, role, scopes, email, firstName, lastName,
+              emailVerified, activeTenantAlias } = request.user;
+      return { id: sub, username, role, scopes, email, firstName, lastName,
+               emailVerified, activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 
   // ── POST /auth/logout ───────────────────────────────────────────────────────
+  // ── PATCH /auth/me/tenant — MTN-13: active-tenant switch ───────────────────
+  app.patch<{ Body: { tenantAlias: string } }>(
+    '/me/tenant',
+    { preHandler: [app.authenticate, csrfGuard] },
+    async (request, reply) => {
+      const { tenantAlias } = request.body ?? {};
+      if (!tenantAlias || typeof tenantAlias !== 'string') {
+        return reply.status(400).send({ error: 'tenantAlias required' });
+      }
+      const sid = request.cookies.sid;
+      if (!sid) return reply.status(401).send({ error: 'no session' });
+      try {
+        await updateSession(sid, { activeTenantAlias: tenantAlias });
+      } catch (e) {
+        return reply.status(404).send({ error: (e as Error).message });
+      }
+      void emitSessionEvent({
+        userId:      request.user.sub,
+        sessionId:   sid,
+        eventType:   'tenant_switch',
+        tenantAlias,
+        ipAddress:   request.ip,
+        userAgent:   String(request.headers['user-agent'] ?? ''),
+        result:      'success',
+      });
+      return { ok: true, activeTenantAlias: tenantAlias };
+    },
+  );
+
   app.post('/logout', async (request, reply) => {
     const sid = request.cookies.sid;
     if (sid) {
-      const session = deleteSession(sid);
+      const session = await deleteSession(sid);
       // Invalidate refresh token in Keycloak (fire-and-forget)
       if (session) {
         keycloakLogout(session.refreshToken);
         emitToHeimdall('AUTH_LOGOUT', 'INFO', { username: session.username }, sid);
+        // MTN-64: emit logout event
+        void emitSessionEvent({
+          userId:    session.sub,
+          sessionId: sid,
+          eventType: 'logout',
+          ipAddress: request.ip,
+          userAgent: String(request.headers['user-agent'] ?? ''),
+          result:    'success',
+        });
       }
     }
     reply.clearCookie('sid', { path: '/' });

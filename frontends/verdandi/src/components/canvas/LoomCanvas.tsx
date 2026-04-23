@@ -24,7 +24,7 @@ import type { ContextMenuState } from './NodeContextMenu';
 import { useLoomStore }            from '../../stores/loomStore';
 import { clearLayoutCache }        from '../../utils/layoutGraph';
 import { isUnauthorized }          from '../../services/lineage';
-import { CANVAS }                  from '../../utils/constants';
+import { CANVAS, LAYOUT }           from '../../utils/constants';
 import { getMinimapNodeColor }     from '../../utils/minimapColors';
 import type { LoomNode, LoomEdge } from '../../types/graph';
 import { useIsMobile }             from '../../hooks/useIsMobile';
@@ -146,6 +146,7 @@ const LoomCanvasInner = memo(() => {
           minZoom={0.1}
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
+          onlyRenderVisibleElements={nodes.length > LAYOUT.PERF_VIRTUALIZE_THRESHOLD}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={true}

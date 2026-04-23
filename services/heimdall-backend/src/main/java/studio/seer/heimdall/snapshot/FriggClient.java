@@ -27,4 +27,16 @@ public interface FriggClient {
             @HeaderParam("Authorization") String authorization,
             FriggCommand                  body
     );
+
+    /**
+     * Server-level command (ArcadeDB 26.x API).
+     * Use body {@code {"command":"create database <name>"}} to create a database.
+     * ArcadeDB 26.x removed the old {@code /api/v1/create/{db}} endpoint.
+     */
+    @POST
+    @Path("/server")
+    Uni<String> serverCommand(
+            @HeaderParam("Authorization") String authorization,
+            FriggCommand                  body
+    );
 }

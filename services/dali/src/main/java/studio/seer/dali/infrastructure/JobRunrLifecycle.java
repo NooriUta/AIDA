@@ -12,6 +12,7 @@ import jakarta.inject.Singleton;
 import org.jobrunr.configuration.JobRunr;
 import org.jobrunr.configuration.JobRunrConfiguration;
 import org.jobrunr.scheduling.JobScheduler;
+import org.jobrunr.server.BackgroundJobServerConfiguration;
 import org.jobrunr.server.JobActivator;
 import org.jobrunr.storage.StorageProvider;
 import org.slf4j.Logger;
@@ -82,14 +83,29 @@ public class JobRunrLifecycle {
             }
         };
         try {
+            var bgServerConfig = BackgroundJobServerConfiguration
+                    .usingStandardBackgroundJobServerConfiguration()
+                    .andWorkerCount(config.jobrunr().workerThreads());
             var jrConfig = JobRunr.configure()
                     .useStorageProvider(arcadeDbStorageProvider)
                     .useJobActivator(activator)
-                    .useBackgroundJobServer();
-            if (config.jobrunr().dashboard().enabled()) {
+                    .useBackgroundJobServer(bgServerConfig);
+            boolean dashboardEnabled = config.jobrunr().dashboard().enabled()
+                    && !config.jobrunr().workerOnly();
+            if (dashboardEnabled) {
                 int port = config.jobrunr().dashboard().port();
-                jrConfig = jrConfig.useDashboard(port);
-                log.info("JobRunr: dashboard enabled on :{}", port);
+                try {
+                    jrConfig = jrConfig.useDashboard(port);
+                    log.info("JobRunr: dashboard enabled on :{}", port);
+                } catch (Exception dashEx) {
+                    // Port already in use (stale Dali process); continue without dashboard.
+                    // Scheduler + BackgroundJobServer still start normally.
+                    log.warn("JobRunr: dashboard port :{} already in use — starting without dashboard. " +
+                             "Kill the process holding the port or set DALI_JOBRUNR_DASHBOARD_PORT. Cause: {}",
+                             port, dashEx.getMessage());
+                }
+            } else if (config.jobrunr().workerOnly()) {
+                log.info("JobRunr: worker-only mode — dashboard suppressed");
             }
             jobRunrResult = jrConfig.initialize();
             log.info("JobRunr: ready — BackgroundJobServer started");

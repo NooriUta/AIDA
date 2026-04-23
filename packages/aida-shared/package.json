@@ -5,7 +5,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".":               "./src/index.ts",
-    "./styles/tokens": "./styles/tokens.css",
+    "./styles/tokens": { "types": "./styles/tokens.css.d.ts", "default": "./styles/tokens.css" },
     "./theme":         "./src/theme.ts"
   }
 }

@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>AIDA · Services Page — Prototype</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --bg1:#0b0e10; --bg2:#141a1d; --bg3:#1c2428; --bg4:#2a3338;
+    --bd:#2e3a40; --bd2:#3e4c54;
+    --t1:#e8eff1; --t2:#a8b5bc; --t3:#6e7c83;
+    --acc:#3ddfd1;      /* teal */
+    --warn:#f2c14e;     /* amber — global/cross-tenant */
+    --ok:#2ecc71;
+    --bad:#ff5d5d;
+    --idle:#6e7c83;
+    --radius:6px;
+    --fs:13px;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  *,*::before,*::after { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg1); color:var(--t1); font-size:var(--fs); }
+  body { padding:14px 18px 80px; }
+
+  /* ── Top bar (mimics HeimdallHeader) ────────────────────────────────────── */
+  .topbar {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; margin:-14px -18px 18px;
+    background:var(--bg2); border-bottom:1px solid var(--bd);
+  }
+  .logo { font-weight:700; letter-spacing:0.06em; color:var(--acc); }
+  .crumb { color:var(--t2); font-size:12px; }
+  .crumb strong { color:var(--t1); }
+  .spacer { flex:1; }
+  .scope-badge {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 8px; font-size:10px; font-weight:600; letter-spacing:0.06em;
+    border-radius:var(--radius); text-transform:uppercase;
+  }
+  .scope-badge .dot { width:5px; height:5px; border-radius:50%; }
+  .scope-badge.global {
+    color:var(--warn); background:color-mix(in srgb, var(--warn) 12%, transparent);
+    border:1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  }
+  .scope-badge.global .dot { background:var(--warn); }
+  .scope-badge.tenant {
+    color:var(--acc); background:color-mix(in srgb, var(--acc) 12%, transparent);
+    border:1px solid color-mix(in srgb, var(--acc) 35%, transparent);
+  }
+  .scope-badge.tenant .dot { background:var(--acc); }
+
+  /* ── Tenant switcher (pill group) ───────────────────────────────────────── */
+  .tenant-switch {
+    display:inline-flex; align-items:center; gap:0;
+    background:var(--bg3); border:1px solid var(--bd); border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .tenant-switch button {
+    background:transparent; color:var(--t2); border:none; cursor:pointer;
+    padding:6px 11px; font-size:11px; font-weight:500; letter-spacing:0.03em;
+    border-right:1px solid var(--bd);
+  }
+  .tenant-switch button:last-child { border-right:none; }
+  .tenant-switch button:hover { background:var(--bg4); color:var(--t1); }
+  .tenant-switch button.active {
+    background:color-mix(in srgb, var(--acc) 18%, transparent);
+    color:var(--acc);
+  }
+  .tenant-switch button.all {
+    color:var(--warn);
+  }
+  .tenant-switch button.all.active {
+    background:color-mix(in srgb, var(--warn) 18%, transparent);
+    color:var(--warn);
+  }
+
+  /* ── Section ────────────────────────────────────────────────────────────── */
+  section { margin-bottom:22px; }
+  .sec-head {
+    display:flex; align-items:center; gap:10px; margin-bottom:10px;
+    cursor:pointer; user-select:none;
+  }
+  .sec-head .chev { color:var(--t3); font-size:10px; transition:transform .12s; }
+  .sec-head.collapsed .chev { transform:rotate(-90deg); }
+  .sec-title {
+    font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--t2);
+  }
+  .sec-count { color:var(--t3); font-size:11px; }
+  .sec-body { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:6px; }
+  .sec-head.collapsed + .sec-body { display:none; }
+  .sec-note {
+    margin:2px 0 10px; padding:7px 10px;
+    background:color-mix(in srgb, var(--warn) 6%, transparent);
+    border-left:2px solid var(--warn);
+    color:var(--t2); font-size:11px; line-height:1.5;
+  }
+
+  /* ── Service / DB card — compact tile ──────────────────────────────────── */
+  .row {
+    position:relative;
+    padding:10px 12px 34px; background:var(--bg2);
+    border:1px solid var(--bd); border-radius:var(--radius);
+    cursor:pointer;
+    display:flex; flex-direction:column; gap:4px;
+    min-height:84px;
+  }
+  .row:hover { border-color:var(--bd2); background:var(--bg3); }
+  .row .name { font-weight:600; color:var(--t1); font-size:13px; display:flex; align-items:center; gap:6px; }
+  .row .meta { color:var(--t3); font-size:11px; font-family:'JetBrains Mono',monospace; }
+  .row .dot  { position:absolute; top:12px; right:12px; width:8px; height:8px; }
+  .row .actions {
+    position:absolute; bottom:8px; right:10px; display:flex; gap:4px; opacity:0;
+    transition:opacity .12s;
+  }
+  .row:hover .actions { opacity:1; }
+  /* Left border accent by status — peripheral vision cue */
+  .row.s-up    { border-left:3px solid var(--ok);   }
+  .row.s-deg   { border-left:3px solid var(--warn); }
+  .row.s-down  { border-left:3px solid var(--bad);  }
+  .row.s-idle  { border-left:3px solid var(--idle); }
+
+  /* Status pill — big, dominant: UP 38ms / DOWN / DEGRADED 820ms */
+  .status {
+    display:inline-flex; align-items:baseline; gap:8px;
+    font-family:'JetBrains Mono',monospace; font-weight:600;
+    margin-top:auto;
+  }
+  .status .word {
+    padding:2px 7px; border-radius:3px; font-size:10px; letter-spacing:0.08em;
+  }
+  .status.up   .word { background:color-mix(in srgb, var(--ok)   18%, transparent); color:var(--ok); }
+  .status.down .word { background:color-mix(in srgb, var(--bad)  22%, transparent); color:var(--bad); }
+  .status.deg  .word { background:color-mix(in srgb, var(--warn) 20%, transparent); color:var(--warn); }
+  .status.idle .word { background:var(--bg4); color:var(--t3); }
+  .status .lat       { color:var(--t1); font-size:14px; font-weight:700; }
+  .status.down .lat  { color:var(--bad); }
+  .status.deg  .lat  { color:var(--warn); }
+  .status.idle .lat  { color:var(--t3); font-size:12px; font-weight:500; }
+  .dot { width:8px; height:8px; border-radius:50%; justify-self:center; }
+  .dot.ok   { background:var(--ok);   box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+  .dot.bad  { background:var(--bad);  box-shadow:0 0 0 3px color-mix(in srgb, var(--bad) 20%, transparent); }
+  .dot.idle { background:var(--idle); }
+  .dot.warn { background:var(--warn); box-shadow:0 0 0 3px color-mix(in srgb, var(--warn) 20%, transparent); }
+  .name { font-weight:600; color:var(--t1); display:flex; align-items:center; gap:8px; }
+  .tenant-chip {
+    font-size:10px; padding:1px 7px; border-radius:3px;
+    background:var(--bg4); color:var(--t2); letter-spacing:0.04em;
+    border:1px solid var(--bd);
+  }
+  .tenant-chip.default { color:var(--acc); border-color:color-mix(in srgb, var(--acc) 40%, transparent); }
+  .tenant-chip.acme    { color:#8ab6ff; border-color:color-mix(in srgb, #8ab6ff 40%, transparent); }
+  .tenant-chip.beta    { color:#e39ad1; border-color:color-mix(in srgb, #e39ad1 40%, transparent); }
+  .meta { color:var(--t3); font-size:11px; font-family:'JetBrains Mono', monospace; }
+  .version { color:var(--t2); font-size:11px; font-family:'JetBrains Mono', monospace; }
+  .uptime { color:var(--t3); font-size:11px; }
+  .metric { color:var(--t2); font-size:11px; display:flex; gap:10px; flex-wrap:wrap; }
+  .metric b { color:var(--t1); font-weight:600; }
+  .actions { display:flex; gap:4px; }
+  .actions button {
+    background:var(--bg3); border:1px solid var(--bd); color:var(--t2);
+    padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;
+  }
+  .actions button:hover { border-color:var(--acc); color:var(--acc); }
+  .actions button.danger:hover { border-color:var(--bad); color:var(--bad); }
+
+  /* ── DB group (nested under tenant) ─────────────────────────────────────── */
+  .db-group {
+    border:1px solid var(--bd); border-radius:var(--radius);
+    background:var(--bg2); overflow:hidden;
+  }
+  .db-group + .db-group { margin-top:8px; }
+  .db-group-head {
+    display:flex; align-items:center; gap:10px;
+    padding:9px 12px; background:var(--bg3);
+    border-bottom:1px solid var(--bd); cursor:pointer;
+  }
+  .db-group-head .chev { color:var(--t3); font-size:10px; transition:transform .12s; }
+  .db-group-head.collapsed .chev { transform:rotate(-90deg); }
+  .db-group-head.collapsed { border-bottom:none; }
+  .db-group-body { padding:6px; display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:6px; }
+  .db-group-head.collapsed + .db-group-body { display:none; }
+  .db-group-title {
+    display:flex; align-items:center; gap:8px;
+    font-weight:600; font-size:12px;
+  }
+  .db-group-sum { color:var(--t3); font-size:11px; margin-left:auto; }
+
+  .db-row {
+    position:relative; padding:10px 12px; border-radius:4px;
+    background:var(--bg2); border:1px solid var(--bd);
+    cursor:pointer; display:flex; flex-direction:column; gap:4px;
+    min-height:78px;
+  }
+  .db-row:hover { background:var(--bg3); border-color:var(--bd2); }
+  .db-row .meta { color:var(--t3); font-size:11px; font-family:'JetBrains Mono',monospace; }
+  .db-row .name { font-weight:600; font-size:13px; }
+  .db-row .dot  { position:absolute; top:12px; right:12px; width:8px; height:8px; }
+  .db-row .actions {
+    position:absolute; bottom:8px; right:10px; display:flex; gap:4px;
+    opacity:0; transition:opacity .12s;
+  }
+  .db-row:hover .actions { opacity:1; }
+  .db-row.s-up    { border-left:3px solid var(--ok);   }
+  .db-row.s-deg   { border-left:3px solid var(--warn); }
+  .db-row.s-idle  { border-left:3px solid var(--idle); }
+
+  /* ── Dev section (top, collapsed by default, hidden in Docker/prod) ────── */
+  .dev-section { margin-bottom:22px; padding-bottom:12px; border-bottom:1px dashed var(--bd2); }
+  .dev-section.hidden { display:none; }
+  .dev-title-label { color:var(--warn) !important; }
+  .dev-title-label::after {
+    content:'DEV ONLY'; margin-left:10px;
+    font-size:9px; padding:2px 6px; border-radius:3px;
+    background:color-mix(in srgb, var(--warn) 15%, transparent);
+    color:var(--warn); letter-spacing:0.08em;
+  }
+  .dev-body { opacity:0.82; }
+  .dev-card {
+    position:relative; padding:10px 12px 12px; min-height:90px;
+    background:var(--bg2); border:1px dashed var(--bd2); border-radius:var(--radius);
+    cursor:pointer; text-decoration:none; color:inherit;
+    display:flex; flex-direction:column; gap:3px;
+    border-left:3px solid var(--warn);
+  }
+  .dev-card:hover { border-color:var(--warn); background:var(--bg3); }
+  .dev-card .name { font-weight:600; color:var(--t1); font-size:13px; }
+  .dev-card .meta { color:var(--t3); font-size:11px; font-family:'JetBrains Mono',monospace; }
+  .dev-card .dot  { position:absolute; top:12px; right:12px; width:8px; height:8px; }
+  /* Dashed border kept as dev-signature; left accent uses dev warn or status */
+  .dev-card.s-up    { border-left-color:var(--ok);   }
+  .dev-card.s-deg   { border-left-color:var(--warn); }
+  .dev-card.s-down  { border-left-color:var(--bad);  }
+  .dev-card.s-idle  { border-left-color:var(--idle); }
+
+  /* ── Hidden (filtered by tenant) ────────────────────────────────────────── */
+  .row.hidden, .db-group.hidden { display:none; }
+
+  /* ── Integration map (SVG topology) ─────────────────────────────────────── */
+  .topo {
+    background:var(--bg2); border:1px solid var(--bd);
+    border-radius:var(--radius); padding:12px;
+    overflow-x:auto;
+  }
+  .topo svg { display:block; width:100%; min-width:720px; height:380px; }
+  .topo .node rect {
+    fill:var(--bg3); stroke:var(--bd2); rx:5; ry:5;
+    transition:stroke .12s, fill .12s;
+  }
+  .topo .node:hover rect { stroke:var(--acc); fill:var(--bg4); cursor:pointer; }
+  .topo .node text.title { fill:var(--t1); font-size:12px; font-weight:600; }
+  .topo .node text.sub   { fill:var(--t3); font-size:10px; font-family:'JetBrains Mono',monospace; }
+  .topo .node .ndot      { r:4; }
+  .topo .node.up   .ndot { fill:var(--ok);   }
+  .topo .node.deg  .ndot { fill:var(--warn); }
+  .topo .node.down .ndot { fill:var(--bad);  }
+  .topo .node.idle .ndot { fill:var(--idle); }
+  .topo path.link { fill:none; stroke-linecap:round; }
+  .topo path.link.up   { stroke:color-mix(in srgb, var(--ok)   55%, transparent); }
+  .topo path.link.deg  { stroke:color-mix(in srgb, var(--warn) 70%, transparent); }
+  .topo path.link.down { stroke:var(--bad); stroke-dasharray:4 3; }
+  .topo text.linklabel { fill:var(--t3); font-size:9px; font-family:'JetBrains Mono',monospace; }
+  .topo .legend { display:flex; gap:14px; margin-top:8px; padding-left:4px; font-size:10px; color:var(--t3); }
+  .topo .legend span { display:inline-flex; align-items:center; gap:5px; }
+  .topo .legend i { display:inline-block; width:16px; height:2px; border-radius:2px; }
+
+  /* ── Right-rail detail drawer (click any service) ───────────────────────── */
+  .drawer {
+    position:fixed; top:0; right:0; bottom:0; width:420px;
+    background:var(--bg2); border-left:1px solid var(--bd);
+    transform:translateX(100%); transition:transform .18s;
+    padding:16px; overflow-y:auto;
+  }
+  .drawer.open { transform:translateX(0); }
+  .drawer h3 { margin:0 0 6px; font-size:14px; }
+  .drawer .close {
+    position:absolute; top:12px; right:12px;
+    background:transparent; border:none; color:var(--t3);
+    font-size:20px; cursor:pointer;
+  }
+  .drawer .close:hover { color:var(--t1); }
+  .drawer .tabs { display:flex; gap:2px; margin:14px 0 10px; border-bottom:1px solid var(--bd); }
+  .drawer .tabs button {
+    background:transparent; border:none; color:var(--t3); padding:7px 10px;
+    font-size:11px; letter-spacing:0.04em; text-transform:uppercase; cursor:pointer;
+    border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .drawer .tabs button.active { color:var(--acc); border-bottom-color:var(--acc); }
+  .drawer pre {
+    background:var(--bg1); padding:10px; border-radius:4px; font-size:11px;
+    color:var(--t2); overflow-x:auto; border:1px solid var(--bd);
+  }
+
+  /* ── Toast ─────────────────────────────────────────────────────────────── */
+  #toast {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--bg3); border:1px solid var(--acc); color:var(--t1);
+    padding:10px 16px; border-radius:var(--radius); font-size:12px;
+    opacity:0; transition:opacity .18s; pointer-events:none;
+  }
+  #toast.show { opacity:1; }
+
+  hr.sep { border:none; border-top:1px solid var(--bd); margin:18px 0; }
+
+  .hint {
+    font-size:11px; color:var(--t3); margin:-4px 0 10px;
+    padding-left:14px; border-left:2px solid var(--bd);
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">HEIMDALL</span>
+  <span class="crumb">/ <strong>services</strong></span>
+  <span class="spacer"></span>
+  <!-- Demo: toggle deployment env to see dev-tools hide in docker/prod -->
+  <span class="tenant-switch" style="margin-right:10px;" id="envSwitch">
+    <button class="active" data-env="local">LOCAL</button>
+    <button data-env="docker">DOCKER</button>
+    <button data-env="prod">PROD</button>
+  </span>
+  <span class="scope-badge global" id="scopeBadge">
+    <span class="dot"></span>
+    <span id="scopeLabel">ALL TENANTS</span>
+  </span>
+</div>
+
+<!-- ── Services control bar ─────────────────────────────────────────────── -->
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+  <div class="tenant-switch" id="tenantSwitch">
+    <button class="all active" data-tenant="__all__">All tenants</button>
+    <button data-tenant="default">default</button>
+    <button data-tenant="acme">acme</button>
+    <button data-tenant="beta-corp">beta-corp</button>
+  </div>
+  <span style="color:var(--t3); font-size:11px;">
+    Filter применяется к секциям Databases, Tenant workers, Integrations
+  </span>
+</div>
+
+<!-- ── Dev tools (top, collapsed by default, hidden in Docker/prod) ────── -->
+<section class="dev-section" id="devSection">
+  <div class="sec-head collapsed" onclick="toggleSection(this)">
+    <span class="chev">▼</span>
+    <span class="sec-title dev-title-label">Developer tools</span>
+    <span class="sec-count">local dev only · click to expand</span>
+  </div>
+  <div class="sec-body dev-body">
+    <a class="dev-card" href="http://localhost:2480/studio" target="_blank">
+      <span class="dot ok"></span>
+      <div class="name">ArcadeDB Studio</div>
+      <div class="meta">:2480</div>
+      <span class="status up"><span class="word">UP</span><span class="lat">9 ms</span></span>
+    </a>
+    <a class="dev-card" href="http://localhost:18080/jobrunr/dashboard" target="_blank">
+      <span class="dot ok"></span>
+      <div class="name">JobRunr</div>
+      <div class="meta">:18080</div>
+      <span class="status up"><span class="word">UP</span><span class="lat">24 ms</span></span>
+    </a>
+    <a class="dev-card" href="http://localhost:19090/graphql" target="_blank">
+      <span class="dot warn"></span>
+      <div class="name">GraphiQL</div>
+      <div class="meta">:19090</div>
+      <span class="status deg"><span class="word">DEGRADED</span><span class="lat">820 ms</span></span>
+    </a>
+    <a class="dev-card" href="http://localhost:8081/admin/aida/console/" target="_blank">
+      <span class="dot ok"></span>
+      <div class="name">Keycloak</div>
+      <div class="meta">:8081</div>
+      <span class="status up"><span class="word">UP</span><span class="lat">47 ms</span></span>
+    </a>
+    <a class="dev-card" href="/heimdall/demodebug">
+      <span class="dot ok"></span>
+      <div class="name">Demo / Debug</div>
+      <div class="meta">local</div>
+      <span class="status up"><span class="word">UP</span><span class="lat">—</span></span>
+    </a>
+    <a class="dev-card" href="http://localhost:9090/graph" target="_blank">
+      <span class="dot bad"></span>
+      <div class="name">Prometheus</div>
+      <div class="meta">:9090</div>
+      <span class="status down"><span class="word">DOWN</span><span class="lat">refused</span></span>
+    </a>
+    <div class="dev-card" onclick="toast('POST /api/admin/dev/cluster-dump')">
+      <span class="dot idle"></span>
+      <div class="name">Cluster dump</div>
+      <div class="meta">.tar.gz</div>
+      <span class="status idle"><span class="word">READY</span><span class="lat">manual</span></span>
+    </div>
+    <div class="dev-card" onclick="toast('POST /api/admin/dev/seed')">
+      <span class="dot idle"></span>
+      <div class="name">Seed tenants</div>
+      <div class="meta">fixture</div>
+      <span class="status idle"><span class="word">READY</span><span class="lat">manual</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ── 1. Platform ───────────────────────────────────────────────────────── -->
+<section>
+  <div class="sec-head" onclick="toggleSection(this)">
+    <span class="chev">▼</span>
+    <span class="sec-title">Platform</span>
+    <span class="sec-count">5 services · global</span>
+  </div>
+  <div class="sec-note">
+    Инфраструктурные сервисы — один инстанс на всю платформу. Переключение тенанта их не меняет.
+  </div>
+  <div class="sec-body">
+    <div class="row" onclick="openDrawer('chur', 'BFF · Fastify')">
+      <span class="dot ok"></span>
+      <span class="name">chur</span>
+      <span class="meta">:3000</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">38 ms</span></span>
+      <span class="actions"><button>logs</button></span>
+    </div>
+    <div class="row" onclick="openDrawer('heimdall-backend', 'Quarkus · admin API')">
+      <span class="dot ok"></span>
+      <span class="name">heimdall-backend</span>
+      <span class="meta">:18080</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">62 ms</span></span>
+      <span class="actions"><button>logs</button></span>
+    </div>
+    <div class="row" onclick="openDrawer('shuttle', 'GraphQL lineage API')">
+      <span class="dot warn"></span>
+      <span class="name">shuttle</span>
+      <span class="meta">:19090</span>
+      <span class="status deg"><span class="word">DEGRADED</span><span class="lat">820 ms</span></span>
+      <span class="actions"><button>logs</button></span>
+    </div>
+    <div class="row" onclick="openDrawer('keycloak', 'Identity provider')">
+      <span class="dot ok"></span>
+      <span class="name">keycloak</span>
+      <span class="meta">:8081</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">47 ms</span></span>
+      <span class="actions"><button>admin</button></span>
+    </div>
+    <div class="row" onclick="openDrawer('nginx', 'Edge proxy')">
+      <span class="dot ok"></span>
+      <span class="name">nginx</span>
+      <span class="meta">:80/:443</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">4 ms</span></span>
+      <span class="actions"><button>logs</button></span>
+    </div>
+  </div>
+</section>
+
+<!-- ── 2. Databases ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="sec-head" onclick="toggleSection(this)">
+    <span class="chev">▼</span>
+    <span class="sec-title">Databases (ArcadeDB)</span>
+    <span class="sec-count">1 cluster · 6 databases</span>
+  </div>
+  <div class="hint">
+    ArcadeDB cluster `:2480` — global infra. Внутри: shared DBs (frigg, jobrunr)
+    и per-tenant DBs (ygg-*). Click по БД → Studio + dump + retention.
+  </div>
+
+  <!-- Shared / global DBs -->
+  <div class="db-group">
+    <div class="db-group-head" onclick="toggleGroup(this)">
+      <span class="chev">▼</span>
+      <span class="db-group-title">
+        🌐 Shared
+        <span class="scope-badge global" style="padding:1px 6px; font-size:9px;">
+          <span class="dot"></span>GLOBAL
+        </span>
+      </span>
+      <span class="db-group-sum">2 DBs · 1.4 GB · always active</span>
+    </div>
+    <div class="db-group-body">
+      <div class="db-row" onclick="openDrawer('db:frigg','ArcadeDB · frigg')">
+        <span class="dot ok"></span>
+        <span class="name">frigg</span>
+        <span class="meta">graph · 312 MB</span>
+        <span class="status up"><span class="word">UP</span><span class="lat">8 ms</span></span>
+        <span class="actions"><button>studio</button></span>
+      </div>
+      <div class="db-row" onclick="openDrawer('db:jobrunr','ArcadeDB · jobrunr')">
+        <span class="dot ok"></span>
+        <span class="name">jobrunr</span>
+        <span class="meta">doc · 1.1 GB</span>
+        <span class="status up"><span class="word">UP</span><span class="lat">11 ms</span></span>
+        <span class="actions"><button>studio</button></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenant: default -->
+  <div class="db-group tenant-scoped" data-tenant="default">
+    <div class="db-group-head" onclick="toggleGroup(this)">
+      <span class="chev">▼</span>
+      <span class="db-group-title">
+        🏢 <span class="tenant-chip default">default</span>
+      </span>
+      <span class="db-group-sum">2 DBs · 847 MB · 3 workers</span>
+    </div>
+    <div class="db-group-body">
+      <div class="db-row" onclick="openDrawer('db:ygg-default','ArcadeDB · ygg-default')">
+        <span class="dot ok"></span>
+        <span class="name">ygg-default</span>
+        <span class="meta">graph · 731 MB</span>
+        <span class="status up"><span class="word">UP</span><span class="lat">14 ms</span></span>
+        <span class="actions"><button>studio</button></span>
+      </div>
+      <div class="db-row" onclick="openDrawer('db:sandbox-default','ArcadeDB · sandbox-default')">
+        <span class="dot idle"></span>
+        <span class="name">sandbox-default</span>
+        <span class="meta">graph · 116 MB</span>
+        <span class="status idle"><span class="word">IDLE</span><span class="lat">—</span></span>
+        <span class="actions"><button>studio</button></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenant: acme -->
+  <div class="db-group tenant-scoped" data-tenant="acme">
+    <div class="db-group-head" onclick="toggleGroup(this)">
+      <span class="chev">▼</span>
+      <span class="db-group-title">
+        🏢 <span class="tenant-chip acme">acme</span>
+      </span>
+      <span class="db-group-sum">2 DBs · 4.2 GB · 1 worker</span>
+    </div>
+    <div class="db-group-body">
+      <div class="db-row" onclick="openDrawer('db:ygg-acme','ArcadeDB · ygg-acme')">
+        <span class="dot ok"></span>
+        <span class="name">ygg-acme</span>
+        <span class="meta">graph · 4.1 GB</span>
+        <span class="status up"><span class="word">UP</span><span class="lat">22 ms</span></span>
+        <span class="actions"><button>studio</button></span>
+      </div>
+      <div class="db-row" onclick="openDrawer('db:sandbox-acme','ArcadeDB · sandbox-acme')">
+        <span class="dot idle"></span>
+        <span class="name">sandbox-acme</span>
+        <span class="meta">graph · 62 MB</span>
+        <span class="status idle"><span class="word">IDLE</span><span class="lat">—</span></span>
+        <span class="actions"><button>studio</button></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenant: beta -->
+  <div class="db-group tenant-scoped" data-tenant="beta-corp">
+    <div class="db-group-head" onclick="toggleGroup(this)">
+      <span class="chev">▼</span>
+      <span class="db-group-title">
+        🏢 <span class="tenant-chip beta">beta-corp</span>
+        <span class="scope-badge" style="padding:1px 6px; font-size:9px; background:color-mix(in srgb, var(--bad) 15%, transparent); color:var(--bad); border:1px solid color-mix(in srgb, var(--bad) 40%, transparent);">
+          SUSPENDED
+        </span>
+      </span>
+      <span class="db-group-sum">1 DB · 220 MB · 0 workers</span>
+    </div>
+    <div class="db-group-body">
+      <div class="db-row" onclick="openDrawer('db:ygg-beta','ArcadeDB · ygg-beta-corp')">
+        <span class="dot warn"></span>
+        <span class="name">ygg-beta-corp</span>
+        <span class="meta">graph · 220 MB · RO</span>
+        <span class="status deg"><span class="word">FROZEN</span><span class="lat">—</span></span>
+        <span class="actions"><button>unfreeze</button></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3. Tenant workers ────────────────────────────────────────────────── -->
+<section>
+  <div class="sec-head" onclick="toggleSection(this)">
+    <span class="chev">▼</span>
+    <span class="sec-title">Tenant workers</span>
+    <span class="sec-count">4 workers · 2 cron</span>
+  </div>
+  <div class="sec-body">
+    <div class="row tenant-scoped" data-tenant="default" onclick="openDrawer('dali:default','Dali worker · default')">
+      <span class="dot ok"></span>
+      <span class="name">dali-worker <span class="tenant-chip default">default</span></span>
+      <span class="meta">5/10 · q3</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">42 s parse</span></span>
+      <span class="actions"><button>drain</button></span>
+    </div>
+    <div class="row tenant-scoped" data-tenant="default" onclick="openDrawer('cron:default','Harvest cron · default')">
+      <span class="dot ok"></span>
+      <span class="name">harvest-cron <span class="tenant-chip default">default</span></span>
+      <span class="meta">every 6h</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">next 14:00</span></span>
+      <span class="actions"><button>run-now</button></span>
+    </div>
+    <div class="row tenant-scoped" data-tenant="acme" onclick="openDrawer('dali:acme','Dali worker · acme')">
+      <span class="dot ok"></span>
+      <span class="name">dali-worker <span class="tenant-chip acme">acme</span></span>
+      <span class="meta">0/5 · q0</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">idle</span></span>
+      <span class="actions"><button>scale</button></span>
+    </div>
+    <div class="row tenant-scoped" data-tenant="acme" onclick="openDrawer('cron:acme','Harvest cron · acme')">
+      <span class="dot ok"></span>
+      <span class="name">harvest-cron <span class="tenant-chip acme">acme</span></span>
+      <span class="meta">every 1h</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">next 14:30</span></span>
+      <span class="actions"><button>run-now</button></span>
+    </div>
+    <div class="row tenant-scoped" data-tenant="beta-corp" onclick="openDrawer('dali:beta','Dali worker · beta-corp')">
+      <span class="dot bad"></span>
+      <span class="name">dali-worker <span class="tenant-chip beta">beta-corp</span></span>
+      <span class="meta">—</span>
+      <span class="status down"><span class="word">DOWN</span><span class="lat">SUSPENDED</span></span>
+      <span class="actions"><button>unfreeze</button></span>
+    </div>
+  </div>
+</section>
+
+<!-- ── 4. Integrations ──────────────────────────────────────────────────── -->
+<section>
+  <div class="sec-head" onclick="toggleSection(this)">
+    <span class="chev">▼</span>
+    <span class="sec-title">Integrations</span>
+    <span class="sec-count">external · per-tenant config</span>
+  </div>
+  <div class="sec-body">
+    <div class="row tenant-scoped" data-tenant="default">
+      <span class="dot ok"></span>
+      <span class="name">mimir <span class="tenant-chip default">default</span></span>
+      <span class="meta">external</span>
+      <span class="status up"><span class="word">UP</span><span class="lat">200 ms</span></span>
+      <span class="actions"><button>rotate-key</button></span>
+    </div>
+    <div class="row tenant-scoped" data-tenant="acme">
+      <span class="dot warn"></span>
+      <span class="name">mimir <span class="tenant-chip acme">acme</span></span>
+      <span class="meta">external</span>
+      <span class="status deg"><span class="word">DEGRADED</span><span class="lat">340 ms</span></span>
+      <span class="actions"><button>rotate-key</button></span>
+    </div>
+    <div class="row tenant-scoped" data-tenant="default">
+      <span class="dot warn"></span>
+      <span class="name">s3-avatar <span class="tenant-chip default">default</span></span>
+      <span class="meta">fallback</span>
+      <span class="status deg"><span class="word">FALLBACK</span><span class="lat">local-disk</span></span>
+      <span class="actions"><button>configure</button></span>
+    </div>
+  </div>
+</section>
+
+<!-- ── 5. Integration map (topology) ────────────────────────────────────── -->
+<section>
+  <div class="sec-head" onclick="toggleSection(this)">
+    <span class="chev">▼</span>
+    <span class="sec-title">Integration map</span>
+    <span class="sec-count">live data flow · click узел → details</span>
+  </div>
+  <div class="hint">
+    Кто кого зовёт. Цвет линии = health последнего вызова (зелёный / жёлтый / красный).
+    Толщина = req/min.
+  </div>
+  <div id="topo" class="topo"></div>
+</section>
+
+
+<!-- ── Drawer ───────────────────────────────────────────────────────────── -->
+<div class="drawer" id="drawer">
+  <button class="close" onclick="closeDrawer()">×</button>
+  <h3 id="drawerTitle">—</h3>
+  <div class="crumb" id="drawerSub">—</div>
+  <div class="tabs">
+    <button class="active">Overview</button>
+    <button>Config</button>
+    <button>Events (last 100)</button>
+    <button>Health history</button>
+    <button>Version history</button>
+  </div>
+  <pre id="drawerBody">loading…</pre>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ── Tenant switcher ──────────────────────────────────────────────────
+  const switchEl = document.getElementById('tenantSwitch');
+  const scopeBadge = document.getElementById('scopeBadge');
+  const scopeLabel = document.getElementById('scopeLabel');
+
+  switchEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    switchEl.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tenant = btn.dataset.tenant;
+    applyFilter(tenant);
+  });
+
+  function applyFilter(tenant) {
+    const all = tenant === '__all__';
+    document.querySelectorAll('.tenant-scoped').forEach(el => {
+      const t = el.dataset.tenant;
+      el.classList.toggle('hidden', !all && t !== tenant);
+    });
+    if (all) {
+      scopeBadge.className = 'scope-badge global';
+      scopeLabel.textContent = 'ALL TENANTS';
+    } else {
+      scopeBadge.className = 'scope-badge tenant';
+      scopeLabel.textContent = tenant;
+    }
+  }
+
+  // ── Section / group collapse ─────────────────────────────────────────
+  function toggleSection(head) { head.classList.toggle('collapsed'); }
+  function toggleGroup(head)   { head.classList.toggle('collapsed'); }
+
+  // ── Drawer ───────────────────────────────────────────────────────────
+  const drawer = document.getElementById('drawer');
+  function openDrawer(id, title) {
+    drawer.classList.add('open');
+    document.getElementById('drawerTitle').textContent = id;
+    document.getElementById('drawerSub').textContent = title;
+    document.getElementById('drawerBody').textContent =
+      `# ${id}\n# ${title}\n\n` +
+      `status:       OK\nuptime:       3d 14h\nversion:      (mock)\nheartbeat:    5s ago\n` +
+      `config:\n  tenantIsolation: true\n  retention: 180d\n\nrecent events (tail 5):\n` +
+      `  [INFO]  heartbeat ok\n  [INFO]  config reload v5\n  [WARN]  slow query 320ms\n` +
+      `  [INFO]  worker scaled 3→5\n  [INFO]  heartbeat ok\n`;
+  }
+  function closeDrawer() { drawer.classList.remove('open'); }
+
+  // ── Toast ────────────────────────────────────────────────────────────
+  const toastEl = document.getElementById('toast');
+  let toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+  }
+
+  // Initial filter = "all"
+  applyFilter('__all__');
+
+  // ── Deploy-env flag (hides dev section in docker/prod) ─────────────────
+  // In real app: read from process.env.NODE_ENV / a /config endpoint.
+  const envSwitch = document.getElementById('envSwitch');
+  const devSection = document.getElementById('devSection');
+  function applyEnv(env) {
+    const show = env === 'local';
+    devSection.classList.toggle('hidden', !show);
+  }
+  envSwitch.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    envSwitch.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    applyEnv(b.dataset.env);
+  });
+  // ?env=docker in URL also hides dev on load
+  const urlEnv = new URLSearchParams(location.search).get('env');
+  if (urlEnv) {
+    const btn = envSwitch.querySelector(`[data-env="${urlEnv}"]`);
+    if (btn) btn.click();
+  }
+
+  // ── Integration map (SVG topology) ───────────────────────────────────
+  // Columns left→right: Edge · BFF · Services · Storage · External
+  const NODES = [
+    { id:'browser',  col:0, row:1, title:'browser',     sub:'SPA',       status:'up'  },
+    { id:'nginx',    col:1, row:1, title:'nginx',       sub:':80/:443',  status:'up'  },
+    { id:'chur',     col:2, row:1, title:'chur',        sub:':3000 BFF', status:'up'  },
+    { id:'shuttle',  col:3, row:0, title:'shuttle',     sub:':19090',    status:'deg' },
+    { id:'hbackend', col:3, row:1, title:'heimdall-be', sub:':18080',    status:'up'  },
+    { id:'kc',       col:3, row:2, title:'keycloak',    sub:':8081',     status:'up'  },
+    { id:'dali',     col:4, row:0, title:'dali-worker', sub:'per-tenant',status:'up'  },
+    { id:'arcade',   col:4, row:1, title:'ArcadeDB',    sub:':2480',     status:'up'  },
+    { id:'mimir',    col:5, row:0, title:'mimir',       sub:'external',  status:'deg' },
+    { id:'s3',       col:5, row:2, title:'s3-avatar',   sub:'fallback',  status:'deg' },
+  ];
+  const LINKS = [
+    { from:'browser',  to:'nginx',    status:'up',   rate:'220/min' },
+    { from:'nginx',    to:'chur',     status:'up',   rate:'210/min' },
+    { from:'chur',     to:'shuttle',  status:'deg',  rate:' 42/min' },
+    { from:'chur',     to:'hbackend', status:'up',   rate:' 18/min' },
+    { from:'chur',     to:'kc',       status:'up',   rate:'  6/min' },
+    { from:'hbackend', to:'dali',     status:'up',   rate:'  4/min' },
+    { from:'hbackend', to:'arcade',   status:'up',   rate:' 60/min' },
+    { from:'shuttle',  to:'arcade',   status:'up',   rate:'180/min' },
+    { from:'dali',     to:'arcade',   status:'up',   rate:' 35/min' },
+    { from:'dali',     to:'mimir',    status:'deg',  rate:'  9/min' },
+    { from:'chur',     to:'s3',       status:'deg',  rate:'  —'     },
+  ];
+
+  function renderTopo() {
+    const el = document.getElementById('topo');
+    if (!el) return;
+    const W = 980, H = 380, COLW = W / 6, ROWH = 100, TOP = 50;
+    const pos = {};
+    NODES.forEach(n => { pos[n.id] = { x: n.col * COLW + 30, y: n.row * ROWH + TOP }; });
+    const NW = 128, NH = 56;
+
+    const svg = [`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`];
+    // Layer header labels L1–L6 (client → external)
+    const LAYERS = [
+      { col:0, tier:'L1', label:'Client'       },
+      { col:1, tier:'L2', label:'Edge'         },
+      { col:2, tier:'L3', label:'BFF'          },
+      { col:3, tier:'L4', label:'Services'     },
+      { col:4, tier:'L5', label:'Storage'      },
+      { col:5, tier:'L6', label:'External'     },
+    ];
+    LAYERS.forEach(L => {
+      const x = L.col * COLW + 30 + NW/2;
+      svg.push(`<text x="${x}" y="20" text-anchor="middle" fill="var(--acc)" font-size="10" font-weight="700" letter-spacing="0.1em">${L.tier}</text>`);
+      svg.push(`<text x="${x}" y="34" text-anchor="middle" fill="var(--t2)" font-size="11">${L.label}</text>`);
+      // divider below header
+      svg.push(`<line x1="${L.col * COLW + 10}" y1="42" x2="${L.col * COLW + COLW - 10}" y2="42" stroke="var(--bd)" stroke-dasharray="2 3"/>`);
+    });
+    // Links first (under nodes)
+    LINKS.forEach(l => {
+      const a = pos[l.from], b = pos[l.to];
+      const x1 = a.x + NW, y1 = a.y + NH/2;
+      const x2 = b.x,      y2 = b.y + NH/2;
+      const cx = (x1 + x2) / 2;
+      const d = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`;
+      const w = l.status === 'down' ? 1.2 : (l.rate.includes('180') ? 3 : l.rate.includes('220') || l.rate.includes('210') ? 2.8 : 1.6);
+      svg.push(`<path class="link ${l.status}" d="${d}" stroke-width="${w}"/>`);
+      svg.push(`<text class="linklabel" x="${cx}" y="${(y1+y2)/2 - 4}" text-anchor="middle">${l.rate}</text>`);
+    });
+    // Nodes
+    NODES.forEach(n => {
+      const p = pos[n.id];
+      svg.push(`<g class="node ${n.status}" onclick="openDrawer('${n.id}','${n.title} — ${n.sub}')">`);
+      svg.push(`<rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}"/>`);
+      svg.push(`<circle class="ndot" cx="${p.x + 12}" cy="${p.y + 14}"/>`);
+      svg.push(`<text class="title" x="${p.x + 24}" y="${p.y + 18}">${n.title}</text>`);
+      svg.push(`<text class="sub"   x="${p.x + 12}" y="${p.y + 40}">${n.sub}</text>`);
+      svg.push(`</g>`);
+    });
+    svg.push(`</svg>`);
+    el.innerHTML = svg.join('') +
+      `<div class="legend">
+        <span><i style="background:var(--ok)"></i>up</span>
+        <span><i style="background:var(--warn)"></i>degraded</span>
+        <span><i style="background:var(--bad)"></i>down / dashed</span>
+        <span style="margin-left:auto">thickness = req/min</span>
+      </div>`;
+  }
+  renderTopo();
+
+  // Mirror .status.{up|deg|down|idle} onto parent row as border-accent class
+  document.querySelectorAll('.row, .db-row, .dev-card').forEach(r => {
+    const s = r.querySelector('.status');
+    if (!s) return;
+    if (s.classList.contains('up'))   r.classList.add('s-up');
+    if (s.classList.contains('deg'))  r.classList.add('s-deg');
+    if (s.classList.contains('down')) r.classList.add('s-down');
+    if (s.classList.contains('idle')) r.classList.add('s-idle');
+  });
+</script>
+</body>
+</html>

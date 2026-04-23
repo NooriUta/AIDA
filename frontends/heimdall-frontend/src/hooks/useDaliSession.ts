@@ -11,7 +11,7 @@ const TERMINAL = new Set<string>(['COMPLETED', 'FAILED', 'CANCELLED']);
  * @param id      Session UUID to poll
  * @param enabled Set to false to skip polling (e.g. already terminal)
  */
-export function useDaliSession(id: string, enabled: boolean): DaliSession | null {
+export function useDaliSession(id: string, enabled: boolean, tenantAlias?: string): DaliSession | null {
   const [session, setSession] = useState<DaliSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -24,7 +24,7 @@ export function useDaliSession(id: string, enabled: boolean): DaliSession | null
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       try {
-        const s = await getSession(id, ctrl.signal);
+        const s = await getSession(id, ctrl.signal, tenantAlias);
         if (!stopped) {
           setSession(s);
           if (TERMINAL.has(s.status)) {
@@ -51,7 +51,7 @@ export function useDaliSession(id: string, enabled: boolean): DaliSession | null
       clearInterval(timerRef.current!);
       abortRef.current?.abort();
     };
-  }, [id, enabled]);
+  }, [id, enabled, tenantAlias]);
 
   return session;
 }

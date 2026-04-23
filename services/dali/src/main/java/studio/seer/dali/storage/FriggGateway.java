@@ -35,48 +35,39 @@ public class FriggGateway {
     @ConfigProperty(name = "frigg.password") String password;
 
     /**
-     * Executes a SQL query and returns the result rows.
-     *
-     * <p>BUG-SS-041: automatically retries once on {@link java.io.IOException}
-     * ("Connection was closed") which occurs when ArcadeDB drops an idle connection
-     * from the pool before the client-side TTL expires.
+     * Executes a SQL query in the default configured FRIGG database.
+     * BUG-SS-041: retries once on IOException (stale ArcadeDB connection).
      */
     public List<Map<String, Object>> sql(String query) {
-        log.debug("[FRIGG] {}", query);
-        try {
-            var result = client.command(db, basicAuth(), new FriggCommand("sql", query, null))
-                    .map(FriggResponse::result)
-                    .onFailure(java.io.IOException.class).retry().atMost(1)
-                    .await().atMost(TIMEOUT);
-            return result != null ? result : List.of();
-        } catch (Exception ex) {
-            log.error("[FRIGG FAILED] {} — {}", query, ex.getMessage());
-            throw ex;
-        }
+        return sqlIn(db, query, null);
     }
 
-    /**
-     * Executes a SQL query with named parameters.
-     *
-     * <p>BUG-SS-041: automatically retries once on {@link java.io.IOException}.
-     */
+    /** Executes a SQL query with named parameters in the default FRIGG database. */
     public List<Map<String, Object>> sql(String query, Map<String, Object> params) {
-        log.debug("[FRIGG] {}", query);
+        return sqlIn(db, query, params);
+    }
+
+    /** Executes a SQL query in an explicitly named FRIGG database (multi-tenant). */
+    public List<Map<String, Object>> sqlIn(String database, String query) {
+        return sqlIn(database, query, null);
+    }
+
+    /** Executes a SQL query with named parameters in an explicitly named FRIGG database. */
+    public List<Map<String, Object>> sqlIn(String database, String query, Map<String, Object> params) {
+        log.debug("[FRIGG:{}] {}", database, query);
         try {
-            var result = client.command(db, basicAuth(), new FriggCommand("sql", query, params))
+            var result = client.command(database, basicAuth(), new FriggCommand("sql", query, params))
                     .map(FriggResponse::result)
                     .onFailure(java.io.IOException.class).retry().atMost(1)
                     .await().atMost(TIMEOUT);
             return result != null ? result : List.of();
         } catch (Exception ex) {
-            log.error("[FRIGG FAILED] {} params={} — {}", query, params.keySet(), ex.getMessage());
+            log.error("[FRIGG:{}] FAILED {} — {}", database, query, ex.getMessage());
             throw ex;
         }
     }
 
-    /**
-     * Quick health check — returns true if FRIGG responds to a simple query.
-     */
+    /** Quick health check — returns true if FRIGG responds to a simple query. */
     public boolean ping() {
         try {
             sql("SELECT 1");
@@ -88,32 +79,40 @@ public class FriggGateway {
     }
 
     /**
-     * Creates the FRIGG database if it doesn't already exist.
-     *
-     * @return {@code true} if the database exists and is usable (created or already present);
-     *         {@code false} if creation failed (auth error, network issue, etc.)
+     * Creates the default FRIGG database (from config) if it doesn't already exist.
+     * Returns true if usable, false on failure.
      */
     public boolean ensureDatabase() {
-        // ArcadeDB 26.x uses POST /api/v1/server with a command body.
-        // The old /api/v1/create/{db} endpoint was removed in 26.x.
-        FriggCommand cmd = new FriggCommand(null, "create database " + db, null);
+        return ensureDatabaseNamed(db);
+    }
+
+    /**
+     * Creates a named FRIGG database if it doesn't already exist.
+     * Used by FriggSchemaInitializer.ensureSchema(tenantAlias) for tenant DBs.
+     */
+    public boolean ensureDatabaseNamed(String dbName) {
+        FriggCommand cmd = new FriggCommand(null, "create database " + dbName, null);
         try {
             client.serverCommand(basicAuth(), cmd).await().atMost(TIMEOUT);
-            log.info("[FRIGG] database '{}' created", db);
+            log.info("[FRIGG] database '{}' created", dbName);
             return true;
         } catch (WebApplicationException e) {
             int status = e.getResponse().getStatus();
             if (status == 500 || status == 400) {
-                // ArcadeDB returns 500 or 400 when the database already exists — treat as success
-                log.info("[FRIGG] database '{}' already exists (HTTP {} from /server)", db, status);
+                log.info("[FRIGG] database '{}' already exists (HTTP {})", dbName, status);
                 return true;
             }
-            log.warn("[FRIGG] ensureDatabase failed — HTTP {}: {}", status, e.getMessage());
+            log.warn("[FRIGG] ensureDatabaseNamed({}) failed — HTTP {}: {}", dbName, status, e.getMessage());
             return false;
         } catch (Exception e) {
-            log.warn("[FRIGG] ensureDatabase failed (connection issue?): {}", e.getMessage());
+            log.warn("[FRIGG] ensureDatabaseNamed({}) failed: {}", dbName, e.getMessage());
             return false;
         }
+    }
+
+    /** Returns the FRIGG database name for a given tenant alias: {@code dali_{alias}}. */
+    public String tenantDb(String tenantAlias) {
+        return "dali_" + tenantAlias;
     }
 
     private String basicAuth() {

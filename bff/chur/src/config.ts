@@ -10,10 +10,10 @@ function requireInProd(name: string, value: string | undefined, fallback: string
 
 export const config = {
   port:          Number(process.env.PORT ?? 3000),
-  corsOrigin:    process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  corsOrigin:    process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:5174,http://localhost:5175',
 
   // ── Keycloak OIDC ──────────────────────────────────────────────────────────
-  keycloakUrl:      process.env.KEYCLOAK_URL          ?? 'http://localhost:8180',
+  keycloakUrl:      process.env.KEYCLOAK_URL          ?? 'http://127.0.0.1:8180',
   keycloakRealm:    process.env.KEYCLOAK_REALM        ?? 'seer',
   keycloakClientId: process.env.KEYCLOAK_CLIENT_ID    ?? 'aida-bff',
   keycloakSecret:   requireInProd('KEYCLOAK_CLIENT_SECRET',
@@ -28,8 +28,16 @@ export const config = {
   kcAdminPass:  process.env.KC_ADMIN_PASS ?? 'admin',
 
   // ── ArcadeDB (for /api/query proxy — not auth) ────────────────────────────
-  arcadeUrl:     process.env.ARCADEDB_URL  ?? 'http://localhost:2480',
+  arcadeUrl:     process.env.ARCADEDB_URL  ?? 'http://127.0.0.1:2480',
   arcadeDb:      process.env.ARCADEDB_DB   ?? 'hound',
   arcadeUser:    process.env.ARCADEDB_USER ?? 'root',
   arcadePass:    process.env.ARCADEDB_PASS ?? 'playwithdata',
+
+  // ── FRIGG (port 2481) — session store + tenants registry + per-user data ──
+  friggUrl:         (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, ''),
+  friggUser:        process.env.FRIGG_USER  ?? 'root',
+  friggPass:        process.env.FRIGG_PASS  ?? 'playwithdata',
+  friggSessionDb:   process.env.FRIGG_SESSION_DB ?? 'frigg-sessions',
+  friggUsersDb:     process.env.FRIGG_USERS_DB   ?? 'frigg-users',
+  friggTenantsDb:   process.env.FRIGG_TENANTS_DB ?? 'frigg-tenants',
 } as const;
