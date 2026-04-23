@@ -601,6 +601,33 @@ export async function inviteUser(
 const APP_ROLES = ROLE_PRIORITY; // re-use the existing ordered array
 
 /**
+ * List all application realm roles from Keycloak.
+ * Filters out KC built-ins (offline_access, uma_authorization, default-roles-*).
+ * Falls back to the hardcoded ROLE_PRIORITY list if KC Admin API is unavailable.
+ */
+export async function listRoles(): Promise<{ id: string; name: string; description: string }[]> {
+  try {
+    const token = await getAdminToken();
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/roles`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) throw new Error(`KC listRoles ${res.status}`);
+    const all = await res.json() as (KcRole & { description?: string })[];
+    const appRoleSet = new Set(APP_ROLES as string[]);
+    return all
+      .filter(r => appRoleSet.has(r.name))
+      .map(r => ({ id: r.id, name: r.name, description: r.description ?? '' }))
+      .sort((a, b) =>
+        (APP_ROLES as string[]).indexOf(a.name) - (APP_ROLES as string[]).indexOf(b.name),
+      );
+  } catch (err) {
+    console.warn('[KC] listRoles unavailable — using fallback:', (err as Error).message);
+    return APP_ROLES.map(name => ({ id: name, name, description: '' }));
+  }
+}
+
+/**
  * Replace all app realm roles on a user with the single given role.
  * Built-in KC roles (offline_access, uma_authorization, default-roles-*) are untouched.
  */

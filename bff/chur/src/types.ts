@@ -17,6 +17,7 @@ export interface SeerUser {
   email?:             string;
   firstName?:         string;
   lastName?:          string;
+  emailVerified?:     boolean;
 }
 
 // Extend Fastify request to carry user info after session-based authentication

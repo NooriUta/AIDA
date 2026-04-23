@@ -17,13 +17,14 @@ export interface KeycloakTokenResponse {
 }
 
 export interface KeycloakUserInfo {
-  sub:       string;
-  username:  string;
-  role:      UserRole;
-  scopes:    string[];   // from JWT scope claim
-  email?:    string;
-  firstName?: string;
-  lastName?:  string;
+  sub:            string;
+  username:       string;
+  role:           UserRole;
+  scopes:         string[];   // from JWT scope claim
+  email?:         string;
+  firstName?:     string;
+  lastName?:      string;
+  emailVerified?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -151,11 +152,12 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
   const hasAidaScopes = jwtScopes.some((s) => s.startsWith('aida:') || s.startsWith('seer:'));
   const scopes = hasAidaScopes ? jwtScopes : [...jwtScopes, ...deriveAidaScopes(roles)];
 
-  const email     = (payload as { email?: string }).email;
-  const firstName = (payload as { given_name?: string }).given_name;
-  const lastName  = (payload as { family_name?: string }).family_name;
+  const email         = (payload as { email?: string }).email;
+  const firstName     = (payload as { given_name?: string }).given_name;
+  const lastName      = (payload as { family_name?: string }).family_name;
+  const emailVerified = (payload as { email_verified?: boolean }).email_verified;
 
-  return { sub, username, role, scopes, email, firstName, lastName };
+  return { sub, username, role, scopes, email, firstName, lastName, emailVerified };
 }
 
 /** Server-side logout: invalidate the refresh token in Keycloak. */

@@ -93,9 +93,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       );
       // Persist KC identity claims in session for /auth/me enrichment
       await updateSession(sid, {
-        email:     userInfo.email,
-        firstName: userInfo.firstName,
-        lastName:  userInfo.lastName,
+        email:         userInfo.email,
+        firstName:     userInfo.firstName,
+        lastName:      userInfo.lastName,
+        emailVerified: userInfo.emailVerified,
       });
 
       reply.setCookie('sid', sid, COOKIE_OPTS);
@@ -109,7 +110,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         result:     'success',
       });
       return { id: userInfo.sub, username: userInfo.username, role: userInfo.role,
-               email: userInfo.email, firstName: userInfo.firstName, lastName: userInfo.lastName };
+               scopes: userInfo.scopes, email: userInfo.email,
+               firstName: userInfo.firstName, lastName: userInfo.lastName,
+               emailVerified: userInfo.emailVerified,
+               activeTenantAlias: 'default' };
     },
   );
 
@@ -118,9 +122,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/me',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
-      return { id: sub, username, role, email, firstName, lastName,
-               activeTenantAlias: activeTenantAlias ?? 'default' };
+      const { sub, username, role, scopes, email, firstName, lastName,
+              emailVerified, activeTenantAlias } = request.user;
+      return { id: sub, username, role, scopes, email, firstName, lastName,
+               emailVerified, activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 
@@ -129,9 +134,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/refresh',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
-      return { id: sub, username, role, email, firstName, lastName,
-               activeTenantAlias: activeTenantAlias ?? 'default' };
+      const { sub, username, role, scopes, email, firstName, lastName,
+              emailVerified, activeTenantAlias } = request.user;
+      return { id: sub, username, role, scopes, email, firstName, lastName,
+               emailVerified, activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 

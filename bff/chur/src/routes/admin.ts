@@ -11,6 +11,7 @@ import {
   setUserEnabled,
   getUserAttributes,
   setUserAttributes,
+  listRoles,
 } from '../keycloakAdmin';
 
 const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
@@ -28,6 +29,24 @@ const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
  * Self-service routes (/admin/me/*) are accessible to any authenticated user.
  */
 export const adminRoutes: FastifyPluginAsync = async (app) => {
+
+  // ── Roles reference (local-admin+) ──────────────────────────────────────────
+  // Returns application roles from KC in priority order.
+  // Used by role pickers in Verdandi / HEIMDALL user management UI.
+
+  app.get(
+    '/admin/roles',
+    { preHandler: [app.authenticate, requireScope('aida:tenant:admin')] },
+    async (_request, reply) => {
+      try {
+        const roles = await listRoles();
+        return reply.send(roles);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'KC_ADMIN_ERROR';
+        return reply.status(502).send({ error: msg });
+      }
+    },
+  );
 
   // ── Tenants (admin+ only) ─────────────────────────────────────────────────
 
