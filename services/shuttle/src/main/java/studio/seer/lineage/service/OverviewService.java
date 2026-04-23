@@ -5,6 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.SchemaNode;
+import studio.seer.lineage.registry.YggLineageRegistry;
+import studio.seer.lineage.security.SeerIdentity;
 
 import java.util.List;
 import java.util.Map;
@@ -22,8 +24,13 @@ import java.util.Map;
 @ApplicationScoped
 public class OverviewService {
 
-    @Inject
-    ArcadeGateway arcade;
+    @Inject ArcadeGateway      arcade;
+    @Inject SeerIdentity       identity;
+    @Inject YggLineageRegistry lineageRegistry;
+
+    String lineageDb() {
+        return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
 
     public Uni<List<SchemaNode>> overview() {
         // Traversal chain:
@@ -46,7 +53,7 @@ public class OverviewService {
             ORDER BY schema_name
             """;
 
-        return arcade.sql(sql).map(rows -> rows.stream()
+        return arcade.sqlIn(lineageDb(), sql, Map.of()).map(rows -> rows.stream()
             .map(OverviewService::toSchemaNode)
             .toList()
         );
