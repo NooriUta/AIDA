@@ -1,0 +1,127 @@
+###############################################################################
+# AIDA — STABLE infrastructure layer
+#
+# Services: Keycloak · FRIGG (ArcadeDB) · Ygg (ArcadeDB) · init-frigg
+#
+# Lifecycle:  start once, update only on infra version bumps.
+# Restart:    make stable-restart  (rebuilds nothing — all images)
+# Full wipe:  make stable-clean    (WARNING: destroys all state)
+#
+# Network aida_net is OWNED by this file — all other compose layers
+# declare it as external and attach to it.
+###############################################################################
+
+networks:
+  default:
+    name: aida_net
+
+services:
+  # ── Keycloak (IAM) ──────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: start-dev --import-realm --features=organization
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8180"
+      KC_HTTP_RELATIVE_PATH: "/kc"
+      KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: "xforwarded"
+      KC_HOSTNAME: "localhost"
+      KC_HOSTNAME_STRICT: "false"
+      KC_FEATURES: "organization"
+    ports:
+      - "127.0.0.1:18180:8180"
+    volumes:
+      # Named volume preserves KC realm data across container recreates.
+      # Both orgs (default + acme) and their stable UUIDs are baked into
+      # seer-realm.json so a fresh import always produces the same KC state.
+      # To force fresh import: docker volume rm aida-root_keycloak_data
+      - keycloak_data:/opt/keycloak/data
+      - ./infra/keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /kc/health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
+
+  # ── FRIGG (ArcadeDB — session/tenant/user store) ────────────────────────────
+  # Host port 2481 → container 2480  (Ygg gets 2480 on host)
+  frigg:
+    image: arcadedata/arcadedb:26.3.2
+    environment:
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_ROOT_PASSWORD:-playwithdata}"
+    ports:
+      - "127.0.0.1:2481:2480"
+    volumes:
+      - frigg_data:/home/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Ygg (ArcadeDB — lineage graph, база hound) ──────────────────────────────
+  ygg:
+    container_name: Ygg-1
+    image: arcadedata/arcadedb:26.3.2
+    environment:
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:-playwithdata}"
+      ARCADEDB_OPTS_MEMORY: "-Xms2G -Xmx2G"
+    ports:
+      - "127.0.0.1:2480:2480"
+      - "127.0.0.1:2424:2424"
+    volumes:
+      - hound_databases:/home/arcadedb/databases
+      - hound_config:/home/arcadedb/config
+      - hound_logs:/home/arcadedb/log
+      - hound_backups:/home/arcadedb/backups
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── init-frigg (one-shot DB initialiser) ────────────────────────────────────
+  # Idempotent — creates FRIGG databases only if they don't already exist.
+  # Runs on every `stable-up`; exits immediately if DBs are present.
+  init-frigg:
+    image: curlimages/curl:latest
+    restart: "no"
+    depends_on:
+      frigg:
+        condition: service_healthy
+    environment:
+      FRIGG_PASS: ${FRIGG_ROOT_PASSWORD:-playwithdata}
+    command: >
+      sh -c "
+        create_db() {
+          local db=$$1
+          result=$$(curl -sf --max-time 5 -u root:$$FRIGG_PASS -X POST http://frigg:2480/api/v1/server
+            -H 'Content-Type: application/json'
+            -d \"{\\\"command\\\":\\\"create database $$db\\\"}\" 2>/dev/null || echo error)
+          echo \"[init-frigg] $$db: $$result\"
+        }
+        dbs=$$(curl -sf -u root:$$FRIGG_PASS http://frigg:2480/api/v1/databases 2>/dev/null || echo '')
+        echo $$dbs | grep -q '\"frigg-sessions\"' || create_db frigg-sessions
+        echo $$dbs | grep -q '\"frigg-tenants\"'  || create_db frigg-tenants
+        echo $$dbs | grep -q '\"frigg-users\"'    || create_db frigg-users
+        echo $$dbs | grep -q '\"dali\"'           || create_db dali
+        echo $$dbs | grep -q '\"heimdall\"'       || create_db heimdall
+        echo '[init-frigg] done.'
+      "
+
+volumes:
+  keycloak_data:    # KC realm data — survives container recreates
+  frigg_data:
+  hound_databases:
+    external: true
+  hound_config:
+    external: true
+  hound_logs:
+    external: true
+  hound_backups:
+    external: true
