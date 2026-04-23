@@ -161,10 +161,13 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
 
   // Tenant resolution (priority order):
   //   1. seer_tenant — custom KC protocol mapper attribute
-  //   2. organization — KC 24+ Organizations claim (first key = org alias = tenant alias)
+  //   2. organization.alias — custom OIDC mapper (claim.name="organization.alias") → {"organization":{"alias":"<name>"}}
+  //   3. organization first key — standard KC 26 orgs format → {"organization":{"<name>":{}}}
   const seerTenant = (payload as { seer_tenant?: string }).seer_tenant;
   const orgClaim   = (payload as { organization?: Record<string, unknown> }).organization;
-  const orgAlias   = orgClaim && typeof orgClaim === 'object' ? Object.keys(orgClaim)[0] : undefined;
+  const orgAlias   = orgClaim && typeof orgClaim === 'object'
+    ? (typeof orgClaim['alias'] === 'string' ? orgClaim['alias'] : Object.keys(orgClaim)[0])
+    : undefined;
   const tenantAlias = seerTenant ?? orgAlias;
 
   return { sub, username, role, scopes, email, firstName, lastName, emailVerified, tenantAlias };
