@@ -8,6 +8,9 @@ import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * Ensures the JobRunr schema exists in FRIGG (ArcadeDB) before the
  * background job server starts processing jobs.
@@ -139,11 +142,35 @@ public class FriggSchemaInitializer {
                 log.warn("FriggSchemaInitializer: schema partially initialised — one or more document " +
                          "types could not be created. Session enqueueing will be refused until Dali restarts.");
             }
-            // Ensure tenant-specific DB for the default tenant (single-tenant demo mode)
+            // Ensure tenant-specific DB for default tenant and all known tenants in FRIGG
             ensureSchema("default");
+            ensureAllTenantSchemas();
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not initialise FRIGG schema (FRIGG may be unavailable): {}",
                     e.getMessage());
+        }
+    }
+
+    /**
+     * Queries frigg-tenants for all DaliTenantConfig records and ensures
+     * dali_{alias} schema exists for each. Idempotent — safe to call at startup.
+     */
+    public void ensureAllTenantSchemas() {
+        try {
+            List<Map<String, Object>> rows = frigg.sqlIn(
+                    "frigg-tenants",
+                    "SELECT tenantAlias FROM DaliTenantConfig " +
+                    "WHERE status IN ['ACTIVE', 'PROVISIONING', 'SUSPENDED']");
+            for (Map<String, Object> row : rows) {
+                Object aliasObj = row.get("tenantAlias");
+                if (aliasObj == null) continue;
+                String alias = aliasObj.toString();
+                if (!"default".equals(alias)) {
+                    ensureSchema(alias);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not enumerate tenants from frigg-tenants: {}", e.getMessage());
         }
     }
 
@@ -153,7 +180,7 @@ public class FriggSchemaInitializer {
      * Called at startup for "default" and by provisioning for new tenants.
      */
     public void ensureSchema(String tenantAlias) {
-        String dbName = FriggGateway.tenantDb(tenantAlias);
+        String dbName = frigg.tenantDb(tenantAlias);
         log.info("FriggSchemaInitializer: ensuring tenant schema in {}", dbName);
         try {
             frigg.ensureDatabaseNamed(dbName);

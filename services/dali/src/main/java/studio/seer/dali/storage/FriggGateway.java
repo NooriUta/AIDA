@@ -110,8 +110,8 @@ public class FriggGateway {
         }
     }
 
-    /** Computes the FRIGG database name for a given tenant alias. */
-    public static String tenantDb(String tenantAlias) {
+    /** Returns the FRIGG database name for a given tenant alias: {@code dali_{alias}}. */
+    public String tenantDb(String tenantAlias) {
         return "dali_" + tenantAlias;
     }
 
