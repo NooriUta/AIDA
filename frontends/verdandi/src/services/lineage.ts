@@ -8,7 +8,17 @@ const ENDPOINT = import.meta.env.VITE_GRAPHQL_URL
   ?? `${location.origin}/graphql`;
 
 const gqlClient = new GraphQLClient(ENDPOINT, {
-  credentials: 'include',  // send httpOnly JWT cookie cross-origin
+  credentials: 'include',
+  requestMiddleware: (req) => {
+    const overrideTenant = localStorage.getItem('seer-active-tenant');
+    return {
+      ...req,
+      headers: {
+        ...req.headers,
+        ...(overrideTenant ? { 'X-Seer-Override-Tenant': overrideTenant } : {}),
+      },
+    };
+  },
 });
 
 // ── Domain types (mirror GraphQL schema from lineage-api) ─────────────────────

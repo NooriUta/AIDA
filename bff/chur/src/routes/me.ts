@@ -27,14 +27,14 @@ import {
   upsertUserVertex,
   getUserVertex,
 } from '../users/FriggUserRepository';
-import { friggUsersSql, friggUsersQuery } from '../users/FriggUsersClient';
+import { friggUsersSql, friggUsersQuery, type UserVertexType } from '../users/FriggUsersClient';
 import { csrfGuard } from '../middleware/csrfGuard';
 import { sanitizeForAudit } from '../middleware/sanitizeForAudit';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 async function currentConfigVersion(
-  type: 'UserProfile' | 'UserPreferences' | 'UserNotifications',
+  type: UserVertexType,
   userId: string,
 ): Promise<number> {
   const existing = await getUserVertex(type, userId);

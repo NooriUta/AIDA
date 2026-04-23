@@ -23,7 +23,12 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
     '/',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const { username, role, activeTenantAlias } = request.user;
+      const { username, role, scopes, activeTenantAlias } = request.user;
+      const isSuperAdmin = role === 'super-admin' || scopes?.includes('aida:superadmin');
+      const overrideTenant = isSuperAdmin
+        ? (request.headers['x-seer-override-tenant'] as string | undefined)
+        : undefined;
+      const effectiveTenant = overrideTenant ?? activeTenantAlias ?? 'default';
 
       try {
         const upstream = await fetch(`${LINEAGE_API_URL}/graphql`, {
@@ -32,7 +37,7 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
             'Content-Type':          'application/json',
             'X-Seer-Role':           role,
             'X-Seer-User':           username,
-            'X-Seer-Tenant-Alias':   activeTenantAlias ?? 'default',
+            'X-Seer-Tenant-Alias':   effectiveTenant,
           },
           body: JSON.stringify(request.body),
         });
@@ -64,7 +69,12 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
 
     // HTTP GET — introspection / GraphiQL passthrough
     handler: async (request, reply) => {
-      const { username, role, activeTenantAlias } = request.user;
+      const { username, role, scopes, activeTenantAlias } = request.user;
+      const isSuperAdmin = role === 'super-admin' || scopes?.includes('aida:superadmin');
+      const overrideTenant = isSuperAdmin
+        ? (request.headers['x-seer-override-tenant'] as string | undefined)
+        : undefined;
+      const effectiveTenant = overrideTenant ?? activeTenantAlias ?? 'default';
       const qs = new URLSearchParams(request.query as Record<string, string>);
 
       try {
@@ -72,7 +82,7 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
           headers: {
             'X-Seer-Role':         role,
             'X-Seer-User':         username,
-            'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
+            'X-Seer-Tenant-Alias': effectiveTenant,
           },
         });
 
@@ -86,14 +96,19 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
 
     // WebSocket upgrade — graphql-transport-ws proxy
     wsHandler: (socket, request) => {
-      const { username, role, activeTenantAlias } = request.user;
+      const { username, role, scopes, activeTenantAlias } = request.user;
+      const isSuperAdmin = role === 'super-admin' || scopes?.includes('aida:superadmin');
+      const overrideTenant = isSuperAdmin
+        ? (request.headers['x-seer-override-tenant'] as string | undefined)
+        : undefined;
+      const effectiveTenant = overrideTenant ?? activeTenantAlias ?? 'default';
       const wsUrl = `${toWsUrl(LINEAGE_API_URL)}/graphql`;
 
       const upstream = new WebSocket(wsUrl, ['graphql-transport-ws'], {
         headers: {
           'X-Seer-Role':         role,
           'X-Seer-User':         username,
-          'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
+          'X-Seer-Tenant-Alias': effectiveTenant,
         },
       });
 
