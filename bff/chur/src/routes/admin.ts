@@ -86,13 +86,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const isSuperAdmin = request.user.scopes?.includes('aida:superadmin');
-      if (isSuperAdmin) {
-        // Super-admin: all KC organizations (not filtered by FRIGG status)
+      // Cross-tenant admins (super-admin + admin) can see ALL active tenants.
+      // Regular admin = platform-wide admin who can switch between any tenant.
+      const isAdmin = request.user.scopes?.includes('aida:admin');
+      if (isSuperAdmin || isAdmin) {
+        // Try KC Organizations first (authoritative when KC orgs are configured)
         const orgs = await listAllOrganizations();
         if (orgs.length > 0) {
           return reply.send(orgs.map(o => ({ id: o.alias, name: o.name || o.alias })));
         }
-        // Fallback: FRIGG active tenants
+        // Fallback: FRIGG active tenants (works without KC org configuration)
         return reply.send(await listActiveTenants());
       }
       // All other roles: fetch this user's KC org memberships (multi-org support)

@@ -75,13 +75,16 @@ describe('GET /admin/tenants', () => {
     expect(body[0].id).toBe('default');
   });
 
-  it('200 — admin with aida:admin scope', async () => {
+  it('200 — admin with aida:admin scope gets all tenants', async () => {
     const sid = await makeSid('admin', ['seer:read', 'aida:admin', 'aida:tenant:admin']);
     const res = await app.inject({ method: 'GET', url: '/admin/tenants', cookies: { sid } });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { id: string }[];
     expect(Array.isArray(body)).toBe(true);
-    expect(body[0].id).toBe('default');
+    // Admin sees all FRIGG tenants (or fallback 'default' if FRIGG unavailable in CI)
+    expect(body.length).toBeGreaterThanOrEqual(1);
+    const ids = body.map((t: { id: string }) => t.id);
+    expect(ids).toContain('default');
   });
 });
 

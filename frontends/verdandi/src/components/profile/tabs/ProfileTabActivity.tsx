@@ -40,6 +40,7 @@ export const ProfileTabActivity = memo(() => {
     setLoading(true);
     fetch('/me/session-activity', { credentials: 'include' })
       .then(r => {
+        if (r.status === 401 || r.status === 404) return { events: [] };
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json();
       })
