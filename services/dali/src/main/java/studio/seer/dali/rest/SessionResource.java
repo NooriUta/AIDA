@@ -13,6 +13,7 @@ import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.ParseSessionInput;
 import studio.seer.tenantrouting.TenantContext;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -90,8 +91,13 @@ public class SessionResource {
 
     @GET
     @Path("/archive")
-    public Response archive(@QueryParam("limit") @DefaultValue("200") int limit) {
-        return Response.ok(sessionRepository.findAll(tenantCtx.tenantAlias(), limit)).build();
+    public Response archive(
+            @QueryParam("limit") @DefaultValue("200") int limit,
+            @QueryParam("allTenants") @DefaultValue("false") boolean allTenants) {
+        List<studio.seer.shared.Session> sessions = (allTenants && tenantCtx.isSuperadmin())
+                ? sessionRepository.findAllTenants(limit)
+                : sessionRepository.findAll(tenantCtx.tenantAlias(), limit);
+        return Response.ok(sessions).build();
     }
 
     /**

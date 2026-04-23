@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import studio.seer.dali.rest.SourceDTO.SchemaFilter;
 import studio.seer.dali.security.JdbcUrlValidator;
 import studio.seer.dali.storage.SourceRepository;
+import studio.seer.tenantrouting.TenantContext;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -36,10 +37,11 @@ public class SourceResource {
 
     @Inject SourceRepository  repository;
     @Inject JdbcUrlValidator  jdbcUrlValidator;
+    @Inject TenantContext     tenantCtx;
 
     @GET
     public Response list() {
-        return Response.ok(repository.findAll()).build();
+        return Response.ok(repository.findAll(tenantCtx.tenantAlias())).build();
     }
 
     @POST
@@ -50,7 +52,7 @@ public class SourceResource {
         var ssrf = jdbcUrlValidator.validate(body.jdbcUrl());
         if (!ssrf.allowed()) return bad("source_url_rejected: " + ssrf.reason());
         SourceDTO created = repository.create(
-            body.name(), body.dialect(), body.jdbcUrl(),
+            tenantCtx.tenantAlias(), body.name(), body.dialect(), body.jdbcUrl(),
             body.username(), body.password(), body.schemaFilter());
         return Response.status(Response.Status.CREATED).entity(created).build();
     }
@@ -63,21 +65,24 @@ public class SourceResource {
         }
         var ssrf = jdbcUrlValidator.validate(body.jdbcUrl());
         if (!ssrf.allowed()) return bad("source_url_rejected: " + ssrf.reason());
-        return repository.update(id, body.name(), body.dialect(), body.jdbcUrl(),
-                body.username(), body.password(), body.schemaFilter())
-                .map(dto -> Response.ok(dto).build())
-                .orElse(Response.status(Response.Status.NOT_FOUND)
-                        .entity("{\"error\":\"source not found\"}").build());
+        var updated = repository.update(tenantCtx.tenantAlias(), id, body.name(), body.dialect(), body.jdbcUrl(),
+                body.username(), body.password(), body.schemaFilter());
+        if (updated.isEmpty()) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity("{\"error\":\"source not found\"}").build();
+        }
+        return Response.ok(updated.get()).build();
     }
 
     @DELETE
     @Path("/{id}")
     public Response delete(@PathParam("id") String id) {
-        if (repository.findById(id).isEmpty()) {
+        String alias = tenantCtx.tenantAlias();
+        if (repository.findById(alias, id).isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND)
                     .entity("{\"error\":\"source not found\"}").build();
         }
-        repository.delete(id);
+        repository.delete(alias, id);
         return Response.noContent().build();
     }
 
