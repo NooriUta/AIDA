@@ -795,20 +795,48 @@
         "super-admin"
       ],
       "attributes": {
-        "title": [ "Platform Owner" ],
-        "dept": [ "Platform" ],
-        "phone": [ "" ],
-        "avatarColor": [ "#e05c5c" ],
-        "tz": [ "Europe/Moscow" ],
-        "dateFmt": [ "DD.MM.YYYY" ],
-        "startPage": [ "admin" ],
-        "pref.lang": [ "ru" ],
-        "notify.email": [ "true" ],
-        "notify.browser": [ "true" ],
-        "notify.harvest": [ "true" ],
-        "notify.errors": [ "true" ],
-        "notify.digest": [ "false" ],
-        "organization.alias": [ "default" ]
+        "title": [
+          "Platform Owner"
+        ],
+        "dept": [
+          "Platform"
+        ],
+        "phone": [
+          ""
+        ],
+        "avatarColor": [
+          "#e05c5c"
+        ],
+        "tz": [
+          "Europe/Moscow"
+        ],
+        "dateFmt": [
+          "DD.MM.YYYY"
+        ],
+        "startPage": [
+          "admin"
+        ],
+        "pref.lang": [
+          "ru"
+        ],
+        "notify.email": [
+          "true"
+        ],
+        "notify.browser": [
+          "true"
+        ],
+        "notify.harvest": [
+          "true"
+        ],
+        "notify.errors": [
+          "true"
+        ],
+        "notify.digest": [
+          "false"
+        ],
+        "organization.alias": [
+          "default"
+        ]
       }
     }
   ],
@@ -846,6 +874,29 @@
         },
         {
           "username": "local.admin"
+        },
+        {
+          "username": "superadmin"
+        }
+      ],
+      "id": "9d0b33c6-617c-400f-bce4-119e105ad459"
+    },
+    {
+      "id": "296b3873-6512-4d75-8a5a-8c1284afffb3",
+      "name": "acme",
+      "alias": "acme",
+      "description": "Acme Corp tenant",
+      "enabled": true,
+      "redirectUrl": "",
+      "domains": [
+        {
+          "name": "acme.io",
+          "verified": true
+        }
+      ],
+      "members": [
+        {
+          "username": "admin"
         },
         {
           "username": "superadmin"

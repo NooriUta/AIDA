@@ -69,6 +69,10 @@ services:
     ports:
       - "127.0.0.1:18180:8180"
     volumes:
+      # Named volume preserves KC data (users, orgs, sessions) across container recreates.
+      # Realm JSON is still mounted for initial import on first start.
+      # To force fresh import (e.g. after realm schema changes): docker volume rm aida-root_keycloak_data
+      - keycloak_data:/opt/keycloak/data
       - ./infra/keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /kc/health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
@@ -353,6 +357,7 @@ services:
 
 volumes:
   nginx_certs:
+  keycloak_data:    # KC realm data persisted across container recreates
   frigg_data:
   hound_databases:
     external: true

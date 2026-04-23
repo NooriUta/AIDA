@@ -90,13 +90,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       // Regular admin = platform-wide admin who can switch between any tenant.
       const isAdmin = request.user.scopes?.includes('aida:admin');
       if (isSuperAdmin || isAdmin) {
-        // Try KC Organizations first (authoritative when KC orgs are configured)
+        // FRIGG is the operational tenant registry — always the primary source.
+        // KC orgs are used for user-membership routing but may lag behind FRIGG
+        // (e.g. tenants provisioned via API without a corresponding KC org yet).
+        const friggTenants = await listActiveTenants();
+        if (friggTenants.length > 0) return reply.send(friggTenants);
+        // Fallback: KC orgs (when FRIGG is unavailable)
         const orgs = await listAllOrganizations();
         if (orgs.length > 0) {
           return reply.send(orgs.map(o => ({ id: o.alias, name: o.name || o.alias })));
         }
-        // Fallback: FRIGG active tenants (works without KC org configuration)
-        return reply.send(await listActiveTenants());
+        return reply.send([{ id: 'default', name: 'Default' }]);
       }
       // All other roles: fetch this user's KC org memberships (multi-org support)
       const orgs = await getUserOrganizations(request.user.sub);
