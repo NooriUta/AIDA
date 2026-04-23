@@ -586,30 +586,30 @@ export const Header = memo(() => {
 Header.displayName = 'Header';
 
 // ── TenantPickerButton ────────────────────────────────────────────────────────
-// Super-admins see a dropdown to switch tenant context without re-login.
-// All other roles see a plain read-only badge.
+// All users: fetches accessible tenants from /admin/tenants on mount.
+// Shows a dropdown if 2+ tenants (multi-org membership), badge otherwise.
 
 interface TenantItem { id: string; name: string }
 
 function TenantPickerButton({ user }: { user: import('../../stores/authStore').AuthUser }) {
   const { t } = useTranslation();
-  const isSuperAdmin = user.scopes?.includes('aida:admin');
 
   const [open,    setOpen]    = useState(false);
   const [tenants, setTenants] = useState<TenantItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Lazy-load tenant list on first open
+  // Fetch accessible tenants on mount — count determines badge vs dropdown
   useEffect(() => {
-    if (!open || !isSuperAdmin || tenants.length > 0) return;
-    setLoading(true);
     fetch('/admin/tenants', { credentials: 'include' })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then((data: TenantItem[]) => setTenants(data))
-      .catch(() => {})
+      .catch(() => {
+        const alias = user.activeTenantAlias ?? 'default';
+        setTenants([{ id: alias, name: alias }]);
+      })
       .finally(() => setLoading(false));
-  }, [open, isSuperAdmin, tenants.length]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function pick(alias: string) {
     localStorage.setItem('seer-active-tenant', alias);
@@ -640,7 +640,8 @@ function TenantPickerButton({ user }: { user: import('../../stores/authStore').A
     textTransform: 'uppercase', flexShrink: 0,
   };
 
-  if (!isSuperAdmin) {
+  // Badge-only: still loading, or only one accessible tenant
+  if (loading || tenants.length <= 1) {
     return (
       <span title={t('tenant.activeHint', { defaultValue: 'Active tenant' })} style={badgeStyle}>
         <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--acc)' }} />

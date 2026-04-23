@@ -7,7 +7,7 @@ import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.DaliApplicationDto;
 import studio.seer.lineage.model.DaliDatabaseDto;
 import studio.seer.lineage.model.DaliSchemaDto;
-import studio.seer.lineage.registry.YggLineageRegistry;
+import studio.seer.tenantrouting.YggLineageRegistry;
 import studio.seer.lineage.security.SeerIdentity;
 
 import java.util.*;

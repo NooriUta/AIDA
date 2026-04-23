@@ -1,5 +1,9 @@
-/* ── Google Fonts: DM Sans + Fira Code (fallback/option) + Manrope + Unbounded + IBM Plex Mono (brandbook) ── */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Fira+Code:wght@400;500&family=Manrope:wght@300;400;500;600;700&family=Unbounded:wght@800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+/* ── Google Fonts: all UI + mono font picker options ─────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Exo+2:wght@400;500;600&family=Fira+Code:wght@400;500&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@300;400;500;600;700&family=Oxanium:wght@400;500;600&family=Source+Code+Pro:wght@400;500&family=Unbounded:wght@800&display=swap');
+
+/* ── Geist + Geist Mono — self-hosted via @fontsource-variable ───────────── */
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
 
 @import "tailwindcss";
 

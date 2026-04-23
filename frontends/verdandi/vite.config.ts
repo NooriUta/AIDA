@@ -80,10 +80,13 @@ export default defineConfig({
     host: '0.0.0.0',
     cors: true,           // required for MF remote loading from shell origin
     proxy: {
-      // Dev: proxy GraphQL directly to SHUTTLE (bypasses Chur auth — dev only).
-      // In production the reverse-proxy / Chur handles /graphql.
+      // Dev: proxy GraphQL through Chur so X-Seer-Tenant-Alias is correctly
+      // injected by Chur before forwarding to SHUTTLE. Chur validates the
+      // session cookie and sets X-Seer-Tenant-Alias = effectiveTenant.
+      // Direct-to-SHUTTLE bypass was removed because SHUTTLE only reads
+      // X-Seer-Tenant-Alias (set by Chur) — not X-Seer-Override-Tenant from frontend.
       '/graphql': {
-        target: process.env.SHUTTLE_URL ?? 'http://localhost:8080',
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
       '/auth': {

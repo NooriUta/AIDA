@@ -19,6 +19,7 @@ import { useAuthStore }   from './stores/authStore';
 import { usePrefsSync }  from './hooks/usePrefsSync';
 import { applyDom }      from './stores/prefsStore';
 import type { ServerPrefs } from './stores/prefsStore';
+import { useLoomStore }  from './stores/loomStore';
 
 const KnotPage = lazy(() =>
   import('./components/knot/KnotPage').then((m) => ({ default: m.KnotPage })),
@@ -68,6 +69,17 @@ export default function App() {
     const h = (e: Event) => applyDom((e as CustomEvent<Partial<ServerPrefs>>).detail);
     window.addEventListener('aida:prefs', h);
     return () => window.removeEventListener('aida:prefs', h);
+  }, []);
+
+  // Tenant switch: navigate to L1 and invalidate all cached queries so data
+  // re-fetches from the newly selected tenant's ArcadeDB.
+  useEffect(() => {
+    const h = () => {
+      useLoomStore.getState().navigateToLevel('L1');
+      queryClient.invalidateQueries();
+    };
+    window.addEventListener('seer-tenant-changed', h);
+    return () => window.removeEventListener('seer-tenant-changed', h);
   }, []);
 
   // Sync Verdandi preferences to/from Keycloak (R4.14)

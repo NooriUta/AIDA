@@ -10,12 +10,22 @@ const ENDPOINT = import.meta.env.VITE_GRAPHQL_URL
 const gqlClient = new GraphQLClient(ENDPOINT, {
   credentials: 'include',
   requestMiddleware: (req) => {
-    const overrideTenant = localStorage.getItem('seer-active-tenant');
+    const activeTenant = localStorage.getItem('seer-active-tenant');
     return {
       ...req,
       headers: {
+        // graphql-request v7 does not include Content-Type in req.headers at middleware
+        // time — it is added after the middleware runs. We must set it explicitly here
+        // so that Fastify (Chur) parses the body as JSON, not as text/plain string.
+        'Content-Type': 'application/json',
         ...req.headers,
-        ...(overrideTenant ? { 'X-Seer-Override-Tenant': overrideTenant } : {}),
+        // X-Seer-Override-Tenant — read by Chur; Chur sets X-Seer-Tenant-Alias for SHUTTLE.
+        // X-Seer-Tenant-Alias    — read directly by SHUTTLE (belt-and-suspenders for dev).
+        // Both headers carry the same value; Chur overwrites X-Seer-Tenant-Alias in prod.
+        ...(activeTenant ? {
+          'X-Seer-Override-Tenant': activeTenant,
+          'X-Seer-Tenant-Alias':    activeTenant,
+        } : {}),
       },
     };
   },

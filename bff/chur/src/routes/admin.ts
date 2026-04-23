@@ -12,6 +12,8 @@ import {
   getUserAttributes,
   setUserAttributes,
   listRoles,
+  listAllOrganizations,
+  getUserOrganizations,
 } from '../keycloakAdmin';
 import { config } from '../config';
 
@@ -83,12 +85,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     '/admin/tenants',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const isSuperAdmin = request.user.scopes?.includes('aida:admin');
+      const isSuperAdmin = request.user.scopes?.includes('aida:superadmin');
       if (isSuperAdmin) {
-        // Super-admin sees all active tenants from FRIGG
+        // Super-admin: all KC organizations (not filtered by FRIGG status)
+        const orgs = await listAllOrganizations();
+        if (orgs.length > 0) {
+          return reply.send(orgs.map(o => ({ id: o.alias, name: o.name || o.alias })));
+        }
+        // Fallback: FRIGG active tenants
         return reply.send(await listActiveTenants());
       }
-      // Regular users see only their own tenant
+      // All other roles: fetch this user's KC org memberships (multi-org support)
+      const orgs = await getUserOrganizations(request.user.sub);
+      if (orgs.length > 0) {
+        return reply.send(orgs.map(o => ({ id: o.alias, name: o.name || o.alias })));
+      }
+      // Fallback: own active tenant only
       const alias = request.user.activeTenantAlias ?? 'default';
       return reply.send([{ id: alias, name: alias }]);
     },

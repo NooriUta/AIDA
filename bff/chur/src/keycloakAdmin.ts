@@ -339,7 +339,48 @@ export async function setUserAttributes(
   if (!putRes.ok) throw new Error(`KC setUserAttributes/put ${putRes.status}`);
 }
 
-// ── KC-ORG-04: Organization member APIs ─────────────────────────────────────
+// ── KC-ORG: Organization APIs ────────────────────────────────────────────────
+
+interface KcOrg { id: string; alias: string; name: string }
+
+/**
+ * List ALL organizations in the realm (super-admin use: see all tenants).
+ * KC 26+ Organizations API.
+ */
+export async function listAllOrganizations(): Promise<KcOrg[]> {
+  try {
+    const token = await getAdminToken();
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${encodeURIComponent(KC_REALM)}/organizations?max=200`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) { console.warn(`[KC] listAllOrganizations ${res.status}`); return []; }
+    return await res.json() as KcOrg[];
+  } catch (err) {
+    console.warn('[KC] listAllOrganizations unavailable:', (err as Error).message);
+    return [];
+  }
+}
+
+/**
+ * List organizations a specific user belongs to (multi-org membership).
+ * KC 26+ Organizations API: GET /users/{userId}/organizations.
+ */
+export async function getUserOrganizations(userId: string): Promise<KcOrg[]> {
+  try {
+    assertKcId(userId, 'getUserOrganizations.userId');
+    const token = await getAdminToken();
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${encodeURIComponent(KC_REALM)}/users/${encodeURIComponent(userId)}/organizations`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) { console.warn(`[KC] getUserOrganizations ${res.status}`); return []; }
+    return await res.json() as KcOrg[];
+  } catch (err) {
+    console.warn('[KC] getUserOrganizations unavailable:', (err as Error).message);
+    return [];
+  }
+}
 
 /**
  * KC-ORG-04: List members of a Keycloak Organization (26.2+ Organizations feature).

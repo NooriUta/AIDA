@@ -5,7 +5,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.*;
-import studio.seer.lineage.registry.YggLineageRegistry;
+import studio.seer.tenantrouting.YggLineageRegistry;
 import studio.seer.lineage.security.SeerIdentity;
 
 import java.util.*;
