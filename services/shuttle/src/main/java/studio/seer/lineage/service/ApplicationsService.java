@@ -7,6 +7,8 @@ import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.DaliApplicationDto;
 import studio.seer.lineage.model.DaliDatabaseDto;
 import studio.seer.lineage.model.DaliSchemaDto;
+import studio.seer.tenantrouting.YggLineageRegistry;
+import studio.seer.lineage.security.SeerIdentity;
 
 import java.util.*;
 
@@ -19,7 +21,13 @@ import java.util.*;
 @ApplicationScoped
 public class ApplicationsService {
 
-    @Inject ArcadeGateway arcade;
+    @Inject ArcadeGateway      arcade;
+    @Inject SeerIdentity       identity;
+    @Inject YggLineageRegistry lineageRegistry;
+
+    String lineageDb() {
+        return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
 
     public Uni<List<DaliApplicationDto>> fetchApplicationHierarchy() {
         // Query each DaliSchema with its full App→DB context in one pass.
@@ -43,7 +51,7 @@ public class ApplicationsService {
             ORDER BY appName, dbName, schName
             """;
 
-        return arcade.sql(sql).map(ApplicationsService::buildHierarchy);
+        return arcade.sqlIn(lineageDb(), sql, Map.of()).map(ApplicationsService::buildHierarchy);
     }
 
     private static List<DaliApplicationDto> buildHierarchy(List<Map<String, Object>> rows) {

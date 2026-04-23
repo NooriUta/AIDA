@@ -339,7 +339,48 @@ export async function setUserAttributes(
   if (!putRes.ok) throw new Error(`KC setUserAttributes/put ${putRes.status}`);
 }
 
-// ── KC-ORG-04: Organization member APIs ─────────────────────────────────────
+// ── KC-ORG: Organization APIs ────────────────────────────────────────────────
+
+interface KcOrg { id: string; alias: string; name: string }
+
+/**
+ * List ALL organizations in the realm (super-admin use: see all tenants).
+ * KC 26+ Organizations API.
+ */
+export async function listAllOrganizations(): Promise<KcOrg[]> {
+  try {
+    const token = await getAdminToken();
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${encodeURIComponent(KC_REALM)}/organizations?max=200`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) { console.warn(`[KC] listAllOrganizations ${res.status}`); return []; }
+    return await res.json() as KcOrg[];
+  } catch (err) {
+    console.warn('[KC] listAllOrganizations unavailable:', (err as Error).message);
+    return [];
+  }
+}
+
+/**
+ * List organizations a specific user belongs to (multi-org membership).
+ * KC 26+ Organizations API: GET /users/{userId}/organizations.
+ */
+export async function getUserOrganizations(userId: string): Promise<KcOrg[]> {
+  try {
+    assertKcId(userId, 'getUserOrganizations.userId');
+    const token = await getAdminToken();
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${encodeURIComponent(KC_REALM)}/users/${encodeURIComponent(userId)}/organizations`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) { console.warn(`[KC] getUserOrganizations ${res.status}`); return []; }
+    return await res.json() as KcOrg[];
+  } catch (err) {
+    console.warn('[KC] getUserOrganizations unavailable:', (err as Error).message);
+    return [];
+  }
+}
 
 /**
  * KC-ORG-04: List members of a Keycloak Organization (26.2+ Organizations feature).
@@ -599,6 +640,33 @@ export async function inviteUser(
 
 /** Known application realm roles (in priority order). */
 const APP_ROLES = ROLE_PRIORITY; // re-use the existing ordered array
+
+/**
+ * List all application realm roles from Keycloak.
+ * Filters out KC built-ins (offline_access, uma_authorization, default-roles-*).
+ * Falls back to the hardcoded ROLE_PRIORITY list if KC Admin API is unavailable.
+ */
+export async function listRoles(): Promise<{ id: string; name: string; description: string }[]> {
+  try {
+    const token = await getAdminToken();
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/roles`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) throw new Error(`KC listRoles ${res.status}`);
+    const all = await res.json() as (KcRole & { description?: string })[];
+    const appRoleSet = new Set(APP_ROLES as string[]);
+    return all
+      .filter(r => appRoleSet.has(r.name))
+      .map(r => ({ id: r.id, name: r.name, description: r.description ?? '' }))
+      .sort((a, b) =>
+        (APP_ROLES as string[]).indexOf(a.name) - (APP_ROLES as string[]).indexOf(b.name),
+      );
+  } catch (err) {
+    console.warn('[KC] listRoles unavailable — using fallback:', (err as Error).message);
+    return APP_ROLES.map(name => ({ id: name, name, description: '' }));
+  }
+}
 
 /**
  * Replace all app realm roles on a user with the single given role.

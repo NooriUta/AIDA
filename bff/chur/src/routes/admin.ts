@@ -11,9 +11,41 @@ import {
   setUserEnabled,
   getUserAttributes,
   setUserAttributes,
+  listRoles,
+  listAllOrganizations,
+  getUserOrganizations,
 } from '../keycloakAdmin';
+import { config } from '../config';
 
 const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
+
+// ── FRIGG tenant helper ───────────────────────────────────────────────────────
+const FRIGG_BASIC = Buffer.from(`${config.friggUser}:${config.friggPass}`).toString('base64');
+
+async function listActiveTenants(): Promise<{ id: string; name: string }[]> {
+  try {
+    const res = await fetch(
+      `${config.friggUrl}/api/v1/query/${encodeURIComponent(config.friggTenantsDb)}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${FRIGG_BASIC}` },
+        body:    JSON.stringify({
+          language: 'sql',
+          command:  `SELECT tenantAlias, status FROM DaliTenantConfig WHERE status = 'ACTIVE' ORDER BY tenantAlias`,
+        }),
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
+    if (!res.ok) throw new Error(`FRIGG ${res.status}`);
+    const data = await res.json() as { result?: Array<{ tenantAlias?: string; status?: string }> };
+    return (data.result ?? [])
+      .filter(r => r.tenantAlias)
+      .map(r => ({ id: r.tenantAlias!, name: r.tenantAlias! }));
+  } catch {
+    // Fallback: at least return default so UI doesn't break
+    return [{ id: 'default', name: 'Default' }];
+  }
+}
 
 /**
  * Admin routes — R4.2/R4.11 (Sprint 4).
@@ -29,14 +61,48 @@ const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
  */
 export const adminRoutes: FastifyPluginAsync = async (app) => {
 
+  // ── Roles reference (local-admin+) ──────────────────────────────────────────
+  // Returns application roles from KC in priority order.
+  // Used by role pickers in Verdandi / HEIMDALL user management UI.
+
+  app.get(
+    '/admin/roles',
+    { preHandler: [app.authenticate, requireScope('aida:tenant:admin')] },
+    async (_request, reply) => {
+      try {
+        const roles = await listRoles();
+        return reply.send(roles);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'KC_ADMIN_ERROR';
+        return reply.status(502).send({ error: msg });
+      }
+    },
+  );
+
   // ── Tenants (admin+ only) ─────────────────────────────────────────────────
 
   app.get(
     '/admin/tenants',
-    { preHandler: [app.authenticate, requireScope('aida:admin')] },
-    async (_request, reply) => {
-      // Phase 1: single tenant
-      return reply.send([{ id: 'default', name: 'Default Tenant', userCount: 0 }]);
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const isSuperAdmin = request.user.scopes?.includes('aida:superadmin');
+      if (isSuperAdmin) {
+        // Super-admin: all KC organizations (not filtered by FRIGG status)
+        const orgs = await listAllOrganizations();
+        if (orgs.length > 0) {
+          return reply.send(orgs.map(o => ({ id: o.alias, name: o.name || o.alias })));
+        }
+        // Fallback: FRIGG active tenants
+        return reply.send(await listActiveTenants());
+      }
+      // All other roles: fetch this user's KC org memberships (multi-org support)
+      const orgs = await getUserOrganizations(request.user.sub);
+      if (orgs.length > 0) {
+        return reply.send(orgs.map(o => ({ id: o.alias, name: o.name || o.alias })));
+      }
+      // Fallback: own active tenant only
+      const alias = request.user.activeTenantAlias ?? 'default';
+      return reply.send([{ id: alias, name: alias }]);
     },
   );
 

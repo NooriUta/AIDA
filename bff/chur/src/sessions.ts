@@ -29,6 +29,7 @@ export interface Session {
   email?:             string;
   firstName?:         string;
   lastName?:          string;
+  emailVerified?:     boolean;
 }
 
 export interface SessionUser {

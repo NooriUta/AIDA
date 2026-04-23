@@ -14,13 +14,16 @@ beforeAll(() => { sessions._setStoreForTesting(new InMemorySessionStore()); });
 
 // ── Mock keycloakAdmin.ts ─────────────────────────────────────────────────────
 vi.mock('../keycloakAdmin', () => ({
-  listUsers:         vi.fn().mockResolvedValue([{ id: 'u1', name: 'alice', role: 'viewer', active: true }]),
-  getUser:           vi.fn().mockResolvedValue({ id: 'u1', name: 'alice', role: 'viewer' }),
-  inviteUser:        vi.fn().mockResolvedValue(undefined),
-  setUserRole:       vi.fn().mockResolvedValue(undefined),
-  setUserEnabled:    vi.fn().mockResolvedValue(undefined),
-  getUserAttributes: vi.fn().mockResolvedValue({}),
-  setUserAttributes: vi.fn().mockResolvedValue(undefined),
+  listUsers:              vi.fn().mockResolvedValue([{ id: 'u1', name: 'alice', role: 'viewer', active: true }]),
+  getUser:                vi.fn().mockResolvedValue({ id: 'u1', name: 'alice', role: 'viewer' }),
+  inviteUser:             vi.fn().mockResolvedValue(undefined),
+  setUserRole:            vi.fn().mockResolvedValue(undefined),
+  setUserEnabled:         vi.fn().mockResolvedValue(undefined),
+  getUserAttributes:      vi.fn().mockResolvedValue({}),
+  setUserAttributes:      vi.fn().mockResolvedValue(undefined),
+  // MTN: tenant picker — KC Organizations API (returns empty → falls back to own tenant)
+  listAllOrganizations:   vi.fn().mockResolvedValue([]),
+  getUserOrganizations:   vi.fn().mockResolvedValue([]),
 }));
 
 // ── App factory ───────────────────────────────────────────────────────────────
@@ -42,6 +45,8 @@ async function makeSid(role: string, scopes: string[]): Promise<string> {
 }
 
 // ── GET /admin/tenants ────────────────────────────────────────────────────────
+// MTN: tenant picker is open to ALL authenticated users (not just admins) so
+// that the UI can show a switcher to any multi-org KC member.
 
 describe('GET /admin/tenants', () => {
   let app: App;
@@ -52,17 +57,22 @@ describe('GET /admin/tenants', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('403 — viewer missing aida:admin scope', async () => {
+  it('200 — viewer gets own tenant (KC orgs empty → fallback)', async () => {
     const sid = await makeSid('viewer', ['seer:read']);
     const res = await app.inject({ method: 'GET', url: '/admin/tenants', cookies: { sid } });
-    expect(res.statusCode).toBe(403);
-    expect(res.json().missing).toContain('aida:admin');
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { id: string }[];
+    expect(Array.isArray(body)).toBe(true);
+    expect(body[0].id).toBe('default');
   });
 
-  it('403 — local-admin missing aida:admin scope', async () => {
+  it('200 — local-admin gets own tenant (KC orgs empty → fallback)', async () => {
     const sid = await makeSid('local-admin', ['seer:read', 'aida:tenant:admin']);
     const res = await app.inject({ method: 'GET', url: '/admin/tenants', cookies: { sid } });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { id: string }[];
+    expect(Array.isArray(body)).toBe(true);
+    expect(body[0].id).toBe('default');
   });
 
   it('200 — admin with aida:admin scope', async () => {

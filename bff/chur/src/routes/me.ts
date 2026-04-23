@@ -27,14 +27,14 @@ import {
   upsertUserVertex,
   getUserVertex,
 } from '../users/FriggUserRepository';
-import { friggUsersSql, friggUsersQuery } from '../users/FriggUsersClient';
+import { friggUsersSql, friggUsersQuery, type UserVertexType } from '../users/FriggUsersClient';
 import { csrfGuard } from '../middleware/csrfGuard';
 import { sanitizeForAudit } from '../middleware/sanitizeForAudit';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 async function currentConfigVersion(
-  type: 'UserProfile' | 'UserPreferences' | 'UserNotifications',
+  type: UserVertexType,
   userId: string,
 ): Promise<number> {
   const existing = await getUserVertex(type, userId);
@@ -168,6 +168,51 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         { userId: request.user.sub },
       );
       return reply.send({ events: rows });
+    },
+  );
+
+  // Application state (saved filters, favorites, dashboard layouts, recently viewed)
+  app.get('/me/app-state', { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const row = await getUserVertex('UserApplicationState', request.user.sub);
+      return reply.send(row ?? { userId: request.user.sub, configVersion: 0, data: {} });
+    },
+  );
+
+  app.put<{ Body: { data: Record<string, unknown>; expectedConfigVersion?: number } }>(
+    '/me/app-state',
+    { preHandler: [app.authenticate, csrfGuard] },
+    async (request, reply) => {
+      const { data, expectedConfigVersion } = request.body ?? ({} as any);
+      if (!data || typeof data !== 'object') return reply.status(400).send({ error: 'data required' });
+      const expected = expectedConfigVersion ?? await currentConfigVersion('UserApplicationState', request.user.sub);
+      const r = await upsertUserVertex('UserApplicationState', request.user.sub, data, expected);
+      if (!r.ok) return reply.status(409).send(conflictBody(expected, r.current));
+      return reply.send({ ok: true, configVersion: r.configVersion });
+    },
+  );
+
+  // Source bindings — read-only for the user themselves (written by admins)
+  app.get('/me/source-bindings', { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const tenantAlias = request.user.activeTenantAlias ?? 'default';
+      const rows = await friggUsersQuery(
+        `SELECT payload, updatedAt FROM UserSourceBindings ` +
+        `WHERE userId = :userId AND tenantAlias = :tenant LIMIT 1`,
+        { userId: request.user.sub, tenant: tenantAlias },
+      );
+      if (rows.length === 0) return reply.send({ sourceIds: [], allowAllSources: false });
+      const row = rows[0] as Record<string, unknown>;
+      const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload ?? {});
+      return reply.send(payload);
+    },
+  );
+
+  // Lifecycle — read-only (firstLoginAt, lastLoginAt, createdAt, createdBy)
+  app.get('/me/lifecycle', { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const row = await getUserVertex('UserLifecycle', request.user.sub);
+      return reply.send(row ?? { userId: request.user.sub, configVersion: 0, data: {} });
     },
   );
 };

@@ -3,10 +3,17 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { usePrefsStore } from './prefsStore';
 
 export interface AuthUser {
-  id: string;
-  username: string;
-  role: 'viewer' | 'editor' | 'admin';
-  activeTenantAlias?: string;
+  id:                string;
+  username:          string;
+  /** Highest KC realm role — dynamic string; don't use union for exhaustive checks. */
+  role:              string;
+  /** KC JWT scope claim — use for conditional UI (e.g. hasScope('aida:admin')). */
+  scopes:            string[];
+  activeTenantAlias: string;
+  email?:            string;
+  firstName?:        string;
+  lastName?:         string;
+  emailVerified?:    boolean;
 }
 
 interface AuthStore {

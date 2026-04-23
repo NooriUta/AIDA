@@ -93,11 +93,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       );
       // Persist KC identity claims in session for /auth/me enrichment
       await updateSession(sid, {
-        email:     userInfo.email,
-        firstName: userInfo.firstName,
-        lastName:  userInfo.lastName,
+        email:         userInfo.email,
+        firstName:     userInfo.firstName,
+        lastName:      userInfo.lastName,
+        emailVerified: userInfo.emailVerified,
+        // Persist tenant from KC JWT so subsequent /auth/me calls see it.
+        // Only set when KC actually emits the claim; undefined keeps session default.
+        ...(userInfo.tenantAlias ? { activeTenantAlias: userInfo.tenantAlias } : {}),
       });
 
+      const activeTenantAlias = userInfo.tenantAlias ?? 'default';
       reply.setCookie('sid', sid, COOKIE_OPTS);
       emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
       void emitSessionEvent({
@@ -106,10 +111,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         eventType:  'login',
         ipAddress:  request.ip,
         userAgent:  String(request.headers['user-agent'] ?? ''),
+        tenantAlias: activeTenantAlias,
         result:     'success',
       });
       return { id: userInfo.sub, username: userInfo.username, role: userInfo.role,
-               email: userInfo.email, firstName: userInfo.firstName, lastName: userInfo.lastName };
+               scopes: userInfo.scopes, email: userInfo.email,
+               firstName: userInfo.firstName, lastName: userInfo.lastName,
+               emailVerified: userInfo.emailVerified,
+               activeTenantAlias };
     },
   );
 
@@ -118,9 +127,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/me',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
-      return { id: sub, username, role, email, firstName, lastName,
-               activeTenantAlias: activeTenantAlias ?? 'default' };
+      const { sub, username, role, scopes, email, firstName, lastName,
+              emailVerified, activeTenantAlias } = request.user;
+      return { id: sub, username, role, scopes, email, firstName, lastName,
+               emailVerified, activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 
@@ -129,9 +139,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     '/refresh',
     { preHandler: [app.authenticate] },
     async (request) => {
-      const { sub, username, role, email, firstName, lastName, activeTenantAlias } = request.user;
-      return { id: sub, username, role, email, firstName, lastName,
-               activeTenantAlias: activeTenantAlias ?? 'default' };
+      const { sub, username, role, scopes, email, firstName, lastName,
+              emailVerified, activeTenantAlias } = request.user;
+      return { id: sub, username, role, scopes, email, firstName, lastName,
+               emailVerified, activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
 

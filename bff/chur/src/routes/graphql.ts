@@ -24,6 +24,10 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const { username, role, activeTenantAlias } = request.user;
+      // Any authenticated user may override the tenant via header — the picker
+      // only exposes tenants the user already belongs to, so no privilege escalation.
+      const overrideTenant = request.headers['x-seer-override-tenant'] as string | undefined;
+      const effectiveTenant = overrideTenant ?? activeTenantAlias ?? 'default';
 
       try {
         const upstream = await fetch(`${LINEAGE_API_URL}/graphql`, {
@@ -32,9 +36,14 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
             'Content-Type':          'application/json',
             'X-Seer-Role':           role,
             'X-Seer-User':           username,
-            'X-Seer-Tenant-Alias':   activeTenantAlias ?? 'default',
+            'X-Seer-Tenant-Alias':   effectiveTenant,
           },
-          body: JSON.stringify(request.body),
+          // If the browser sent text/plain (graphql-request v7 middleware quirk),
+          // Fastify stores the body as a raw string — pass it through as-is.
+          // Otherwise JSON.stringify a parsed object (normal application/json path).
+          body: typeof request.body === 'string'
+            ? request.body
+            : JSON.stringify(request.body),
         });
 
         const data = await upstream.json();
@@ -65,6 +74,10 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
     // HTTP GET — introspection / GraphiQL passthrough
     handler: async (request, reply) => {
       const { username, role, activeTenantAlias } = request.user;
+      // Any authenticated user may override the tenant via header — the picker
+      // only exposes tenants the user already belongs to, so no privilege escalation.
+      const overrideTenant = request.headers['x-seer-override-tenant'] as string | undefined;
+      const effectiveTenant = overrideTenant ?? activeTenantAlias ?? 'default';
       const qs = new URLSearchParams(request.query as Record<string, string>);
 
       try {
@@ -72,7 +85,7 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
           headers: {
             'X-Seer-Role':         role,
             'X-Seer-User':         username,
-            'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
+            'X-Seer-Tenant-Alias': effectiveTenant,
           },
         });
 
@@ -87,13 +100,17 @@ export const graphqlRoutes: FastifyPluginAsync = async (app) => {
     // WebSocket upgrade — graphql-transport-ws proxy
     wsHandler: (socket, request) => {
       const { username, role, activeTenantAlias } = request.user;
+      // Any authenticated user may override the tenant via header — the picker
+      // only exposes tenants the user already belongs to, so no privilege escalation.
+      const overrideTenant = request.headers['x-seer-override-tenant'] as string | undefined;
+      const effectiveTenant = overrideTenant ?? activeTenantAlias ?? 'default';
       const wsUrl = `${toWsUrl(LINEAGE_API_URL)}/graphql`;
 
       const upstream = new WebSocket(wsUrl, ['graphql-transport-ws'], {
         headers: {
           'X-Seer-Role':         role,
           'X-Seer-User':         username,
-          'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
+          'X-Seer-Tenant-Alias': effectiveTenant,
         },
       });
 

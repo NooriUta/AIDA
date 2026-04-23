@@ -94,9 +94,9 @@ export function applyDom(prefs: Partial<ServerPrefs>): void {
       root.setAttribute('data-palette', prefs.palette);
     }
   }
-  if (prefs.uiFont)   root.style.setProperty('--ui-font',   prefs.uiFont);
-  if (prefs.monoFont) root.style.setProperty('--mono-font', prefs.monoFont);
-  if (prefs.fontSize) root.style.setProperty('--font-size', `${prefs.fontSize}px`);
+  if (prefs.uiFont)   root.style.setProperty('--font', `'${prefs.uiFont}', system-ui, sans-serif`);
+  if (prefs.monoFont) root.style.setProperty('--mono', `'${prefs.monoFont}', monospace`);
+  if (prefs.fontSize) root.style.fontSize = `${prefs.fontSize}px`;
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
