@@ -22,8 +22,8 @@ services:
   # ── SHUTTLE (Quarkus GraphQL API) ──────────────────────────────────────────
   shuttle:
     build:
-      context: ./services/shuttle
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/shuttle/Dockerfile
     environment:
       QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://ygg:2480}
       ARCADE_DB:       ${ARCADEDB_DB:-hound}
@@ -32,6 +32,10 @@ services:
       QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
       HEIMDALL_URL:    http://heimdall-backend:9093
       DALI_URL:        http://dali:9090
+      # FriggYggLineageRegistry — tenant→DB routing (multi-tenant mode)
+      # Without these, registry falls back to localhost defaults → no data in Docker
+      FRIGG_URL:       http://frigg:2480
+      YGG_URL:         http://ygg:2480
     ports:
       - "18080:8080"
     # ygg lives in stable layer — no depends_on cross-file.

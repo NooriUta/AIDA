@@ -1,0 +1,13 @@
+// Docker-only settings — used ONLY inside Docker image (not in monorepo).
+// Copied in as settings.gradle so Gradle includes only the needed modules.
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'aida-root'
+
+include 'libraries:tenant-routing'
+include 'services:shuttle'
