@@ -328,7 +328,7 @@ services:
   # Создаёт нужные базы в FRIGG после того, как контейнер здоров.
   # restart: no — запускается один раз; chur зависит от service_completed_successfully.
   init-frigg:
-    image: curlimages/curl:8
+    image: curlimages/curl:latest
     restart: "no"
     depends_on:
       frigg:
