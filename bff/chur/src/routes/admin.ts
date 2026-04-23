@@ -13,8 +13,37 @@ import {
   setUserAttributes,
   listRoles,
 } from '../keycloakAdmin';
+import { config } from '../config';
 
 const HEIMDALL_ORIGIN = process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093';
+
+// ── FRIGG tenant helper ───────────────────────────────────────────────────────
+const FRIGG_BASIC = Buffer.from(`${config.friggUser}:${config.friggPass}`).toString('base64');
+
+async function listActiveTenants(): Promise<{ id: string; name: string }[]> {
+  try {
+    const res = await fetch(
+      `${config.friggUrl}/api/v1/query/${encodeURIComponent(config.friggTenantsDb)}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${FRIGG_BASIC}` },
+        body:    JSON.stringify({
+          language: 'sql',
+          command:  `SELECT tenantAlias, status FROM DaliTenantConfig WHERE status = 'ACTIVE' ORDER BY tenantAlias`,
+        }),
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
+    if (!res.ok) throw new Error(`FRIGG ${res.status}`);
+    const data = await res.json() as { result?: Array<{ tenantAlias?: string; status?: string }> };
+    return (data.result ?? [])
+      .filter(r => r.tenantAlias)
+      .map(r => ({ id: r.tenantAlias!, name: r.tenantAlias! }));
+  } catch {
+    // Fallback: at least return default so UI doesn't break
+    return [{ id: 'default', name: 'Default' }];
+  }
+}
 
 /**
  * Admin routes — R4.2/R4.11 (Sprint 4).
@@ -52,10 +81,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/admin/tenants',
-    { preHandler: [app.authenticate, requireScope('aida:admin')] },
-    async (_request, reply) => {
-      // Phase 1: single tenant
-      return reply.send([{ id: 'default', name: 'Default Tenant', userCount: 0 }]);
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const isSuperAdmin = request.user.scopes?.includes('aida:admin');
+      if (isSuperAdmin) {
+        // Super-admin sees all active tenants from FRIGG
+        return reply.send(await listActiveTenants());
+      }
+      // Regular users see only their own tenant
+      const alias = request.user.activeTenantAlias ?? 'default';
+      return reply.send([{ id: alias, name: alias }]);
     },
   );
 
