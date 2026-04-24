@@ -227,25 +227,27 @@ jobs:
             # Ensure external volumes exist
             docker volume create hound_databases || true
 
-            # Restart stack
+            # Restart stack — --wait blocks until all services report healthy
+            # (respects healthcheck start_period + retries; KC worst-case ~240s)
             docker compose \
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
-              up -d --remove-orphans || {
-                echo "=== docker compose up failed ==="
+              up -d --remove-orphans --wait --wait-timeout 300 || {
+                echo "=== docker compose up failed or timed out ==="
                 docker ps -a
-                docker logs seer-studio-chur-1    --tail 60 2>&1 || true
+                docker logs seer-studio-chur-1     --tail 60 2>&1 || true
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
+                docker logs seer-studio-frigg-1    --tail 20 2>&1 || true
                 exit 1
               }
 
             # ── DB bootstrap / idempotent schema init ──────────────────────────
-            # Reads FRIGG_PASS / YGG_PASS from .env.prod; waits up to 120s for ArcadeDB.
+            # All containers are healthy at this point (--wait guarantees it).
             # Creates frigg-tenants, dali_default, hound_default, hound_src_default and
             # seeds DaliTenantConfig('default', status=ACTIVE). Idempotent — safe on re-deploy.
-            echo "=== Running init-arcadedb.sh ==="
+            echo "=== Running init-arcadedb.sh (all services healthy) ==="
             source .env.prod 2>/dev/null || true
-            INIT_ARCADEDB_TIMEOUT=120 \
+            INIT_ARCADEDB_TIMEOUT=300 \
             FRIGG_URL=http://localhost:2481 \
             FRIGG_USER=root \
             FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
