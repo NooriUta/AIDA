@@ -28,7 +28,10 @@ wait_ready() {
   local url="$1" user="$2" pass="$3" label="$4"
   local elapsed=0
   log "Waiting for $label ($url)..."
-  until curl -sf --max-time 3 -u "$user:$pass" "$url/api/v1/ready" -o /dev/null 2>/dev/null; do
+  # NOTE: /api/v1/ready is unauthenticated (returns 204 without credentials).
+  # Sending wrong credentials causes ArcadeDB to return 403 Forbidden even
+  # though the server is healthy. Always check ready without auth.
+  until curl -sf --max-time 3 "$url/api/v1/ready" -o /dev/null 2>/dev/null; do
     if [ "$elapsed" -ge "$TIMEOUT" ]; then
       log "SKIP: $label not available after ${TIMEOUT}s — databases not created."
       return 1
