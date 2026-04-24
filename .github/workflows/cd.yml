@@ -227,31 +227,25 @@ jobs:
             # Ensure external volumes exist
             docker volume create hound_databases || true
 
-            # Restart stack
+            # Restart stack — --wait blocks until all services report healthy
+            # (respects healthcheck start_period + retries; KC worst-case ~240s)
             docker compose \
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
-              up -d --remove-orphans || {
-                echo "=== docker compose up failed ==="
+              up -d --remove-orphans --wait --wait-timeout 300 || {
+                echo "=== docker compose up failed or timed out ==="
                 docker ps -a
-                docker logs seer-studio-chur-1    --tail 60 2>&1 || true
+                docker logs seer-studio-chur-1     --tail 60 2>&1 || true
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
+                docker logs seer-studio-frigg-1    --tail 20 2>&1 || true
                 exit 1
               }
 
             # ── DB bootstrap / idempotent schema init ──────────────────────────
-            # Reads FRIGG_PASS / YGG_PASS from .env.prod; waits up to 300s for ArcadeDB.
-            # ArcadeDB worst-case startup: start_period(90s) + 15 retries × 10s = 240s.
+            # All containers are healthy at this point (--wait guarantees it).
             # Creates frigg-tenants, dali_default, hound_default, hound_src_default and
             # seeds DaliTenantConfig('default', status=ACTIVE). Idempotent — safe on re-deploy.
-            echo "=== Waiting for FRIGG/YGG to be ready ==="
-            for port in 2481 2480; do
-              for i in $(seq 1 30); do
-                curl -sf http://localhost:${port}/api/v1/ready && break
-                echo "  [ArcadeDB:${port}] retry ${i}/30..."; sleep 10
-              done || echo "  [ArcadeDB:${port}] WARNING: not ready after 300s"
-            done
-            echo "=== Running init-arcadedb.sh ==="
+            echo "=== Running init-arcadedb.sh (all services healthy) ==="
             source .env.prod 2>/dev/null || true
             INIT_ARCADEDB_TIMEOUT=300 \
             FRIGG_URL=http://localhost:2481 \
