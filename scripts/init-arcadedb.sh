@@ -257,24 +257,23 @@ if wait_ready "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "FRIGG"; then
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-tenants"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-users"
   ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_default"
-  ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "dali_acme"
-  ensure_db "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "frigg-jobrunr"
   ensure_frigg_tenants_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
+  # Seed the default tenant only. Additional tenants (acme, beta-corp, …)
+  # are provisioned via the Heimdall admin UI after first deploy.
   ensure_tenant_record "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "default" "hound_default" "hound_src_default" "dali_default"
-  ensure_tenant_record "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS" "acme"    "hound_acme"    "hound_src_acme"    "dali_acme"
   ensure_frigg_users_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   ensure_heimdall_control_event_schema "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
   sync_default_keycloak_org_id "$FRIGG_URL" "$FRIGG_USER" "$FRIGG_PASS"
 fi
 
 # ── YGG — lineage graph databases (per-tenant hound_* bases) ─────────────────
-# NOTE: legacy `hound` DB removed — replaced by hound_default / hound_src_default
+# NOTE: legacy `hound` DB removed — replaced by hound_default / hound_src_default.
+# Additional tenant DBs (hound_acme, etc.) are auto-created by SourceArchiveSchemaInitializer
+# when new tenants are provisioned via the Heimdall admin UI.
 if wait_ready "$YGG_URL" "$YGG_USER" "$YGG_PASS" "YGG"; then
   log "Ensuring YGG databases:"
   ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_default"
   ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_src_default"
-  ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_acme"
-  ensure_db "$YGG_URL" "$YGG_USER" "$YGG_PASS" "hound_src_acme"
 fi
 
 log "Done."

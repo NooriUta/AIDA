@@ -124,8 +124,8 @@ jobs:
 
       - name: Fix file permissions for scp
         run: |
-          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/ infra/nginx/
-          chmod a+x infra/scripts/*.sh
+          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/ infra/nginx/ scripts/
+          chmod a+x infra/scripts/*.sh scripts/*.sh
 
       - name: Ensure deploy dir is writable
         uses: appleboy/ssh-action@v1.0.3
@@ -134,7 +134,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
           script: |
-            sudo mkdir -p /opt/seer-studio/infra/scripts /opt/seer-studio/infra/nginx
+            sudo mkdir -p /opt/seer-studio/infra/scripts /opt/seer-studio/infra/nginx /opt/seer-studio/scripts
             sudo chown -R ubuntu:ubuntu /opt/seer-studio
 
       - name: Copy prod compose to server
@@ -143,7 +143,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/,infra/nginx/
+          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/,infra/nginx/,scripts/
           target:   /opt/seer-studio/
 
       - name: Write compose .env on server
@@ -238,6 +238,28 @@ jobs:
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
                 exit 1
               }
+
+            # ── DB bootstrap / idempotent schema init ──────────────────────────
+            # Reads FRIGG_PASS / YGG_PASS from .env.prod; waits up to 120s for ArcadeDB.
+            # Creates frigg-tenants, dali_default, hound_default, hound_src_default and
+            # seeds DaliTenantConfig('default', status=ACTIVE). Idempotent — safe on re-deploy.
+            echo "=== Running init-arcadedb.sh ==="
+            source .env.prod 2>/dev/null || true
+            INIT_ARCADEDB_TIMEOUT=120 \
+            FRIGG_URL=http://localhost:2481 \
+            FRIGG_USER=root \
+            FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+            YGG_URL=http://localhost:2480 \
+            YGG_USER=root \
+            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+            KC_URL=http://localhost:18180/kc \
+            KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
+            KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
+            bash scripts/init-arcadedb.sh || {
+              echo "=== init-arcadedb.sh FAILED (non-fatal on upgrade) ==="
+              # Do not exit — partial failures are logged in the script itself.
+              # Services will retry schema init on startup (FriggSchemaInitializer).
+            }
 
             # Health checks
             echo "Waiting for services..."
