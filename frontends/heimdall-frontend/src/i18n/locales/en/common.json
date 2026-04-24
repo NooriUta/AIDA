@@ -88,7 +88,16 @@
     "queue":      "Queue",
     "resolution": "Resolution",
     "na":         "N/A",
-    "waiting":    "Waiting for events…"
+    "waiting":    "Waiting for events…",
+    "byTenant":      "Per-tenant metrics",
+    "tenantCount":   "{{n}} tenants",
+    "filterTenant":  "Filter alias…",
+    "sessions":      "Sessions",
+    "jobs":          "Jobs",
+    "errors":        "Errors",
+    "last":          "Last event",
+    "noTenantData":  "No tenant activity yet.",
+    "moreTenants":   "more"
   },
   "dashboard": {
     "throughput":   "Throughput (events / sec)",
@@ -520,6 +529,40 @@
       "PROVISIONING":        "Provisioning",
       "PROVISIONING_FAILED": "Provisioning failed",
       "PURGED":              "Purged"
+    },
+    "statusValues": {
+      "ACTIVE":       "Active",
+      "PROVISIONING": "Provisioning",
+      "SUSPENDED":    "Suspended",
+      "ARCHIVED":     "Archived",
+      "PURGED":       "Purged"
+    },
+    "confirmSuspendTitle":  "Confirm suspend",
+    "confirmSuspendMsg":    "Suspending \"{{alias}}\" blocks all tenant traffic. Continue?",
+    "confirmArchiveTitle":  "Confirm archive",
+    "confirmArchiveMsg":    "Archiving \"{{alias}}\" exports all databases to S3 and drops them. Irreversible without Restore.",
+    "confirmExtendTitle":   "Confirm extend retention",
+    "confirmExtendMsg":     "Extend retention for \"{{alias}}\" to {{date}} (+{{days}} days)?",
+    "hints": {
+      "alias":                 "Unique tenant alias; used in DB names and scope claim",
+      "status":                "Lifecycle: ACTIVE → SUSPENDED → ARCHIVED → PURGED",
+      "configVersion":         "Incremented on every config update (optimistic lock)",
+      "keycloakOrgId":         "Keycloak 26.2 Organization ID — source of truth for user membership",
+      "yggLineageDbName":      "ArcadeDB lineage graph DB (hound_{alias})",
+      "yggSourceArchiveDbName":"Source archive DB (hound_src_{alias})",
+      "friggDaliDbName":       "Dali sessions + JobRunr store (dali_{alias})",
+      "yggInstanceUrl":        "YGG ArcadeDB instance URL — reserved for horizontal sharding",
+      "harvestCron":           "6-field cron (sec min hour dom mon dow) for scheduled harvest",
+      "llmMode":               "MIMIR mode: off | local (Ollama) | openai | azure",
+      "dataRetentionDays":     "Days events and sessions are kept before auto-purge",
+      "maxParseSessions":      "Concurrent parse sessions quota",
+      "maxAtoms":              "Total extracted atoms cap (stmt/column/table)",
+      "maxSources":            "Max connected sources (FS/S3/GIT)",
+      "maxConcurrentJobs":     "JobRunr concurrency cap per tenant",
+      "archiveS3Key":          "S3 object key with DB export (set on archive)",
+      "archiveRetentionUntil": "Timestamp after which purge-job deletes the archive",
+      "createdAt":             "Provisioning completion time (7-step flow)",
+      "updatedAt":             "Last config or lifecycle update"
     }
   },
   "tenantSelector": {
@@ -574,6 +617,33 @@
     "harvest": "Harvest events",
     "errors":  "Errors",
     "digest":  "Daily digest"
+  },
+  "members": {
+    "pageTitle":          "Members",
+    "heading":            "Members",
+    "backToTenant":       "Tenant",
+    "username":           "Username",
+    "email":              "Email",
+    "name":               "Name",
+    "role":               "Role",
+    "enabled":            "Enabled",
+    "remove":             "Remove",
+    "empty":              "No members yet.",
+    "invite":             "Invite",
+    "inviteTitle":        "Invite member",
+    "confirmRemoveTitle": "Remove member",
+    "confirmRemoveMsg":   "Remove {{name}} ({{email}}) from this tenant?"
+  },
+  "config": {
+    "pageTitle":  "Tenant config",
+    "heading":    "Config",
+    "readOnly":   "Read-only",
+    "quotas":     "Quotas & limits",
+    "scheduling": "Scheduling & mode",
+    "save":       "Save",
+    "saving":     "Saving…",
+    "reset":      "Reset",
+    "noChanges":  "No changes to save."
   },
   "me": {
     "conflict": "Data was changed externally. Fresh version loaded. Re-apply your edits."
