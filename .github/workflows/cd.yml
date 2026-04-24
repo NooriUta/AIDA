@@ -177,10 +177,13 @@ jobs:
           script: |
             set -e
             DOMAIN=${{ secrets.DOMAIN }}
-            HEIMDALL_CIDR=${{ secrets.HEIMDALL_CIDR }}
+            HEIMDALL_CIDR="${{ secrets.HEIMDALL_CIDR }}"
             CONF=/opt/seer-studio/infra/nginx/nginx.conf
-            # IF-06: substitute both DOMAIN and HEIMDALL_CIDR placeholders
-            sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g; s/\${HEIMDALL_CIDR}/'"${HEIMDALL_CIDR}"'/g' ${CONF} \
+            # IF-06: substitute DOMAIN and HEIMDALL_CIDR placeholders.
+            # If HEIMDALL_CIDR secret is empty, fall back to deny-all (0.0.0.0/32)
+            # to avoid nginx "invalid number of arguments in allow directive" error.
+            CIDR="${HEIMDALL_CIDR:-0.0.0.0/32}"
+            sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g; s/\${HEIMDALL_CIDR}/'"${CIDR}"'/g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
             # Reload only if all three certs exist (root, seer, heimdall)

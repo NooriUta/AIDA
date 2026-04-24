@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
+import { getUser } from '../keycloakAdmin';
 import { createSession, deleteSession, ensureValidSession, updateSession } from '../sessions';
 import { emitSessionEvent } from '../users/UserSessionEventsEmitter';
 import { emitToHeimdall } from '../middleware/heimdallEmit';
@@ -129,7 +130,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     async (request) => {
       const { sub, username, role, scopes, email, firstName, lastName,
               emailVerified, activeTenantAlias } = request.user;
-      return { id: sub, username, role, scopes, email, firstName, lastName,
+      // Fallback: firstName/lastName absent in session (JWT didn't carry given_name/family_name
+      // because KC user has no name set, or scopes changed since last login).
+      // Fetch fresh from KC Admin API so profile page always shows real data.
+      let fn = firstName, ln = lastName;
+      if (!fn && !ln) {
+        const kcUser = await getUser(sub).catch(() => null);
+        fn = kcUser?.firstName ?? undefined;
+        ln = kcUser?.lastName ?? undefined;
+      }
+      return { id: sub, username, role, scopes, email, firstName: fn, lastName: ln,
                emailVerified, activeTenantAlias: activeTenantAlias ?? 'default' };
     },
   );
