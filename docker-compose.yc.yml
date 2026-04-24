@@ -73,6 +73,11 @@ services:
       COOKIE_SECURE:  "true"
       COOKIE_DOMAIN:  ".${DOMAIN:-seidrstudio.pro}"
       CORS_ORIGIN:    "https://${DOMAIN:-seidrstudio.pro},https://seer.${DOMAIN:-seidrstudio.pro},https://heimdall.${DOMAIN:-seidrstudio.pro}"
+      # Docker-internal FRIGG address (default in code is localhost:2481 — dev only)
+      FRIGG_URL:         "http://frigg:2480"
+      FRIGG_SESSION_DB:  "frigg-sessions"
+      FRIGG_USER:        "root"
+      FRIGG_PASSWORD:    "${FRIGG_PASSWORD:-playwithdata}"
     <<: *env_file
     deploy:
       resources:
