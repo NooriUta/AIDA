@@ -1,3 +1,31 @@
+## [v1.3.6] — 2026-04-24
+
+### Bug Fixes
+
+- **cd**: do not send credentials to ArcadeDB /api/v1/ready (no-auth endpoint) ([`aaad131`](https://github.com/NooriUta/AIDA/commit/aaad13115fc016fe09a5215191ec6741e7dd9697))
+
+
+### Miscellaneous
+
+- **release**: update CHANGELOG for v1.3.3 [skip ci] ([`a7fbf3f`](https://github.com/NooriUta/AIDA/commit/a7fbf3fd8800fc23173a9399185cab9c3e6b14a5))
+
+- **release**: sync master → release (v1.3.4, v1.3.5) ([`9d7321b`](https://github.com/NooriUta/AIDA/commit/9d7321b36099119d89acc6f124b6e0f50f7b40b6))
+
+
+### Miscellaneous
+
+- **release**: update CHANGELOG for v1.3.2 [skip ci] ([`4489c26`](https://github.com/NooriUta/AIDA/commit/4489c26d1fa91bd59ec88f789bc6b96b26dd1ef9))
+
+
+### Miscellaneous
+
+- **release**: update CHANGELOG for v1.3.1 [skip ci] ([`74b74e0`](https://github.com/NooriUta/AIDA/commit/74b74e0ec8bd0ef9db82790fb770ca53834652c7))
+
+
+### Miscellaneous
+
+- **release**: update CHANGELOG for v1.3.1 [skip ci] ([`bdab4ca`](https://github.com/NooriUta/AIDA/commit/bdab4ca1173e241f0511683ee5a04c46cd1c73eb))
+
 ## [v1.3.3] — 2026-04-24
 
 ### Bug Fixes
