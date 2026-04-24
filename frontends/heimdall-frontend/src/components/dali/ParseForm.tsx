@@ -163,10 +163,21 @@ export function ParseForm({ onSessionCreated, tenantAlias }: ParseFormProps) {
           )}
         </div>
 
-        {/* Row 2: DB name */}
+        {/* Row 2: DB name (Schema namespace) */}
         <div className={css.formRowTop} style={{ marginTop: 0 }}>
           <div className={css.fieldGroup} style={{ flex: 1 }}>
-            <label className={css.fieldLabel}>{t('dali.form.dbNameLabel')}</label>
+            <label className={css.fieldLabel} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              {t('dali.form.dbNameLabel')}
+              <span
+                title={t('dali.form.dbNameTooltip')}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 14, height: 14, borderRadius: '50%',
+                  background: 'var(--bg3)', border: '1px solid var(--bd)',
+                  fontSize: 9, color: 'var(--t3)', cursor: 'help', flexShrink: 0,
+                }}
+              >?</span>
+            </label>
             <input
               className="field-input"
               style={{ fontFamily: 'var(--mono)', fontSize: '13px', padding: '6px 10px' }}
@@ -199,6 +210,14 @@ export function ParseForm({ onSessionCreated, tenantAlias }: ParseFormProps) {
                 onChange={e => setClearBeforeWrite(e.target.checked)}
               />
               <label htmlFor="dali-clear">{t('dali.form.clearLabel')}</label>
+              {clearBeforeWrite && !preview && (
+                <span style={{
+                  fontSize: 10, color: 'var(--wrn)', fontFamily: 'var(--mono)',
+                  marginLeft: 4, whiteSpace: 'nowrap',
+                }}>
+                  {t('dali.form.clearWarning')}
+                </span>
+              )}
             </div>
           </div>
 

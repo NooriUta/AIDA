@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation }              from 'react-i18next';
 import { type DaliSession, type FileResult, cancelSession } from '../../api/dali';
 import { useDaliSession } from '../../hooks/useDaliSession';
@@ -58,6 +58,29 @@ function fmtK(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
   return n.toLocaleString();
+}
+
+// ── Session name derivation (Блок 1) ─────────────────────────────────────────
+// Derives a human-readable session name from the source path + start time.
+// Examples: "LOG_PKG.SQL · 14:32",  "DWH batch (322) · 13:15",  "jdbc:pg:// · 09:00"
+function deriveSessionName(session: DaliSession): string {
+  const src = session.source ?? '';
+  const time = session.startedAt
+    ? new Date(session.startedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  const timePart = time ? ` · ${time}` : '';
+
+  if (session.batch) {
+    const filename = src.replace(/\\/g, '/').split('/').pop() ?? src;
+    const base = filename || src || 'batch';
+    return `${base} (${session.total > 0 ? session.total : '…'})${timePart}`;
+  }
+  if (src.startsWith('jdbc:')) {
+    const label = src.slice(0, 28) + (src.length > 28 ? '…' : '');
+    return `${label}${timePart}`;
+  }
+  const filename = src.replace(/\\/g, '/').split('/').pop() ?? src;
+  return `${filename || src || '—'}${timePart}`;
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -138,8 +161,9 @@ function ProgressBar({ session }: { session: DaliSession }) {
   );
 }
 
-// ── Source cell: path + BATCH / FILE tag ─────────────────────────────────────
+// ── Source cell: path + BATCH / FILE tag + error preview (Блок 2) ────────────
 function SourceCell({ session, tenantAlias }: { session: DaliSession; tenantAlias?: string }) {
+  const errors = session.errors ?? [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -181,6 +205,20 @@ function SourceCell({ session, tenantAlias }: { session: DaliSession; tenantAlia
           DB: {session.dbName}
         </span>
       )}
+      {/* Error preview for FAILED sessions (Блок 2) */}
+      {session.status === 'FAILED' && errors.length > 0 && (
+        <div
+          style={{
+            color: 'var(--danger)', fontSize: 10, fontFamily: 'var(--mono)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            maxWidth: 260, marginTop: 1,
+          }}
+          title={errors[0]}
+        >
+          ✗ {errors[0].slice(0, 80)}
+        </div>
+      )}
+
       {/* Tenant + clear-before-write — always shown so operator sees write context */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 1 }}>
         {tenantAlias && (
@@ -593,12 +631,35 @@ function DetailRow({ session, tenantAlias }: { session: DaliSession; tenantAlias
             </div>
           </div>
 
-          {/* Timing row — start / finish timestamps + tenant */}
+          {/* Timing row — start / finish timestamps + tenant + FRIGG persistence (Блок 5) */}
           <div style={{
             display: 'flex', gap: 24, marginTop: 10, marginBottom: 2,
             fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t3)',
             borderTop: '1px solid var(--bd)', paddingTop: 8, flexWrap: 'wrap', alignItems: 'center',
           }}>
+            {/* FRIGG persistence badge — moved here from SessionRow (Блок 5) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {t('dali.sessions.friggInDetail')}
+              </span>
+              <span
+                title={session.friggPersisted ? t('dali.sessions.friggSaved') : t('dali.sessions.friggPending')}
+                style={{
+                  fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                  padding: '1px 5px', borderRadius: 3,
+                  background: session.friggPersisted
+                    ? 'color-mix(in srgb, var(--suc) 14%, transparent)'
+                    : 'color-mix(in srgb, var(--wrn) 14%, transparent)',
+                  color: session.friggPersisted ? 'var(--suc)' : 'var(--wrn)',
+                  border: `1px solid ${session.friggPersisted
+                    ? 'color-mix(in srgb, var(--suc) 30%, transparent)'
+                    : 'color-mix(in srgb, var(--wrn) 30%, transparent)'}`,
+                }}
+              >
+                {session.friggPersisted ? '✓' : '⏳'}
+              </span>
+            </div>
+
             {tenantAlias && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em' }}>tenant</span>
@@ -767,15 +828,17 @@ function DetailRow({ session, tenantAlias }: { session: DaliSession; tenantAlias
 
 // ── Session row with per-row polling ─────────────────────────────────────────
 interface SessionRowProps {
-  session:  DaliSession;
-  expanded: boolean;
-  onToggle: () => void;
-  onUpdate: (s: DaliSession) => void;
-  hideCols?: boolean;
+  session:     DaliSession;
+  expanded:    boolean;
+  onToggle:    () => void;
+  onUpdate:    (s: DaliSession) => void;
+  hideCols?:   boolean;
   tenantAlias?: string;
+  /** UC-S07: show tenant badge prominently in row (all-tenants mode) */
+  showTenant?: boolean;
 }
 
-function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = false, tenantAlias }: SessionRowProps) {
+function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = false, tenantAlias, showTenant = false }: SessionRowProps) {
   const { t } = useTranslation();
   const isTerminal = TERMINAL.has(session.status);
   // Use the tenant stored in the session itself (set by server at creation time)
@@ -821,42 +884,53 @@ function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = false, t
         style={{ cursor: 'pointer' }}
       >
         <td>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ fontFamily: 'var(--mono)', color: 'var(--t2)', fontSize: 12 }} title={s.id}>
-              {s.id.slice(0, 8)}
-            </span>
-            <span
-              title={s.friggPersisted ? t('dali.sessions.friggSaved') : t('dali.sessions.friggPending')}
-              style={{
-                fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
-                padding: '1px 4px', borderRadius: 3,
-                background: s.friggPersisted
-                  ? 'color-mix(in srgb, var(--suc) 14%, transparent)'
-                  : 'color-mix(in srgb, var(--wrn) 14%, transparent)',
-                color: s.friggPersisted ? 'var(--suc)' : 'var(--wrn)',
-                border: `1px solid ${s.friggPersisted
-                  ? 'color-mix(in srgb, var(--suc) 30%, transparent)'
-                  : 'color-mix(in srgb, var(--wrn) 30%, transparent)'}`,
-                lineHeight: '1.2',
-              }}
-            >
-              {s.friggPersisted ? 'F✓' : 'F?'}
-            </span>
-            {s.instanceId && (
-              <span
-                title={t('dali.sessions.instanceTitle', { id: s.instanceId })}
-                style={{
-                  fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
-                  padding: '1px 5px', borderRadius: 3,
-                  background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
-                  color: 'var(--acc)',
-                  border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
-                  lineHeight: '1.2', whiteSpace: 'nowrap',
-                }}
-              >
-                {s.instanceId}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Session name (Блок 1) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{
+                fontFamily: 'var(--mono)', color: 'var(--t1)', fontSize: 11,
+                fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap', maxWidth: showTenant ? 140 : 180,
+              }} title={`${deriveSessionName(s)}\nID: ${s.id}`}>
+                {deriveSessionName(s)}
               </span>
-            )}
+              {/* UC-S07 — tenant badge: prominent when viewing all tenants */}
+              {showTenant && effectiveTenant && (
+                <span style={{
+                  fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
+                  padding: '1px 6px', borderRadius: 3, flexShrink: 0,
+                  background: 'color-mix(in srgb, var(--acc) 15%, transparent)',
+                  color: 'var(--acc)',
+                  border: '1px solid color-mix(in srgb, var(--acc) 35%, transparent)',
+                  whiteSpace: 'nowrap',
+                }} title={`Tenant: ${effectiveTenant}`}>
+                  {effectiveTenant}
+                </span>
+              )}
+            </div>
+            {/* ID + instanceId badge row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }}>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--t3)', fontSize: 10 }} title={s.id}>
+                {s.id.slice(0, 8)}
+              </span>
+              {/* instanceId badge (Блок 4) — ⚙ icon + informative tooltip */}
+              {s.instanceId && (
+                <span
+                  title={t('dali.sessions.instanceTooltip', { id: s.instanceId, alias: effectiveTenant ?? '…' })}
+                  style={{
+                    fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600,
+                    padding: '1px 5px', borderRadius: 3,
+                    background: 'color-mix(in srgb, var(--acc) 10%, transparent)',
+                    color: 'var(--acc)',
+                    border: '1px solid color-mix(in srgb, var(--acc) 25%, transparent)',
+                    lineHeight: '1.2', whiteSpace: 'nowrap',
+                    cursor: 'help',
+                  }}
+                >
+                  ⚙ {s.instanceId}
+                </span>
+              )}
+            </div>
           </div>
         </td>
         <td><StatusBadge status={s.status} /></td>
@@ -926,20 +1000,104 @@ function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = false, t
 }
 
 // ── SessionList ───────────────────────────────────────────────────────────────
+type FilterStatus = 'all' | 'RUNNING' | 'FAILED' | 'COMPLETED' | 'QUEUED';
+type SortBy = 'date' | 'duration';
+
 interface SessionListProps {
-  sessions: DaliSession[];
+  sessions:        DaliSession[];
   onSessionUpdate: (s: DaliSession) => void;
-  tenantAlias?: string;
+  tenantAlias?:    string;
+  /** UC-S07: when true, sessions from multiple tenants are shown — display tenant badge prominently */
+  allTenantsMode?: boolean;
+  /** Controlled expanded row id — when provided by parent (URL-driven). If absent, local state is used. */
+  expandedId?:     string | null;
+  onToggleExpand?: (id: string) => void;
 }
 
-export function SessionList({ sessions, onSessionUpdate, tenantAlias }: SessionListProps) {
-  const { t }       = useTranslation();
-  const isMobile    = useIsMobile();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+export function SessionList({
+  sessions, onSessionUpdate, tenantAlias,
+  allTenantsMode = false,
+  expandedId: controlledExpandedId, onToggleExpand,
+}: SessionListProps) {
+  const { t }    = useTranslation();
+  const isMobile = useIsMobile();
+
+  // Local expand state — used only when parent doesn't control it (Блок 6)
+  const [localExpandedId, setLocalExpandedId] = useState<string | null>(null);
+  const expandedId = controlledExpandedId !== undefined ? controlledExpandedId : localExpandedId;
 
   function toggleExpand(id: string) {
-    setExpandedId(prev => (prev === id ? null : id));
+    if (onToggleExpand) {
+      onToggleExpand(id);
+    } else {
+      setLocalExpandedId(prev => (prev === id ? null : id));
+    }
   }
+
+  // Tab filter + search + sort (Блок 3)
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [searchText,   setSearchText]   = useState('');
+  const [sortBy,       setSortBy]       = useState<SortBy>('date');
+
+  // Reset filter/search when sessions list changes identity (tenant switch, etc.)
+  useEffect(() => {
+    setFilterStatus('all');
+    setSearchText('');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantAlias]);
+
+  // Count per status for tab badges (always from full sessions list)
+  const counts = useMemo(() => ({
+    all:       sessions.length,
+    RUNNING:   sessions.filter(s => s.status === 'RUNNING' || s.status === 'CANCELLING').length,
+    FAILED:    sessions.filter(s => s.status === 'FAILED').length,
+    COMPLETED: sessions.filter(s => s.status === 'COMPLETED').length,
+    QUEUED:    sessions.filter(s => s.status === 'QUEUED').length,
+  }), [sessions]);
+
+  // Filtered + searched + sorted sessions for table
+  const filtered = useMemo(() => {
+    let list = sessions;
+
+    // Status filter
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'RUNNING') {
+        list = list.filter(s => s.status === 'RUNNING' || s.status === 'CANCELLING');
+      } else {
+        list = list.filter(s => s.status === filterStatus);
+      }
+    }
+
+    // Search by source filename
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      list = list.filter(s => {
+        const src = (s.source ?? '').toLowerCase();
+        const filename = src.replace(/\\/g, '/').split('/').pop() ?? '';
+        return src.includes(q) || filename.includes(q);
+      });
+    }
+
+    // Sort
+    if (sortBy === 'duration') {
+      list = [...list].sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
+    } else {
+      // date desc (default — newer first)
+      list = [...list].sort((a, b) =>
+        (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
+    }
+
+    return list;
+  }, [sessions, filterStatus, searchText, sortBy]);
+
+  // Tab filter buttons definition
+  const tabs: { key: FilterStatus; labelKey: string }[] = [
+    { key: 'all',       labelKey: 'dali.sessions.filterAll'       },
+    { key: 'RUNNING',   labelKey: 'dali.sessions.filterRunning'   },
+    { key: 'FAILED',    labelKey: 'dali.sessions.filterFailed'    },
+    { key: 'COMPLETED', labelKey: 'dali.sessions.filterCompleted' },
+    { key: 'QUEUED',    labelKey: 'dali.sessions.filterQueued'    },
+  ];
 
   return (
     <div className={css.panel}>
@@ -955,7 +1113,103 @@ export function SessionList({ sessions, onSessionUpdate, tenantAlias }: SessionL
         <span style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
           {t('dali.sessions.sessionCount', { count: sessions.length })}
         </span>
+        {/* UC-S07 all-tenants indicator */}
+        {allTenantsMode && (
+          <span style={{
+            fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
+            padding: '2px 7px', borderRadius: 3,
+            background: 'color-mix(in srgb, var(--acc) 15%, transparent)',
+            color: 'var(--acc)',
+            border: '1px solid color-mix(in srgb, var(--acc) 35%, transparent)',
+            whiteSpace: 'nowrap',
+          }}>
+            ◉ {t('dali.page.allTenantsBanner')}
+          </span>
+        )}
       </div>
+
+      {/* ── Tab filter bar + search + sort (Блок 3) ──────────────────────── */}
+      {sessions.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '7px 14px 0', flexWrap: 'wrap',
+          borderBottom: '1px solid var(--bd)',
+        }}>
+          {/* Status tabs */}
+          <div style={{ display: 'flex', gap: 2, flex: '0 0 auto' }}>
+            {tabs.map(tab => {
+              const count = counts[tab.key];
+              if (tab.key !== 'all' && count === 0) return null;
+              const active = filterStatus === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setFilterStatus(tab.key)}
+                  style={{
+                    padding: '4px 9px',
+                    background: active ? 'var(--bg3)' : 'transparent',
+                    border: active ? '1px solid var(--bd)' : '1px solid transparent',
+                    borderBottom: active ? '1px solid var(--bg3)' : '1px solid transparent',
+                    borderRadius: '4px 4px 0 0',
+                    color: active ? 'var(--t1)' : 'var(--t3)',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'color 0.1s',
+                  }}
+                >
+                  {/* Colored dot for non-all tabs */}
+                  {tab.key === 'RUNNING' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--inf)', flexShrink: 0 }} />}
+                  {tab.key === 'FAILED'  && <span style={{ color: 'var(--danger)', fontSize: 9 }}>✗</span>}
+                  {tab.key === 'COMPLETED' && <span style={{ color: 'var(--suc)', fontSize: 9 }}>✓</span>}
+                  {tab.key === 'QUEUED'  && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--t3)', flexShrink: 0 }} />}
+                  {t(tab.labelKey)}
+                  <span style={{
+                    fontFamily: 'var(--mono)', fontSize: 9,
+                    color: active ? 'var(--acc)' : 'var(--t4)',
+                    background: active ? 'color-mix(in srgb, var(--acc) 12%, transparent)' : 'var(--bg3)',
+                    padding: '0 4px', borderRadius: 3,
+                  }}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+
+          {/* Search */}
+          <input
+            type="text"
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder={t('dali.sessions.searchPlaceholder')}
+            style={{
+              background: 'var(--bg2)', border: '1px solid var(--bd)',
+              borderRadius: 4, padding: '3px 8px', fontSize: 11,
+              color: 'var(--t1)', outline: 'none', fontFamily: 'var(--mono)',
+              width: 170,
+            }}
+          />
+
+          {/* Sort toggle */}
+          <button
+            onClick={() => setSortBy(prev => prev === 'date' ? 'duration' : 'date')}
+            style={{
+              padding: '3px 8px', background: 'var(--bg2)',
+              border: '1px solid var(--bd)', borderRadius: 4,
+              fontSize: 11, cursor: 'pointer', color: 'var(--t3)',
+              fontFamily: 'inherit', whiteSpace: 'nowrap',
+            }}
+            title={sortBy === 'date' ? t('dali.sessions.sortDuration') : t('dali.sessions.sortDate')}
+          >
+            {sortBy === 'date' ? t('dali.sessions.sortDate') : t('dali.sessions.sortDuration')}
+          </button>
+        </div>
+      )}
 
       {sessions.length === 0 ? (
         <div className={css.empty}>
@@ -971,12 +1225,16 @@ export function SessionList({ sessions, onSessionUpdate, tenantAlias }: SessionL
             ))}
           </div>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className={css.empty} style={{ padding: '24px 16px' }}>
+          <div className={css.emptyTitle} style={{ fontSize: 13 }}>No sessions match the filter</div>
+        </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table className={css.sessionTable} style={{ minWidth: isMobile ? 480 : undefined }}>
             <thead>
               <tr>
-                <th style={{ width: isMobile ? 70 : 90  }}>{t('dali.sessions.colSessionId')}</th>
+                <th style={{ width: isMobile ? 100 : 160 }}>{t('dali.sessions.colSessionId')}</th>
                 <th style={{ width: 120 }}>{t('dali.sessions.colStatus')}</th>
                 {!isMobile && <th style={{ width: 100 }}>{t('dali.sessions.colDialect')}</th>}
                 <th>{t('dali.sessions.colSource')}</th>
@@ -986,7 +1244,7 @@ export function SessionList({ sessions, onSessionUpdate, tenantAlias }: SessionL
               </tr>
             </thead>
             <tbody>
-              {sessions.map(s => (
+              {filtered.map(s => (
                 <SessionRow
                   key={s.id}
                   session={s}
@@ -995,6 +1253,7 @@ export function SessionList({ sessions, onSessionUpdate, tenantAlias }: SessionL
                   onUpdate={onSessionUpdate}
                   hideCols={isMobile}
                   tenantAlias={tenantAlias}
+                  showTenant={allTenantsMode}
                 />
               ))}
             </tbody>

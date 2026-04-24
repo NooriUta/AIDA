@@ -121,8 +121,10 @@ export async function getSession(id: string, signal?: AbortSignal, tenantAlias?:
   return res.json();
 }
 
-export async function getSessions(limit = 50, tenantAlias?: string): Promise<DaliSession[]> {
-  const res = await fetch(`${BASE}/api/sessions?limit=${limit}`, { headers: th(tenantAlias) });
+export async function getSessions(limit = 50, tenantAlias?: string, allTenants = false): Promise<DaliSession[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (allTenants) params.set('allTenants', 'true');
+  const res = await fetch(`${BASE}/api/sessions?${params}`, { headers: th(tenantAlias) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -162,6 +164,30 @@ export async function cancelSession(id: string, tenantAlias?: string): Promise<v
 
 export async function getYggStats(tenantAlias?: string): Promise<YggStats> {
   const res = await fetch(`${BASE}/api/stats`, { headers: th(tenantAlias) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── JobRunr stats ─────────────────────────────────────────────────────────────
+
+export interface JobRunrStats {
+  enqueued:   number;
+  processing: number;
+  failed:     number;
+  succeeded:  number;
+  scheduled:  number;
+}
+
+/** GET /api/jobs/stats — live JobRunr queue counters from FRIGG jobrunr_jobs table. */
+export async function getJobRunrStats(): Promise<JobRunrStats> {
+  const res = await fetch(`${BASE}/api/jobs/stats`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/** POST /api/jobs/reset-stuck — reset all PROCESSING jobs to FAILED (operator action). */
+export async function resetStuckJobs(): Promise<{ reset: string; processing: number; failed: number }> {
+  const res = await fetch(`${BASE}/api/jobs/reset-stuck`, { method: 'POST' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

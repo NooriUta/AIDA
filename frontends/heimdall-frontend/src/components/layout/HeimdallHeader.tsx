@@ -247,11 +247,11 @@ function TenantPickerButton() {
 
   useEffect(() => {
     if (!canFetch) return;
-    fetch('/admin/tenants', { credentials: 'include' })
+    fetch('/chur/api/admin/tenants', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then((body: unknown) => {
-        const arr = Array.isArray(body) ? (body as { id: string; name: string }[]) : [];
-        setTenants(arr.map(t => ({ tenantAlias: t.id })));
+        const arr = Array.isArray(body) ? (body as { tenantAlias: string; status: string }[]) : [];
+        setTenants(arr.filter(t => t.status === 'ACTIVE').map(t => ({ tenantAlias: t.tenantAlias })));
       })
       .catch(() => {});
   }, [canFetch]);
@@ -265,18 +265,30 @@ function TenantPickerButton() {
     return () => window.removeEventListener('aida:tenant', h);
   }, []);
 
-  const displayActive = user?.activeTenantAlias ?? active;
+  // `active` is initialized from localStorage/user and updated immediately on pick().
+  // Use it directly — it's always current, unlike user.activeTenantAlias which
+  // lags behind until the async PATCH /auth/me/tenant response comes back.
+  const displayActive = active;
 
   if (!isAdmin) return null;
 
   const displayTenants = tenants;
   const canSwitch = isAdmin && displayTenants.length > 1;
 
-  const pick = (alias: string) => {
+  const pick = async (alias: string) => {
     setActive(alias);
     localStorage.setItem('seer-active-tenant', alias);
     window.dispatchEvent(new CustomEvent('aida:tenant', { detail: { activeTenant: alias } }));
     setOpen(false);
+    try {
+      await fetch('/auth/me/tenant', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantAlias: alias }),
+      });
+      useAuthStore.setState(s => s.user ? { user: { ...s.user, activeTenantAlias: alias } } : {});
+    } catch { /* best-effort */ }
   };
 
   return (
@@ -325,7 +337,7 @@ function TenantPickerButton() {
           {displayTenants.map(t => (
             <button
               key={t.tenantAlias}
-              onClick={() => pick(t.tenantAlias)}
+              onClick={() => void pick(t.tenantAlias)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px',
                 background: active === t.tenantAlias ? 'color-mix(in srgb, var(--acc) 10%, transparent)' : 'transparent',

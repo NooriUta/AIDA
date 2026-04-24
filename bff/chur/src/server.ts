@@ -76,7 +76,8 @@ async function start(): Promise<void> {
 
   // ── Health ───────────────────────────────────────────────────────────────────
 
-  app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));
+  app.get('/health',  async () => ({ ok: true, ts: new Date().toISOString() }));
+  app.get('/version', async () => ({ version: process.env.npm_package_version ?? '0.0.0' }));
 
   // ── Listen ───────────────────────────────────────────────────────────────────
 
