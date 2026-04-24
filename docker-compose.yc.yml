@@ -77,7 +77,8 @@ services:
       FRIGG_URL:         "http://frigg:2480"
       FRIGG_SESSION_DB:  "frigg-sessions"
       FRIGG_USER:        "root"
-      FRIGG_PASSWORD:    "${FRIGG_PASSWORD:-playwithdata}"
+      # FRIGG_PASSWORD intentionally omitted — read from .env.prod via <<: *env_file below.
+      # Explicit value here would be shadowed by env_file anyway (env_file wins in Compose merge order).
     <<: *env_file
     deploy:
       resources:
