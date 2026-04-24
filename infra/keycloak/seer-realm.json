@@ -1,734 +1,903 @@
 {
-  "realm": "seer",
-  "enabled": true,
-  "organizationsEnabled": false,
-  "registrationAllowed": false,
-  "loginWithEmailAllowed": false,
-  "duplicateEmailsAllowed": true,
-  "sslRequired": "none",
-  "accessTokenLifespan": 14400,
-  "ssoSessionIdleTimeout": 36000,
-  "ssoSessionMaxLifespan": 36000,
-  "roles": {
-    "realm": [
-      {
-        "name": "viewer",
-        "description": "Read-only access to lineage data"
-      },
-      {
-        "name": "editor",
-        "description": "Read + limited write access, MIMIR with quota"
-      },
-      {
-        "name": "operator",
-        "description": "Run harvest, monitor Dali, event stream"
-      },
-      {
-        "name": "auditor",
-        "description": "Audit log and tool call trace, read-only"
-      },
-      {
-        "name": "local-admin",
-        "description": "Manage tenant users and quotas"
-      },
-      {
-        "name": "tenant-owner",
-        "description": "Tenant settings, billing, assign local-admin"
-      },
-      {
-        "name": "admin",
-        "description": "Full HEIMDALL, Sources, restart services, DEMODEBUG"
-      },
-      {
-        "name": "super-admin",
-        "description": "Platform, cross-tenant, Keycloak realm management"
-      }
-    ]
-  },
-  "defaultRoles": [
-    "viewer"
-  ],
-  "clients": [
-    {
-      "clientId": "aida-bff",
-      "name": "AIDA BFF (Chur)",
-      "enabled": true,
-      "clientAuthenticatorType": "client-secret",
-      "secret": "aida-bff-secret-dev",
-      "directAccessGrantsEnabled": true,
-      "standardFlowEnabled": false,
-      "implicitFlowEnabled": false,
-      "serviceAccountsEnabled": false,
-      "publicClient": false,
-      "redirectUris": [
-        "http://localhost:3000/*",
-        "https://seidrstudio.pro/*",
-        "https://www.seidrstudio.pro/*",
-        "https://seer.seidrstudio.pro/*",
-        "https://heimdall.seidrstudio.pro/*"
-      ],
-      "webOrigins": [
-        "http://localhost:3000",
-        "https://seidrstudio.pro",
-        "https://www.seidrstudio.pro",
-        "https://seer.seidrstudio.pro",
-        "https://heimdall.seidrstudio.pro"
-      ],
-      "protocol": "openid-connect",
-      "defaultClientScopes": [
-        "openid",
-        "profile",
-        "email",
-        "roles"
-      ],
-      "optionalClientScopes": [
-        "seer:read",
-        "seer:write",
-        "aida:harvest",
-        "aida:audit",
-        "aida:tenant:admin",
-        "aida:tenant:owner",
-        "aida:admin",
-        "aida:admin:destructive",
-        "aida:superadmin"
-      ],
-      "protocolMappers": [
-        {
-          "name": "sub-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-sub-mapper",
-          "consentRequired": false,
-          "config": {
-            "access.token.claim": "true",
-            "id.token.claim": "true",
-            "userinfo.token.claim": "true"
-          }
-        },
-        {
-          "name": "username-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-attribute-mapper",
-          "consentRequired": false,
-          "config": {
-            "userinfo.token.claim": "true",
-            "user.attribute": "username",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "claim.name": "preferred_username",
-            "jsonType.label": "String"
-          }
-        },
-        {
-          "name": "seer-role-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-realm-role-mapper",
-          "consentRequired": false,
-          "config": {
-            "multivalued": "true",
-            "userinfo.token.claim": "true",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "claim.name": "seer_roles",
-            "jsonType.label": "String"
-          }
-        }
-      ]
-    }
-  ],
-  "clientScopes": [
-    {
-      "name": "aida:admin",
-      "description": "HEIMDALL admin access — metrics, snapshots, control panel",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "aida:admin:destructive",
-      "description": "HEIMDALL destructive ops — reset, cancel sessions",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "seer:read",
-      "description": "Read lineage data, LOOM, KNOT, ANVIL",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "seer:write",
-      "description": "Save views, annotations, MIMIR full access",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "aida:harvest",
-      "description": "Run parse sessions, view Dali, event stream",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "aida:audit",
-      "description": "Audit log view and export",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "aida:tenant:admin",
-      "description": "Manage tenant users and quotas",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "aida:tenant:owner",
-      "description": "Tenant settings, billing, assign local-admin",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    },
-    {
-      "name": "aida:superadmin",
-      "description": "Platform settings, cross-tenant, Keycloak realm",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      }
-    }
-  ],
-  "users": [
-    {
-      "username": "admin",
-      "firstName": "Platform",
-      "lastName": "Admin",
-      "email": "admin@seer.io",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "admin",
-          "temporary": false
-        }
-      ],
-      "realmRoles": [
-        "admin"
-      ],
-      "attributes": {
-        "title": [
-          "Platform Engineer"
-        ],
-        "dept": [
-          "Platform"
-        ],
-        "phone": [
-          "+7 900 111-00-01"
-        ],
-        "avatarColor": [
-          "#A8B860"
-        ],
-        "tz": [
-          "Europe/Moscow"
-        ],
-        "dateFmt": [
-          "DD.MM.YYYY"
-        ],
-        "startPage": [
-          "dashboard"
-        ],
-        "pref.lang": [
-          "ru"
-        ],
-        "notify.email": [
-          "true"
-        ],
-        "notify.browser": [
-          "false"
-        ],
-        "notify.harvest": [
-          "true"
-        ],
-        "notify.errors": [
-          "true"
-        ],
-        "notify.digest": [
-          "false"
-        ],
-        "quota_mimir": [
-          "100"
-        ],
-        "quota_sessions": [
-          "10"
-        ],
-        "quota_atoms": [
-          "100000"
-        ],
-        "quota_workers": [
-          "8"
-        ],
-        "quota_anvil": [
-          "200"
-        ],
-        "source_bindings": [
-          "hound,dali"
-        ]
-      }
-    },
-    {
-      "username": "editor",
-      "firstName": "Maria",
-      "lastName": "Kuznetsova",
-      "email": "m.kuznetsova@seer.io",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "editor",
-          "temporary": false
-        }
-      ],
-      "realmRoles": [
-        "editor"
-      ],
-      "attributes": {
-        "title": [
-          "Data Analyst"
-        ],
-        "dept": [
-          "BI"
-        ],
-        "phone": [
-          ""
-        ],
-        "avatarColor": [
-          "#88B8A8"
-        ],
-        "tz": [
-          "Europe/Kiev"
-        ],
-        "dateFmt": [
-          "YYYY-MM-DD"
-        ],
-        "startPage": [
-          "loom"
-        ],
-        "pref.lang": [
-          "ru"
-        ],
-        "notify.email": [
-          "true"
-        ],
-        "notify.browser": [
-          "false"
-        ],
-        "notify.harvest": [
-          "false"
-        ],
-        "notify.errors": [
-          "true"
-        ],
-        "notify.digest": [
-          "true"
-        ],
-        "quota_mimir": [
-          "20"
-        ],
-        "quota_sessions": [
-          "2"
-        ],
-        "quota_atoms": [
-          "50000"
-        ],
-        "quota_workers": [
-          "4"
-        ],
-        "quota_anvil": [
-          "20"
-        ],
-        "source_bindings": [
-          "hound"
-        ]
-      }
-    },
-    {
-      "username": "viewer",
-      "firstName": "Dev",
-      "lastName": "Readonly",
-      "email": "dev@seer.io",
-      "enabled": false,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "viewer",
-          "temporary": false
-        }
-      ],
-      "realmRoles": [
-        "viewer"
-      ],
-      "attributes": {
-        "title": [
-          "Junior Developer"
-        ],
-        "dept": [
-          "Dev"
-        ],
-        "phone": [
-          ""
-        ],
-        "avatarColor": [
-          "#7DBF78"
-        ],
-        "tz": [
-          "Europe/Moscow"
-        ],
-        "dateFmt": [
-          "YYYY-MM-DD"
-        ],
-        "startPage": [
-          "loom"
-        ],
-        "pref.lang": [
-          "ru"
-        ],
-        "notify.email": [
-          "false"
-        ],
-        "notify.browser": [
-          "false"
-        ],
-        "notify.harvest": [
-          "false"
-        ],
-        "notify.errors": [
-          "false"
-        ],
-        "notify.digest": [
-          "false"
-        ],
-        "quota_mimir": [
-          "5"
-        ],
-        "quota_sessions": [
-          "1"
-        ],
-        "quota_atoms": [
-          "10000"
-        ],
-        "quota_workers": [
-          "1"
-        ],
-        "quota_anvil": [
-          "5"
-        ],
-        "source_bindings": [
-          ""
-        ]
-      }
-    },
-    {
-      "username": "alexey.petrov",
-      "firstName": "Alexey",
-      "lastName": "Petrov",
-      "email": "a.petrov@seer.io",
-      "enabled": true,
-      "emailVerified": true,
-      "realmRoles": [
-        "operator"
-      ],
-      "attributes": {
-        "title": [
-          "Data Ops Engineer"
-        ],
-        "dept": [
-          "Analytics"
-        ],
-        "phone": [
-          "+7 900 222-00-02"
-        ],
-        "avatarColor": [
-          "#D4922A"
-        ],
-        "tz": [
-          "Europe/Moscow"
-        ],
-        "dateFmt": [
-          "DD.MM.YYYY"
-        ],
-        "startPage": [
-          "events"
-        ],
-        "pref.lang": [
-          "ru"
-        ],
-        "notify.email": [
-          "true"
-        ],
-        "notify.browser": [
-          "true"
-        ],
-        "notify.harvest": [
-          "true"
-        ],
-        "notify.errors": [
-          "true"
-        ],
-        "notify.digest": [
-          "false"
-        ],
-        "quota_mimir": [
-          "50"
-        ],
-        "quota_sessions": [
-          "5"
-        ],
-        "quota_atoms": [
-          "100000"
-        ],
-        "quota_workers": [
-          "8"
-        ],
-        "quota_anvil": [
-          "50"
-        ],
-        "source_bindings": [
-          "hound,dali"
-        ]
-      }
-    },
-    {
-      "username": "sergey.ivanov",
-      "firstName": "Sergey",
-      "lastName": "Ivanov",
-      "email": "s.ivanov@seer.io",
-      "enabled": true,
-      "emailVerified": true,
-      "realmRoles": [
-        "auditor"
-      ],
-      "attributes": {
-        "title": [
-          "Security Auditor"
-        ],
-        "dept": [
-          "Security"
-        ],
-        "phone": [
-          "+7 900 444-00-04"
-        ],
-        "avatarColor": [
-          "#afa9ec"
-        ],
-        "tz": [
-          "Europe/Moscow"
-        ],
-        "dateFmt": [
-          "DD.MM.YYYY"
-        ],
-        "startPage": [
-          "dashboard"
-        ],
-        "pref.lang": [
-          "ru"
-        ],
-        "notify.email": [
-          "false"
-        ],
-        "notify.browser": [
-          "false"
-        ],
-        "notify.harvest": [
-          "false"
-        ],
-        "notify.errors": [
-          "false"
-        ],
-        "notify.digest": [
-          "true"
-        ],
-        "quota_mimir": [
-          "10"
-        ],
-        "quota_sessions": [
-          "1"
-        ],
-        "quota_atoms": [
-          "0"
-        ],
-        "quota_workers": [
-          "0"
-        ],
-        "quota_anvil": [
-          "10"
-        ],
-        "source_bindings": [
-          ""
-        ]
-      }
-    },
-    {
-      "username": "tenant.owner",
-      "firstName": "Tenant",
-      "lastName": "Owner",
-      "email": "owner@acme.com",
-      "enabled": true,
-      "emailVerified": true,
-      "realmRoles": [
-        "tenant-owner"
-      ],
-      "attributes": {
-        "title": [
-          "CTO"
-        ],
-        "dept": [
-          "Management"
-        ],
-        "phone": [
-          "+7 900 555-00-05"
-        ],
-        "avatarColor": [
-          "#f0997b"
-        ],
-        "tz": [
-          "UTC"
-        ],
-        "dateFmt": [
-          "MM/DD/YYYY"
-        ],
-        "startPage": [
-          "dashboard"
-        ],
-        "pref.lang": [
-          "en"
-        ],
-        "notify.email": [
-          "true"
-        ],
-        "notify.browser": [
-          "false"
-        ],
-        "notify.harvest": [
-          "false"
-        ],
-        "notify.errors": [
-          "true"
-        ],
-        "notify.digest": [
-          "true"
-        ],
-        "quota_mimir": [
-          "30"
-        ],
-        "quota_sessions": [
-          "3"
-        ],
-        "quota_atoms": [
-          "50000"
-        ],
-        "quota_workers": [
-          "4"
-        ],
-        "quota_anvil": [
-          "30"
-        ],
-        "source_bindings": [
-          "hound,dali"
-        ]
-      }
-    },
-    {
-      "username": "local.admin",
-      "firstName": "Local",
-      "lastName": "Admin",
-      "email": "la@acme.com",
-      "enabled": true,
-      "emailVerified": true,
-      "realmRoles": [
-        "local-admin"
-      ],
-      "attributes": {
-        "title": [
-          "Team Lead"
-        ],
-        "dept": [
-          "Analytics"
-        ],
-        "phone": [
-          ""
-        ],
-        "avatarColor": [
-          "#5dcaa5"
-        ],
-        "tz": [
-          "Asia/Yekaterinburg"
-        ],
-        "dateFmt": [
-          "DD.MM.YYYY"
-        ],
-        "startPage": [
-          "services"
-        ],
-        "pref.lang": [
-          "ru"
-        ],
-        "notify.email": [
-          "true"
-        ],
-        "notify.browser": [
-          "true"
-        ],
-        "notify.harvest": [
-          "true"
-        ],
-        "notify.errors": [
-          "true"
-        ],
-        "notify.digest": [
-          "false"
-        ],
-        "quota_mimir": [
-          "50"
-        ],
-        "quota_sessions": [
-          "5"
-        ],
-        "quota_atoms": [
-          "50000"
-        ],
-        "quota_workers": [
-          "6"
-        ],
-        "quota_anvil": [
-          "50"
-        ],
-        "source_bindings": [
-          "hound,dali"
-        ]
-      }
-    }
-  ]
+    "realm":  "seer",
+    "enabled":  true,
+    "organizationsEnabled":  true,
+    "registrationAllowed":  false,
+    "loginWithEmailAllowed":  false,
+    "duplicateEmailsAllowed":  true,
+    "sslRequired":  "none",
+    "accessTokenLifespan":  14400,
+    "ssoSessionIdleTimeout":  36000,
+    "ssoSessionMaxLifespan":  36000,
+    "roles":  {
+                  "realm":  [
+                                {
+                                    "name":  "viewer",
+                                    "description":  "Read-only access to lineage data"
+                                },
+                                {
+                                    "name":  "editor",
+                                    "description":  "Read + limited write access, MIMIR with quota"
+                                },
+                                {
+                                    "name":  "operator",
+                                    "description":  "Run harvest, monitor Dali, event stream"
+                                },
+                                {
+                                    "name":  "auditor",
+                                    "description":  "Audit log and tool call trace, read-only"
+                                },
+                                {
+                                    "name":  "local-admin",
+                                    "description":  "Manage tenant users and quotas"
+                                },
+                                {
+                                    "name":  "tenant-owner",
+                                    "description":  "Tenant settings, billing, assign local-admin"
+                                },
+                                {
+                                    "name":  "admin",
+                                    "description":  "Full HEIMDALL, Sources, restart services, DEMODEBUG"
+                                },
+                                {
+                                    "name":  "super-admin",
+                                    "description":  "Platform, cross-tenant, Keycloak realm management"
+                                }
+                            ]
+              },
+    "defaultRoles":  [
+                         "viewer"
+                     ],
+    "clients":  [
+                    {
+                        "clientId":  "aida-bff",
+                        "name":  "AIDA BFF (Chur)",
+                        "enabled":  true,
+                        "clientAuthenticatorType":  "client-secret",
+                        "secret":  "aida-bff-secret-dev",
+                        "directAccessGrantsEnabled":  true,
+                        "standardFlowEnabled":  false,
+                        "implicitFlowEnabled":  false,
+                        "serviceAccountsEnabled":  false,
+                        "publicClient":  false,
+                        "redirectUris":  [
+                                             "http://localhost:3000/*",
+                                             "https://seidrstudio.pro/*",
+                                             "https://www.seidrstudio.pro/*",
+                                             "https://seer.seidrstudio.pro/*",
+                                             "https://heimdall.seidrstudio.pro/*"
+                                         ],
+                        "webOrigins":  [
+                                           "http://localhost:3000",
+                                           "https://seidrstudio.pro",
+                                           "https://www.seidrstudio.pro",
+                                           "https://seer.seidrstudio.pro",
+                                           "https://heimdall.seidrstudio.pro"
+                                       ],
+                        "protocol":  "openid-connect",
+                        "defaultClientScopes":  [
+                                                    "openid",
+                                                    "profile",
+                                                    "email",
+                                                    "roles",
+                                                    "organization"
+                                                ],
+                        "optionalClientScopes":  [
+                                                     "seer:read",
+                                                     "seer:write",
+                                                     "aida:harvest",
+                                                     "aida:audit",
+                                                     "aida:tenant:admin",
+                                                     "aida:tenant:owner",
+                                                     "aida:admin",
+                                                     "aida:admin:destructive",
+                                                     "aida:superadmin"
+                                                 ],
+                        "protocolMappers":  [
+                                                {
+                                                    "name":  "sub-mapper",
+                                                    "protocol":  "openid-connect",
+                                                    "protocolMapper":  "oidc-sub-mapper",
+                                                    "consentRequired":  false,
+                                                    "config":  {
+                                                                   "access.token.claim":  "true",
+                                                                   "id.token.claim":  "true",
+                                                                   "userinfo.token.claim":  "true"
+                                                               }
+                                                },
+                                                {
+                                                    "name":  "username-mapper",
+                                                    "protocol":  "openid-connect",
+                                                    "protocolMapper":  "oidc-usermodel-attribute-mapper",
+                                                    "consentRequired":  false,
+                                                    "config":  {
+                                                                   "userinfo.token.claim":  "true",
+                                                                   "user.attribute":  "username",
+                                                                   "id.token.claim":  "true",
+                                                                   "access.token.claim":  "true",
+                                                                   "claim.name":  "preferred_username",
+                                                                   "jsonType.label":  "String"
+                                                               }
+                                                },
+                                                {
+                                                    "name":  "seer-role-mapper",
+                                                    "protocol":  "openid-connect",
+                                                    "protocolMapper":  "oidc-usermodel-realm-role-mapper",
+                                                    "consentRequired":  false,
+                                                    "config":  {
+                                                                   "multivalued":  "true",
+                                                                   "userinfo.token.claim":  "true",
+                                                                   "id.token.claim":  "true",
+                                                                   "access.token.claim":  "true",
+                                                                   "claim.name":  "seer_roles",
+                                                                   "jsonType.label":  "String"
+                                                               }
+                                                }
+                                            ]
+                    }
+                ],
+    "clientScopes":  [
+                         {
+                             "name":  "organization",
+                             "description":  "KC-ORG-03: Organizations feature РІР‚вЂќ adds organization.alias to JWT via user attribute (ROPC-compatible)",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "false",
+                                                "display.on.consent.screen":  "false"
+                                            },
+                             "protocolMappers":  [
+                                                     {
+                                                         "name":  "organization-alias",
+                                                         "protocol":  "openid-connect",
+                                                         "protocolMapper":  "oidc-usermodel-attribute-mapper",
+                                                         "consentRequired":  false,
+                                                         "config":  {
+                                                                        "userinfo.token.claim":  "true",
+                                                                        "user.attribute":  "organization.alias",
+                                                                        "id.token.claim":  "true",
+                                                                        "access.token.claim":  "true",
+                                                                        "claim.name":  "organization.alias",
+                                                                        "jsonType.label":  "String"
+                                                                    }
+                                                     }
+                                                 ]
+                         },
+                         {
+                             "name":  "aida:admin",
+                             "description":  "HEIMDALL admin access РІР‚вЂќ metrics, snapshots, control panel",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "false"
+                                            }
+                         },
+                         {
+                             "name":  "aida:admin:destructive",
+                             "description":  "HEIMDALL destructive ops РІР‚вЂќ reset, cancel sessions",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "false"
+                                            }
+                         },
+                         {
+                             "name":  "seer:read",
+                             "description":  "Read lineage data, LOOM, KNOT, ANVIL",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "true"
+                                            }
+                         },
+                         {
+                             "name":  "seer:write",
+                             "description":  "Save views, annotations, MIMIR full access",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "true"
+                                            }
+                         },
+                         {
+                             "name":  "aida:harvest",
+                             "description":  "Run parse sessions, view Dali, event stream",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "false"
+                                            }
+                         },
+                         {
+                             "name":  "aida:audit",
+                             "description":  "Audit log view and export",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "false"
+                                            }
+                         },
+                         {
+                             "name":  "aida:tenant:admin",
+                             "description":  "Manage tenant users and quotas",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "false"
+                                            }
+                         },
+                         {
+                             "name":  "aida:tenant:owner",
+                             "description":  "Tenant settings, billing, assign local-admin",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "false"
+                                            }
+                         },
+                         {
+                             "name":  "aida:superadmin",
+                             "description":  "Platform settings, cross-tenant, Keycloak realm",
+                             "protocol":  "openid-connect",
+                             "attributes":  {
+                                                "include.in.token.scope":  "true",
+                                                "display.on.consent.screen":  "false"
+                                            }
+                         }
+                     ],
+    "users":  [
+                  {
+                      "username":  "admin",
+                      "firstName":  "Platform",
+                      "lastName":  "Admin",
+                      "email":  "admin@seer.io",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "admin",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "admin"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "Platform Engineer"
+                                                   ],
+                                         "dept":  [
+                                                      "Platform"
+                                                  ],
+                                         "phone":  [
+                                                       "+7 900 111-00-01"
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#A8B860"
+                                                         ],
+                                         "tz":  [
+                                                    "Europe/Moscow"
+                                                ],
+                                         "dateFmt":  [
+                                                         "DD.MM.YYYY"
+                                                     ],
+                                         "startPage":  [
+                                                           "dashboard"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "ru"
+                                                       ],
+                                         "notify.email":  [
+                                                              "true"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "false"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "true"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "true"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "false"
+                                                           ],
+                                         "quota_mimir":  [
+                                                             "100"
+                                                         ],
+                                         "quota_sessions":  [
+                                                                "10"
+                                                            ],
+                                         "quota_atoms":  [
+                                                             "100000"
+                                                         ],
+                                         "quota_workers":  [
+                                                               "8"
+                                                           ],
+                                         "quota_anvil":  [
+                                                             "200"
+                                                         ],
+                                         "source_bindings":  [
+                                                                 "hound,dali"
+                                                             ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  },
+                  {
+                      "username":  "editor",
+                      "firstName":  "Maria",
+                      "lastName":  "Kuznetsova",
+                      "email":  "m.kuznetsova@seer.io",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "editor",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "editor"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "Data Analyst"
+                                                   ],
+                                         "dept":  [
+                                                      "BI"
+                                                  ],
+                                         "phone":  [
+                                                       ""
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#88B8A8"
+                                                         ],
+                                         "tz":  [
+                                                    "Europe/Kiev"
+                                                ],
+                                         "dateFmt":  [
+                                                         "YYYY-MM-DD"
+                                                     ],
+                                         "startPage":  [
+                                                           "loom"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "ru"
+                                                       ],
+                                         "notify.email":  [
+                                                              "true"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "false"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "false"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "true"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "true"
+                                                           ],
+                                         "quota_mimir":  [
+                                                             "20"
+                                                         ],
+                                         "quota_sessions":  [
+                                                                "2"
+                                                            ],
+                                         "quota_atoms":  [
+                                                             "50000"
+                                                         ],
+                                         "quota_workers":  [
+                                                               "4"
+                                                           ],
+                                         "quota_anvil":  [
+                                                             "20"
+                                                         ],
+                                         "source_bindings":  [
+                                                                 "hound"
+                                                             ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  },
+                  {
+                      "username":  "viewer",
+                      "firstName":  "Dev",
+                      "lastName":  "Readonly",
+                      "email":  "dev@seer.io",
+                      "enabled":  false,
+                      "emailVerified":  true,
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "viewer",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "viewer"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "Junior Developer"
+                                                   ],
+                                         "dept":  [
+                                                      "Dev"
+                                                  ],
+                                         "phone":  [
+                                                       ""
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#7DBF78"
+                                                         ],
+                                         "tz":  [
+                                                    "Europe/Moscow"
+                                                ],
+                                         "dateFmt":  [
+                                                         "YYYY-MM-DD"
+                                                     ],
+                                         "startPage":  [
+                                                           "loom"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "ru"
+                                                       ],
+                                         "notify.email":  [
+                                                              "false"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "false"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "false"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "false"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "false"
+                                                           ],
+                                         "quota_mimir":  [
+                                                             "5"
+                                                         ],
+                                         "quota_sessions":  [
+                                                                "1"
+                                                            ],
+                                         "quota_atoms":  [
+                                                             "10000"
+                                                         ],
+                                         "quota_workers":  [
+                                                               "1"
+                                                           ],
+                                         "quota_anvil":  [
+                                                             "5"
+                                                         ],
+                                         "source_bindings":  [
+                                                                 ""
+                                                             ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  },
+                  {
+                      "username":  "alexey.petrov",
+                      "firstName":  "Alexey",
+                      "lastName":  "Petrov",
+                      "email":  "a.petrov@seer.io",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "realmRoles":  [
+                                         "operator"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "Data Ops Engineer"
+                                                   ],
+                                         "dept":  [
+                                                      "Analytics"
+                                                  ],
+                                         "phone":  [
+                                                       "+7 900 222-00-02"
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#D4922A"
+                                                         ],
+                                         "tz":  [
+                                                    "Europe/Moscow"
+                                                ],
+                                         "dateFmt":  [
+                                                         "DD.MM.YYYY"
+                                                     ],
+                                         "startPage":  [
+                                                           "events"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "ru"
+                                                       ],
+                                         "notify.email":  [
+                                                              "true"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "true"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "true"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "true"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "false"
+                                                           ],
+                                         "quota_mimir":  [
+                                                             "50"
+                                                         ],
+                                         "quota_sessions":  [
+                                                                "5"
+                                                            ],
+                                         "quota_atoms":  [
+                                                             "100000"
+                                                         ],
+                                         "quota_workers":  [
+                                                               "8"
+                                                           ],
+                                         "quota_anvil":  [
+                                                             "50"
+                                                         ],
+                                         "source_bindings":  [
+                                                                 "hound,dali"
+                                                             ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  },
+                  {
+                      "username":  "sergey.ivanov",
+                      "firstName":  "Sergey",
+                      "lastName":  "Ivanov",
+                      "email":  "s.ivanov@seer.io",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "realmRoles":  [
+                                         "auditor"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "Security Auditor"
+                                                   ],
+                                         "dept":  [
+                                                      "Security"
+                                                  ],
+                                         "phone":  [
+                                                       "+7 900 444-00-04"
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#afa9ec"
+                                                         ],
+                                         "tz":  [
+                                                    "Europe/Moscow"
+                                                ],
+                                         "dateFmt":  [
+                                                         "DD.MM.YYYY"
+                                                     ],
+                                         "startPage":  [
+                                                           "dashboard"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "ru"
+                                                       ],
+                                         "notify.email":  [
+                                                              "false"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "false"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "false"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "false"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "true"
+                                                           ],
+                                         "quota_mimir":  [
+                                                             "10"
+                                                         ],
+                                         "quota_sessions":  [
+                                                                "1"
+                                                            ],
+                                         "quota_atoms":  [
+                                                             "0"
+                                                         ],
+                                         "quota_workers":  [
+                                                               "0"
+                                                           ],
+                                         "quota_anvil":  [
+                                                             "10"
+                                                         ],
+                                         "source_bindings":  [
+                                                                 ""
+                                                             ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  },
+                  {
+                      "username":  "tenant.owner",
+                      "firstName":  "Tenant",
+                      "lastName":  "Owner",
+                      "email":  "owner@acme.com",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "realmRoles":  [
+                                         "tenant-owner"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "CTO"
+                                                   ],
+                                         "dept":  [
+                                                      "Management"
+                                                  ],
+                                         "phone":  [
+                                                       "+7 900 555-00-05"
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#f0997b"
+                                                         ],
+                                         "tz":  [
+                                                    "UTC"
+                                                ],
+                                         "dateFmt":  [
+                                                         "MM/DD/YYYY"
+                                                     ],
+                                         "startPage":  [
+                                                           "dashboard"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "en"
+                                                       ],
+                                         "notify.email":  [
+                                                              "true"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "false"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "false"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "true"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "true"
+                                                           ],
+                                         "quota_mimir":  [
+                                                             "30"
+                                                         ],
+                                         "quota_sessions":  [
+                                                                "3"
+                                                            ],
+                                         "quota_atoms":  [
+                                                             "50000"
+                                                         ],
+                                         "quota_workers":  [
+                                                               "4"
+                                                           ],
+                                         "quota_anvil":  [
+                                                             "30"
+                                                         ],
+                                         "source_bindings":  [
+                                                                 "hound,dali"
+                                                             ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  },
+                  {
+                      "username":  "local.admin",
+                      "firstName":  "Local",
+                      "lastName":  "Admin",
+                      "email":  "la@acme.com",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "realmRoles":  [
+                                         "local-admin"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "Team Lead"
+                                                   ],
+                                         "dept":  [
+                                                      "Analytics"
+                                                  ],
+                                         "phone":  [
+                                                       ""
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#5dcaa5"
+                                                         ],
+                                         "tz":  [
+                                                    "Asia/Yekaterinburg"
+                                                ],
+                                         "dateFmt":  [
+                                                         "DD.MM.YYYY"
+                                                     ],
+                                         "startPage":  [
+                                                           "services"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "ru"
+                                                       ],
+                                         "notify.email":  [
+                                                              "true"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "true"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "true"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "true"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "false"
+                                                           ],
+                                         "quota_mimir":  [
+                                                             "50"
+                                                         ],
+                                         "quota_sessions":  [
+                                                                "5"
+                                                            ],
+                                         "quota_atoms":  [
+                                                             "50000"
+                                                         ],
+                                         "quota_workers":  [
+                                                               "6"
+                                                           ],
+                                         "quota_anvil":  [
+                                                             "50"
+                                                         ],
+                                         "source_bindings":  [
+                                                                 "hound,dali"
+                                                             ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  },
+                  {
+                      "username":  "superadmin",
+                      "firstName":  "Super",
+                      "lastName":  "Admin",
+                      "email":  "superadmin@seer.io",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "superadmin",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "super-admin"
+                                     ],
+                      "attributes":  {
+                                         "title":  [
+                                                       "Platform Owner"
+                                                   ],
+                                         "dept":  [
+                                                      "Platform"
+                                                  ],
+                                         "phone":  [
+                                                       ""
+                                                   ],
+                                         "avatarColor":  [
+                                                             "#e05c5c"
+                                                         ],
+                                         "tz":  [
+                                                    "Europe/Moscow"
+                                                ],
+                                         "dateFmt":  [
+                                                         "DD.MM.YYYY"
+                                                     ],
+                                         "startPage":  [
+                                                           "admin"
+                                                       ],
+                                         "pref.lang":  [
+                                                           "ru"
+                                                       ],
+                                         "notify.email":  [
+                                                              "true"
+                                                          ],
+                                         "notify.browser":  [
+                                                                "true"
+                                                            ],
+                                         "notify.harvest":  [
+                                                                "true"
+                                                            ],
+                                         "notify.errors":  [
+                                                               "true"
+                                                           ],
+                                         "notify.digest":  [
+                                                               "false"
+                                                           ],
+                                         "organization.alias":  [
+                                                                    "default"
+                                                                ]
+                                     }
+                  }
+              ],
+    "organizations":  [
+                          {
+                              "name":  "default",
+                              "alias":  "default",
+                              "description":  "Default tenant for single-tenant dev deployments",
+                              "enabled":  true,
+                              "redirectUrl":  "",
+                              "domains":  [
+                                              {
+                                                  "name":  "seer.io",
+                                                  "verified":  true
+                                              }
+                                          ],
+                              "members":  [
+                                              {
+                                                  "username":  "admin"
+                                              },
+                                              {
+                                                  "username":  "editor"
+                                              },
+                                              {
+                                                  "username":  "viewer"
+                                              },
+                                              {
+                                                  "username":  "alexey.petrov"
+                                              },
+                                              {
+                                                  "username":  "sergey.ivanov"
+                                              },
+                                              {
+                                                  "username":  "tenant.owner"
+                                              },
+                                              {
+                                                  "username":  "local.admin"
+                                              },
+                                              {
+                                                  "username":  "superadmin"
+                                              }
+                                          ],
+                              "id":  "9d0b33c6-617c-400f-bce4-119e105ad459"
+                          }
+                      ],
+    "attributes":  {
+                       "userProfileEnabled":  "true"
+                   },
+    "components":  {
+                       "org.keycloak.userprofile.UserProfileProvider":  [
+                                                                            {
+                                                                                "providerId":  "declarative-user-profile",
+                                                                                "subComponents":  {
+
+                                                                                                  },
+                                                                                "config":  {
+                                                                                               "kc.user.profile.config":  [
+                                                                                                                              "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"required\": {\"roles\": [\"user\"]}}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}}], \"unmanagedAttributePolicy\": \"ADMIN_EDIT\"}"
+                                                                                                                          ]
+                                                                                           }
+                                                                            }
+                                                                        ]
+                   }
 }

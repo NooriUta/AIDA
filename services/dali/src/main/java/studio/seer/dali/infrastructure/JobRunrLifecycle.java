@@ -12,6 +12,7 @@ import jakarta.inject.Singleton;
 import org.jobrunr.configuration.JobRunr;
 import org.jobrunr.configuration.JobRunrConfiguration;
 import org.jobrunr.scheduling.JobScheduler;
+import org.jobrunr.server.BackgroundJobServerConfiguration;
 import org.jobrunr.server.JobActivator;
 import org.jobrunr.storage.StorageProvider;
 import org.slf4j.Logger;
@@ -82,16 +83,31 @@ public class JobRunrLifecycle {
             }
         };
         try {
-            var jrConfig = JobRunr.configure()
+            var bgServerConfig = BackgroundJobServerConfiguration
+                    .usingStandardBackgroundJobServerConfiguration()
+                    .andWorkerCount(config.jobrunr().workerThreads());
+            // useDashboard() MUST be called before useBackgroundJobServer() in JobRunr 8.x.
+            // Calling it after returns a terminal builder type that silently ignores the call.
+            boolean dashboardEnabled = config.jobrunr().dashboard().enabled()
+                    && !config.jobrunr().workerOnly();
+            var jrBuilder = JobRunr.configure()
                     .useStorageProvider(arcadeDbStorageProvider)
-                    .useJobActivator(activator)
-                    .useBackgroundJobServer();
-            if (config.jobrunr().dashboard().enabled()) {
+                    .useJobActivator(activator);
+            if (dashboardEnabled) {
                 int port = config.jobrunr().dashboard().port();
-                jrConfig = jrConfig.useDashboard(port);
-                log.info("JobRunr: dashboard enabled on :{}", port);
+                try {
+                    jrBuilder = jrBuilder.useDashboard(port);
+                    log.info("JobRunr: dashboard enabled on :{}", port);
+                } catch (Exception dashEx) {
+                    // Port already in use (stale Dali process); continue without dashboard.
+                    log.warn("JobRunr: dashboard port :{} already in use — starting without dashboard. " +
+                             "Kill the process holding the port or set DALI_JOBRUNR_DASHBOARD_PORT. Cause: {}",
+                             port, dashEx.getMessage());
+                }
+            } else if (config.jobrunr().workerOnly()) {
+                log.info("JobRunr: worker-only mode — dashboard suppressed");
             }
-            jobRunrResult = jrConfig.initialize();
+            jobRunrResult = jrBuilder.useBackgroundJobServer(bgServerConfig).initialize();
             log.info("JobRunr: ready — BackgroundJobServer started");
         } catch (Exception e) {
             log.error("JobRunr: initialisation FAILED — job scheduling is unavailable. " +

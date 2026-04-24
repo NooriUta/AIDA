@@ -1,5 +1,6 @@
 package studio.seer.dali.rest;
 
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
@@ -12,13 +13,13 @@ import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import studio.seer.dali.service.SessionService;
 import studio.seer.shared.ParseSessionInput;
+import studio.seer.tenantrouting.TenantContext;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -36,6 +37,7 @@ import java.util.stream.Stream;
  * {@link SessionService#enqueue} with {@code uploaded=true}.  {@link studio.seer.dali.job.ParseJob}
  * deletes the temp directory once the session completes or fails.
  */
+@RequestScoped
 @jakarta.ws.rs.Path("/api/sessions/upload")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
 public class FileUploadResource {
@@ -45,6 +47,7 @@ public class FileUploadResource {
     );
 
     @Inject SessionService sessionService;
+    @Inject TenantContext  tenantCtx;
 
     @POST
     @Produces(MediaType.APPLICATION_JSON)
@@ -52,7 +55,9 @@ public class FileUploadResource {
             @RestForm("file")             FileUpload file,
             @RestForm("dialect")          String     dialect,
             @RestForm("preview")          @DefaultValue("false") boolean preview,
-            @RestForm("clearBeforeWrite") @DefaultValue("true")  boolean clearBeforeWrite
+            @RestForm("clearBeforeWrite") @DefaultValue("true")  boolean clearBeforeWrite,
+            @RestForm("dbName")           @DefaultValue("")       String  dbName,
+            @RestForm("appName")          @DefaultValue("")       String  appName
     ) {
         if (file == null || file.fileName() == null || file.fileName().isBlank()) {
             return bad("file is required");
@@ -73,11 +78,9 @@ public class FileUploadResource {
                     + " — accepted: " + ALLOWED_EXTENSIONS);
         }
 
-        Path tempDir = Path.of(System.getProperty("java.io.tmpdir"),
-                "dali-upload-" + UUID.randomUUID());
-
+        Path tempDir = null;
         try {
-            Files.createDirectories(tempDir);
+            tempDir = Files.createTempDirectory("dali-upload-");
 
             if (isZip) {
                 UploadExtractor.extractZip(file.uploadedFile(), tempDir);
@@ -89,7 +92,11 @@ public class FileUploadResource {
             }
 
             ParseSessionInput input = new ParseSessionInput(
-                    dialect.strip(), tempDir.toString(), preview, clearBeforeWrite, true);
+                    dialect.strip(), tempDir.toString(), preview, clearBeforeWrite, true,
+                    null, null, null,
+                    dbName  != null && !dbName.isBlank()  ? dbName.strip()  : null,
+                    appName != null && !appName.isBlank() ? appName.strip() : null,
+                    tenantCtx.tenantAlias());
 
             try {
                 return Response.accepted(sessionService.enqueue(input)).build();

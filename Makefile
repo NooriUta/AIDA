@@ -1,4 +1,7 @@
-.PHONY: help dev dev-hybrid build test docker-up docker-down docker-build clean hound-run hound-batch demo-start demo-reset demo-snapshot
+.PHONY: help dev dev-hybrid build test docker-up docker-down docker-build clean hound-run hound-batch demo-start demo-reset demo-snapshot \
+  stable-up stable-down stable-restart stable-clean \
+  backend-up backend-down backend-build backend-restart \
+  up down restart all-up all-down all-rebuild ps logs logs-app logs-backend
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -65,3 +68,83 @@ clean: ## Clean all build artifacts
 	./gradlew clean
 	rm -rf bff/chur/node_modules frontends/verdandi/node_modules
 	rm -rf bff/chur/dist frontends/verdandi/dist frontends/verdandi/coverage
+
+# ── Layered Docker deployment ─────────────────────────────────────────────────
+# Three layers restart independently — never touch stable during normal deploys.
+#
+#   stable   — Keycloak · FRIGG · Ygg      (stateful infra, image-only)
+#   backend  — SHUTTLE · Dali · Heimdall   (Quarkus, rebuild on Java changes)
+#   app      — Chur · Verdandi · Heimdall-frontend · Shell · nginx  (fast redeploy)
+
+STABLE  := docker compose -f docker-compose.stable.yml
+BACKEND := docker compose -f docker-compose.backend.yml
+APP     := docker compose -f docker-compose.yml
+_ALL    := docker compose -f docker-compose.stable.yml -f docker-compose.backend.yml -f docker-compose.yml
+
+stable-up: ## Start infrastructure (Keycloak · FRIGG · Ygg)
+	$(STABLE) up -d
+
+stable-down: ## Stop infrastructure (data volumes preserved)
+	$(STABLE) down
+
+stable-restart: ## Restart infrastructure containers (no rebuild)
+	$(STABLE) restart
+
+stable-clean: ## ⚠ DANGER: stop infra and destroy ALL data volumes (KC · FRIGG · Ygg)
+	$(STABLE) down -v
+
+backend-up: ## Start backend services (SHUTTLE · Dali · Heimdall-backend)
+	$(BACKEND) up -d
+
+backend-down: ## Stop backend services
+	$(BACKEND) down
+
+backend-build: ## Build backend images (with layer cache)
+	$(BACKEND) build
+
+backend-restart: ## Rebuild backend from scratch and restart  ← use after Java/Quarkus changes
+	$(BACKEND) build --no-cache
+	$(BACKEND) up -d
+
+up: ## Start app layer (Chur · Verdandi · Heimdall-frontend · Shell · nginx)
+	$(APP) up -d
+
+down: ## Stop app layer
+	$(APP) down
+
+restart: ## ← MOST COMMON: rebuild app from scratch and restart  (use after Node/React changes)
+	$(APP) build --no-cache
+	$(APP) up -d
+
+all-up: ## Start all layers in order: stable → backend → app
+	$(STABLE) up -d
+	@echo "[make] Waiting for FRIGG, Ygg, Keycloak..."
+	@until $$(docker inspect --format='{{.State.Health.Status}}' aida-root-keycloak-1 2>/dev/null | grep -q healthy); do printf '.'; sleep 3; done; echo ""
+	$(BACKEND) up -d
+	$(APP) up -d
+
+all-down: ## Stop all layers gracefully (app → backend → stable)
+	-$(APP) down
+	-$(BACKEND) down
+	$(STABLE) down
+
+all-rebuild: ## Rebuild backend + app images and restart (stable untouched)
+	$(BACKEND) build --no-cache
+	$(APP) build --no-cache
+	$(BACKEND) up -d
+	$(APP) up -d
+
+ps: ## Show status of all containers across all layers
+	$(_ALL) ps
+
+logs: ## Follow logs from all containers (Ctrl-C to stop)
+	$(_ALL) logs -f
+
+logs-app: ## Follow logs from app layer only
+	$(APP) logs -f
+
+logs-backend: ## Follow logs from backend layer only
+	$(BACKEND) logs -f
+
+log-%: ## Follow logs for a specific service: make log-chur
+	$(_ALL) logs -f $*

@@ -5,6 +5,7 @@
 //   :services:shuttle         Quarkus 3 / Java 21   lineage GraphQL API        :8080
 //   :services:dali            Quarkus 3 / Java 21   ingestion & storage API    :9090
 //   :services:heimdall-backend Quarkus 3 / Java 21  team-docs / plan viewer    :9093
+//   :services:anvil           Quarkus 3 / Java 21   impact analysis engine     :9095
 //   :shared:dali-models       Java 21               shared model DTOs
 //
 // Node services (not Gradle subprojects — managed via tasks below):
@@ -20,6 +21,7 @@
 //   ./gradlew :services:shuttle:quarkusDev         SHUTTLE dev mode   :8080
 //   ./gradlew :services:dali:quarkusDev            Dali    dev mode   :9090
 //   ./gradlew :services:heimdall-backend:quarkusDev Heimdall dev mode :9093
+//   ./gradlew :services:anvil:quarkusDev           ANVIL    dev mode :9095
 //   ./gradlew :services:shuttle:build              SHUTTLE fat-jar
 //   ./gradlew :libraries:hound:build               Hound library build
 //   ./gradlew :libraries:hound:fatJar              Hound standalone JAR
@@ -167,11 +169,25 @@ task heimdallDev {
     }
 }
 
+// ─── anvil tasks ─────────────────────────────────────────────────────────────
+
+task anvilDev(type: GradleBuild) {
+    group       = 'anvil'
+    description = 'Start ANVIL impact engine in dev mode (Quarkus, :9095)'
+    tasks       = [':services:anvil:quarkusDev']
+}
+
+task anvilBuild(type: GradleBuild) {
+    group       = 'anvil'
+    description = 'Build ANVIL fat-jar'
+    tasks       = [':services:anvil:build']
+}
+
 // ─── devAll — start all services ─────────────────────────────────────────────
 
 task devAll {
     group       = 'Development'
-    description = 'Start all services: Shuttle (:8080) + Dali (:9090) + Heimdall (:9093/:5174) + Chur (:3000) + verdandi (:5173)'
+    description = 'Start all services: Shuttle (:8080) + Dali (:9090) + ANVIL (:9095) + Heimdall (:9093/:5174) + Chur (:3000) + verdandi (:5173)'
     dependsOn   churInstall, verdandiInstall, heimdallFrontendInstall
 
     doLast {
@@ -182,6 +198,9 @@ task devAll {
                 .start()
             new ProcessBuilder('cmd', '/c',
                 "start \"Dali\" /D \"${rootDir}\" \"${gradleCmd}\" :services:dali:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
+                "start \"Anvil\" /D \"${rootDir}\" \"${gradleCmd}\" :services:anvil:quarkusDev")
                 .start()
             new ProcessBuilder('cmd', '/c',
                 "start \"Heimdall-Backend\" /D \"${rootDir}\" \"${gradleCmd}\" :services:heimdall-backend:quarkusDev")
@@ -195,12 +214,14 @@ task devAll {
             new ProcessBuilder('cmd', '/c',
                 "start \"verdandi\" /D \"${verdandiDir}\" \"${npmCmd}\" run dev")
                 .start()
-            println '> Opened 6 windows: Shuttle (:8080) Dali (:9090) Heimdall-Backend (:9093) Heimdall-Frontend (:5174) Chur (:3000) verdandi (:5173)'
+            println '> Opened 7 windows: Shuttle (:8080) Dali (:9090) Anvil (:9095) Heimdall-Backend (:9093) Heimdall-Frontend (:5174) Chur (:3000) verdandi (:5173)'
         } else {
             // Unix/macOS — run all in parallel, inherit output to this terminal
             def shuttleProc = new ProcessBuilder(gradleCmd, ':services:shuttle:quarkusDev')
                 .directory(rootDir).inheritIO().start()
             def daliProc = new ProcessBuilder(gradleCmd, ':services:dali:quarkusDev')
+                .directory(rootDir).inheritIO().start()
+            def anvilProc = new ProcessBuilder(gradleCmd, ':services:anvil:quarkusDev')
                 .directory(rootDir).inheritIO().start()
             def heimdallBackProc = new ProcessBuilder(gradleCmd, ':services:heimdall-backend:quarkusDev')
                 .directory(rootDir).inheritIO().start()
@@ -213,12 +234,13 @@ task devAll {
             Runtime.runtime.addShutdownHook(new Thread({
                 shuttleProc.destroyForcibly()
                 daliProc.destroyForcibly()
+                anvilProc.destroyForcibly()
                 heimdallBackProc.destroyForcibly()
                 heimdallFrontProc.destroyForcibly()
                 churProc.destroyForcibly()
                 verdandiProc.destroyForcibly()
             }))
-            [shuttleProc, daliProc, heimdallBackProc, heimdallFrontProc, churProc, verdandiProc]*.waitFor()
+            [shuttleProc, daliProc, anvilProc, heimdallBackProc, heimdallFrontProc, churProc, verdandiProc]*.waitFor()
         }
     }
 }

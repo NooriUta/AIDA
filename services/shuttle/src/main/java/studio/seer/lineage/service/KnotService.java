@@ -5,6 +5,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.*;
+import studio.seer.tenantrouting.YggLineageRegistry;
+import studio.seer.tenantrouting.YggSourceArchiveRegistry;
+import studio.seer.lineage.security.SeerIdentity;
 
 import java.util.*;
 
@@ -59,8 +62,18 @@ import java.util.*;
 @ApplicationScoped
 public class KnotService {
 
-    @Inject
-    ArcadeGateway arcade;
+    @Inject ArcadeGateway           arcade;
+    @Inject SeerIdentity            identity;
+    @Inject YggLineageRegistry      lineageRegistry;
+    @Inject YggSourceArchiveRegistry sourceArchiveRegistry;
+
+    String lineageDb() {
+        return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
+
+    String sourceArchiveDb() {
+        return sourceArchiveRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
 
     // ── Session list ──────────────────────────────────────────────────────────
 
@@ -77,7 +90,7 @@ public class KnotService {
             ORDER BY file_path
             """;
 
-        return arcade.sql(sql).map(rows -> rows.stream()
+        return arcade.sqlIn(lineageDb(), sql, Map.of()).map(rows -> rows.stream()
             .map(r -> {
                 String filePath    = str(r, "file_path");
                 String sessionName = deriveName(str(r, "session_name"), filePath);
@@ -171,10 +184,10 @@ public class KnotService {
 
         return Uni.combine().all()
             .unis(
-                arcade.sql(sqlMeta, params).onFailure().recoverWithItem(List.of()),
-                arcade.sql(sqlRoutineCount, params).onFailure().recoverWithItem(List.of()),
-                arcade.sql(sqlStmtGeoids, params).onFailure().recoverWithItem(List.of()),
-                arcade.sql(sqlAtoms, params).onFailure().recoverWithItem(List.of())
+                arcade.sqlIn(lineageDb(), sqlMeta, params).onFailure().recoverWithItem(List.of()),
+                arcade.sqlIn(lineageDb(), sqlRoutineCount, params).onFailure().recoverWithItem(List.of()),
+                arcade.sqlIn(lineageDb(), sqlStmtGeoids, params).onFailure().recoverWithItem(List.of()),
+                arcade.sqlIn(lineageDb(), sqlAtoms, params).onFailure().recoverWithItem(List.of())
             )
             .asTuple()
             .map(t -> {
@@ -270,8 +283,8 @@ public class KnotService {
 
         return Uni.combine().all()
             .unis(
-                arcade.cypher(cypherMain,   params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(cypherCounts, params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(), cypherMain,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherCounts, params).onFailure().recoverWithItem(List.of())
             )
             .asTuple()
             .map(t -> buildTables(t.getItem1(), t.getItem2()));
@@ -355,9 +368,9 @@ public class KnotService {
 
         return Uni.combine().all()
             .unis(
-                arcade.sql(sqlCols,    tgParams).onFailure().recoverWithItem(List.of()),
-                arcade.sql(sqlTable,   tgParams).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(cypherStmt, params).onFailure().recoverWithItem(List.of())
+                arcade.sqlIn(lineageDb(), sqlCols,  tgParams).onFailure().recoverWithItem(List.of()),
+                arcade.sqlIn(lineageDb(), sqlTable, tgParams).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherStmt, params).onFailure().recoverWithItem(List.of())
             )
             .asTuple()
             .chain(t -> {
@@ -398,7 +411,7 @@ public class KnotService {
                     WHERE session_id = :sid AND stmt_geoid = :sg
                     LIMIT 1
                     """;
-                return arcade.sql(sqlSnip, Map.of("sid", sessionId, "sg", stmtGeoid))
+                return arcade.sqlIn(lineageDb(), sqlSnip, Map.of("sid", sessionId, "sg", stmtGeoid))
                     .onFailure().recoverWithItem(List.of())
                     .map(snipRows -> {
                         String snippet = snipRows.isEmpty()
@@ -429,7 +442,7 @@ public class KnotService {
             ORDER BY routineName, edgeType
             LIMIT 100
             """;
-        return arcade.cypher(cypher, params)
+        return arcade.cypherIn(lineageDb(), cypher, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> new KnotTableUsage(
@@ -461,7 +474,7 @@ public class KnotService {
             ORDER BY routineName, stmtType
             LIMIT 50
             """;
-        return arcade.cypher(cypher, params)
+        return arcade.cypherIn(lineageDb(), cypher, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> new KnotColumnUsage(
@@ -540,10 +553,10 @@ public class KnotService {
 
         return Uni.combine().all()
             .unis(
-                arcade.cypher(cypherStmts,   params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(cypherTables,  params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(cypherStmtSrc, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(cypherEdges,   params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(), cypherStmts,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherTables,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherStmtSrc, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherEdges,   params).onFailure().recoverWithItem(List.of())
             )
             .asTuple()
             .map(t -> buildStatementTree(t.getItem1(), t.getItem2(), t.getItem3(), t.getItem4()));
@@ -690,7 +703,7 @@ public class KnotService {
         Map<String, Object> params = isRid
             ? Map.of("rid",   idOrGeoid)
             : Map.of("geoid", idOrGeoid);
-        return arcade.sql(sql, params)
+        return arcade.sqlIn(lineageDb(), sql, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.isEmpty() ? null : str(rows.get(0), "snippet"))
             .map(s -> (s == null || s.isBlank()) ? null : s);
@@ -711,7 +724,7 @@ public class KnotService {
             WHERE session_id = :sid
             LIMIT 1
             """;
-        return arcade.sql(sql, Map.of("sid", sessionId))
+        return arcade.sqlIn(lineageDb(), sql, Map.of("sid", sessionId))
                 .onFailure().recoverWithItem(List.of())
                 .map(rows -> {
                     if (rows.isEmpty()) return null;
@@ -721,6 +734,50 @@ public class KnotService {
                             str(r, "script"),
                             num(r, "line_count"),
                             num(r, "char_count")
+                    );
+                });
+    }
+
+    // ── Full source file from source archive (hound_src_{tenant}) ────────────
+    //
+    // Returns the complete, unprocessed SQL document stored by Dali during parse.
+    // Unlike DaliSnippetScript (fragments in lineage DB), DaliSourceFile contains
+    // the original full file text. Accessed by session_id in hound_src_{tenant}.
+
+    public Uni<KnotSourceFile> knotSourceFile(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return Uni.createFrom().nullItem();
+
+        // Step 1: resolve file_path from lineage DB (DaliSession.session_id → file_path).
+        // Step 2: look up DaliSourceFile by file_path in archive DB (hound_src_{tenant}).
+        // This bridges Hound session_id ("session-{ts}") to Dali archive (stored by file_path).
+        String lineageSql = "SELECT file_path FROM DaliSession WHERE session_id = :sid LIMIT 1";
+
+        return arcade.sqlIn(lineageDb(), lineageSql, Map.of("sid", sessionId))
+                .onFailure().recoverWithItem(List.of())
+                .flatMap(rows -> {
+                    if (rows.isEmpty()) return Uni.createFrom().nullItem();
+                    String fp = str(rows.get(0), "file_path");
+                    if (fp == null || fp.isBlank()) return Uni.createFrom().nullItem();
+
+                    String archiveSql = """
+                        SELECT session_id, file_path, sql_text, size_bytes, sql_text_hash
+                        FROM DaliSourceFile
+                        WHERE file_path = :fp
+                        ORDER BY @rid DESC
+                        LIMIT 1
+                        """;
+                    return arcade.sqlIn(sourceArchiveDb(), archiveSql, Map.of("fp", fp));
+                })
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> {
+                    if (rows.isEmpty()) return null;
+                    var r = rows.get(0);
+                    return new KnotSourceFile(
+                            str(r, "session_id"),
+                            str(r, "file_path"),
+                            str(r, "sql_text"),
+                            r.get("size_bytes") != null ? ((Number) r.get("size_bytes")).longValue() : 0L,
+                            str(r, "sql_text_hash")
                     );
                 });
     }
@@ -791,7 +848,7 @@ public class KnotService {
             ? Map.of("rid",   idOrGeoid)
             : Map.of("geoid", idOrGeoid);
 
-        Uni<List<SubqueryInfo>> descendantsUni = arcade.sql(descendantSql, params)
+        Uni<List<SubqueryInfo>> descendantsUni = arcade.sqlIn(lineageDb(), descendantSql, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> new SubqueryInfo(
@@ -801,7 +858,7 @@ public class KnotService {
                     str(r, "parentStmtGeoid")))
                 .toList());
 
-        Uni<List<AtomContextCount>> atomsUni = arcade.sql(atomSql, params)
+        Uni<List<AtomContextCount>> atomsUni = arcade.sqlIn(lineageDb(), atomSql, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> {
@@ -822,7 +879,7 @@ public class KnotService {
         // is fiddly, so we first resolve the stmt_geoid via SQL if input is a RID.
 
         Uni<String> geoidUni = isRid
-            ? arcade.sql(
+            ? arcade.sqlIn(lineageDb(),
                 "SELECT stmt_geoid FROM DaliStatement WHERE @rid = :rid LIMIT 1",
                 Map.of("rid", idOrGeoid))
                 .onFailure().recoverWithItem(List.of())
@@ -834,7 +891,7 @@ public class KnotService {
 
             // Direct reads of the root stmt itself — Cypher keeps it clean.
             // id(t) in ArcadeDB Cypher returns the '#cluster:pos' string.
-            Uni<List<SourceTableRef>> directUni = arcade.cypher("""
+            Uni<List<SourceTableRef>> directUni = arcade.cypherIn(lineageDb(), """
                     MATCH (s:DaliStatement {stmt_geoid: $geoid})-[:READS_FROM]->(t:DaliTable)
                     RETURN DISTINCT id(t)         AS tblRid,
                                     t.table_geoid  AS tableGeoid,
@@ -856,7 +913,7 @@ public class KnotService {
             // Hoisted reads — descendant reads a table via CHILD_OF* chain.
             // sub→root via CHILD_OF*1..30 (child→parent direction), then
             // sub-[:READS_FROM]->table. Returns which sub attributed the read.
-            Uni<List<SourceTableRef>> hoistedUni = arcade.cypher("""
+            Uni<List<SourceTableRef>> hoistedUni = arcade.cypherIn(lineageDb(), """
                     MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root:DaliStatement {stmt_geoid: $geoid})
                     MATCH (sub)-[:READS_FROM]->(t:DaliTable)
                     RETURN DISTINCT id(t)          AS tblRid,
@@ -920,7 +977,7 @@ public class KnotService {
             LIMIT 50000
             """;
 
-        return arcade.sql(sql, params)
+        return arcade.sqlIn(lineageDb(), sql, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> new KnotSnippet(str(r, "stmt_geoid"), str(r, "snippet")))
@@ -970,7 +1027,7 @@ public class KnotService {
             LIMIT 5000
             """; // ORDER BY removed — Java re-sorts by stmtGeoid+atomLine+atomPos below
 
-        return arcade.cypher(cypher, params)
+        return arcade.cypherIn(lineageDb(), cypher, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> {
@@ -1025,7 +1082,7 @@ public class KnotService {
             LIMIT 5000
             """;
 
-        return arcade.cypher(cypher, params)
+        return arcade.cypherIn(lineageDb(), cypher, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> new KnotCall(
@@ -1062,7 +1119,7 @@ public class KnotService {
             LIMIT 5000
             """;
 
-        return arcade.cypher(cypher, params)
+        return arcade.cypherIn(lineageDb(), cypher, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> {
@@ -1110,7 +1167,7 @@ public class KnotService {
             LIMIT 5000
             """;
 
-        return arcade.cypher(cypher, params)
+        return arcade.cypherIn(lineageDb(), cypher, params)
             .onFailure().recoverWithItem(List.of())
             .map(rows -> rows.stream()
                 .map(r -> new KnotAffectedColumn(
@@ -1158,9 +1215,9 @@ public class KnotService {
 
         return Uni.combine().all()
             .unis(
-                arcade.cypher(cypherRoutines, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(cypherParams,   params).onFailure().recoverWithItem(List.of()),
-                arcade.cypher(cypherVars,     params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(), cypherRoutines, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherParams,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherVars,     params).onFailure().recoverWithItem(List.of())
             )
             .asTuple()
             .map(t -> {

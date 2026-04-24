@@ -28,8 +28,12 @@ import studio.seer.dali.service.SessionService;
 import studio.seer.shared.FileResult;
 import studio.seer.shared.ParseSessionInput;
 import studio.seer.shared.VertexTypeStat;
+import studio.seer.tenantrouting.YggLineageRegistry;
+
+import studio.seer.dali.archive.SourceArchiveWriter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -65,14 +69,16 @@ public class ParseJob {
             ".sql", ".pck", ".prc", ".pkb", ".pks", ".fnc", ".trg", ".vw"
     );
 
-    @Inject HoundParser          houndParser;
-    @Inject SessionService       sessionService;
-    @Inject HeimdallEmitter      emitter;
-    @Inject SkadiFetcherRegistry skadiFetcherRegistry;
-    @Inject SourceArchiveService sourceArchiveService;
+    @Inject HoundParser            houndParser;
+    @Inject SessionService         sessionService;
+    @Inject HeimdallEmitter        emitter;
+    @Inject SkadiFetcherRegistry   skadiFetcherRegistry;
+    @Inject SourceArchiveService   sourceArchiveService;
+    @Inject YggLineageRegistry     yggLineageRegistry;
+    @Inject TenantParseSerializer  tenantSerializer;
+    @Inject SourceArchiveWriter    archiveWriter;
 
     @ConfigProperty(name = "ygg.url")      String yggUrl;
-    @ConfigProperty(name = "ygg.db")       String yggDb;
     @ConfigProperty(name = "ygg.user")     String yggUser;
     @ConfigProperty(name = "ygg.password") String yggPassword;
     // Optional — absent when HEIMDALL_URL env var is not set (e.g. CI, local dev without Heimdall).
@@ -87,14 +93,35 @@ public class ParseJob {
 
         long startMs = System.currentTimeMillis();
 
+        // Non-preview jobs are serialized per tenant: at most 1 parse runs at a time
+        // per tenant; a second job waits until the first finishes (no rejection).
+        String lockAlias = (!input.preview() && input.tenantAlias() != null && !input.tenantAlias().isBlank())
+                ? input.tenantAlias() : null;
+        if (lockAlias != null) {
+            try {
+                tenantSerializer.acquire(lockAlias);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                sessionService.failSession(sessionId, "Interrupted while waiting for parse slot");
+                return;
+            }
+        }
+
+        // Archive: open session record (preview sessions are also archived for observability)
+        boolean isBatch = !src.startsWith("jdbc:") && Files.isDirectory(Path.of(src));
+        if (!input.preview()) archiveWriter.openSession(sessionId, input, isBatch, startMs);
+
         try {
             HoundConfig config = buildConfig(input);
+            log.info("[ParseJob] sid={} preview={} writeMode={} clear={}",
+                    sessionId, input.preview(), config.writeMode(), input.clearBeforeWrite());
             emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(),
                     input.clearBeforeWrite(), config.workerThreads());
 
-            // Optional YGG cleanup before first write
+            // hound_src is a permanent archive — clearBeforeWrite NEVER clears it.
+            // Only the lineage graph hound_{tenant} is truncated here.
             if (!input.preview() && input.clearBeforeWrite()) {
-                log.info("[{}] clearBeforeWrite=true — truncating YGG...", sessionId);
+                log.info("[{}] clearBeforeWrite=true — truncating YGG lineage (hound_src untouched)...", sessionId);
                 houndParser.cleanAll(config);
                 log.info("[{}] YGG truncated", sessionId);
             }
@@ -112,7 +139,7 @@ public class ParseJob {
             if (Files.isDirectory(sourcePath)) {
                 runBatch(sessionId, sourcePath, config, input);
             } else {
-                runSingle(sessionId, sourcePath, config);
+                runSingle(sessionId, sourcePath, config, input);
             }
 
         } catch (Exception e) {
@@ -120,8 +147,13 @@ public class ParseJob {
             String errorMsg = buildErrorMessage(e);
             sessionService.failSession(sessionId, errorMsg);
             emitter.sessionFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs);
+            if (!input.preview()) {
+                archiveWriter.failSession(sessionId, input, System.currentTimeMillis(), System.currentTimeMillis() - startMs);
+                archiveWriter.writeErrors(sessionId, input, null, src, List.of(errorMsg), "SESSION_ERROR");
+            }
             throw new RuntimeException("ParseJob failed for session " + sessionId, e);
         } finally {
+            if (lockAlias != null) tenantSerializer.release(lockAlias);
             if (input.uploaded()) {
                 deleteTempDir(Path.of(src));
             }
@@ -134,27 +166,47 @@ public class ParseJob {
         if (input.preview()) {
             return HoundConfig.defaultDisabled(input.dialect());
         }
+        // MTN-04: fail-fast on missing tenantAlias — no silent "default" fallback.
+        // Every ParseSessionInput MUST carry alias resolved from JWT/header at
+        // session-create time. If this fires, the dispatcher forgot to inject it.
+        String tenantAlias = requireTenantAlias(input, "buildConfig");
+        String lineageDb = yggLineageRegistry.resourceFor(tenantAlias).databaseName();
         return new HoundConfig(
                 input.dialect(),
                 null,                           // targetSchema — no namespace isolation
                 ArcadeWriteMode.REMOTE_BATCH,
-                yggUrl, yggDb, yggUser, yggPassword,
+                yggUrl, lineageDb, yggUser, yggPassword,
                 Runtime.getRuntime().availableProcessors(),
                 false, 5000, null);
     }
 
     // ── Single file ────────────────────────────────────────────────────────────
 
-    private void runSingle(String sessionId, Path file, HoundConfig config) {
+    private void runSingle(String sessionId, Path file, HoundConfig config, ParseSessionInput input) {
         sessionService.startSession(sessionId, false, 1);
+        long fileStart = System.currentTimeMillis();
 
         HoundEventListener listener = buildListener(sessionId, config);
-        ParseResult result = houndParser.parse(file, config, listener);
+        ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
+                ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
+                : houndParser.parse(file, config, listener);
 
         FileResult fr = toFileResult(result);
         sessionService.completeSession(sessionId, result, List.of(fr));
         emitter.sessionCompleted(sessionId, result.atomCount(), result.resolutionRate(),
                 result.durationMs(), 1);
+
+        if (!input.preview()) {
+            String sqlText = readSilently(file);
+            long   stop    = System.currentTimeMillis();
+            String fid     = archiveWriter.writeFile(sessionId, input, file.toString(), sqlText,
+                    "file", file.getFileName().toString(), null,
+                    fileStart, stop, result.durationMs(), fr.success());
+            archiveWriter.writeFileErrors(sessionId, input, fid, fr);
+            archiveWriter.closeSession(sessionId, input, stop, 1,
+                    fr.success() ? 1 : 0, fr.errors().size(),
+                    result.durationMs(), result.atomCount(), result.resolutionRate());
+        }
     }
 
     // ── JDBC source (SKADI harvest) ───────────────────────────────────────────
@@ -194,8 +246,9 @@ public class ParseJob {
         SkadiFetchResult fetchResult = fetcher.fetchScripts(skConfig);
         fetchListener.onFetchCompleted(fetchResult.stats());
 
-        // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup)
-        List<SqlSource> sources = sourceArchiveService.upsertAll(fetchResult.files());
+        // 4 — convert to SqlSource.FromText (MVP: all files; full: hash-dedup against hound_src_{alias})
+        String tenantAlias = requireTenantAlias(input, "runJdbc/sourceArchive");
+        List<SqlSource> sources = sourceArchiveService.upsertAll(tenantAlias, fetchResult.files());
 
         if (sources.isEmpty()) {
             log.info("[{}] SKADI: no SQL sources to parse (adapter={}, fetched={})",
@@ -226,6 +279,25 @@ public class ParseJob {
         sessionService.completeSession(sessionId, merged, fileResults);
         emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
+
+        if (!input.preview()) {
+            long stop = System.currentTimeMillis();
+            // Archive each SKADI source file — sql text is already in memory
+            for (int i = 0; i < fetchResult.files().size() && i < fileResults.size(); i++) {
+                com.skadi.SkadiFetchedFile sf = fetchResult.files().get(i);
+                FileResult fr = fileResults.get(i);
+                String fid = archiveWriter.writeFile(sessionId, input,
+                        sf.suggestedFilename(), sf.sqlText(),
+                        fetcher.adapterName(), sf.name(), skConfig.schema(),
+                        stop - fr.durationMs(), stop, fr.durationMs(), fr.success());
+                archiveWriter.writeFileErrors(sessionId, input, fid, fr);
+            }
+            int successCount = (int) fileResults.stream().filter(FileResult::success).count();
+            int errorCount   = (int) fileResults.stream().filter(f -> !f.errors().isEmpty()).count();
+            archiveWriter.closeSession(sessionId, input, stop,
+                    fileResults.size(), successCount, errorCount,
+                    merged.durationMs(), merged.atomCount(), merged.resolutionRate());
+        }
     }
 
     // ── Batch (directory) ─────────────────────────────────────────────────────
@@ -251,7 +323,8 @@ public class ParseJob {
         // Per-file retry absorbs transient ArcadeDB MVCC conflicts without aborting the entire
         // batch — a single file failure no longer cascades into a full session retry (JobRunr).
         for (Path file : files) {
-            FileResult fr = parseFileWithRetry(sessionId, file, config);
+            long   fileStart = System.currentTimeMillis();
+            FileResult fr = parseFileWithRetry(sessionId, file, config, input);
             fileResults.add(fr);
             sessionService.recordFileComplete(sessionId, fr);
             if (fr.success()) {
@@ -261,12 +334,27 @@ public class ParseJob {
                 log.warn("[{}] File permanently failed (skipped): {}",
                         sessionId, file.getFileName());
             }
+            if (!input.preview()) {
+                String sqlText = readSilently(file);
+                String fid = archiveWriter.writeFile(sessionId, input, file.toString(), sqlText,
+                        "file", file.getFileName().toString(), null,
+                        fileStart, System.currentTimeMillis(), fr.durationMs(), fr.success());
+                archiveWriter.writeFileErrors(sessionId, input, fid, fr);
+            }
         }
 
         ParseResult merged = merge(input.source(), fileResults);
         sessionService.completeSession(sessionId, merged, fileResults);
         emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
+
+        if (!input.preview()) {
+            int successCount = (int) fileResults.stream().filter(FileResult::success).count();
+            int errorCount   = (int) fileResults.stream().filter(f -> !f.errors().isEmpty()).count();
+            archiveWriter.closeSession(sessionId, input, System.currentTimeMillis(),
+                    fileResults.size(), successCount, errorCount,
+                    merged.durationMs(), merged.atomCount(), merged.resolutionRate());
+        }
     }
 
     /**
@@ -279,12 +367,15 @@ public class ParseJob {
      * <p>On permanent failure the file is recorded as {@code success=false} in the batch
      * result, but processing continues for the remaining files.
      */
-    private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config) {
+    private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config,
+                                          ParseSessionInput input) {
         Exception lastEx = null;
         for (int attempt = 1; attempt <= FILE_MAX_RETRIES; attempt++) {
             try {
                 HoundEventListener listener = buildListener(sessionId, config);
-                ParseResult result = houndParser.parse(file, config, listener);
+                ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
+                        ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
+                        : houndParser.parse(file, config, listener);
                 if (attempt > 1) {
                     log.info("[{}] File recovered on attempt {}/{}: {}",
                             sessionId, attempt, FILE_MAX_RETRIES, file.getFileName());
@@ -435,5 +526,30 @@ public class ParseJob {
 
         return new ParseResult(source, atoms, vertices, edges, droppedEdges,
                 aggMap, rate, atomsResolved, atomsUnresolved, warnings, errors, duration);
+    }
+
+    private static String readSilently(Path file) {
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.warn("[SourceArchive] could not read file content for archiving: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * MTN-04: Extracts and validates the tenant alias from a ParseSessionInput.
+     * Throws IllegalStateException if missing — this is a deliberate fail-fast:
+     * any path reaching here without alias is a bug in the dispatcher that must
+     * be fixed upstream (no silent routing to "default").
+     */
+    private static String requireTenantAlias(ParseSessionInput input, String context) {
+        String alias = input.tenantAlias();
+        if (alias == null || alias.isBlank()) {
+            throw new IllegalStateException(
+                    "MTN-04 [" + context + "]: ParseSessionInput.tenantAlias is required " +
+                    "(refusing to default). TenantAwareJobDispatcher must inject alias at enqueue time.");
+        }
+        return alias;
     }
 }

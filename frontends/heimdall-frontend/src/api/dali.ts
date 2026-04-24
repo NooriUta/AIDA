@@ -1,5 +1,9 @@
 const BASE = '/dali'; // proxied by Vite dev server → http://localhost:9090
 
+function th(tenantAlias?: string): HeadersInit {
+  return tenantAlias ? { 'X-Seer-Tenant-Alias': tenantAlias } : {};
+}
+
 export type DaliDialect = 'plsql' | 'postgresql' | 'clickhouse';
 export type SessionStatus = 'QUEUED' | 'RUNNING' | 'CANCELLING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
@@ -9,6 +13,10 @@ export interface ParseSessionInput {
   preview: boolean;
   /** If true, all Dali YGG data is truncated before this session writes. Default: true. */
   clearBeforeWrite: boolean;
+  /** Database name — when set, Hound creates a DaliDatabase vertex + CONTAINS_SCHEMA edges. */
+  dbName?: string;
+  /** Optional application name for BELONGS_TO_APP grouping. */
+  appName?: string;
 }
 
 export interface VertexTypeStat {
@@ -59,6 +67,10 @@ export interface DaliSession {
   friggPersisted: boolean;
   /** Dali instance tag — null/undefined for untagged (single-instance) sessions. */
   instanceId: string | null;
+  /** Database name supplied at session creation — null/undefined for ad-hoc sessions. */
+  dbName?: string | null;
+  /** Tenant alias stored by the server at session creation time. "default" for single-tenant. */
+  tenantAlias: string;
 }
 
 export interface DaliHealth {
@@ -71,13 +83,18 @@ export async function uploadAndParse(
   dialect: DaliDialect,
   preview: boolean,
   clearBeforeWrite: boolean,
+  dbName?: string,
+  appName?: string,
+  tenantAlias?: string,
 ): Promise<DaliSession> {
   const form = new FormData();
   form.append('file', file);
   form.append('dialect', dialect);
   form.append('preview', String(preview));
   form.append('clearBeforeWrite', String(clearBeforeWrite));
-  const res = await fetch(`${BASE}/api/sessions/upload`, { method: 'POST', body: form });
+  if (dbName)  form.append('dbName',  dbName);
+  if (appName) form.append('appName', appName);
+  const res = await fetch(`${BASE}/api/sessions/upload`, { method: 'POST', headers: th(tenantAlias), body: form });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
@@ -85,10 +102,10 @@ export async function uploadAndParse(
   return res.json();
 }
 
-export async function postSession(input: ParseSessionInput): Promise<DaliSession> {
+export async function postSession(input: ParseSessionInput, tenantAlias?: string): Promise<DaliSession> {
   const res = await fetch(`${BASE}/api/sessions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...th(tenantAlias) },
     body: JSON.stringify(input),
   });
   if (!res.ok) {
@@ -98,27 +115,31 @@ export async function postSession(input: ParseSessionInput): Promise<DaliSession
   return res.json();
 }
 
-export async function getSession(id: string, signal?: AbortSignal): Promise<DaliSession> {
-  const res = await fetch(`${BASE}/api/sessions/${id}`, { signal });
+export async function getSession(id: string, signal?: AbortSignal, tenantAlias?: string): Promise<DaliSession> {
+  const res = await fetch(`${BASE}/api/sessions/${id}`, { signal, headers: th(tenantAlias) });
   if (!res.ok) throw new Error(`Session ${id} not found`);
   return res.json();
 }
 
-export async function getSessions(limit = 50): Promise<DaliSession[]> {
-  const res = await fetch(`${BASE}/api/sessions?limit=${limit}`);
+export async function getSessions(limit = 50, tenantAlias?: string, allTenants = false): Promise<DaliSession[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (allTenants) params.set('allTenants', 'true');
+  const res = await fetch(`${BASE}/api/sessions?${params}`, { headers: th(tenantAlias) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-export async function getDaliHealth(): Promise<DaliHealth> {
-  const res = await fetch(`${BASE}/api/sessions/health`);
+export async function getDaliHealth(tenantAlias?: string): Promise<DaliHealth> {
+  const res = await fetch(`${BASE}/api/sessions/health`, { headers: th(tenantAlias) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
 /** Returns sessions stored in FRIGG (the authoritative archive), bypassing in-memory cache. */
-export async function getSessionsArchive(limit = 200): Promise<DaliSession[]> {
-  const res = await fetch(`${BASE}/api/sessions/archive?limit=${limit}`);
+export async function getSessionsArchive(limit = 200, tenantAlias?: string, allTenants = false): Promise<DaliSession[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (allTenants) params.set('allTenants', 'true');
+  const res = await fetch(`${BASE}/api/sessions/archive?${params}`, { headers: th(tenantAlias) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -136,13 +157,37 @@ export interface YggStats {
   atomsPending:    number;
 }
 
-export async function cancelSession(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/sessions/${id}/cancel`, { method: 'POST' });
+export async function cancelSession(id: string, tenantAlias?: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/sessions/${id}/cancel`, { method: 'POST', headers: th(tenantAlias) });
   if (!res.ok && res.status !== 409) throw new Error(`HTTP ${res.status}`);
 }
 
-export async function getYggStats(): Promise<YggStats> {
-  const res = await fetch(`${BASE}/api/stats`);
+export async function getYggStats(tenantAlias?: string): Promise<YggStats> {
+  const res = await fetch(`${BASE}/api/stats`, { headers: th(tenantAlias) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── JobRunr stats ─────────────────────────────────────────────────────────────
+
+export interface JobRunrStats {
+  enqueued:   number;
+  processing: number;
+  failed:     number;
+  succeeded:  number;
+  scheduled:  number;
+}
+
+/** GET /api/jobs/stats — live JobRunr queue counters from FRIGG jobrunr_jobs table. */
+export async function getJobRunrStats(): Promise<JobRunrStats> {
+  const res = await fetch(`${BASE}/api/jobs/stats`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/** POST /api/jobs/reset-stuck — reset all PROCESSING jobs to FAILED (operator action). */
+export async function resetStuckJobs(): Promise<{ reset: string; processing: number; failed: number }> {
+  const res = await fetch(`${BASE}/api/jobs/reset-stuck`, { method: 'POST' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -180,16 +225,16 @@ export interface TestConnectionResult {
   error?: string;
 }
 
-export async function getSources(): Promise<DaliSource[]> {
-  const res = await fetch(`${BASE}/api/sources`);
+export async function getSources(tenantAlias?: string): Promise<DaliSource[]> {
+  const res = await fetch(`${BASE}/api/sources`, { headers: th(tenantAlias) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-export async function createSource(input: CreateSourceInput): Promise<DaliSource> {
+export async function createSource(input: CreateSourceInput, tenantAlias?: string): Promise<DaliSource> {
   const res = await fetch(`${BASE}/api/sources`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...th(tenantAlias) },
     body: JSON.stringify(input),
   });
   if (!res.ok) {
@@ -199,10 +244,10 @@ export async function createSource(input: CreateSourceInput): Promise<DaliSource
   return res.json();
 }
 
-export async function updateSource(id: string, input: Partial<CreateSourceInput>): Promise<DaliSource> {
+export async function updateSource(id: string, input: Partial<CreateSourceInput>, tenantAlias?: string): Promise<DaliSource> {
   const res = await fetch(`${BASE}/api/sources/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...th(tenantAlias) },
     body: JSON.stringify(input),
   });
   if (!res.ok) {
@@ -212,8 +257,8 @@ export async function updateSource(id: string, input: Partial<CreateSourceInput>
   return res.json();
 }
 
-export async function deleteSource(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/sources/${id}`, { method: 'DELETE' });
+export async function deleteSource(id: string, tenantAlias?: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/sources/${id}`, { method: 'DELETE', headers: th(tenantAlias) });
   if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
 }
 

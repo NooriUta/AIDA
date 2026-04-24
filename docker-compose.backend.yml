@@ -1,0 +1,103 @@
+###############################################################################
+# AIDA — BACKEND (partStable) layer
+#
+# Services: SHUTTLE (GraphQL) · Dali (PL/SQL parser) · Heimdall-backend
+#
+# Requires stable layer running first:  make stable-up
+#
+# Lifecycle:  restart when business logic changes (Quarkus services).
+#             Slower to build — rebuild only when Java/Quarkus sources change.
+# Restart:    make backend-restart
+# Rebuild:    make backend-build
+#
+# Network aida_net is created by docker-compose.stable.yml (external here).
+###############################################################################
+
+networks:
+  default:
+    name: aida_net
+    external: true
+
+services:
+  # ── SHUTTLE (Quarkus GraphQL API) ──────────────────────────────────────────
+  shuttle:
+    build:
+      context: .
+      dockerfile: services/shuttle/Dockerfile
+    environment:
+      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://ygg:2480}
+      ARCADE_DB:       ${ARCADEDB_DB:-hound}
+      ARCADE_USER:     ${ARCADEDB_USER:-root}
+      ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
+      HEIMDALL_URL:    http://heimdall-backend:9093
+      DALI_URL:        http://dali:9090
+      # FriggYggLineageRegistry — tenant→DB routing (multi-tenant mode)
+      # Without these, registry falls back to localhost defaults → no data in Docker
+      FRIGG_URL:       http://frigg:2480
+      YGG_URL:         http://ygg:2480
+    ports:
+      - "18080:8080"
+    # ygg lives in stable layer — no depends_on cross-file.
+    # Startup order enforced by Makefile: stable-up → backend-up.
+    # Service retries handle timing if stable isn't fully up yet.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/graphql/schema.graphql || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ── Dali (async PL/SQL parse service) ────────────────────────────────────
+  # ВАЖНО: context = . (монорепо root) — зависит от libraries:hound и shared:dali-models.
+  dali:
+    build:
+      context: .
+      dockerfile: services/dali/Dockerfile
+    ports:
+      - "19090:9090"
+      - "127.0.0.1:29091:29091"
+    environment:
+      QUARKUS_HTTP_PORT: "9090"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:13000,http://localhost:5174,http://localhost:5175,http://localhost:25174,https://localhost"
+      FRIGG_URL:      http://frigg:2480
+      FRIGG_DB:       dali
+      FRIGG_USER:     root
+      FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
+      HEIMDALL_URL:   http://heimdall-backend:9093
+      YGG_URL:        http://ygg:2480
+      COMPOSE_PROJECT_NAME: aida-root
+      DALI_SESSION_RETENTION_DAYS: ${DALI_SESSION_RETENTION_DAYS:-30}
+      DALI_INSTANCE_ID: ${DALI_INSTANCE_ID:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/q/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ── Heimdall-backend (admin observability) ─────────────────────────────────
+  # ВАЖНО: context = . (монорепо root) — зависит от shared/dali-models/.
+  heimdall-backend:
+    build:
+      context: .
+      dockerfile: services/heimdall-backend/Dockerfile
+    ports:
+      - "19093:9093"
+    environment:
+      QUARKUS_HTTP_PORT: "9093"
+      QUARKUS_REST_CLIENT_FRIGG_API_URL: http://frigg:2480
+      FRIGG_DB:       heimdall
+      FRIGG_USER:     root
+      FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
+      COMPOSE_PROJECT_NAME: aida-root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docs:/docs:ro
+      - C:/AIDA/docs:/team-docs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/q/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s

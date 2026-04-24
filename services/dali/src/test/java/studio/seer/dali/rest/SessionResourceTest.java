@@ -14,6 +14,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import io.restassured.specification.RequestSpecification;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
@@ -51,6 +53,10 @@ class SessionResourceTest {
     @Inject
     SessionRepository repository;
 
+    private static RequestSpecification withTenant() {
+        return given().header("X-Seer-Tenant-Alias", "default");
+    }
+
     /** BUG-SS-025: clean up FRIGG after each test to prevent cross-run accumulation. */
     @AfterEach
     void cleanup() {
@@ -59,7 +65,7 @@ class SessionResourceTest {
 
     @Test
     void post_validInput_returns202WithQueuedSession() {
-        given()
+        withTenant()
             .contentType(ContentType.JSON)
             .body("""
                   { "dialect": "plsql", "source": "%s", "preview": true }
@@ -76,7 +82,7 @@ class SessionResourceTest {
 
     @Test
     void post_missingDialect_returns400() {
-        given()
+        withTenant()
             .contentType(ContentType.JSON)
             .body("""
                   { "source": "/some/path", "preview": false }
@@ -90,7 +96,7 @@ class SessionResourceTest {
     @Test
     void get_existingSession_returns200() {
         // Create a session first
-        String id = given()
+        String id = withTenant()
             .contentType(ContentType.JSON)
             .body("""
                   { "dialect": "plsql", "source": "%s", "preview": true }
@@ -102,7 +108,7 @@ class SessionResourceTest {
             .extract().path("id");
 
         // Then retrieve it
-        given()
+        withTenant()
         .when()
             .get(SESSIONS_URL + "/" + id)
         .then()
@@ -113,7 +119,7 @@ class SessionResourceTest {
 
     @Test
     void get_unknownSession_returns404() {
-        given()
+        withTenant()
         .when()
             .get(SESSIONS_URL + "/00000000-0000-0000-0000-000000000000")
         .then()
@@ -123,7 +129,7 @@ class SessionResourceTest {
     @Test
     void cancel_existingQueuedSession_returns202() {
         // Create a session in preview=true so it completes quickly without touching YGG
-        String id = given()
+        String id = withTenant()
             .contentType(ContentType.JSON)
             .body("""
                   { "dialect": "plsql", "source": "%s", "preview": true }
@@ -134,7 +140,7 @@ class SessionResourceTest {
             .statusCode(202)
             .extract().path("id");
 
-        given()
+        withTenant()
         .when()
             .post(SESSIONS_URL + "/" + id + "/cancel")
         .then()
@@ -144,7 +150,7 @@ class SessionResourceTest {
 
     @Test
     void cancel_unknownSession_returns404() {
-        given()
+        withTenant()
         .when()
             .post(SESSIONS_URL + "/00000000-0000-0000-0000-000000000000/cancel")
         .then()
@@ -155,7 +161,7 @@ class SessionResourceTest {
     @Test
     void cancel_alreadyCancelledSession_returns409() {
         // Create, cancel, then try to cancel again
-        String id = given()
+        String id = withTenant()
             .contentType(ContentType.JSON)
             .body("""
                   { "dialect": "plsql", "source": "%s", "preview": true }
@@ -167,11 +173,11 @@ class SessionResourceTest {
             .extract().path("id");
 
         // First cancel — should succeed
-        given().when().post(SESSIONS_URL + "/" + id + "/cancel")
+        withTenant().when().post(SESSIONS_URL + "/" + id + "/cancel")
             .then().statusCode(202);
 
         // Second cancel — already terminal
-        given()
+        withTenant()
         .when()
             .post(SESSIONS_URL + "/" + id + "/cancel")
         .then()

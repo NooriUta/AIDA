@@ -127,11 +127,14 @@ export function useLoomLayout(
     const forceELK   = forceELKCount > 0;
 
     applyELKLayout(displayGraph.nodes, displayGraph.edges, { forceELK })
-      .then(({ nodes: layoutedNodes, isGrid }) => {
+      .then(({ nodes: layoutedNodes, isGrid, isDense }) => {
         if (cancelled) return;
         setNodes(layoutedNodes);
         setEdges(displayGraph.edges);
         setGraphStats(layoutedNodes.length, displayGraph.edges.length);
+        if (isDense) {
+          console.info('[LOOM] Dense graph mode active — stress algorithm (EK-01)');
+        }
         // M-3: show warning when grid was used proactively (not for ELK fallback)
         setLayoutWarning(
           isGrid && nodeCount > LAYOUT.AUTO_GRID_THRESHOLD

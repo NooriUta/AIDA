@@ -9,9 +9,13 @@ export type UserRole =
   | 'super-admin';
 
 export interface AuthUser {
-  id: string;
-  username: string;
-  role: UserRole;
+  id:                 string;
+  username:           string;
+  role:               UserRole;
+  email?:             string;
+  firstName?:         string;
+  lastName?:          string;
+  activeTenantAlias?: string;
 }
 
 export type EventLevel = 'INFO' | 'WARN' | 'ERROR';
@@ -84,3 +88,6 @@ export function useAppContext(): AppContext {
   // Реализуется в каждом remote через useSearchParams() из react-router-dom.
   return {} as AppContext; // placeholder
 }
+
+export { sharedPrefsStore, applyPrefs, initSharedPrefs } from './stores/sharedPrefsStore';
+export type { SharedPrefs } from './stores/sharedPrefsStore';

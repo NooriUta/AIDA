@@ -60,13 +60,27 @@ public interface DaliConfig {
 
         Dashboard dashboard();
 
+        /**
+         * DMT-07 — worker-only mode flag.
+         * When true: node processes jobs only; dashboard is suppressed regardless of
+         * {@code dashboard.enabled}. Intended for multi-replica deployments where one
+         * designated replica runs the dashboard and the others are pure workers.
+         *
+         * <p>Spike result: JobRunr OSS 8.5.2 does not have a separate scheduler-only mode
+         * (that is JobRunr Pro). In OSS, every BackgroundJobServer both schedules AND processes.
+         * Setting worker-only=true therefore only suppresses the HTTP dashboard.
+         */
+        @WithName("worker-only")
+        @WithDefault("false")
+        boolean workerOnly();
+
         interface BackgroundJobServer {
             @WithDefault("true")
             boolean enabled();
         }
 
         interface Dashboard {
-            /** Start the JobRunr HTTP dashboard. Disable in test profile. */
+            /** Start the JobRunr HTTP dashboard. Disable in test profile or when worker-only=true. */
             @WithDefault("true")
             boolean enabled();
 

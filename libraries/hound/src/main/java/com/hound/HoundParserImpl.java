@@ -78,6 +78,25 @@ public class HoundParserImpl implements HoundParser {
     }
 
     @Override
+    public ParseResult parse(Path file, HoundConfig config, String dbName, String appName,
+                             HoundEventListener listener) {
+        listener.onFileParseStarted(file.toString(), config.dialect());
+        try (ArcadeDBSemanticWriter writer = createWriter(config)) {
+            CanonicalPool pool = null;
+            if (writer != null && dbName != null && !dbName.isBlank()) {
+                String resolvedApp = (appName != null && !appName.isBlank()) ? appName : dbName;
+                pool = writer.ensureCanonicalPool(dbName, resolvedApp, resolvedApp);
+            }
+            ParseResult result = doParseFile(file, config, writer, pool, dbName, listener);
+            listener.onFileParseCompleted(file.toString(), result);
+            return result;
+        } catch (Exception e) {
+            listener.onError(file.toString(), e);
+            throw new RuntimeException("Hound parse failed: " + file, e);
+        }
+    }
+
+    @Override
     public List<ParseResult> parseBatch(List<Path> files, HoundConfig config) {
         return parseBatch(files, config, HoundHeimdallListener.fromSystemProperty());
     }

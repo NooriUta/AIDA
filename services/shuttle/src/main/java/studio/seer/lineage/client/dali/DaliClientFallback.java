@@ -23,13 +23,15 @@ public class DaliClientFallback implements FallbackHandler<Object> {
                 ctx.getFailure() != null ? ctx.getFailure().getMessage() : "unknown error");
 
         return switch (ctx.getMethod().getName()) {
-            case "createSession" -> SessionInfo.unavailable();
-            case "getSession"    -> SessionInfo.unavailable();
-            case "cancelSession" -> new CancelResponse("UNAVAILABLE", "Dali service unreachable");
-            case "listSessions"  -> List.of();
-            case "getStats"      -> DaliStats.empty();
-            case "getHealth"     -> DaliHealth.degraded("Dali unreachable");
-            default              -> null;
+            case "createSession"  -> SessionInfo.unavailable();
+            case "getSession"     -> SessionInfo.unavailable();
+            case "cancelSession"  -> new CancelResponse("UNAVAILABLE", "Dali service unreachable");
+            case "replaySession"  -> SessionInfo.unavailable();
+            case "listSessions"   -> List.of();
+            case "getStats"       -> DaliStats.empty();
+            case "getHealth"      -> DaliHealth.degraded("Dali unreachable");
+            case "startHarvest"   -> java.util.Map.of("status", "unavailable");
+            default               -> null;
         };
     }
 }

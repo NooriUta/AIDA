@@ -45,12 +45,15 @@ const rbacPlugin: FastifyPluginAsync = async (app) => {
 
       try {
         const session = await ensureValidSession(sid);
-        // Attach user info to request (same shape as before for graphql.ts compatibility)
         request.user = {
-          sub:      session.sub,
-          username: session.username,
-          role:     session.role,
-          scopes:   session.scopes,
+          sub:               session.sub,
+          username:          session.username,
+          role:              session.role,
+          scopes:            session.scopes,
+          activeTenantAlias: session.activeTenantAlias,
+          email:             session.email,
+          firstName:         session.firstName,
+          lastName:          session.lastName,
         };
       } catch {
         return reply.status(401).send({ error: 'Unauthorized' });
@@ -69,10 +72,14 @@ const rbacPlugin: FastifyPluginAsync = async (app) => {
       try {
         const session = await ensureValidSession(sid);
         request.user = {
-          sub:      session.sub,
-          username: session.username,
-          role:     session.role,
-          scopes:   session.scopes,
+          sub:               session.sub,
+          username:          session.username,
+          role:              session.role,
+          scopes:            session.scopes,
+          activeTenantAlias: session.activeTenantAlias,
+          email:             session.email,
+          firstName:         session.firstName,
+          lastName:          session.lastName,
         };
       } catch {
         return reply.status(401).send({ error: 'Unauthorized' });

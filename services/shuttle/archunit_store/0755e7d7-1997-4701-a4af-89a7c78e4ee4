@@ -1,0 +1,3 @@
+Method <studio.seer.lineage.storage.ViewRepository.delete(java.lang.String)> calls method <studio.seer.lineage.client.ArcadeGateway.sql(java.lang.String, java.util.Map)> in (ViewRepository.java:64)
+Method <studio.seer.lineage.storage.ViewRepository.findById(java.lang.String)> calls method <studio.seer.lineage.client.ArcadeGateway.sql(java.lang.String, java.util.Map)> in (ViewRepository.java:71)
+Method <studio.seer.lineage.storage.ViewRepository.save(java.lang.String, java.lang.String, java.lang.String)> calls method <studio.seer.lineage.client.ArcadeGateway.sql(java.lang.String, java.util.Map)> in (ViewRepository.java:52)

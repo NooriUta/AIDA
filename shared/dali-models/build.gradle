@@ -13,6 +13,16 @@ repositories { mavenCentral() }
 dependencies {
     // Validation annotations (compileOnly — consumers bring their own runtime)
     compileOnly 'jakarta.validation:jakarta.validation-api:3.0.2'
+    // Jackson annotations for explicit JSON mapping (compileOnly — consumers bring Jackson runtime)
+    compileOnly 'com.fasterxml.jackson.core:jackson-annotations:2.17.2'
+
+    // Tests (MTN-52 SchemaVersion util)
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 // Нет runtime-зависимостей — чистые Java records и enums.

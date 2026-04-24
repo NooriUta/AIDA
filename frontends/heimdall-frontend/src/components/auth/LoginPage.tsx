@@ -35,7 +35,7 @@ export function LoginPage() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) navigate('/', { replace: true });
+    if (isAuthenticated) navigate('/overview/services', { replace: true });
   }, [isAuthenticated, navigate]);
 
   const onSubmit = async ({ username, password }: FormValues) => {

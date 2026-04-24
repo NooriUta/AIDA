@@ -39,6 +39,6 @@ public class HarvestScheduler {
     void triggerNightlyHarvest() {
         String harvestId = "scheduled-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         log.info("HarvestScheduler: triggering nightly harvest (harvestId={})", harvestId);
-        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId));
+        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId, "default"));
     }
 }

@@ -5,6 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.ExploreResult;
+import studio.seer.lineage.security.SeerIdentity;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.List;
 import java.util.Map;
@@ -12,18 +14,21 @@ import java.util.Map;
 /**
  * L3 — direct-edge lineage for any node (table, column, routine, statement…).
  *
- * Uses id(n) for vertex lookup — @rid is NOT valid in ArcadeDB Cypher WHERE clauses.
- * Bidirectional lineage uses two parallel queries merged in Java (no UNION) — avoids
- * ArcadeDB Cypher UNION deduplication issues when labels()[0] returns List<String> columns.
+ * SHT-04: All ArcadeDB queries are routed to the tenant's lineage database
+ * ({@code hound_{alias}}) via {@link YggLineageRegistry}. Single-tenant
+ * deployments always use {@code hound_default}.
  */
 @ApplicationScoped
 public class LineageService {
 
-    @Inject
-    ArcadeGateway arcade;
+    @Inject ArcadeGateway       arcade;
+    @Inject ExploreService      exploreService;
+    @Inject SeerIdentity        identity;
+    @Inject YggLineageRegistry  lineageRegistry;
 
-    @Inject
-    ExploreService exploreService;
+    private String lineageDb() {
+        return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
 
     /**
      * Bidirectional 1-hop lineage — all edges incident to nodeId.
@@ -74,8 +79,9 @@ public class LineageService {
             LIMIT 200
             """;
 
+        String db = lineageDb();
         return Uni.combine().all()
-            .unis(List.of(arcade.cypher(outQ, params), arcade.cypher(inQ, params)))
+            .unis(List.of(arcade.cypherIn(db, outQ, params), arcade.cypherIn(db, inQ, params)))
             .combinedWith(results -> {
                 var all = new java.util.ArrayList<Map<String, Object>>();
                 for (Object raw : results)
@@ -175,7 +181,7 @@ public class LineageService {
                    ''                  AS targetHandle
             LIMIT 2000
             """;
-        return arcade.cypher(cypher, Map.of("nodeId", nodeId))
+        return arcade.cypherIn(lineageDb(), cypher, Map.of("nodeId", nodeId))
                 .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
                 .flatMap(exploreService::enrichDataSource);
     }
@@ -212,7 +218,7 @@ public class LineageService {
                    t.schema_geoid AS tgtScope, 'WRITES_TO' AS edgeType
             LIMIT 500
             """;
-        return arcade.cypher(cypher, Map.of("nodeId", nodeId))
+        return arcade.cypherIn(lineageDb(), cypher, Map.of("nodeId", nodeId))
                 .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
                 .flatMap(exploreService::enrichDataSource);
     }
@@ -245,7 +251,7 @@ public class LineageService {
             "       labels(t)[0] AS tgtType,\n" +
             "       et AS edgeType\n" +
             "LIMIT 500";
-        return arcade.cypher(cypher, Map.of("nodeId", nodeId))
+        return arcade.cypherIn(lineageDb(), cypher, Map.of("nodeId", nodeId))
                 .map(rows -> ExploreService.buildResult(rows, nodeId, ""))
                 .flatMap(exploreService::enrichDataSource);
     }

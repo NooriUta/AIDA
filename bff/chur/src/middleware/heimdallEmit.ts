@@ -5,7 +5,7 @@
  * so Chur's own request handling is never affected.
  */
 
-const HEIMDALL_URL = (process.env.HEIMDALL_URL ?? 'http://localhost:9093').replace(/\/$/, '');
+const HEIMDALL_URL = (process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093').replace(/\/$/, '');
 
 export function emitToHeimdall(
   eventType: string,

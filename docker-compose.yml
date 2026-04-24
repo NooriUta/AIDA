@@ -1,45 +1,40 @@
 ###############################################################################
-# AIDA — Full-stack Docker Compose (application delivery)
-# Services: Keycloak · SHUTTLE · Dali · Chur · Verdandi · Heimdall · Shell
-# ArcadeDB (Ygg + Frigg) — graph & job store
+# AIDA — APP (updatable) layer
 #
-# Host ports offset +10000 from dev to avoid conflicts:
-#   Keycloak  18180    SHUTTLE  18080    Chur  13000    verdandi  15173
+# Services: nginx · Chur (BFF) · Verdandi · Heimdall-frontend · Shell
 #
-# SQL source databases (Oracle, PostgreSQL) are NOT included here.
-# Use docker-compose.skadi-env.yml for SKADI/Hound integration testing.
+# Requires stable + backend layers running:  make stable-up && make backend-up
+#
+# Lifecycle:  rebuild on every platform code change (Node.js / React).
+#             Fast build — no JVM compilation.
+# Deploy:     make restart        ← most common command
+# First run:  make all-up         ← starts all three layers in order
+#
+# Network aida_net is created by docker-compose.stable.yml (external here).
+#
+# Host ports:
+#   nginx     80 / 443    Chur    13000    Verdandi   15173
+#   Heimdall  25174       Shell   25175
 ###############################################################################
 
 networks:
   default:
     name: aida_net
+    external: true
 
 services:
   # ── nginx (TLS termination — local HTTPS) ──────────────────────────────────
-  # Self-signed cert auto-generated into named volume nginx_certs on first start.
-  # Access: https://localhost/       → Verdandi
-  #         https://localhost/heimdall → Heimdall UI
-  #         https://localhost/kc/    → Keycloak admin
+  # Certs: mkcert-generated, trusted by browser without warning.
+  # Generate once: cd infra/nginx/certs && mkcert -cert-file local.crt -key-file local.key localhost 127.0.0.1 ::1
+  # Install mkcert CA once: mkcert -install
+  # Access: https://localhost/          → Verdandi (Seiðr Studio)
+  #         https://localhost/heimdall/ → Heimdall UI
+  #         https://localhost/kc/       → Keycloak admin
   nginx:
     image: nginx:1.27-alpine
-    entrypoint:
-      - sh
-      - -c
-      - |
-        apk add --no-cache openssl >/dev/null 2>&1
-        mkdir -p /etc/nginx/certs
-        if [ ! -f /etc/nginx/certs/local.crt ]; then
-          openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
-            -keyout /etc/nginx/certs/local.key \
-            -out    /etc/nginx/certs/local.crt \
-            -subj   '/CN=localhost/O=AIDA' \
-            -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
-            2>/dev/null && echo '[nginx] self-signed cert generated'
-        fi
-        exec nginx -g 'daemon off;'
     volumes:
       - ./infra/nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
-      - nginx_certs:/etc/nginx/certs
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
     ports:
       - "80:80"
       - "443:443"
@@ -47,56 +42,6 @@ services:
       - chur
       - verdandi
       - heimdall-frontend
-      - keycloak
-
-  # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.2
-    command: start-dev --import-realm
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KC_HTTP_PORT: "8180"
-      KC_HTTP_RELATIVE_PATH: "/kc"
-      KC_HEALTH_ENABLED: "true"
-      KC_PROXY_HEADERS: "xforwarded"   # KC 26: replaces deprecated KC_PROXY=edge
-      KC_HOSTNAME: "localhost"
-      KC_HOSTNAME_STRICT: "false"
-    ports:
-      - "127.0.0.1:18180:8180"
-    volumes:
-      - ./infra/keycloak/seer-realm.json:/opt/keycloak/data/import/seer-realm.json:ro
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /kc/health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 90s
-
-  # ── SHUTTLE (Quarkus GraphQL API) ──────────────────────────────────────────
-  shuttle:
-    build:
-      context: ./services/shuttle
-      dockerfile: Dockerfile
-    environment:
-      QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://ygg:2480}
-      ARCADE_DB:       ${ARCADEDB_DB:-hound}
-      ARCADE_USER:     ${ARCADEDB_USER:-root}
-      ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
-      QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
-      HEIMDALL_URL:    http://heimdall-backend:9093
-      DALI_URL:        http://dali:9090
-    ports:
-      - "18080:8080"
-    depends_on:
-      ygg:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/graphql/schema.graphql || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
 
   # ── Chur (auth gateway / BFF) ──────────────────────────────────────────────
   chur:
@@ -106,35 +51,35 @@ services:
     environment:
       NODE_ENV:              ${NODE_ENV:-development}
       PORT:                  "3000"
-      CORS_ORIGIN:           "http://localhost:15173,https://localhost,http://localhost:5175,http://localhost:25174"
-      # Keycloak (internal network — no port offset)
+      CORS_ORIGIN:           "https://localhost,http://localhost:5174,http://localhost:5173,http://localhost:5175"
+      # Keycloak — lives in stable layer, reached via aida_net
       KEYCLOAK_URL:          http://keycloak:8180/kc
       KEYCLOAK_REALM:        seer
       KEYCLOAK_CLIENT_ID:    aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
       COOKIE_SECRET:         ${COOKIE_SECRET:-dev-cookie-secret}
       COOKIE_SECURE:         "true"
-      # ArcadeDB (external container)
+      # Ygg (ArcadeDB — lineage) — stable layer
       ARCADEDB_URL:          ${ARCADEDB_URL:-http://ygg:2480}
       ARCADEDB_DB:           ${ARCADEDB_DB:-hound}
       ARCADEDB_USER:         ${ARCADEDB_USER:-root}
       ARCADEDB_PASS:         ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
-      # SHUTTLE (internal network)
+      # FRIGG — stable layer
+      FRIGG_URL:             http://frigg:2480
+      FRIGG_SESSION_DB:      frigg-sessions
+      FRIGG_USER:            root
+      FRIGG_PASS:            ${FRIGG_ROOT_PASSWORD:-playwithdata}
+      # SHUTTLE — backend layer
       LINEAGE_API_URL:       http://shuttle:8080
-      # HEIMDALL (internal network)
+      # HEIMDALL — backend layer
       HEIMDALL_URL:          http://heimdall-backend:9093
-      # Keycloak Admin API — master realm bootstrap creds (used by /heimdall/users)
+      # KC Admin API
       KC_ADMIN_USER:         ${KC_ADMIN_USER:-admin}
       KC_ADMIN_PASS:         ${KC_ADMIN_PASS:-admin}
     ports:
       - "13000:3000"
-    depends_on:
-      keycloak:
-        condition: service_healthy
-      shuttle:
-        condition: service_started
-      ygg:
-        condition: service_healthy
+    # Cross-layer deps (KC, FRIGG, SHUTTLE) are not declared here —
+    # startup order is guaranteed by Makefile. Chur has health retries.
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
@@ -142,7 +87,7 @@ services:
       retries: 5
       start_period: 30s
 
-  # ── verdandi (React frontend — Seiðr Studio) ──────────────────────────────
+  # ── Verdandi (React — Seiðr Studio) ─────────────────────────────────────────
   verdandi:
     build:
       context: ./frontends/verdandi
@@ -159,7 +104,7 @@ services:
       retries: 3
       start_period: 20s
 
-  # ── heimdall-frontend (React — HEIMDALL Control Panel) ────────────────────
+  # ── Heimdall-frontend (React — HEIMDALL Control Panel) ────────────────────
   heimdall-frontend:
     build:
       context: .
@@ -171,8 +116,6 @@ services:
     depends_on:
       chur:
         condition: service_started
-      heimdall-backend:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5174/ || exit 1"]
       interval: 15s
@@ -204,123 +147,4 @@ services:
       retries: 3
       start_period: 20s
 
-  # ── Dali (async PL/SQL parse service) ────────────────────────────────────
-  # ВАЖНО: context = . (монорепо root), НЕ services/dali/.
-  # Причина: сервис зависит от libraries:hound и shared:dali-models.
-  dali:
-    build:
-      context: .
-      dockerfile: services/dali/Dockerfile
-    ports:
-      - "19090:9090"
-    environment:
-      QUARKUS_HTTP_PORT: "9090"
-      CORS_ORIGINS: "http://localhost:3000,http://localhost:13000,http://localhost:5174,http://localhost:5175,http://localhost:25174,https://localhost"
-      FRIGG_URL:      http://frigg:2480
-      FRIGG_DB:       dali
-      FRIGG_USER:     root
-      FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
-      HEIMDALL_URL:   http://heimdall-backend:9093
-      YGG_URL:        http://ygg:2480
-      COMPOSE_PROJECT_NAME: aida-root
-      # Session retention (days). Default = 30. Override: DALI_SESSION_RETENTION_DAYS=90
-      DALI_SESSION_RETENTION_DAYS: ${DALI_SESSION_RETENTION_DAYS:-30}
-      # Instance isolation: set to a unique tag when running multiple Dali instances
-      # against the same FRIGG. Empty = single-instance / untagged (default for dev).
-      # Example for second instance: DALI_INSTANCE_ID: dali-2
-      DALI_INSTANCE_ID: ${DALI_INSTANCE_ID:-}
-    depends_on:
-      frigg:
-        condition: service_healthy
-      ygg:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/q/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
-
-  # ── FRIGG (ArcadeDB — HEIMDALL snapshot persistence) ──────────────────────
-  # Отдельный ArcadeDB инстанс только для HEIMDALL. НЕ путать с Ygg.
-  # ArcadeDB всегда слушает :2480 внутри контейнера.
-  # Маппинг: host :2481 → container :2480  (dev: localhost:2481 → FRIGG)
-  # Docker-сеть: frigg:2480  |  ygg:2480 — разные контейнеры, нет конфликта
-  frigg:
-    image: arcadedata/arcadedb:26.3.2
-    environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_ROOT_PASSWORD:-playwithdata}"
-    ports:
-      - "127.0.0.1:2481:2480"
-    volumes:
-      - frigg_data:/home/arcadedb/databases
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-  # ── Ygg (ArcadeDB — lineage graph, база hound) ────────────────────────────────
-  ygg:
-    container_name: Ygg-1
-    image: arcadedata/arcadedb:26.3.2
-    environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:-playwithdata}"
-      ARCADEDB_OPTS_MEMORY: "-Xms2G -Xmx2G"
-    ports:
-      - "127.0.0.1:2480:2480"   # HTTP API  (dev: localhost:2480)
-      - "127.0.0.1:2424:2424"   # Binary protocol
-    volumes:
-      - hound_databases:/home/arcadedb/databases
-      - hound_config:/home/arcadedb/config
-      - hound_logs:/home/arcadedb/log
-      - hound_backups:/home/arcadedb/backups
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-  # ── HEIMDALL (admin observability backend) ─────────────────────────────────
-  # ВАЖНО: context = . (монорепо root), не services/heimdall-backend/
-  # Причина: сервис зависит от shared/dali-models/ (inter-module dependency).
-  heimdall-backend:
-    build:
-      context: .
-      dockerfile: services/heimdall-backend/Dockerfile
-    ports:
-      - "19093:9093"
-    environment:
-      QUARKUS_HTTP_PORT: "9093"
-      QUARKUS_REST_CLIENT_FRIGG_API_URL: http://frigg:2480
-      FRIGG_DB:       heimdall
-      FRIGG_USER:     root
-      FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
-      COMPOSE_PROJECT_NAME: aida-root
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./docs:/docs:ro                  # public docs baked into image + overridable in dev
-      - C:/AIDA/docs:/team-docs:ro       # team-internal docs (local only — not in prod)
-    depends_on:
-      frigg:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/q/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-volumes:
-  nginx_certs:
-  frigg_data:
-  hound_databases:
-    external: true
-  hound_config:
-    external: true
-  hound_logs:
-    external: true
-  hound_backups:
-    external: true
+volumes: {}

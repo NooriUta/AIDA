@@ -30,6 +30,11 @@ public class SeerIdentity {
         return (user != null && !user.isBlank()) ? user : "anonymous";
     }
 
+    public String tenantAlias() {
+        String alias = rc.request().getHeader("X-Seer-Tenant-Alias");
+        return (alias != null && !alias.isBlank()) ? alias : "default";
+    }
+
     public boolean isAdmin()   { return "admin".equals(role()); }
     public boolean isEditor()  { return "editor".equals(role()) || isAdmin(); }
     public boolean canWrite()  { return isEditor(); }

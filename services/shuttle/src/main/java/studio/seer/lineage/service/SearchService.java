@@ -5,6 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.SearchResult;
+import studio.seer.lineage.security.SeerIdentity;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.Map;
 
 /**
  * Full-text search across all Dali vertex types.
+ * SHT-04: Queries routed to {@code hound_{alias}} via {@link YggLineageRegistry}.
  *
  * ArcadeDB does not support UNION ALL — queries run in parallel, merged in Java.
  * LIKE :q uses named parameter binding to prevent SQL injection.
@@ -34,8 +37,13 @@ import java.util.Map;
 @ApplicationScoped
 public class SearchService {
 
-    @Inject
-    ArcadeGateway arcade;
+    @Inject ArcadeGateway      arcade;
+    @Inject SeerIdentity       identity;
+    @Inject YggLineageRegistry lineageRegistry;
+
+    private String lineageDb() {
+        return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
 
     @SuppressWarnings("unchecked")
     public Uni<List<SearchResult>> search(String query, int limit) {
@@ -90,7 +98,7 @@ public class SearchService {
      */
     private Uni<List<Map<String, Object>>> q(String template, String like, int n) {
         String sql = String.format(template, n);
-        return arcade.sql(sql, Map.of("q", like))
+        return arcade.sqlIn(lineageDb(), sql, Map.of("q", like))
             .onFailure().recoverWithItem(List.of());
     }
 

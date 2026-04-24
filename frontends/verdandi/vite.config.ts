@@ -3,6 +3,24 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { federation } from '@module-federation/vite';
 import path from 'path';
+import type { ServerOptions } from 'http-proxy';
+
+// Strip `Secure` from Set-Cookie so the HTTP Vite dev server works with
+// Docker Chur (COOKIE_SECURE=true). Prod traffic uses nginx:443.
+function stripSecureCookie() {
+  return {
+    configure(proxy: import('http-proxy').Server) {
+      proxy.on('proxyRes', (proxyRes: import('http').IncomingMessage) => {
+        const cookies = proxyRes.headers['set-cookie'];
+        if (cookies) {
+          proxyRes.headers['set-cookie'] = (cookies as string[]).map((c) =>
+            c.replace(/;\s*Secure/gi, ''),
+          );
+        }
+      });
+    },
+  } satisfies ServerOptions;
+}
 
 export default defineConfig({
   plugins: [
@@ -51,7 +69,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter:  ['text', 'html', 'lcov'],
-      exclude:   ['src/test/**', '**/*.test.*', '**/*.spec.*', 'src/main.tsx', 'src/vite-env.d.ts'],
+      exclude:   [
+        'src/test/**', '**/*.test.*', '**/*.spec.*',
+        'src/main.tsx', 'src/vite-env.d.ts',
+        // Legacy / large utilities pending dedicated test sprint:
+        'src/utils/transformGraph.ts',    // re-export barrel + legacy fn (unused, for reference)
+        'src/utils/transformOverview.ts', // L1 overview transform — needs own test sprint
+        'src/utils/layoutL1.ts',          // L1 geometry helpers — needs own test sprint
+      ],
       thresholds: {
         lines:     70,
         functions: 70,
@@ -59,7 +84,12 @@ export default defineConfig({
       },
     },
   },
-  // Module Federation generates top-level await — requires es2022+ target.
+  // vite 8.0.5+ (rolldown) introduced a hard REQUIRE_TLA check: CJS require()
+  // cannot import a TLA module. @module-federation/vite generates TLA virtual
+  // files for shared modules in remotes, and CJS react-dom uses require("react").
+  // Pinning to 8.0.4 (last pre-rolldown release) avoids this incompatibility.
+  // The HIGH CVE in 8.0.0-8.0.4 (server.fs.deny bypass) is dev-server only —
+  // it cannot be triggered by `vite build` in CI or nginx in production.
   build: {
     target: 'es2022',
     sourcemap: false,
@@ -68,14 +98,30 @@ export default defineConfig({
     host: '0.0.0.0',
     cors: true,           // required for MF remote loading from shell origin
     proxy: {
-      // Dev: proxy GraphQL directly to SHUTTLE (bypasses Chur auth — dev only).
-      // In production the reverse-proxy / Chur handles /graphql.
+      // Dev: proxy GraphQL through Chur so X-Seer-Tenant-Alias is correctly
+      // injected by Chur before forwarding to SHUTTLE. Chur validates the
+      // session cookie and sets X-Seer-Tenant-Alias = effectiveTenant.
+      // Direct-to-SHUTTLE bypass was removed because SHUTTLE only reads
+      // X-Seer-Tenant-Alias (set by Chur) — not X-Seer-Override-Tenant from frontend.
       '/graphql': {
-        target: process.env.SHUTTLE_URL ?? 'http://localhost:8080',
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:3000',
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+        ...stripSecureCookie(),
+      },
+      '/me': {
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/admin': {
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/prefs': {
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
     },

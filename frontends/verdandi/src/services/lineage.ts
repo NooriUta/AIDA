@@ -8,7 +8,27 @@ const ENDPOINT = import.meta.env.VITE_GRAPHQL_URL
   ?? `${location.origin}/graphql`;
 
 const gqlClient = new GraphQLClient(ENDPOINT, {
-  credentials: 'include',  // send httpOnly JWT cookie cross-origin
+  credentials: 'include',
+  requestMiddleware: (req) => {
+    const activeTenant = localStorage.getItem('seer-active-tenant');
+    return {
+      ...req,
+      headers: {
+        // graphql-request v7 does not include Content-Type in req.headers at middleware
+        // time — it is added after the middleware runs. We must set it explicitly here
+        // so that Fastify (Chur) parses the body as JSON, not as text/plain string.
+        'Content-Type': 'application/json',
+        ...req.headers,
+        // X-Seer-Override-Tenant — read by Chur; Chur sets X-Seer-Tenant-Alias for SHUTTLE.
+        // X-Seer-Tenant-Alias    — read directly by SHUTTLE (belt-and-suspenders for dev).
+        // Both headers carry the same value; Chur overwrites X-Seer-Tenant-Alias in prod.
+        ...(activeTenant ? {
+          'X-Seer-Override-Tenant': activeTenant,
+          'X-Seer-Tenant-Alias':    activeTenant,
+        } : {}),
+      },
+    };
+  },
 });
 
 // ── Domain types (mirror GraphQL schema from lineage-api) ─────────────────────
@@ -626,9 +646,9 @@ export async function fetchKnotTableDetail(
 export interface KnotTableUsage {
   routineGeoid: string;
   routineName:  string;
-  edgeType:     string;  // READS_FROM | WRITES_TO
-  stmtGeoid:    string;
-  stmtType:     string;
+  edgeType:     string;        // READS_FROM | WRITES_TO
+  stmtGeoid:    string | null; // null when routine has no associated statement
+  stmtType:     string | null; // null when stmtGeoid is null
 }
 
 const KNOT_TABLE_ROUTINES = /* GraphQL */ `
@@ -715,6 +735,36 @@ export async function fetchKnotScript(sessionId: string): Promise<KnotScript | n
     { sessionId },
   );
   return data.knotScript ?? null;
+}
+
+// ── Full source file from archive (hound_src_{tenant}) ───────────────────────
+
+export interface KnotSourceFile {
+  sessionId:   string;
+  filePath:    string;
+  sqlText:     string;
+  sizeBytes:   number;
+  sqlTextHash: string;
+}
+
+const KNOT_SOURCE_FILE = /* GraphQL */ `
+  query KnotSourceFile($sessionId: String!) {
+    knotSourceFile(sessionId: $sessionId) {
+      sessionId
+      filePath
+      sqlText
+      sizeBytes
+      sqlTextHash
+    }
+  }
+`;
+
+export async function fetchKnotSourceFile(sessionId: string): Promise<KnotSourceFile | null> {
+  const data = await gqlClient.request<{ knotSourceFile: KnotSourceFile | null }>(
+    KNOT_SOURCE_FILE,
+    { sessionId },
+  );
+  return data.knotSourceFile ?? null;
 }
 
 // ── Lazy statement extras (descendants + atom stats) ─────────────────────────

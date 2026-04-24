@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 import studio.seer.heimdall.RingBuffer;
 import studio.seer.heimdall.metrics.MetricsCollector;
 import studio.seer.heimdall.snapshot.SnapshotManager;
+import studio.seer.heimdall.tenant.TenantContext;
 
 import java.util.Map;
 
@@ -42,6 +43,7 @@ public class ControlResource {
     @Inject RingBuffer       ringBuffer;
     @Inject MetricsCollector metricsCollector;
     @Inject SnapshotManager  snapshots;
+    @Inject TenantContext    tenantCtx;
 
     @POST
     @Path("/reset")
@@ -93,7 +95,11 @@ public class ControlResource {
     }
 
     private boolean isAdmin(String role) {
-        return "admin".equalsIgnoreCase(role);
+        // Accept both legacy X-Seer-Role header value and new scope-based check
+        return "admin".equalsIgnoreCase(role)
+            || "super-admin".equalsIgnoreCase(role)
+            || tenantCtx.isAdmin()
+            || tenantCtx.isSuperAdmin();
     }
 
     private Response forbidden() {

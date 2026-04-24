@@ -11,18 +11,26 @@
     ]
   },
   "nav": {
-    "services":     "Сервисы",
-    "dashboard":    "Дашборд",
-    "dali":         "Ðali",
-    "sources":      "Источники",
-    "events":       "Поток событий",
-    "demodebug":    "DEMODEBUG",
-    "users":        "Пользователи",
-    "overviewDesc": "Мониторинг сервисов и события",
-    "daliDesc":     "Разбор SQL и управление сессиями",
-    "adminDesc":    "Пользователи, роли, настройки",
-    "sessions":     "Сессии",
-    "jobrunr":      "JobRunr"
+    "services":         "Сервисы",
+    "dashboard":        "Дашборд",
+    "dali":             "Ðali",
+    "sources":          "Источники",
+    "events":           "Поток событий",
+    "demodebug":        "DEMODEBUG",
+    "users":            "Пользователи",
+    "tenants":          "Тенанты",
+    "overviewDesc":     "Мониторинг сервисов и события",
+    "daliDesc":         "Разбор SQL и управление сессиями",
+    "adminDesc":        "Тенанты, пользователи и настройки",
+    "docsDesc":         "Документация и справочники",
+    "docs":             "ДОКУМЕНТЫ",
+    "sessions":         "Сессии",
+    "jobrunr":          "JobRunr",
+    "profile":          "Профиль",
+    "preferences":      "Настройки",
+    "notifications":    "Уведомления",
+    "sessionActivity":  "Активность сессий",
+    "softDeletedUsers": "Soft-deleted пользователи"
   },
   "auth": {
     "login":    "Войти",
@@ -51,7 +59,20 @@
   "status": {
     "loading":      "Загрузка…",
     "error":        "Не удалось загрузить данные",
-    "unauthorized": "Сессия истекла. Войдите снова."
+    "unauthorized": "Сессия истекла. Войдите снова.",
+    "saved":        "Сохранено",
+    "saving":       "Сохранение…",
+    "active":       "активен",
+    "disabled":     "отключён"
+  },
+  "action": {
+    "refresh":   "Обновить",
+    "restore":   "Восстановить",
+    "legalHold": "Legal hold",
+    "edit":      "Изменить",
+    "save":      "Сохранить",
+    "cancel":    "Отмена",
+    "close":     "Закрыть"
   },
   "ws": {
     "open":       "подключён",
@@ -139,23 +160,24 @@
     "deleteConfirm":    "Удалить снапшот? Действие необратимо."
   },
   "users": {
-    "title":          "Пользователи",
-    "subtitle":       "Управление ролями, scopes и квотами · Extended model поверх Keycloak",
-    "invite":         "Пригласить",
-    "edit":           "Редакт.",
-    "block":          "Заблокировать",
-    "unblock":        "Разблокировать",
-    "save":           "Сохранить изменения",
-    "cancel":         "Отмена",
-    "confirm":        "Подтвердить",
-    "total":          "Пользователей",
-    "active":         "Активных",
-    "admins":         "С правами admin",
-    "sourceBindings": "Source bindings",
-    "filterRole":     "Все роли",
-    "filterStatus":   "Все статусы",
-    "filterSearch":   "Имя или email…",
-    "clearFilters":   "Сбросить",
+    "title":            "Пользователи",
+    "subtitle":         "Управление ролями, scopes и квотами · Extended model поверх Keycloak",
+    "invite":           "Добавить пользователя",
+    "edit":             "Редакт.",
+    "block":            "Заблокировать",
+    "unblock":          "Разблокировать",
+    "save":             "Сохранить изменения",
+    "cancel":           "Отмена",
+    "confirm":          "Подтвердить",
+    "total":            "Пользователей",
+    "active":           "Активных",
+    "admins":           "С правами admin",
+    "sourceBindings":   "Source bindings",
+    "filterRole":       "Все роли",
+    "filterStatus":     "Все статусы",
+    "filterSearch":     "Имя или email…",
+    "clearFilters":     "Сбросить",
+    "crossTenantMode":  "все тенанты",
     "sections": {
       "profile":     "Профиль",
       "role":        "Роль",
@@ -164,6 +186,22 @@
       "sources":     "Источники",
       "activity":    "Активность",
       "prefs":       "Настройки"
+    },
+    "drawer": {
+      "kcIdentity":    "KC Identity",
+      "status":        "статус",
+      "roleScopes":    "Роль и Scopes",
+      "role":          "роль",
+      "tier":          "уровень",
+      "profile":       "Профиль",
+      "sourceBindings":"Привязки источников",
+      "allSources":    "Доступ ко всем источникам (без ограничений)",
+      "sourceCSV":     "source-id-1, source-id-2, …",
+      "lifecycle":     "Lifecycle",
+      "notSoftDeleted":"Пользователь активен, soft-delete не применён.",
+      "tabIdentity":   "Профиль",
+      "tabBindings":   "Источники",
+      "tabLifecycle":  "Lifecycle"
     }
   },
   "daliWidget": {
@@ -179,13 +217,37 @@
   },
   "profile": {
     "title":         "Профиль",
-    "appearance":    "Внешний вид",
     "platform":      "AIÐA — Панель управления Heimðallr",
     "fieldUsername": "Логин",
     "fieldEmail":    "Email",
     "fieldRole":     "Роль",
     "fieldPlatform": "Платформа",
-    "themeHint":     "Настройки темы сохраняются локально и используются во всех приложениях AIÐA."
+    "themeHint":     "Настройки темы сохраняются локально и используются во всех приложениях AIÐA.",
+    "desc":          "Личные данные профиля.",
+    "firstName":     "Имя",
+    "lastName":      "Фамилия",
+    "dept":          "Отдел",
+    "phone":         "Телефон",
+    "avatarUrl":     "URL аватара",
+    "tabs": {
+      "profile":       "Профиль",
+      "preferences":   "Настройки",
+      "appearance":    "Внешний вид",
+      "notifications": "Уведомления"
+    },
+    "appearance": {
+      "theme":    "Тема",
+      "dark":     "Тёмная",
+      "light":    "Светлая",
+      "palette":  "Палитра",
+      "uiFont":   "Шрифт интерфейса",
+      "monoFont": "Моноширинный шрифт",
+      "fontSize": "Размер шрифта",
+      "density":  "Плотность",
+      "compact":  "Компактный",
+      "normal":   "Обычный",
+      "preview":  "Текст для превью"
+    }
   },
   "dali": {
     "page": {
@@ -235,7 +297,19 @@
       "footerJobsTracked_few":   "{{count}} задачи отслеживается",
       "footerJobsTracked_many":  "{{count}} задач отслеживается",
       "footerJobsTracked_other": "{{count}} задач отслеживается",
-      "footerReady":    "jobrunr готов"
+      "footerReady":    "jobrunr готов",
+      "jobrunrEnqueued":   "В очереди",
+      "jobrunrProcessing": "Выполняется",
+      "jobrunrFailed":     "Ошибки JobRunr",
+      "jobrunrSucceeded":  "Выполнено",
+      "stuckAlert_one":    "{{count}} задача застряла в PROCESSING без активного воркера.",
+      "stuckAlert_few":    "{{count}} задачи застряли в PROCESSING без активного воркера.",
+      "stuckAlert_many":   "{{count}} задач застряли в PROCESSING без активного воркера.",
+      "stuckAlert_other":  "{{count}} задач застряли в PROCESSING без активного воркера.",
+      "stuckReset":           "Сбросить в Failed",
+      "allTenantsTitle":      "Показать live-сессии всех тенантов",
+      "allTenantsActiveTitle":"Все тенанты — нажмите для возврата к одному",
+      "allTenantsBanner":     "Просмотр live-сессий по всем тенантам"
     },
     "form": {
       "title":            "Новая сессия парсинга",
@@ -251,6 +325,10 @@
       "submitParse":      "Парсить",
       "submitUpload":     "Загрузить и парсить",
       "submitting":       "...",
+      "dbNameLabel":       "Схема (namespace)",
+      "dbNameTooltip":     "Имя узла базы данных в YGG. Группирует все схемы сессии под один вершину DaliDatabase. Оставьте пустым, чтобы писать схемы на корневом уровне.",
+      "dbNamePlaceholder": "PROD_DB (опционально — группирует схемы под узел БД)",
+      "clearWarning":      "⚠ YGG будет очищен перед записью",
       "errSelectFile":    "Выберите файл для загрузки",
       "errSourceRequired": "Путь к источнику обязателен",
       "errAnotherActive": "Другая сессия активна — дождитесь завершения"
@@ -301,7 +379,18 @@
       "colTotal":         "Всего",
       "friggSaved":       "Сохранено в FRIGG",
       "friggPending":     "Ещё не сохранено в FRIGG",
+      "friggInDetail":    "Сохранено в FRIGG:",
       "instanceTitle":    "Экземпляр Dali: {{id}}",
+      "instanceTooltip":  "Экземпляр Dali ({{id}}), выполнявший эту сессию.\nХранится в FRIGG → dali_{{alias}}.dali_sessions[instanceId].\nНастраивается через переменную DALI_INSTANCE_ID.\nИспользуется для изоляции сессий между несколькими воркерами.",
+      "filterAll":        "Все",
+      "filterRunning":    "В работе",
+      "filterFailed":     "Ошибки",
+      "filterCompleted":  "Завершённые",
+      "filterQueued":     "В очереди",
+      "searchPlaceholder": "Поиск по имени файла…",
+      "sortDate":         "Дата ↓",
+      "sortDuration":     "Длит.",
+      "errorPreview":     "✗ {{msg}}",
       "errorsBtn_one":    "{{count}} ошибка",
       "errorsBtn_few":    "{{count}} ошибки",
       "errorsBtn_many":   "{{count}} ошибок",
@@ -400,5 +489,116 @@
       "uploadBtn":       "Загрузить и разобрать",
       "success":         "Загружено — сессия {{id}} в очереди"
     }
+  },
+  "tenants": {
+    "pageTitle":        "Тенанты",
+    "heading":          "Тенанты",
+    "alias":            "Псевдоним",
+    "status":           "Статус",
+    "configVersion":    "Версия конфига",
+    "harvestCron":      "Харвест cron",
+    "membersCount":     "Польз.",
+    "membersCount.hint": "KC-пользователи в организации тенанта",
+    "sourcesCount":     "Источники",
+    "sourcesCount.hint": "Количество DaliSource в dali_{alias}",
+    "atomsCount":       "Атомы",
+    "atomsCount.hint":  "Количество вершин графа в hound_{alias}",
+    "tenant":           "Тенант",
+    "back":             "Тенанты",
+    "refresh":          "Обновить",
+    "empty":            "Тенанты не найдены.",
+    "details":          "Детали →",
+    "allStatuses":      "Все статусы",
+    "searchPlaceholder":"Поиск по псевдониму…",
+    "search":           "Поиск по псевдониму…",
+    "total":            "тенантов",
+    "provision": {
+      "button":        "+ Создать тенант",
+      "title":         "Создать тенант",
+      "aliasLabel":    "Alias (a-z, 0-9, дефис)",
+      "aliasRequired": "Alias обязателен",
+      "confirm":       "Создать"
+    },
+    "action": {
+      "suspend":        "Приостановить",
+      "unsuspend":      "Возобновить",
+      "archive":        "Архивировать",
+      "archiveConfirm": "Архивировать тенант?",
+      "restore":        "Восстановить",
+      "resume":         "Повторить",
+      "forceCleanup":   "Удалить всё",
+      "forceCleanupConfirm": "Удалить все данные тенанта?"
+    },
+    "statusName": {
+      "ACTIVE":              "Активен",
+      "SUSPENDED":           "Приостановлен",
+      "ARCHIVED":            "В архиве",
+      "PROVISIONING":        "Создаётся",
+      "PROVISIONING_FAILED": "Ошибка создания",
+      "PURGED":              "Удалён"
+    }
+  },
+  "tenantSelector": {
+    "label": "Тенант:",
+    "all":   "Все тенанты"
+  },
+  "softDelete": {
+    "confirmRestore": "Восстановить пользователя?",
+    "holdDaysPrompt": "Установить legal-hold на N дней:",
+    "expired":        "истекло",
+    "daysLeft":       "{{n}} дн.",
+    "desc":           "Список пользователей, отключённых через soft-delete. После dataRetentionUntil user будет окончательно удалён, если нет legalHoldUntil.",
+    "empty":          "Нет soft-deleted пользователей.",
+    "col": {
+      "deletedAt":  "Удалён",
+      "by":         "Кем",
+      "reason":     "Причина",
+      "retention":  "До purge",
+      "hold":       "Legal hold",
+      "actions":    "Действия"
+    }
+  },
+  "sessionActivity": {
+    "desc":  "События сессий за последние 180 дней.",
+    "empty": "Событий не найдено.",
+    "col": {
+      "ts":        "Время",
+      "eventType": "Событие",
+      "tenant":    "Тенант",
+      "ip":        "IP",
+      "result":    "Результат"
+    }
+  },
+  "preferences": {
+    "desc":      "Персональные настройки UI. Применяются во всех модулях платформы.",
+    "theme":     "Тема",
+    "themeOpts": { "light": "Светлая", "dark": "Тёмная", "auto": "Системная" },
+    "lang":      "Язык",
+    "langOpts":  { "ru": "Русский", "en": "English" },
+    "tz":        "Часовой пояс",
+    "dateFmt":   "Формат даты",
+    "startPage": "Стартовая страница",
+    "density":   "Плотность",
+    "densityOpts": { "comfortable": "Комфортная", "compact": "Компактная" },
+    "fontSize":  "Размер шрифта",
+    "fontSizeOpts": { "sm": "Маленький", "md": "Средний", "lg": "Большой" }
+  },
+  "notifications": {
+    "desc":    "Выберите, как получать уведомления от платформы.",
+    "email":   "Email",
+    "browser": "Браузер",
+    "harvest": "События харвеста",
+    "errors":  "Ошибки",
+    "digest":  "Ежедневный дайджест"
+  },
+  "me": {
+    "conflict": "Данные изменены извне. Загружены свежие. Повторите изменения."
+  },
+  "consent": {
+    "title":   "Условия и конфиденциальность",
+    "desc":    "Пожалуйста, ознакомьтесь и примите обновлённые Условия использования и Политику конфиденциальности для продолжения.",
+    "tos":     "Условия использования",
+    "privacy": "Политика конфиденциальности",
+    "accept":  "Принимаю"
   }
 }

@@ -57,3 +57,8 @@ test-results/
 # ── Внутренняя документация команды → C:\AIDA\docs\ (вне репозитория) ─────────
 # docs/guides/, docs/architecture/, docs/diagrams/, docs/reference/ — публичные, tracked
 infra/terraform/
+
+# mkcert local dev certs (generated per-machine, never commit private keys)
+infra/nginx/certs/*.crt
+infra/nginx/certs/*.key
+infra/nginx/certs/*.pem

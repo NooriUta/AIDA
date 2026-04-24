@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.rest.SourceDTO;
 import studio.seer.dali.rest.SourceDTO.SchemaFilter;
+import studio.seer.dali.secrets.SecretEncryption;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -25,19 +26,23 @@ public class SourceRepository {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Inject FriggGateway frigg;
+    @Inject SecretEncryption secretCrypto;
 
-    public List<SourceDTO> findAll() {
-        return frigg.sql("SELECT FROM dali_sources ORDER BY createdAt ASC")
+    public List<SourceDTO> findAll(String tenantAlias) {
+        return frigg.sqlIn(frigg.tenantDb(tenantAlias),
+                "SELECT FROM dali_sources ORDER BY createdAt ASC")
                 .stream().map(this::toDTO).toList();
     }
 
-    public Optional<SourceDTO> findById(String id) {
-        var rows = frigg.sql("SELECT FROM dali_sources WHERE id = :id", Map.of("id", id));
+    public Optional<SourceDTO> findById(String tenantAlias, String id) {
+        var rows = frigg.sqlIn(frigg.tenantDb(tenantAlias),
+                "SELECT FROM dali_sources WHERE id = :id", Map.of("id", id));
         return rows.isEmpty() ? Optional.empty() : Optional.of(toDTO(rows.get(0)));
     }
 
-    public SourceDTO create(String name, String dialect, String jdbcUrl,
+    public SourceDTO create(String tenantAlias, String name, String dialect, String jdbcUrl,
                             String username, String password, SchemaFilter schemaFilter) {
+        String db = frigg.tenantDb(tenantAlias);
         String id = UUID.randomUUID().toString();
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("id",         id);
@@ -45,23 +50,25 @@ public class SourceRepository {
         p.put("dialect",    dialect);
         p.put("jdbcUrl",    jdbcUrl);
         p.put("username",   username);
-        p.put("password",   password);
+        // MTN-47: encrypt password at rest (no-op in dev without dali.source.dek)
+        p.put("password",   secretCrypto.encrypt(password));
         p.put("atomCount",  0);
         p.put("lastHarvest", null);
         p.put("schemaInclude", toJson(schemaFilter != null ? schemaFilter.include() : List.of()));
         p.put("schemaExclude", toJson(schemaFilter != null ? schemaFilter.exclude() : List.of()));
         p.put("createdAt",  Instant.now().toString());
-        frigg.sql(
+        frigg.sqlIn(db,
             "INSERT INTO dali_sources SET id = :id, name = :name, dialect = :dialect, " +
             "jdbcUrl = :jdbcUrl, username = :username, password = :password, " +
             "atomCount = :atomCount, lastHarvest = :lastHarvest, " +
             "schemaInclude = :schemaInclude, schemaExclude = :schemaExclude, " +
             "createdAt = :createdAt", p);
-        return findById(id).orElseThrow(() -> new IllegalStateException("Source not found after insert: " + id));
+        return findById(tenantAlias, id).orElseThrow(() -> new IllegalStateException("Source not found after insert: " + id));
     }
 
-    public Optional<SourceDTO> update(String id, String name, String dialect, String jdbcUrl,
+    public Optional<SourceDTO> update(String tenantAlias, String id, String name, String dialect, String jdbcUrl,
                                       String username, String password, SchemaFilter schemaFilter) {
+        String db = frigg.tenantDb(tenantAlias);
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("id",      id);
         p.put("name",    name);
@@ -74,22 +81,25 @@ public class SourceRepository {
             "jdbcUrl = :jdbcUrl, username = :username, " +
             "schemaInclude = :schemaInclude, schemaExclude = :schemaExclude WHERE id = :id";
         if (password != null && !password.isBlank()) {
-            p.put("password", password);
+            // MTN-47: encrypt on update path too
+            p.put("password", secretCrypto.encrypt(password));
             sql = "UPDATE dali_sources SET name = :name, dialect = :dialect, " +
                 "jdbcUrl = :jdbcUrl, username = :username, password = :password, " +
                 "schemaInclude = :schemaInclude, schemaExclude = :schemaExclude WHERE id = :id";
         }
-        frigg.sql(sql, p);
-        return findById(id);
+        frigg.sqlIn(db, sql, p);
+        return findById(tenantAlias, id);
     }
 
-    public void delete(String id) {
-        frigg.sql("DELETE FROM dali_sources WHERE id = :id", Map.of("id", id));
+    public void delete(String tenantAlias, String id) {
+        frigg.sqlIn(frigg.tenantDb(tenantAlias),
+                "DELETE FROM dali_sources WHERE id = :id", Map.of("id", id));
     }
 
     /** Update atom count and last harvest timestamp after a successful harvest. */
-    public void recordHarvest(String id, int atomCount) {
-        frigg.sql("UPDATE dali_sources SET atomCount = :atoms, lastHarvest = :ts WHERE id = :id",
+    public void recordHarvest(String tenantAlias, String id, int atomCount) {
+        frigg.sqlIn(frigg.tenantDb(tenantAlias),
+            "UPDATE dali_sources SET atomCount = :atoms, lastHarvest = :ts WHERE id = :id",
             Map.of("id", id, "atoms", atomCount, "ts", Instant.now().toString()));
     }
 

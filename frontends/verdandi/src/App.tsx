@@ -15,7 +15,11 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
 import { UnderConstructionPage } from './components/stubs/UnderConstructionPage';
-import { useAuthStore } from './stores/authStore';
+import { useAuthStore }   from './stores/authStore';
+import { usePrefsSync }  from './hooks/usePrefsSync';
+import { applyDom }      from './stores/prefsStore';
+import type { ServerPrefs } from './stores/prefsStore';
+import { useLoomStore }  from './stores/loomStore';
 
 const KnotPage = lazy(() =>
   import('./components/knot/KnotPage').then((m) => ({ default: m.KnotPage })),
@@ -59,6 +63,27 @@ export default function App() {
   // Verify the httpOnly cookie is still valid after page reload.
   // If the 8h token expired, checkSession clears state → ProtectedRoute redirects.
   useEffect(() => { checkSession(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-MF prefs broadcast: when HEIMDALL changes palette/theme, apply here too
+  useEffect(() => {
+    const h = (e: Event) => applyDom((e as CustomEvent<Partial<ServerPrefs>>).detail);
+    window.addEventListener('aida:prefs', h);
+    return () => window.removeEventListener('aida:prefs', h);
+  }, []);
+
+  // Tenant switch: navigate to L1 and invalidate all cached queries so data
+  // re-fetches from the newly selected tenant's ArcadeDB.
+  useEffect(() => {
+    const h = () => {
+      useLoomStore.getState().navigateToLevel('L1');
+      queryClient.invalidateQueries();
+    };
+    window.addEventListener('seer-tenant-changed', h);
+    return () => window.removeEventListener('seer-tenant-changed', h);
+  }, []);
+
+  // Sync Verdandi preferences to/from Keycloak (R4.14)
+  usePrefsSync();
 
   return (
     <QueryClientProvider client={queryClient}>

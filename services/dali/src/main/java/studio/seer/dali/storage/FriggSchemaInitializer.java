@@ -8,6 +8,9 @@ import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * Ensures the JobRunr schema exists in FRIGG (ArcadeDB) before the
  * background job server starts processing jobs.
@@ -139,9 +142,56 @@ public class FriggSchemaInitializer {
                 log.warn("FriggSchemaInitializer: schema partially initialised — one or more document " +
                          "types could not be created. Session enqueueing will be refused until Dali restarts.");
             }
+            // Ensure tenant-specific DB for default tenant and all known tenants in FRIGG
+            ensureSchema("default");
+            ensureAllTenantSchemas();
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not initialise FRIGG schema (FRIGG may be unavailable): {}",
                     e.getMessage());
+        }
+    }
+
+    /**
+     * Queries frigg-tenants for all DaliTenantConfig records and ensures
+     * dali_{alias} schema exists for each. Idempotent — safe to call at startup.
+     */
+    public void ensureAllTenantSchemas() {
+        try {
+            List<Map<String, Object>> rows = frigg.sqlIn(
+                    "frigg-tenants",
+                    "SELECT tenantAlias FROM DaliTenantConfig " +
+                    "WHERE status IN ['ACTIVE', 'PROVISIONING', 'SUSPENDED']");
+            for (Map<String, Object> row : rows) {
+                Object aliasObj = row.get("tenantAlias");
+                if (aliasObj == null) continue;
+                String alias = aliasObj.toString();
+                if (!"default".equals(alias)) {
+                    ensureSchema(alias);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not enumerate tenants from frigg-tenants: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Ensures the dali_{alias} database and schema exist for a given tenant.
+     * Idempotent — safe to call multiple times.
+     * Called at startup for "default" and by provisioning for new tenants.
+     */
+    public void ensureSchema(String tenantAlias) {
+        String dbName = frigg.tenantDb(tenantAlias);
+        log.info("FriggSchemaInitializer: ensuring tenant schema in {}", dbName);
+        try {
+            frigg.ensureDatabaseNamed(dbName);
+            for (String type : DOCUMENT_TYPES) {
+                createDocumentTypeIn(dbName, type);
+            }
+            ensurePropertiesIn(dbName);
+            createIndexesIn(dbName);
+            log.info("FriggSchemaInitializer: tenant schema ready in {}", dbName);
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not ensure tenant schema in {}: {}", dbName, e.getMessage());
         }
     }
 
@@ -188,30 +238,47 @@ public class FriggSchemaInitializer {
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not clear jobrunr_servers: {}", e.getMessage());
         }
+        // BUG-SS-STUCK: After clearStaleServers removes all server records, JobRunr's
+        // removeTimedOutBackgroundJobServers() finds nothing to requeue — leaving any
+        // PROCESSING jobs from a crashed previous run stuck forever.
+        // Fix: reset them to FAILED on startup so they appear in the dashboard and
+        // can be retried manually.
+        try {
+            frigg.sql("UPDATE `jobrunr_jobs` SET state = 'FAILED' WHERE state = 'PROCESSING'");
+            log.info("FriggSchemaInitializer: reset stale PROCESSING jobs to FAILED");
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not reset stale PROCESSING jobs: {}", e.getMessage());
+        }
     }
 
-    /**
-     * Creates a document type in FRIGG.
-     *
-     * @return {@code true} if the type was created or already exists; {@code false} on failure.
-     */
     private boolean createDocumentType(String typeName) {
+        return createDocumentTypeIn(null, typeName);
+    }
+
+    private boolean createDocumentTypeIn(String database, String typeName) {
+        String sql = "CREATE DOCUMENT TYPE `" + typeName + "` IF NOT EXISTS";
         try {
-            frigg.sql("CREATE DOCUMENT TYPE `" + typeName + "` IF NOT EXISTS");
-            log.debug("FriggSchemaInitializer: type '{}' ensured", typeName);
+            if (database != null) frigg.sqlIn(database, sql);
+            else frigg.sql(sql);
+            log.debug("FriggSchemaInitializer: type '{}' ensured (db={})", typeName, database);
             return true;
         } catch (Exception e) {
-            log.warn("FriggSchemaInitializer: could not create type '{}': {}", typeName, e.getMessage());
+            log.warn("FriggSchemaInitializer: could not create type '{}' in {}: {}", typeName, database, e.getMessage());
             return false;
         }
     }
 
     private void ensureProperties() {
+        ensurePropertiesIn(null);
+    }
+
+    private void ensurePropertiesIn(String database) {
         for (String[] p : INDEXED_PROPERTIES) {
+            String sql = String.format("CREATE PROPERTY `%s`.`%s` IF NOT EXISTS %s", p[0], p[1], p[2]);
             try {
-                frigg.sql(String.format(
-                        "CREATE PROPERTY `%s`.`%s` IF NOT EXISTS %s", p[0], p[1], p[2]));
-                log.debug("FriggSchemaInitializer: property '{}.{}' ensured", p[0], p[1]);
+                if (database != null) frigg.sqlIn(database, sql);
+                else frigg.sql(sql);
+                log.debug("FriggSchemaInitializer: property '{}.{}' ensured (db={})", p[0], p[1], database);
             } catch (Exception e) {
                 log.warn("FriggSchemaInitializer: could not create property {}.{}: {}", p[0], p[1], e.getMessage());
             }
@@ -219,30 +286,38 @@ public class FriggSchemaInitializer {
     }
 
     private void createIndexes() {
-        createIndex("jobrunr_jobs",           "id",        true);
-        createIndex("jobrunr_jobs",           "state",     false);
-        createIndex("jobrunr_recurring_jobs", "id",        true);
-        createIndex("jobrunr_servers",        "id",              true);
-        createIndex("jobrunr_servers",        "lastHeartbeat",   false);
-        createIndex("jobrunr_metadata",       "id",        true);
-        createIndex("dali_sessions",          "id",         true);
-        createIndex("dali_sessions",          "startedAt",  false);
-        createIndex("dali_sessions",          "finishedAt", false);
-        createIndex("dali_sessions",          "status",     false);
-        createIndex("dali_sessions",          "dialect",    false);
-        createIndex("dali_sessions",          "instanceId", false);
-        createIndex("dali_sources",           "id",         true);
-        createIndex("dali_sources",           "dialect",    false);
+        createIndexesIn(null);
+    }
+
+    private void createIndexesIn(String database) {
+        createIndexIn(database, "jobrunr_jobs",           "id",            true);
+        createIndexIn(database, "jobrunr_jobs",           "state",         false);
+        createIndexIn(database, "jobrunr_recurring_jobs", "id",            true);
+        createIndexIn(database, "jobrunr_servers",        "id",            true);
+        createIndexIn(database, "jobrunr_servers",        "lastHeartbeat", false);
+        createIndexIn(database, "jobrunr_metadata",       "id",            true);
+        createIndexIn(database, "dali_sessions",          "id",            true);
+        createIndexIn(database, "dali_sessions",          "startedAt",     false);
+        createIndexIn(database, "dali_sessions",          "finishedAt",    false);
+        createIndexIn(database, "dali_sessions",          "status",        false);
+        createIndexIn(database, "dali_sessions",          "dialect",       false);
+        createIndexIn(database, "dali_sessions",          "instanceId",    false);
+        createIndexIn(database, "dali_sources",           "id",            true);
+        createIndexIn(database, "dali_sources",           "dialect",       false);
     }
 
     private void createIndex(String type, String property, boolean unique) {
+        createIndexIn(null, type, property, unique);
+    }
+
+    private void createIndexIn(String database, String type, String property, boolean unique) {
         String indexType = unique ? "UNIQUE" : "NOTUNIQUE";
-        // ArcadeDB auto-generates the index name; IF NOT EXISTS skips if already present.
         String sql = String.format(
                 "CREATE INDEX IF NOT EXISTS ON `%s` (`%s`) %s", type, property, indexType);
         try {
-            frigg.sql(sql);
-            log.debug("FriggSchemaInitializer: index ensured — {} ({}) on {}", property, indexType, type);
+            if (database != null) frigg.sqlIn(database, sql);
+            else frigg.sql(sql);
+            log.debug("FriggSchemaInitializer: index ensured — {}.{} ({})", type, property, indexType);
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not create index on {}.{}: {}", type, property, e.getMessage());
         }
