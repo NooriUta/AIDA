@@ -71,7 +71,7 @@ ensure_db() {
 run_sql() {
   local base_url="$1" user="$2" pass="$3" db="$4" cmd="$5"
   local body
-  body=$(python -c 'import json,sys; print(json.dumps({"language":"sql","command":sys.argv[1]}))' "$cmd")
+  body=$(python3 -c 'import json,sys; print(json.dumps({"language":"sql","command":sys.argv[1]}))' "$cmd")
   curl -sf --max-time 10 -u "$user:$pass" -X POST "$base_url/api/v1/command/$db" \
     -H "Content-Type: application/json" --data "$body" >/dev/null 2>&1 || true
 }
