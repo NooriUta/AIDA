@@ -191,4 +191,25 @@ public class KnotResource {
                                        + ") → " + (s != null ? s.lineCount() + " lines, "
                                                + s.charCount() + " chars" : "null"))));
     }
+
+    @Query("knotSourceFile")
+    @Description("KNOT — full source file from the source archive (hound_src_{tenant}). Two-step lookup: session_id → DaliSession.file_path (lineage DB) → DaliSourceFile (archive DB). Lazy — fires only when the Source tab is open. Role: viewer+")
+    public Uni<KnotSourceFile> knotSourceFile(
+        @Name("sessionId")
+        @Description("session_id of the DaliSession (Hound format: session-{timestamp})")
+        String sessionId
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "knotSourceFile",
+                       "call", "knotSourceFile(sessionId=" + (sessionId != null ? sessionId : "") + ")"));
+        return knotService.knotSourceFile(sessionId)
+                .invoke(f -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "knotSourceFile",
+                               "sessionId", sessionId != null ? sessionId : "",
+                               "call", "knotSourceFile(sessionId=" + (sessionId != null ? sessionId : "")
+                                       + ") → " + (f != null ? f.sizeBytes() + " bytes" : "null"))));
+    }
 }

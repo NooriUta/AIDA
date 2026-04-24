@@ -737,6 +737,36 @@ export async function fetchKnotScript(sessionId: string): Promise<KnotScript | n
   return data.knotScript ?? null;
 }
 
+// ── Full source file from archive (hound_src_{tenant}) ───────────────────────
+
+export interface KnotSourceFile {
+  sessionId:   string;
+  filePath:    string;
+  sqlText:     string;
+  sizeBytes:   number;
+  sqlTextHash: string;
+}
+
+const KNOT_SOURCE_FILE = /* GraphQL */ `
+  query KnotSourceFile($sessionId: String!) {
+    knotSourceFile(sessionId: $sessionId) {
+      sessionId
+      filePath
+      sqlText
+      sizeBytes
+      sqlTextHash
+    }
+  }
+`;
+
+export async function fetchKnotSourceFile(sessionId: string): Promise<KnotSourceFile | null> {
+  const data = await gqlClient.request<{ knotSourceFile: KnotSourceFile | null }>(
+    KNOT_SOURCE_FILE,
+    { sessionId },
+  );
+  return data.knotSourceFile ?? null;
+}
+
 // ── Lazy statement extras (descendants + atom stats) ─────────────────────────
 // Feeds the LOOM Inspector "Дополнительно" tab. Accepts either an ArcadeDB @rid
 // ("#25:8333") or a stmt_geoid string — the backend resolver in KnotService.java

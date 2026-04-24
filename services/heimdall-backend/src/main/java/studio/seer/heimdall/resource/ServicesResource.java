@@ -21,6 +21,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Parallel health-ping for all platform services — both IDE (dev) and Docker instances.
@@ -67,6 +70,12 @@ public class ServicesResource {
 
     // Heimdall must not restart itself — it would kill the connection.
     private static final Set<String> NO_RESTART = Set.of("heimdall-backend");
+
+    // Quarkus services expose /q/info/build (quarkus-info extension); Node services expose /version.
+    private static final Set<String> QUARKUS_PEERS = Set.of("dali", "shuttle");
+    private static final Set<String> NODE_PEERS     = Set.of("chur");
+    private static final Pattern     VERSION_PAT    = Pattern.compile("\"version\"\\s*:\\s*\"([^\"]+)\"");
+    private final ConcurrentHashMap<String, String> versionCache = new ConcurrentHashMap<>();
 
     /**
      * Parses service entries.  Format (all fields after type are optional):
@@ -199,31 +208,45 @@ public class ServicesResource {
                 }
             }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
         }
-        return Uni.createFrom().item(System::currentTimeMillis)
-                .onItem().transformToUni(start -> {
-                    HttpRequest req = HttpRequest.newBuilder()
-                            .uri(URI.create(svc.url()))
-                            .timeout(Duration.ofSeconds(2))
-                            .GET()
-                            .build();
-                    return Uni.createFrom()
-                            .completionStage(() -> HTTP.sendAsync(req, HttpResponse.BodyHandlers.discarding()))
-                            .onItem().transform(resp -> {
-                                long latency = System.currentTimeMillis() - start;
-                                String status = resp.statusCode() < 500 ? "up" : "degraded";
-                                return new ServiceStatus(svc.name(), svc.port(), svc.mode(), status, latency, versionFor(svc));
-                            })
-                            .onFailure().recoverWithItem(e -> {
-                                long latency = System.currentTimeMillis() - start;
-                                return new ServiceStatus(svc.name(), svc.port(), svc.mode(), "down", latency, null);
-                            });
-                });
+        long start = System.currentTimeMillis();
+        HttpRequest healthReq = HttpRequest.newBuilder()
+                .uri(URI.create(svc.url()))
+                .timeout(Duration.ofSeconds(2))
+                .GET()
+                .build();
+        Uni<String> healthUni = Uni.createFrom()
+                .completionStage(() -> HTTP.sendAsync(healthReq, HttpResponse.BodyHandlers.discarding()))
+                .onItem().transform(resp -> resp.statusCode() < 500 ? "up" : "degraded")
+                .onFailure().recoverWithItem("down");
+        Uni<String> versionUni = fetchPeerVersion(svc);
+        return Uni.combine().all().unis(healthUni, versionUni).asTuple()
+                .onItem().transform(t -> new ServiceStatus(
+                        svc.name(), svc.port(), svc.mode(),
+                        t.getItem1(), System.currentTimeMillis() - start, t.getItem2()));
     }
 
-    // Self version — known at startup; peer services' versions would require
-    // per-service /q/info/build (needs quarkus-info extension on every peer).
-    // Left as TODO: wire peer fetch once extension is enabled cluster-wide.
-    private String versionFor(ServiceDef svc) {
-        return "heimdall-backend".equals(svc.name()) ? selfVersion : null;
+    private Uni<String> fetchPeerVersion(ServiceDef svc) {
+        if ("heimdall-backend".equals(svc.name())) return Uni.createFrom().item(selfVersion);
+        String key = svc.name() + ":" + svc.mode();
+        String cached = versionCache.get(key);
+        if (cached != null) return Uni.createFrom().item(cached);
+        String infoPath;
+        if (QUARKUS_PEERS.contains(svc.name())) infoPath = "/q/info/build";
+        else if (NODE_PEERS.contains(svc.name())) infoPath = "/version";
+        else return Uni.createFrom().nullItem();
+        String url = "http://" + svc.pingHost() + ":" + svc.pingPort() + infoPath;
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(2))
+                .GET().build();
+        return Uni.createFrom()
+                .completionStage(() -> HTTP.sendAsync(req, HttpResponse.BodyHandlers.ofString()))
+                .onItem().transform(resp -> {
+                    if (resp.statusCode() != 200) return null;
+                    Matcher m = VERSION_PAT.matcher(resp.body());
+                    return m.find() ? m.group(1) : null;
+                })
+                .onItem().invoke(v -> { if (v != null) versionCache.put(key, v); })
+                .onFailure().recoverWithNull();
     }
 }

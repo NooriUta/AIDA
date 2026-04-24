@@ -14,6 +14,7 @@ import {
   fetchKnotReport,
   fetchKnotSnippet,
   fetchKnotScript,
+  fetchKnotSourceFile,
   fetchKnotTableRoutines,
   fetchKnotColumnStatements,
   fetchStatementExtras,
@@ -35,8 +36,9 @@ export const qk = {
   knotSessions:  ()               => ['knotSessions']           as const,
   knotReport:    (sid: string)    => ['knotReport', sid]        as const,
   knotSnippet:   (geoid: string)  => ['knotSnippet', geoid]     as const,
-  knotScript:    (sid: string)    => ['knotScript', sid]        as const,
-  stmtExtras:    (geoid: string)  => ['statementExtras', geoid] as const,
+  knotScript:      (sid: string)    => ['knotScript', sid]        as const,
+  knotSourceFile:  (sid: string)    => ['knotSourceFile', sid]    as const,
+  stmtExtras:      (geoid: string)  => ['statementExtras', geoid] as const,
   routineDetail:    (nodeId: string) => ['routineDetail', nodeId]       as const,
   tableRoutines:    (rid: string)    => ['tableRoutines', rid]           as const,
   columnStatements: (geoid: string)  => ['columnStatements', geoid]      as const,
@@ -250,14 +252,27 @@ export function useRoutineDetail(nodeId: string | null) {
   });
 }
 
-/** Lazy full-source fetch — enabled only when the Source tab is active. */
+/** Lazy full-source fetch from DaliSnippetScript — kept for backward compat. */
 export function useKnotScript(sessionId: string | null | undefined, enabled: boolean) {
   const onError = useOnUnauthorized();
   return useQuery({
     queryKey: qk.knotScript(sessionId ?? ''),
     queryFn:  () => fetchKnotScript(sessionId!),
     enabled:  enabled && !!sessionId,
-    staleTime: 600_000,  // source doesn't change within a session — cache 10 min
+    staleTime: 600_000,
+    throwOnError: false,
+    meta: { onError },
+  });
+}
+
+/** Lazy full source file from hound_src_{tenant} archive — looked up by sessionId (two-step via DaliSession.file_path). */
+export function useKnotSourceFile(sessionId: string | null | undefined, enabled: boolean) {
+  const onError = useOnUnauthorized();
+  return useQuery({
+    queryKey: qk.knotSourceFile(sessionId ?? ''),
+    queryFn:  () => fetchKnotSourceFile(sessionId!),
+    enabled:  enabled && !!sessionId,
+    staleTime: 600_000,
     throwOnError: false,
     meta: { onError },
   });

@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import studio.seer.lineage.client.ArcadeGateway;
 import studio.seer.lineage.model.*;
 import studio.seer.tenantrouting.YggLineageRegistry;
+import studio.seer.tenantrouting.YggSourceArchiveRegistry;
 import studio.seer.lineage.security.SeerIdentity;
 
 import java.util.*;
@@ -61,12 +62,17 @@ import java.util.*;
 @ApplicationScoped
 public class KnotService {
 
-    @Inject ArcadeGateway      arcade;
-    @Inject SeerIdentity       identity;
-    @Inject YggLineageRegistry lineageRegistry;
+    @Inject ArcadeGateway           arcade;
+    @Inject SeerIdentity            identity;
+    @Inject YggLineageRegistry      lineageRegistry;
+    @Inject YggSourceArchiveRegistry sourceArchiveRegistry;
 
     String lineageDb() {
         return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
+    }
+
+    String sourceArchiveDb() {
+        return sourceArchiveRegistry.resourceFor(identity.tenantAlias()).databaseName();
     }
 
     // ── Session list ──────────────────────────────────────────────────────────
@@ -728,6 +734,50 @@ public class KnotService {
                             str(r, "script"),
                             num(r, "line_count"),
                             num(r, "char_count")
+                    );
+                });
+    }
+
+    // ── Full source file from source archive (hound_src_{tenant}) ────────────
+    //
+    // Returns the complete, unprocessed SQL document stored by Dali during parse.
+    // Unlike DaliSnippetScript (fragments in lineage DB), DaliSourceFile contains
+    // the original full file text. Accessed by session_id in hound_src_{tenant}.
+
+    public Uni<KnotSourceFile> knotSourceFile(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return Uni.createFrom().nullItem();
+
+        // Step 1: resolve file_path from lineage DB (DaliSession.session_id → file_path).
+        // Step 2: look up DaliSourceFile by file_path in archive DB (hound_src_{tenant}).
+        // This bridges Hound session_id ("session-{ts}") to Dali archive (stored by file_path).
+        String lineageSql = "SELECT file_path FROM DaliSession WHERE session_id = :sid LIMIT 1";
+
+        return arcade.sqlIn(lineageDb(), lineageSql, Map.of("sid", sessionId))
+                .onFailure().recoverWithItem(List.of())
+                .flatMap(rows -> {
+                    if (rows.isEmpty()) return Uni.createFrom().nullItem();
+                    String fp = str(rows.get(0), "file_path");
+                    if (fp == null || fp.isBlank()) return Uni.createFrom().nullItem();
+
+                    String archiveSql = """
+                        SELECT session_id, file_path, sql_text, size_bytes, sql_text_hash
+                        FROM DaliSourceFile
+                        WHERE file_path = :fp
+                        ORDER BY @rid DESC
+                        LIMIT 1
+                        """;
+                    return arcade.sqlIn(sourceArchiveDb(), archiveSql, Map.of("fp", fp));
+                })
+                .onFailure().recoverWithItem(List.of())
+                .map(rows -> {
+                    if (rows.isEmpty()) return null;
+                    var r = rows.get(0);
+                    return new KnotSourceFile(
+                            str(r, "session_id"),
+                            str(r, "file_path"),
+                            str(r, "sql_text"),
+                            r.get("size_bytes") != null ? ((Number) r.get("size_bytes")).longValue() : 0L,
+                            str(r, "sql_text_hash")
                     );
                 });
     }

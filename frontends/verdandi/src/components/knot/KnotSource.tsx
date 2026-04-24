@@ -1,20 +1,20 @@
 // src/components/knot/KnotSource.tsx
 // KNOT — "Исходник" tab: full source file viewer with line numbers.
 //
-// Storage: DaliSnippetScript document in ArcadeDB (one per Hound parse run).
+// Storage: DaliSourceFile in hound_src_{tenant} (original unprocessed SQL document).
 // Large files (30k–50k lines ≈ 2–5 MB) are paginated: PAGE_SIZE lines per
 // render pass to avoid DOM bloat. Navigation: ← Prev / Next → buttons + jump.
 // Line numbers rendered as left-gutter CSS text (no extra DOM nodes).
 
 import { memo, useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useKnotScript } from '../../services/hooks';
+import { useKnotSourceFile } from '../../services/hooks';
 
 const PAGE_SIZE   = 2000;   // lines rendered per page (keeps DOM ≤ ~2k nodes)
 const WARN_LINES  = 30_000; // show performance warning above this
 
 interface KnotSourceProps {
-  sessionId: string;
+  sessionId: string;         // DaliSession.session_id — used for two-step lookup → DaliSourceFile
   active:    boolean;        // tab is currently visible — enables lazy fetch
 }
 
@@ -24,15 +24,15 @@ export const KnotSource = memo(({ sessionId, active }: KnotSourceProps) => {
   const [jumpValue, setJumpValue] = useState('');
   const containerRef              = useRef<HTMLDivElement>(null);
 
-  const { data, isFetching, isError } = useKnotScript(sessionId, active);
+  const { data, isFetching, isError } = useKnotSourceFile(sessionId, active);
 
   // Split once into lines; memo so we don't re-split on page change
   const lines = useMemo(() => {
-    if (!data?.script) return [];
-    return data.script.split('\n');
-  }, [data?.script]);
+    if (!data?.sqlText) return [];
+    return data.sqlText.split('\n');
+  }, [data?.sqlText]);
 
-  const totalLines = lines.length || data?.lineCount || 0;
+  const totalLines = lines.length;
   const pageCount  = Math.max(1, Math.ceil(totalLines / PAGE_SIZE));
 
   // Reset to page 0 when session changes
@@ -65,10 +65,10 @@ export const KnotSource = memo(({ sessionId, active }: KnotSourceProps) => {
   }, [jumpValue, totalLines]);
 
   const copyAll = useCallback(async () => {
-    if (data?.script) {
-      await navigator.clipboard.writeText(data.script);
+    if (data?.sqlText) {
+      await navigator.clipboard.writeText(data.sqlText);
     }
-  }, [data?.script]);
+  }, [data?.sqlText]);
 
   // ── Loading / error states ────────────────────────────────────────────────
   if (!active) return null;
@@ -119,7 +119,7 @@ export const KnotSource = memo(({ sessionId, active }: KnotSourceProps) => {
         {/* Stats */}
         <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0, whiteSpace: 'nowrap' }}>
           {totalLines.toLocaleString()} {t('knot.source.lines')}
-          {data?.charCount ? ` · ${(data.charCount / 1024).toFixed(1)} KB` : ''}
+          {data?.sizeBytes ? ` · ${(data.sizeBytes / 1024).toFixed(1)} KB` : ''}
         </span>
 
         {/* Performance warning for very large files */}

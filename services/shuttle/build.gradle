@@ -39,8 +39,9 @@ dependencies {
     // Fault tolerance — @Timeout, @Retry, @Fallback for DaliClient
     implementation 'io.quarkus:quarkus-smallrye-fault-tolerance'
 
-    // Health checks — /q/health/live and /q/health/ready
+    // Health checks + Build info
     implementation 'io.quarkus:quarkus-smallrye-health'
+    implementation 'io.quarkus:quarkus-info'
 
     // Tenant routing — TenantContext, YggLineageRegistry, TenantContextFilter
     implementation project(':libraries:tenant-routing')

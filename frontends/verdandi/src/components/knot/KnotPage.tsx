@@ -393,7 +393,7 @@ export const KnotPage = memo(() => {
                 {activeTab === 'routines'   && <KnotRoutines   session={report.session} routines={report.routines ?? []} statements={report.statements} calls={report.calls ?? []} parameters={report.parameters ?? []} variables={report.variables ?? []} />}
                 {activeTab === 'statements' && <KnotStatements statements={report.statements} snippets={report.snippets} atoms={report.atoms} outputColumns={report.outputColumns} affectedColumns={report.affectedColumns} />}
                 {activeTab === 'atoms'      && <KnotAtoms      session={report.session} atoms={report.atoms} />}
-                {/* Source tab: lazy-loaded, stays mounted to avoid re-fetch on tab switch */}
+                {/* Source tab: lazy-loaded by sessionId (two-step: session_id → file_path → DaliSourceFile in hound_src_{tenant}) */}
                 <div style={{ display: activeTab === 'source' ? 'contents' : 'none' }}>
                   <KnotSource sessionId={selectedId ?? ''} active={activeTab === 'source'} />
                 </div>
