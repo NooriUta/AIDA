@@ -198,6 +198,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
+          command_timeout: 30m
           script: |
             set -e
             cd /opt/seer-studio
@@ -255,6 +256,12 @@ jobs:
               "http://localhost:2480/api/v1/ready:YGG" \
               "http://localhost:18180/kc/health/ready:KC"; do
               url="${endpoint%%:*}"; name="${endpoint##*:}"
+              # Quick pre-check: if already ready (e.g. services Up 7 days), skip retry loop
+              if curl -sf "${url}" > /dev/null 2>&1; then
+                echo "  [${name}] already ready"
+                continue
+              fi
+              # Not ready yet — wait up to 5min (30×10s)
               for i in $(seq 1 30); do
                 curl -sf "${url}" > /dev/null 2>&1 && echo "  [${name}] ready" && break
                 echo "  [${name}] retry ${i}/30..."; sleep 10
