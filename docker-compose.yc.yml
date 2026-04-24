@@ -34,9 +34,8 @@ services:
   keycloak:
     command: start --import-realm
     environment:
-      KC_HOSTNAME: "seer.${DOMAIN:-seidrstudio.pro}"
-      KC_HOSTNAME_STRICT: "true"
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"  # allow internal service-to-service calls (keycloak:8180)
+      KC_HOSTNAME: "https://seer.${DOMAIN:-seidrstudio.pro}/kc"
+      KC_HOSTNAME_STRICT: "false"    # KC is behind nginx (xforwarded headers) — strict not needed
       KC_HTTP_RELATIVE_PATH: "/kc"
       KC_PROXY_HEADERS: "xforwarded" # KC 26: replaces deprecated KC_PROXY=edge
       KC_HTTP_ENABLED: "true"        # nginx handles TLS termination
