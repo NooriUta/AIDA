@@ -40,6 +40,7 @@
     "jsdom": "^25.0.1",
     "typescript": "^5.8.3",
     "vite": "^8.0.8",
+    "vite-plugin-mkcert": "^2.0.0",
     "vitest": "^2.1.9"
   }
 }

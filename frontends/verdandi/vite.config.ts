@@ -3,6 +3,24 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { federation } from '@module-federation/vite';
 import path from 'path';
+import type { ServerOptions } from 'http-proxy';
+
+// Strip `Secure` from Set-Cookie so the HTTP Vite dev server works with
+// Docker Chur (COOKIE_SECURE=true). Prod traffic uses nginx:443.
+function stripSecureCookie() {
+  return {
+    configure(proxy: import('http-proxy').Server) {
+      proxy.on('proxyRes', (proxyRes: import('http').IncomingMessage) => {
+        const cookies = proxyRes.headers['set-cookie'];
+        if (cookies) {
+          proxyRes.headers['set-cookie'] = (cookies as string[]).map((c) =>
+            c.replace(/;\s*Secure/gi, ''),
+          );
+        }
+      });
+    },
+  } satisfies ServerOptions;
+}
 
 export default defineConfig({
   plugins: [
@@ -92,6 +110,7 @@ export default defineConfig({
       '/auth': {
         target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
+        ...stripSecureCookie(),
       },
       '/me': {
         target: process.env.CHUR_URL ?? 'http://localhost:3000',
