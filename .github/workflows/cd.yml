@@ -208,6 +208,9 @@ jobs:
               infra/scripts/lockbox-sync.sh || echo "Lockbox sync skipped (not configured)"
             fi
 
+            # Source secrets early — passwords needed for ArcadeDB health checks below
+            source .env.prod 2>/dev/null || true
+
             # Remove yc credential helper for cr.yandex (conflicts with docker login)
             if [ -f ~/.docker/config.json ]; then
               jq 'del(.credHelpers["cr.yandex"])' ~/.docker/config.json \
@@ -250,30 +253,38 @@ jobs:
             # ── Wait for infrastructure only: FRIGG, YGG, KC ──────────────────
             # Must run BEFORE init-arcadedb.sh. App services (Chur/Dali) are not
             # waited here — they depend on DBs that init creates.
-            echo "=== Waiting for infrastructure ==="
-            for endpoint in \
-              "http://localhost:2481/api/v1/ready:FRIGG" \
-              "http://localhost:2480/api/v1/ready:YGG" \
-              "http://localhost:18180/kc/health/ready:KC"; do
-              url="${endpoint%%:*}"; name="${endpoint##*:}"
-              # Quick pre-check: if already ready (e.g. services Up 7 days), skip retry loop
-              if curl -sf "${url}" > /dev/null 2>&1; then
-                echo "  [${name}] already ready"
-                continue
+            #
+            # wait_infra <url> <name> [<user:pass>]
+            #   • ArcadeDB /api/v1/ready requires Basic Auth (401 without creds)
+            #   • Uses a function to correctly propagate non-zero exit on timeout
+            #     (bare for-loop exits 0 if last cmd is `sleep`; function avoids this)
+            wait_infra() {
+              local url="$1" name="$2" auth="${3:-}"
+              local auth_flag=""
+              [ -n "$auth" ] && auth_flag="-u $auth"
+              # Quick pre-check: if already ready (e.g. services Up 7+ days), return immediately
+              if curl -sf $auth_flag "${url}" > /dev/null 2>&1; then
+                echo "  [${name}] already ready"; return 0
               fi
-              # Not ready yet — wait up to 5min (30×10s)
+              local i
               for i in $(seq 1 30); do
-                curl -sf "${url}" > /dev/null 2>&1 && echo "  [${name}] ready" && break
+                if curl -sf $auth_flag "${url}" > /dev/null 2>&1; then
+                  echo "  [${name}] ready"; return 0
+                fi
                 echo "  [${name}] retry ${i}/30..."; sleep 10
-              done || { echo "=== ${name} not ready after 300s — aborting ==="; exit 1; }
-            done
+              done
+              echo "=== ${name} not ready after 300s — aborting ==="; return 1
+            }
+            echo "=== Waiting for infrastructure ==="
+            wait_infra "http://localhost:2481/api/v1/ready"    "FRIGG" "root:${FRIGG_PASSWORD:-playwithdata}"                 || exit 1
+            wait_infra "http://localhost:2480/api/v1/ready"    "YGG"   "root:${ARCADEDB_ADMIN_PASSWORD:-playwithdata}"        || exit 1
+            wait_infra "http://localhost:18180/kc/health/ready" "KC"   ""                                                    || exit 1
 
             # ── DB bootstrap / idempotent schema init ──────────────────────────
             # FRIGG + YGG + KC are ready. Creates frigg-tenants, dali_default,
             # hound_default, hound_src_default, seeds DaliTenantConfig('default').
             # App services become healthy once DBs exist.
             echo "=== Running init-arcadedb.sh ==="
-            source .env.prod 2>/dev/null || true
             INIT_ARCADEDB_TIMEOUT=300 \
             FRIGG_URL=http://localhost:2481 \
             FRIGG_USER=root \
@@ -290,19 +301,12 @@ jobs:
               # Services will retry schema init on startup (FriggSchemaInitializer).
             }
 
-            # Health checks
+            # Health checks (reuse wait_infra; Chur/Shuttle/Verdandi need no auth)
             echo "Waiting for services..."
-            for svc in \
-              "http://localhost:13000/health:Chur" \
-              "http://localhost:18080/q/health:SHUTTLE" \
-              "http://localhost:15173/:Verdandi"; do
-              url="${svc%%:*}"; name="${svc##*:}"
-              for i in $(seq 1 12); do
-                curl -sf "${url}" && break
-                echo "  [${name}] retry ${i}/12..."; sleep 5
-              done || { echo "${name} health check FAILED"; exit 1; }
-              echo "  [${name}] OK"
-            done
+            wait_infra "http://localhost:13000/health" "Chur"     "" || { echo "Chur health check FAILED";     exit 1; }
+            wait_infra "http://localhost:18080/q/health" "SHUTTLE" "" || { echo "SHUTTLE health check FAILED"; exit 1; }
+            wait_infra "http://localhost:15173/"        "Verdandi" "" || { echo "Verdandi health check FAILED"; exit 1; }
+            echo "  All services OK"
 
             echo "Deploy OK — ${{ github.ref_name }} (${{ github.sha }})"
 
