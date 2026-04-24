@@ -106,12 +106,19 @@ jobs:
         env:
           GHCR: ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}
           YCR:  cr.yandex/${{ secrets.YC_REGISTRY_ID }}/${{ matrix.service }}
+        # Retry up to 3 times — YCR occasionally has transient connectivity issues
+        # from GitHub Actions runners (connection refused / dial tcp timeout).
         run: |
-          docker pull ${GHCR}:${{ github.ref_name }}
-          docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:${{ github.ref_name }}
-          docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:latest
-          docker push ${YCR}:${{ github.ref_name }}
-          docker push ${YCR}:latest
+          for attempt in 1 2 3; do
+            echo "=== Mirror attempt ${attempt}/3 ==="
+            docker pull ${GHCR}:${{ github.ref_name }} \
+              && docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:${{ github.ref_name }} \
+              && docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:latest \
+              && docker push ${YCR}:${{ github.ref_name }} \
+              && docker push ${YCR}:latest \
+              && break
+            [ ${attempt} -lt 3 ] && echo "Attempt ${attempt} failed, retrying in 30s..." && sleep 30
+          done
 
   # ── Deploy to production ─────────────────────────────────────────────────────
   deploy:
