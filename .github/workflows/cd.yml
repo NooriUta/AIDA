@@ -227,25 +227,38 @@ jobs:
             # Ensure external volumes exist
             docker volume create hound_databases || true
 
-            # Restart stack — --wait blocks until all services report healthy
-            # (respects healthcheck start_period + retries; KC worst-case ~240s)
+            # Start stack (no --wait: app services need DBs which init creates below)
             docker compose \
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
-              up -d --remove-orphans --wait --wait-timeout 300 || {
-                echo "=== docker compose up failed or timed out ==="
+              up -d --remove-orphans || {
+                echo "=== docker compose up failed ==="
                 docker ps -a
                 docker logs seer-studio-chur-1     --tail 60 2>&1 || true
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
-                docker logs seer-studio-frigg-1    --tail 20 2>&1 || true
                 exit 1
               }
 
+            # ── Wait for infrastructure only: FRIGG, YGG, KC ──────────────────
+            # Must run BEFORE init-arcadedb.sh. App services (Chur/Dali) are not
+            # waited here — they depend on DBs that init creates.
+            echo "=== Waiting for infrastructure ==="
+            for endpoint in \
+              "http://localhost:2481/api/v1/ready:FRIGG" \
+              "http://localhost:2480/api/v1/ready:YGG" \
+              "http://localhost:18180/kc/health/ready:KC"; do
+              url="${endpoint%%:*}"; name="${endpoint##*:}"
+              for i in $(seq 1 30); do
+                curl -sf "${url}" > /dev/null 2>&1 && echo "  [${name}] ready" && break
+                echo "  [${name}] retry ${i}/30..."; sleep 10
+              done || { echo "=== ${name} not ready after 300s — aborting ==="; exit 1; }
+            done
+
             # ── DB bootstrap / idempotent schema init ──────────────────────────
-            # All containers are healthy at this point (--wait guarantees it).
-            # Creates frigg-tenants, dali_default, hound_default, hound_src_default and
-            # seeds DaliTenantConfig('default', status=ACTIVE). Idempotent — safe on re-deploy.
-            echo "=== Running init-arcadedb.sh (all services healthy) ==="
+            # FRIGG + YGG + KC are ready. Creates frigg-tenants, dali_default,
+            # hound_default, hound_src_default, seeds DaliTenantConfig('default').
+            # App services become healthy once DBs exist.
+            echo "=== Running init-arcadedb.sh ==="
             source .env.prod 2>/dev/null || true
             INIT_ARCADEDB_TIMEOUT=300 \
             FRIGG_URL=http://localhost:2481 \
