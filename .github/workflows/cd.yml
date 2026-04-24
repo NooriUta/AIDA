@@ -31,7 +31,7 @@ jobs:
             context: ./bff/chur
             dockerfile: ./bff/chur/Dockerfile
           - service: shuttle
-            context: ./services/shuttle
+            context: .
             dockerfile: ./services/shuttle/Dockerfile
           - service: dali
             context: .
