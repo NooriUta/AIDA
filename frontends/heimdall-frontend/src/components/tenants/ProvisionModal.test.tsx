@@ -62,7 +62,7 @@ describe('form validation', () => {
   });
 
   it('accepts 4-char alias and proceeds to provisioning phase', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ keycloakOrgId: 'org-abc', lastStep: 7 }),
     } as Response);
@@ -82,7 +82,7 @@ describe('form validation', () => {
 describe('successful provisioning', () => {
   it('transitions to success phase and shows keycloakOrgId', async () => {
     const onDone = vi.fn();
-    vi.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ keycloakOrgId: 'org-abc-123', lastStep: 7 }),
     } as Response);
@@ -99,7 +99,7 @@ describe('successful provisioning', () => {
   });
 
   it('calls POST /chur/api/admin/tenants with sanitised alias', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ keycloakOrgId: 'org-x', lastStep: 7 }),
     } as Response);
@@ -117,7 +117,7 @@ describe('successful provisioning', () => {
 // ── Failed provisioning ────────────────────────────────────────────────────────
 describe('failed provisioning — step 0 (pre-flight)', () => {
   it('shows ✗ icon at step 0 and displays error cause', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({
@@ -141,7 +141,7 @@ describe('failed provisioning — step 0 (pre-flight)', () => {
 
 describe('failed provisioning — step 2 (frigg insert)', () => {
   it('marks step 2 failed; step 0 is ✓, step 7 is ○', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({
@@ -166,7 +166,7 @@ describe('failed provisioning — step 2 (frigg insert)', () => {
 
 describe('failed provisioning — step 7 (activate)', () => {
   it('all earlier steps ✓, step 7 ✗', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({ error: 'provisioning_failed', failedStep: 7, cause: 'Update failed' }),
@@ -186,7 +186,7 @@ describe('failed provisioning — step 7 (activate)', () => {
 
 describe('failed provisioning — network error', () => {
   it('shows back button when fetch throws', async () => {
-    vi.spyOn(global, 'fetch').mockRejectedValue(new Error('fetch failed'));
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'));
 
     renderModal();
     fireEvent.change(screen.getByTestId('alias-input'), { target: { value: 'gamma' } });
@@ -201,7 +201,7 @@ describe('failed provisioning — network error', () => {
 // ── Navigation ────────────────────────────────────────────────────────────────
 describe('navigation', () => {
   it('"Назад" returns to form phase', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
       status: 500,
       json: async () => ({ error: 'provisioning_failed', failedStep: 1, cause: 'KC error' }),

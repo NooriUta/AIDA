@@ -225,6 +225,13 @@ public class ServicesResource {
                         t.getItem1(), System.currentTimeMillis() - start, t.getItem2()));
     }
 
+    /** Synchronous version lookup — returns cached value or selfVersion; null for unknown peers. */
+    private String versionFor(ServiceDef svc) {
+        if (svc.self()) return selfVersion;
+        String cached = versionCache.get(svc.name() + ":" + svc.mode());
+        return cached; // may be null — callers tolerate null version
+    }
+
     private Uni<String> fetchPeerVersion(ServiceDef svc) {
         if ("heimdall-backend".equals(svc.name())) return Uni.createFrom().item(selfVersion);
         String key = svc.name() + ":" + svc.mode();
