@@ -20,7 +20,6 @@ const ServicesPage    = React.lazy(() => import('./pages/ServicesPage'));
 const DashboardPage   = React.lazy(() => import('./pages/DashboardPage'));
 const DaliPage        = React.lazy(() => import('./pages/DaliPage'));
 const DaliSourcesPage = React.lazy(() => import('./pages/DaliSourcesPage'));
-const DaliJobRunrPage = React.lazy(() => import('./pages/DaliJobRunrPage'));
 const EventStreamPage = React.lazy(() => import('./pages/EventStreamPage'));
 const ControlsPage    = React.lazy(() => import('./pages/ControlsPage'));
 const UsersPage          = React.lazy(() => import('./pages/UsersPage'));
@@ -116,12 +115,11 @@ export default function App() {
               <Route path="events"    element={<EventStreamPage />} />
             </Route>
 
-            {/* Dali section: Sessions · Sources · JobRunr */}
+            {/* Dali section: Sessions · Sources */}
             <Route path="dali">
               <Route index element={<Navigate to="sessions" replace />} />
               <Route path="sessions" element={<DaliPage />} />
               <Route path="sources"  element={<DaliSourcesPage />} />
-              <Route path="jobrunr"  element={<DaliJobRunrPage />} />
             </Route>
 
             {/* Tenant admin — admin+ only */}

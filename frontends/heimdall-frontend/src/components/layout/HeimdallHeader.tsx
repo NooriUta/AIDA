@@ -32,7 +32,6 @@ const SECTIONS: Section[] = [
     subTabs: [
       { id: 'Sessions', labelKey: 'nav.sessions', route: '/dali/sessions' },
       { id: 'Sources',  labelKey: 'nav.sources',  route: '/dali/sources'  },
-      { id: 'JobRunr',  labelKey: 'nav.jobrunr',  route: '/dali/jobrunr'  },
     ],
   },
   {
@@ -409,7 +408,6 @@ export const HeimdallHeader = memo(() => {
     pathname.includes('/admin/tenants')  ? 'Tenants'   :
     pathname.includes('/users')          ? 'Users'     :
     pathname.includes('/dali/sources')   ? 'Sources'   :
-    pathname.includes('/dali/jobrunr')   ? 'JobRunr'   :
     pathname.includes('/dali')           ? 'Sessions'  :
     pathname.includes('/docs')           ? 'Docs'      :
     pathname.includes('/dashboard')      ? 'Dashboard' :
