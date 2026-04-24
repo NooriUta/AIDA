@@ -238,6 +238,17 @@ public class FriggSchemaInitializer {
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not clear jobrunr_servers: {}", e.getMessage());
         }
+        // BUG-SS-STUCK: After clearStaleServers removes all server records, JobRunr's
+        // removeTimedOutBackgroundJobServers() finds nothing to requeue — leaving any
+        // PROCESSING jobs from a crashed previous run stuck forever.
+        // Fix: reset them to FAILED on startup so they appear in the dashboard and
+        // can be retried manually.
+        try {
+            frigg.sql("UPDATE `jobrunr_jobs` SET state = 'FAILED' WHERE state = 'PROCESSING'");
+            log.info("FriggSchemaInitializer: reset stale PROCESSING jobs to FAILED");
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not reset stale PROCESSING jobs: {}", e.getMessage());
+        }
     }
 
     private boolean createDocumentType(String typeName) {

@@ -86,20 +86,20 @@ public class JobRunrLifecycle {
             var bgServerConfig = BackgroundJobServerConfiguration
                     .usingStandardBackgroundJobServerConfiguration()
                     .andWorkerCount(config.jobrunr().workerThreads());
-            var jrConfig = JobRunr.configure()
-                    .useStorageProvider(arcadeDbStorageProvider)
-                    .useJobActivator(activator)
-                    .useBackgroundJobServer(bgServerConfig);
+            // useDashboard() MUST be called before useBackgroundJobServer() in JobRunr 8.x.
+            // Calling it after returns a terminal builder type that silently ignores the call.
             boolean dashboardEnabled = config.jobrunr().dashboard().enabled()
                     && !config.jobrunr().workerOnly();
+            var jrBuilder = JobRunr.configure()
+                    .useStorageProvider(arcadeDbStorageProvider)
+                    .useJobActivator(activator);
             if (dashboardEnabled) {
                 int port = config.jobrunr().dashboard().port();
                 try {
-                    jrConfig = jrConfig.useDashboard(port);
+                    jrBuilder = jrBuilder.useDashboard(port);
                     log.info("JobRunr: dashboard enabled on :{}", port);
                 } catch (Exception dashEx) {
                     // Port already in use (stale Dali process); continue without dashboard.
-                    // Scheduler + BackgroundJobServer still start normally.
                     log.warn("JobRunr: dashboard port :{} already in use — starting without dashboard. " +
                              "Kill the process holding the port or set DALI_JOBRUNR_DASHBOARD_PORT. Cause: {}",
                              port, dashEx.getMessage());
@@ -107,7 +107,7 @@ public class JobRunrLifecycle {
             } else if (config.jobrunr().workerOnly()) {
                 log.info("JobRunr: worker-only mode — dashboard suppressed");
             }
-            jobRunrResult = jrConfig.initialize();
+            jobRunrResult = jrBuilder.useBackgroundJobServer(bgServerConfig).initialize();
             log.info("JobRunr: ready — BackgroundJobServer started");
         } catch (Exception e) {
             log.error("JobRunr: initialisation FAILED — job scheduling is unavailable. " +

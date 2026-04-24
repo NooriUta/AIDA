@@ -1,6 +1,7 @@
 package studio.seer.dali.rest;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -28,6 +29,7 @@ import java.util.Map;
  * POST   /api/sources/test          → test JDBC connection
  * </pre>
  */
+@RequestScoped
 @Path("/api/sources")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)

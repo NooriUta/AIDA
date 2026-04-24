@@ -1,5 +1,6 @@
 package studio.seer.dali.rest;
 
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
@@ -36,6 +37,7 @@ import java.util.stream.Stream;
  * {@link SessionService#enqueue} with {@code uploaded=true}.  {@link studio.seer.dali.job.ParseJob}
  * deletes the temp directory once the session completes or fails.
  */
+@RequestScoped
 @jakarta.ws.rs.Path("/api/sessions/upload")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
 public class FileUploadResource {

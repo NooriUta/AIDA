@@ -126,28 +126,15 @@ public class SessionService {
                 "would leak parse data into the wrong tenant database.");
         }
 
+        // Instance-level serialization: workerThreads=1 means JobRunr queues
+        // new jobs automatically. No rejection — any submitted job will run
+        // once the current one finishes, regardless of tenant.
         if (!input.preview()) {
-            if (input.clearBeforeWrite()) {
-                boolean conflict = sessions.values().stream()
-                        .filter(s -> tenantAlias.equals(s.tenantAlias()))
-                        .anyMatch(s -> s.status() == SessionStatus.QUEUED
-                                    || s.status() == SessionStatus.RUNNING);
-                if (conflict) {
-                    throw new IllegalStateException(
-                            "Cannot start clearBeforeWrite session: another session is active. " +
-                            "Wait for it to complete first.");
-                }
-            } else {
-                boolean clearRunning = sessions.values().stream()
-                        .filter(s -> tenantAlias.equals(s.tenantAlias()))
-                        .anyMatch(s -> (s.status() == SessionStatus.QUEUED
-                                     || s.status() == SessionStatus.RUNNING)
-                                     && s.clearBeforeWrite());
-                if (clearRunning) {
-                    throw new IllegalStateException(
-                            "Cannot start session: a clearBeforeWrite operation is in progress. " +
-                            "Wait for it to complete first.");
-                }
+            boolean hasActive = sessions.values().stream()
+                    .anyMatch(s -> s.status() == SessionStatus.QUEUED
+                               || s.status() == SessionStatus.RUNNING);
+            if (hasActive) {
+                log.info("Session will queue — another parse is active on this instance (tenant={})", tenantAlias);
             }
         }
         String sessionId = UUID.randomUUID().toString();
@@ -293,6 +280,17 @@ public class SessionService {
     /** Backward-compat overload — returns sessions for "default" tenant. */
     public List<Session> listRecent(int limit) {
         return listRecent("default", limit);
+    }
+
+    /**
+     * Returns sessions across ALL tenants, newest first.
+     * Intended for superadmin multi-tenant view (UC-S07).
+     */
+    public List<Session> listAllTenants(int limit) {
+        return sessions.values().stream()
+                .sorted(Comparator.comparing(Session::startedAt).reversed())
+                .limit(limit)
+                .toList();
     }
 
     public boolean isFriggHealthy() { return friggHealthy; }

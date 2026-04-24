@@ -22,9 +22,10 @@ dependencies {
     // CDI
     implementation 'io.quarkus:quarkus-arc'
 
-    // Health + Metrics
+    // Health + Metrics + Build info
     implementation 'io.quarkus:quarkus-smallrye-health'
     implementation 'io.quarkus:quarkus-micrometer'
+    implementation 'io.quarkus:quarkus-info'
 
     // Scheduler — daily session retention purge
     implementation 'io.quarkus:quarkus-scheduler'

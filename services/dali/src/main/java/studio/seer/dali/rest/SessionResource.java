@@ -1,5 +1,6 @@
 package studio.seer.dali.rest;
 
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -11,6 +12,7 @@ import studio.seer.dali.service.CancelResult;
 import studio.seer.dali.service.SessionService;
 import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.ParseSessionInput;
+import studio.seer.shared.Session;
 import studio.seer.tenantrouting.TenantContext;
 
 import java.util.List;
@@ -27,6 +29,7 @@ import java.util.UUID;
  * POST  /api/sessions/{id}/cancel — cancel session (tenant-scoped)      → 202 | 403 | 404 | 409
  * </pre>
  */
+@RequestScoped
 @Path("/api/sessions")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -38,8 +41,13 @@ public class SessionResource {
     @Inject TenantContext           tenantCtx;
 
     @GET
-    public Response list(@QueryParam("limit") @DefaultValue("50") int limit) {
-        return Response.ok(sessionService.listRecent(tenantCtx.tenantAlias(), limit)).build();
+    public Response list(
+            @QueryParam("limit")      @DefaultValue("50")    int     limit,
+            @QueryParam("allTenants") @DefaultValue("false") boolean allTenants) {
+        List<Session> result = (allTenants && tenantCtx.isSuperadmin())
+                ? sessionService.listAllTenants(limit)
+                : sessionService.listRecent(tenantCtx.tenantAlias(), limit);
+        return Response.ok(result).build();
     }
 
     @POST

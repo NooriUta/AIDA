@@ -25,7 +25,7 @@ class HarvestConcurrencyConfigTest {
 
     @Test
     void harvestJob_execute_has_job_annotation_with_harvest_label() throws NoSuchMethodException {
-        Method execute = HarvestJob.class.getMethod("execute", String.class);
+        Method execute = HarvestJob.class.getMethod("execute", String.class, String.class);
         Job annotation = execute.getAnnotation(Job.class);
         assertNotNull(annotation, "@Job annotation must be present on HarvestJob.execute()");
         assertTrue(Arrays.asList(annotation.labels()).contains("harvest"),

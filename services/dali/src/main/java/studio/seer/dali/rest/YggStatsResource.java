@@ -1,5 +1,6 @@
 package studio.seer.dali.rest;
 
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -22,6 +23,7 @@ import java.util.Map;
  * GET /api/stats  →  200 OK + YggStats JSON
  * </pre>
  */
+@RequestScoped
 @Path("/api/stats")
 @Produces(MediaType.APPLICATION_JSON)
 public class YggStatsResource {
