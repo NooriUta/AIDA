@@ -1,3 +1,16 @@
+## [v1.3.2] — 2026-04-24
+
+### Bug Fixes
+
+- **cd**: use docker compose up --wait before init-arcadedb.sh ([`3aa11ca`](https://github.com/NooriUta/AIDA/commit/3aa11caa575c578860042ea4e1989d032bdae7b4))
+
+- **cd**: increase init-arcadedb timeout 120→300s, add explicit ArcadeDB readiness wait ([`529bb8e`](https://github.com/NooriUta/AIDA/commit/529bb8e35e91cd728640d54e7b61ce9b4e35b3aa))
+
+
+### Miscellaneous
+
+- **release**: update CHANGELOG for v1.3.1 [skip ci] ([`74b74e0`](https://github.com/NooriUta/AIDA/commit/74b74e0ec8bd0ef9db82790fb770ca53834652c7))
+
 ## [v1.3.1] — 2026-04-24
 
 ### Bug Fixes
