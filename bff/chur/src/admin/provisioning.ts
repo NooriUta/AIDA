@@ -248,8 +248,27 @@ export async function provisionTenant(
       const body = await res.text().catch(() => '');
       throw new Error(`KC org ${res.status}${body ? `: ${body.slice(0, 300)}` : ''}`);
     }
-    const loc = res.headers.get('Location') ?? '';
-    return loc.split('/').pop() ?? alias;
+    // Extract org UUID from Location header (KC 26+ returns "…/organizations/{uuid}" on 201).
+    let orgId = '';
+    if (res.status === 201) {
+      const loc = res.headers.get('Location') ?? '';
+      orgId = loc.split('/').pop() ?? '';
+    }
+    // Fallback: Location absent (201 without header) or 409 (org already exists, no Location).
+    // Query KC by alias to obtain the actual UUID — never store the alias string as keycloakOrgId.
+    if (!orgId || orgId.length < 8) {
+      const t2 = await kcAdminToken();
+      const sr = await fetch(
+        `${KC_BASE}/admin/realms/${KC_REALM}/organizations?search=${encodeURIComponent(alias)}`,
+        { headers: { 'Authorization': `Bearer ${t2}` }, signal: AbortSignal.timeout(5_000) },
+      );
+      if (!sr.ok) throw new Error(`KC org lookup failed: ${sr.status}`);
+      const found = (await sr.json() as Array<{ id: string; alias: string }>)
+        .find(o => o.alias === alias);
+      if (!found) throw new Error(`KC org "${alias}" not found after create`);
+      orgId = found.id;
+    }
+    return orgId;
   }, async () => {
     const token = await kcAdminToken().catch(() => '');
     if (!token || !keycloakOrgId) return;
