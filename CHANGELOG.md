@@ -1,3 +1,14 @@
+## [v1.3.3] — 2026-04-24
+
+### Bug Fixes
+
+- **cd**: fix deploy order — wait infra only, then init, then app health ([`6828568`](https://github.com/NooriUta/AIDA/commit/682856821ad3ce5d8b56b49f9fe0829229465255))
+
+
+### Miscellaneous
+
+- **release**: update CHANGELOG for v1.3.2 [skip ci] ([`4489c26`](https://github.com/NooriUta/AIDA/commit/4489c26d1fa91bd59ec88f789bc6b96b26dd1ef9))
+
 ## [v1.3.2] — 2026-04-24
 
 ### Bug Fixes
