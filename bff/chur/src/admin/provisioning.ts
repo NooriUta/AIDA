@@ -139,11 +139,12 @@ async function friggSql(db: string, command: string, params?: Record<string, unk
 }
 
 async function yggCreateDb(dbName: string): Promise<void> {
-  // ArcadeDB 26.x removed POST /api/v1/create/{name}; use server-command API.
+  // ArcadeDB 26.x server-command API — plain name, no backtick quoting, no IF NOT EXISTS clause.
+  // Backticks and IF NOT EXISTS are stored literally as part of the DB name in 26.3.x.
   const res = await fetch(`${YGG_URL}/api/v1/server`, {
     method:  'POST',
     headers: { 'Authorization': `Basic ${YGG_BASIC}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ command: `create database \`${dbName}\` if not exists` }),
+    body:    JSON.stringify({ command: `create database ${dbName}` }),
     signal:  AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
@@ -156,10 +157,11 @@ async function yggCreateDb(dbName: string): Promise<void> {
 async function friggCreateDb(dbName: string): Promise<void> {
   // Drop first: clears any partially-initialised state left by a prior failed run.
   // ArcadeDB returns error if db doesn't exist — we ignore it.
+  // Plain name only — no backtick quoting, no IF NOT EXISTS (stored literally in 26.3.x).
   await fetch(`${FRIGG_URL}/api/v1/server`, {
     method:  'POST',
     headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ command: `drop database \`${dbName}\`` }),
+    body:    JSON.stringify({ command: `drop database ${dbName}` }),
     signal:  AbortSignal.timeout(10_000),
   }).catch(() => {});
   await new Promise(r => setTimeout(r, 300));
@@ -167,7 +169,7 @@ async function friggCreateDb(dbName: string): Promise<void> {
   const res = await fetch(`${FRIGG_URL}/api/v1/server`, {
     method:  'POST',
     headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ command: `create database \`${dbName}\`` }),
+    body:    JSON.stringify({ command: `create database ${dbName}` }),
     signal:  AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
@@ -455,7 +457,7 @@ async function yggDropDb(dbName: string): Promise<void> {
   await fetch(`${YGG_URL}/api/v1/server`, {
     method: 'POST',
     headers: { 'Authorization': `Basic ${YGG_BASIC}`, 'Content-Type': 'application/json' },
-    body:   JSON.stringify({ command: `drop database \`${dbName}\` if exists` }),
+    body:   JSON.stringify({ command: `drop database ${dbName}` }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => {});
 }
@@ -463,7 +465,7 @@ async function friggDropDb(dbName: string): Promise<void> {
   await fetch(`${FRIGG_URL}/api/v1/server`, {
     method: 'POST',
     headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
-    body:   JSON.stringify({ command: `drop database \`${dbName}\` if exists` }),
+    body:   JSON.stringify({ command: `drop database ${dbName}` }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => {});
 }
