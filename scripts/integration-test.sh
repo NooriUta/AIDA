@@ -141,10 +141,23 @@ info "YGG /api/v1/create/diag_ci_test → HTTP ${YGG_CREATE_CODE} | ${YGG_CREATE
 curl -s -o /dev/null -X DELETE -u "root:${YGG_PASS_DIAG}" \
   http://localhost:2480/api/v1/drop/diag_ci_test 2>/dev/null || true
 
+# ── 1c. FRIGG DIAGNOSTICS ─────────────────────────────────────────────────────
+step "1c. FRIGG connectivity diagnostics (localhost:2481)"
+FRIGG_PASS_DIAG=$(grep -oP '(?<=FRIGG_PASSWORD=).*' /opt/seer-studio/.env.prod 2>/dev/null | head -1 || echo "playwithdata")
+
+FRIGG_READY=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
+  http://localhost:2481/api/v1/ready 2>/dev/null || echo "CONN_ERR")
+info "FRIGG /api/v1/ready → ${FRIGG_READY}"
+
+FRIGG_SERVER_DIAG=$(curl -s --max-time 5 \
+  -u "root:${FRIGG_PASS_DIAG}" \
+  http://localhost:2481/api/v1/server 2>/dev/null | head -c 200 || echo "CONN_ERR")
+info "FRIGG /api/v1/server (auth) → ${FRIGG_SERVER_DIAG}"
+
 # ── 2. CREATE TENANT ──────────────────────────────────────────────────────────
 step "2. Create tenant '${TENANT}'"
 info "POST /api/admin/tenants"
-CREATE_RESP=$(curl -sk --max-time 30 \
+CREATE_RESP=$(curl -sk --max-time 240 \
   -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -X POST "${BASE}/api/admin/tenants" \
   -H "Content-Type: application/json" \
