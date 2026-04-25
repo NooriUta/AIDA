@@ -182,7 +182,8 @@ jobs:
             HEIMDALL_CIDR="${{ secrets.HEIMDALL_CIDR_STAGING }}"
             CONF=/opt/seer-studio/infra/nginx/nginx.conf
             CIDR="${HEIMDALL_CIDR:-0.0.0.0/0}"
-            sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g; s/\${HEIMDALL_CIDR}/'"${CIDR}"'/g' ${CONF} \
+            # Используем | как разделитель sed — CIDR содержит '/' что ломает стандартный s/.../
+            sudo bash -c "sed 's|\${DOMAIN}|'"${DOMAIN}"'|g; s|\${HEIMDALL_CIDR}|'"${CIDR}"'|g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
             if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ] && \

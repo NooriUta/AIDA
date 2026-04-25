@@ -191,7 +191,8 @@ jobs:
             # If HEIMDALL_CIDR secret is empty, fall back to deny-all (0.0.0.0/32)
             # to avoid nginx "invalid number of arguments in allow directive" error.
             CIDR="${HEIMDALL_CIDR:-0.0.0.0/32}"
-            sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g; s/\${HEIMDALL_CIDR}/'"${CIDR}"'/g' ${CONF} \
+            # Используем | как разделитель sed — CIDR содержит '/' что ломает стандартный s/.../
+            sudo bash -c "sed 's|\${DOMAIN}|'"${DOMAIN}"'|g; s|\${HEIMDALL_CIDR}|'"${CIDR}"'|g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
             # Reload only if all three certs exist (root, seer, heimdall)
