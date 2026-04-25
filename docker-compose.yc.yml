@@ -59,6 +59,9 @@ services:
       # CD-16: FriggYggLineageRegistry default frigg.url=localhost:2481 — override for Docker
       FRIGG_URL: "http://frigg:2480"
       FRIGG_USER: "root"
+      # CD-17: FriggYggLineageRegistry default ygg.url=localhost:2480 — override for Docker
+      # yggInstanceUrl in DaliTenantConfig is null → falls back to ygg.url config property
+      YGG_URL: "http://ygg:2480"
     <<: *env_file
     deploy:
       resources:
