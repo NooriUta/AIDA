@@ -131,10 +131,10 @@ BAD_CODE=$(curl -sk --max-time 10 \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"wrongpassword"}' \
   -o /dev/null -w "%{http_code}" || echo "000")
-if [ "$BAD_CODE" = "401" ]; then
-  ok "S-03: Неверный пароль → 401"
+if [ "$BAD_CODE" = "401" ] || [ "$BAD_CODE" = "429" ]; then
+  ok "S-03: Неверный пароль → ${BAD_CODE} (401=rejected, 429=KC brute-force protection)"
 else
-  fail "S-03: Неверный пароль ожидали 401, получили ${BAD_CODE}"
+  fail "S-03: Неверный пароль ожидали 401/429, получили ${BAD_CODE}"
 fi
 
 # ── S-04: GraphQL ────────────────────────────────────────────────────────────
