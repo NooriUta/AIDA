@@ -83,26 +83,24 @@ async function retry<T>(fn: () => Promise<T>, times = 2): Promise<T> {
 }
 
 // ArcadeDB 26.x: after server-command create the schema engine initialises
-// slightly later than the query engine. Poll with CREATE (no IF NOT EXISTS) so we
-// get 200 on first success or 400 "type already exists" on retry — both mean the
-// schema engine is ready. 500 "not available" means keep waiting. Max ~10 s.
+// asynchronously. Poll with a DDL probe until 200/400 (ready) or timeout (120 s).
 async function waitDbAccessible(baseUrl: string, auth: string, dbName: string): Promise<void> {
-  for (let i = 0; i < 20; i++) {
-    await new Promise(r => setTimeout(r, 500));
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 1_000));
     const res = await fetch(`${baseUrl}/api/v1/command/${encodeURIComponent(dbName)}`, {
       method:  'POST',
       headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
       body:    JSON.stringify({ language: 'sql', command: 'CREATE DOCUMENT TYPE _probe_init', params: {} }),
-      signal:  AbortSignal.timeout(3_000),
+      signal:  AbortSignal.timeout(5_000),
     }).catch(() => null);
     if (!res) continue;
     if (res.status === 500) {
       const body = await res.text().catch(() => '');
       if (body.includes('not available')) continue;
     }
-    return; // 200 (created) or 400 (already exists) or any other non-"not available" → ready
+    return; // 200 created / 400 type-already-exists / anything else → schema engine up
   }
-  throw new Error(`DB ${dbName} did not become accessible for DDL within 10 s`);
+  throw new Error(`DB ${dbName} did not become accessible for DDL within 120 s`);
 }
 
 async function kcAdminToken(): Promise<string> {
@@ -122,13 +120,22 @@ async function kcAdminToken(): Promise<string> {
 }
 
 async function friggSql(db: string, command: string, params?: Record<string, unknown>): Promise<void> {
-  const res = await fetch(`${FRIGG_URL}/api/v1/command/${encodeURIComponent(db)}`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${FRIGG_BASIC}` },
-    body:    JSON.stringify({ language: 'sql', command, params: params ?? {} }),
-    signal:  AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`FRIGG ${res.status}: ${await res.text().catch(() => '')}`);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const res = await fetch(`${FRIGG_URL}/api/v1/command/${encodeURIComponent(db)}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${FRIGG_BASIC}` },
+      body:    JSON.stringify({ language: 'sql', command, params: params ?? {} }),
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (res.ok) return;
+    const body = await res.text().catch(() => '');
+    if (res.status === 500 && body.includes('not available')) {
+      await new Promise(r => setTimeout(r, 1_000));
+      continue;
+    }
+    throw new Error(`FRIGG ${res.status}: ${body}`);
+  }
+  throw new Error(`FRIGG: DB ${db} not available after 60 s`);
 }
 
 async function yggCreateDb(dbName: string): Promise<void> {
