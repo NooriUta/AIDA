@@ -44,12 +44,13 @@ else
 fi
 
 # ── S-12: Keycloak health ─────────────────────────────────────────────────────
+# KC 26: /kc/health/ready не работает на основном порту — используем /kc/realms/master
 info "S-12: Keycloak health"
-KC_STATUS=$(curl -sk --max-time 10 "${BASE}/kc/health/ready" | grep -o '"status":"[^"]*"' | head -1 || echo "")
-if echo "$KC_STATUS" | grep -q "UP"; then
-  ok "S-12: Keycloak UP"
+KC_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "${BASE}/kc/realms/master" || echo "000")
+if [ "$KC_CODE" = "200" ]; then
+  ok "S-12: Keycloak UP (realms/master → 200)"
 else
-  fail "S-12: Keycloak not UP (got: ${KC_STATUS})"
+  fail "S-12: Keycloak not UP (got: ${KC_CODE})"
 fi
 
 # ── S-05: Chur health ────────────────────────────────────────────────────────

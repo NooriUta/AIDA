@@ -284,7 +284,7 @@ jobs:
             echo "=== Waiting for infrastructure ==="
             wait_infra "http://localhost:2481/api/v1/ready"     "FRIGG" || exit 1
             wait_infra "http://localhost:2480/api/v1/ready"     "YGG"   || exit 1
-            wait_infra "http://localhost:18180/kc/health/ready" "KC"    || exit 1
+            wait_infra "http://localhost:18180/kc/realms/master"  "KC"    || exit 1
 
             # ── DB bootstrap ──────────────────────────────────────────────────
             echo "=== Running init-arcadedb.sh ==="
