@@ -82,6 +82,24 @@ async function retry<T>(fn: () => Promise<T>, times = 2): Promise<T> {
   throw last;
 }
 
+// ArcadeDB 26.x server-command db creation is async — the DB may need a moment
+// to become accessible via the command endpoint. Poll until ready (max ~5 s).
+async function waitDbAccessible(baseUrl: string, auth: string, dbName: string): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    const res = await fetch(`${baseUrl}/api/v1/command/${encodeURIComponent(dbName)}`, {
+      method:  'POST',
+      headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ language: 'sql', command: 'SELECT 1', params: {} }),
+      signal:  AbortSignal.timeout(3_000),
+    }).catch(() => null);
+    if (res && res.status !== 500) return;
+    const body = await res?.text().catch(() => '') ?? '';
+    if (!body.includes('not available')) return;
+  }
+  throw new Error(`DB ${dbName} did not become accessible after creation`);
+}
+
 async function kcAdminToken(): Promise<string> {
   const res = await fetch(`${KC_BASE}/realms/master/protocol/openid-connect/token`, {
     method:  'POST',
@@ -135,6 +153,7 @@ async function friggCreateDb(dbName: string): Promise<void> {
     if (/already exists/i.test(body)) return;
     throw new Error(`FRIGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
   }
+  await waitDbAccessible(FRIGG_URL, FRIGG_BASIC, dbName);
 }
 
 // ── Cron jitter ───────────────────────────────────────────────────────────────
