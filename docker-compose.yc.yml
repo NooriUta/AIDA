@@ -56,6 +56,9 @@ services:
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
       QUARKUS_HTTP_CORS_ORIGINS: "https://${DOMAIN:-seidrstudio.pro},https://seer.${DOMAIN:-seidrstudio.pro},https://heimdall.${DOMAIN:-seidrstudio.pro},http://localhost:13000,http://localhost:15173"
+      # CD-16: FriggYggLineageRegistry default frigg.url=localhost:2481 — override for Docker
+      FRIGG_URL: "http://frigg:2480"
+      FRIGG_USER: "root"
     <<: *env_file
     deploy:
       resources:
