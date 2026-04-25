@@ -216,7 +216,12 @@ upload_dir() {
   fi
 
   info "  Пакуем ${file_count} файлов из ${dir} → ${name}.zip"
-  (cd "$dir" && zip -q "$zip_file" *.sql)
+  (cd "$dir" && python3 -c "
+import zipfile, glob, sys
+with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
+    for f in glob.glob('*.sql'):
+        z.write(f)
+" "$zip_file")
 
   info "  POST /dali/api/sessions/upload (${name}, clearBeforeWrite=${clear})"
   UPLOAD_RESP=$(curl -sk --max-time 60 \
