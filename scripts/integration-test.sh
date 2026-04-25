@@ -154,22 +154,23 @@ FRIGG_SERVER_DIAG=$(curl -s --max-time 5 \
   http://localhost:2481/api/v1/server 2>/dev/null | head -c 200 || echo "CONN_ERR")
 info "FRIGG /api/v1/server (auth) → ${FRIGG_SERVER_DIAG}"
 
-# ── 1d. PRE-CLEANUP: delete stale tenant from previous run ───────────────────
-step "1d. Pre-cleanup: удаляем '${TENANT}' если остался с прошлого прогона"
-PRE_DEL=$(curl -sk --max-time 30 \
+# ── 1d. PRE-CLEANUP: force-cleanup stale tenant from previous run ─────────────
+step "1d. Pre-cleanup: force-cleanup '${TENANT}' если остался с прошлого прогона"
+PRE_DEL=$(curl -sk --max-time 60 \
   -b "$COOKIE_JAR" \
-  -X DELETE "${BASE}/api/admin/tenants/${TENANT}" \
+  -X POST "${BASE}/api/admin/tenants/${TENANT}/force-cleanup" \
   -H "Content-Type: application/json" \
   -H "Origin: ${ORIGIN}" \
   -w "\n%{http_code}" 2>/dev/null || echo -e "\n000")
 PRE_DEL_CODE=$(echo "$PRE_DEL" | tail -1)
-if [ "$PRE_DEL_CODE" = "200" ] || [ "$PRE_DEL_CODE" = "204" ]; then
-  info "Pre-cleanup: тенант '${TENANT}' удалён (${PRE_DEL_CODE}) — ждём 5s"
+PRE_DEL_BODY=$(echo "$PRE_DEL" | head -1)
+if [ "$PRE_DEL_CODE" = "200" ]; then
+  info "Pre-cleanup: тенант '${TENANT}' очищен — ждём 5s"
   sleep 5
 elif [ "$PRE_DEL_CODE" = "404" ]; then
   info "Pre-cleanup: тенант '${TENANT}' не существует — OK"
 else
-  info "Pre-cleanup: DELETE → ${PRE_DEL_CODE} (игнорируем, продолжаем)"
+  info "Pre-cleanup: force-cleanup → ${PRE_DEL_CODE}: ${PRE_DEL_BODY} (игнорируем, продолжаем)"
 fi
 
 # ── 2. CREATE TENANT ──────────────────────────────────────────────────────────
