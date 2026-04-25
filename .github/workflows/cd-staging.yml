@@ -135,7 +135,7 @@ jobs:
 
       - name: Fix file permissions for scp
         run: |
-          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/ infra/nginx/ scripts/
+          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/ infra/nginx/ scripts/ tests/
           chmod a+x infra/scripts/*.sh scripts/*.sh
 
       - name: Ensure deploy dir is writable
@@ -145,7 +145,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER_STAGING }}
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
           script: |
-            sudo mkdir -p /opt/seer-studio/infra/scripts /opt/seer-studio/infra/nginx /opt/seer-studio/scripts
+            sudo mkdir -p /opt/seer-studio/infra/scripts /opt/seer-studio/infra/nginx /opt/seer-studio/scripts /opt/seer-studio/tests
             sudo chown -R ubuntu:ubuntu /opt/seer-studio
 
       - name: Copy prod compose to server
@@ -154,7 +154,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST_STAGING }}
           username: ${{ secrets.DEPLOY_USER_STAGING }}
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
-          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/,infra/nginx/,scripts/
+          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/,infra/nginx/,scripts/,tests/
           target:   /opt/seer-studio/
 
       - name: Write compose .env on server
@@ -333,6 +333,26 @@ jobs:
             cd /opt/seer-studio
             DOMAIN=${{ secrets.DOMAIN_STAGING }} \
             bash scripts/smoke-test.sh
+
+      # ── Integration tests ─────────────────────────────────────────────────────
+      - name: Run integration tests
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          command_timeout: 20m
+          script: |
+            cd /opt/seer-studio
+            # Use repo test fixtures (tests/data/erp) as the default dataset.
+            # On the VM the full ERP dataset lives at tests/data/erp/CRM|HR|FIN|root
+            # (deployed via SCP). Repo fixtures are minimal but valid PL/SQL stubs
+            # that pass Dali parsing, so CI always has data without large file blobs.
+            DATA_DIR=/opt/seer-studio/tests/data/erp
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+            TENANT=acme-ci \
+            DATA_DIR=${DATA_DIR} \
+            bash scripts/integration-test.sh
 
       # ── Load test (опционально) ───────────────────────────────────────────────
       - name: Run load test (k6)
