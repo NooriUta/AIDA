@@ -64,20 +64,24 @@ fi
 
 # ── S-06: Shuttle health ─────────────────────────────────────────────────────
 info "S-06: Shuttle health (local)"
-SHUTTLE=$(curl -s --max-time 10 "http://localhost:18080/q/health" | grep -o '"status":"[^"]*"' | head -1 || echo "")
-if echo "$SHUTTLE" | grep -q "UP"; then
+# Quarkus returns pretty-printed JSON with spaces: "status": "UP"
+# Use grep -q on whole body to handle both compact and pretty-printed formats
+SHUTTLE_BODY=$(curl -s --max-time 10 "http://localhost:18080/q/health" || echo "")
+if echo "$SHUTTLE_BODY" | grep -q '"UP"'; then
   ok "S-06: Shuttle UP"
 else
-  fail "S-06: Shuttle not UP (got: ${SHUTTLE})"
+  SHUTTLE_STATUS=$(echo "$SHUTTLE_BODY" | grep -oE '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 || echo "no response")
+  fail "S-06: Shuttle not UP (got: ${SHUTTLE_STATUS})"
 fi
 
 # ── S-07b: Dali health ───────────────────────────────────────────────────────
 info "S-07b: Dali health (local)"
-DALI=$(curl -s --max-time 10 "http://localhost:19090/q/health" | grep -o '"status":"[^"]*"' | head -1 || echo "")
-if echo "$DALI" | grep -q "UP"; then
+DALI_BODY=$(curl -s --max-time 10 "http://localhost:19090/q/health" || echo "")
+if echo "$DALI_BODY" | grep -q '"UP"'; then
   ok "S-07b: Dali UP"
 else
-  fail "S-07b: Dali not UP (got: ${DALI})"
+  DALI_STATUS=$(echo "$DALI_BODY" | grep -oE '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 || echo "no response")
+  fail "S-07b: Dali not UP (got: ${DALI_STATUS})"
 fi
 
 # ── S-01: Login ───────────────────────────────────────────────────────────────
