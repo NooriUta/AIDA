@@ -19,6 +19,13 @@ import { config } from '../config';
 
 const ALIAS_REGEX = /^[a-z][a-z0-9-]{2,30}[a-z0-9]$/;
 
+/**
+ * ArcadeDB database names must match [a-zA-Z_$][a-zA-Z0-9_$]* — no hyphens.
+ * Tenant aliases may contain hyphens (e.g. "acme-ci"), so we replace them with
+ * underscores when constructing ArcadeDB database names.
+ */
+const dbSafe = (alias: string) => alias.replace(/-/g, '_');
+
 const RESERVED = new Set([
   'default', 'lore', 'audit', 'system', 'admin', 'api', 'www', 'test',
   'staging', 'prod', 'heimdall', 'frigg', 'ygg', 'dali', 'mimir', 'anvil',
@@ -293,9 +300,9 @@ export async function provisionTenant(
       {
         alias,
         orgId:       keycloakOrgId,
-        lineageDb:   `hound_${alias}`,
-        sourceDb:    `hound_src_${alias}`,
-        daliDb:      `dali_${alias}`,
+        lineageDb:   `hound_${dbSafe(alias)}`,
+        sourceDb:    `hound_src_${dbSafe(alias)}`,
+        daliDb:      `dali_${dbSafe(alias)}`,
         harvestCron: harvestCron(alias),
         ts:          Date.now(),
       },
@@ -309,26 +316,26 @@ export async function provisionTenant(
 
   // Step 3 — YGG lineage DB (compensation: drop)
   await runStep(3, async () => {
-    await yggCreateDb(`hound_${alias}`);
+    await yggCreateDb(`hound_${dbSafe(alias)}`);
   }, async () => {
-    await yggDropDb(`hound_${alias}`).catch(() => {});
+    await yggDropDb(`hound_${dbSafe(alias)}`).catch(() => {});
   });
 
   // Step 4 — YGG source archive DB (compensation: drop)
   await runStep(4, async () => {
-    await yggCreateDb(`hound_src_${alias}`);
+    await yggCreateDb(`hound_src_${dbSafe(alias)}`);
   }, async () => {
-    await yggDropDb(`hound_src_${alias}`).catch(() => {});
+    await yggDropDb(`hound_src_${dbSafe(alias)}`).catch(() => {});
   });
 
   // Step 5 — FRIGG dali DB (compensation: drop)
   await runStep(5, async () => {
-    await friggCreateDb(`dali_${alias}`);
-    await friggSql(`dali_${alias}`, `CREATE DOCUMENT TYPE DaliSession IF NOT EXISTS`);
-    await friggSql(`dali_${alias}`, `CREATE PROPERTY DaliSession.sessionId IF NOT EXISTS STRING`);
-    await friggSql(`dali_${alias}`, `CREATE INDEX IF NOT EXISTS ON DaliSession (sessionId) UNIQUE`);
+    await friggCreateDb(`dali_${dbSafe(alias)}`);
+    await friggSql(`dali_${dbSafe(alias)}`, `CREATE DOCUMENT TYPE DaliSession IF NOT EXISTS`);
+    await friggSql(`dali_${dbSafe(alias)}`, `CREATE PROPERTY DaliSession.sessionId IF NOT EXISTS STRING`);
+    await friggSql(`dali_${dbSafe(alias)}`, `CREATE INDEX IF NOT EXISTS ON DaliSession (sessionId) UNIQUE`);
   }, async () => {
-    await friggDropDb(`dali_${alias}`).catch(() => {});
+    await friggDropDb(`dali_${dbSafe(alias)}`).catch(() => {});
   });
 
   // Step 6 — Register harvest cron (best-effort; HEIMDALL may not be up yet in dev)
@@ -459,12 +466,12 @@ export async function forceCleanupTenant(alias: string): Promise<void> {
   }
 
   // Drop YGG DBs (best-effort)
-  for (const db of [`hound_${alias}`, `hound_src_${alias}`]) {
+  for (const db of [`hound_${dbSafe(alias)}`, `hound_src_${dbSafe(alias)}`]) {
     await yggDropDb(db);
   }
 
   // Drop FRIGG dali DB (best-effort)
-  await friggDropDb(`dali_${alias}`);
+  await friggDropDb(`dali_${dbSafe(alias)}`);
 
   // Delete tenant config row
   await friggSql('frigg-tenants',
