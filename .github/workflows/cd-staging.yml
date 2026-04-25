@@ -361,7 +361,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST_STAGING }}
           username: ${{ secrets.DEPLOY_USER_STAGING }}
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
-          command_timeout: 20m
+          command_timeout: 40m
           script: |
             cd /opt/seer-studio
             # Use repo test fixtures (tests/data/erp) as the default dataset.
