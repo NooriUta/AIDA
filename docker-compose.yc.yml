@@ -85,6 +85,11 @@ services:
       FRIGG_USER:        "root"
       # FRIGG_PASSWORD intentionally omitted — read from .env.prod via <<: *env_file below.
       # Explicit value here would be shadowed by env_file anyway (env_file wins in Compose merge order).
+      # CD-18: provisioning.ts reads YGG_URL / YGG_USER / YGG_PASS for tenant pre-flight and
+      # DB creation. Default in code is localhost:2480 (dev only) — must override for Docker.
+      YGG_URL:  "http://ygg:2480"
+      YGG_USER: "root"
+      YGG_PASS: ${ARCADEDB_ADMIN_PASSWORD:-playwithdata}
     <<: *env_file
     deploy:
       resources:
