@@ -155,24 +155,38 @@ FRIGG_SERVER_DIAG=$(curl -s --max-time 5 \
 info "FRIGG /api/v1/server (auth) → ${FRIGG_SERVER_DIAG}"
 
 # ── 1d. PRE-CLEANUP: force-cleanup stale tenant from previous run ─────────────
+# force-cleanup requires aida:admin:destructive — only super-admin has it.
 step "1d. Pre-cleanup: force-cleanup '${TENANT}' если остался с прошлого прогона"
-PRE_DEL=$(curl -sk --max-time 60 \
-  -b "$COOKIE_JAR" \
-  -X POST "${BASE}/api/admin/tenants/${TENANT}/force-cleanup" \
+SUPER_JAR="/tmp/super_cookies_$$.txt"
+SUPER_LOGIN=$(curl -sk --max-time 15 \
+  -c "$SUPER_JAR" \
+  -X POST "${BASE}/auth/login" \
   -H "Content-Type: application/json" \
-  -H "Origin: ${ORIGIN}" \
-  -d '{}' \
+  -d '{"username":"superadmin","password":"superadmin"}' \
   -w "\n%{http_code}" 2>/dev/null || echo -e "\n000")
-PRE_DEL_CODE=$(echo "$PRE_DEL" | tail -1)
-PRE_DEL_BODY=$(echo "$PRE_DEL" | head -1)
-if [ "$PRE_DEL_CODE" = "200" ]; then
-  info "Pre-cleanup: тенант '${TENANT}' очищен — ждём 5s"
-  sleep 5
-elif [ "$PRE_DEL_CODE" = "404" ]; then
-  info "Pre-cleanup: тенант '${TENANT}' не существует — OK"
+SUPER_CODE=$(echo "$SUPER_LOGIN" | tail -1)
+if [ "$SUPER_CODE" = "200" ]; then
+  PRE_DEL=$(curl -sk --max-time 60 \
+    -b "$SUPER_JAR" \
+    -X POST "${BASE}/api/admin/tenants/${TENANT}/force-cleanup" \
+    -H "Content-Type: application/json" \
+    -H "Origin: ${ORIGIN}" \
+    -d '{}' \
+    -w "\n%{http_code}" 2>/dev/null || echo -e "\n000")
+  PRE_DEL_CODE=$(echo "$PRE_DEL" | tail -1)
+  PRE_DEL_BODY=$(echo "$PRE_DEL" | head -1)
+  if [ "$PRE_DEL_CODE" = "200" ]; then
+    info "Pre-cleanup: тенант '${TENANT}' очищен — ждём 5s"
+    sleep 5
+  elif [ "$PRE_DEL_CODE" = "404" ]; then
+    info "Pre-cleanup: тенант '${TENANT}' не существует — OK"
+  else
+    info "Pre-cleanup: force-cleanup → ${PRE_DEL_CODE}: ${PRE_DEL_BODY} (игнорируем)"
+  fi
 else
-  info "Pre-cleanup: force-cleanup → ${PRE_DEL_CODE}: ${PRE_DEL_BODY} (игнорируем, продолжаем)"
+  info "Pre-cleanup: superadmin login → ${SUPER_CODE} (игнорируем, продолжаем)"
 fi
+rm -f "$SUPER_JAR"
 
 # ── 2. CREATE TENANT ──────────────────────────────────────────────────────────
 step "2. Create tenant '${TENANT}'"
