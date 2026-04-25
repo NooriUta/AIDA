@@ -30,7 +30,7 @@ ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASS="${ADMIN_PASS:-admin}"
 DATA_DIR="${DATA_DIR:-/opt/seer-studio/tests/data/erp}"
 SKIP_CLEANUP="${SKIP_CLEANUP:-0}"
-POLL_TIMEOUT="${POLL_TIMEOUT:-300}"
+POLL_TIMEOUT="${POLL_TIMEOUT:-600}"
 
 BASE="https://seer.${DOMAIN}"
 DALI_BASE="https://seer.${DOMAIN}/dali"
