@@ -161,6 +161,7 @@ PRE_DEL=$(curl -sk --max-time 60 \
   -X POST "${BASE}/api/admin/tenants/${TENANT}/force-cleanup" \
   -H "Content-Type: application/json" \
   -H "Origin: ${ORIGIN}" \
+  -d '{}' \
   -w "\n%{http_code}" 2>/dev/null || echo -e "\n000")
 PRE_DEL_CODE=$(echo "$PRE_DEL" | tail -1)
 PRE_DEL_BODY=$(echo "$PRE_DEL" | head -1)
