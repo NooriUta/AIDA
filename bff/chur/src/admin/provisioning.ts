@@ -109,12 +109,14 @@ async function friggSql(db: string, command: string, params?: Record<string, unk
 }
 
 async function yggCreateDb(dbName: string): Promise<void> {
-  const res = await fetch(`${YGG_URL}/api/v1/create/${encodeURIComponent(dbName)}`, {
+  // ArcadeDB 26.x removed POST /api/v1/create/{name}; use server-command API.
+  const res = await fetch(`${YGG_URL}/api/v1/server`, {
     method:  'POST',
-    headers: { 'Authorization': `Basic ${YGG_BASIC}` },
+    headers: { 'Authorization': `Basic ${YGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ command: `create database \`${dbName}\` if not exists` }),
     signal:  AbortSignal.timeout(15_000),
   });
-  if (!res.ok && res.status !== 409) {
+  if (!res.ok) {
     const body = await res.text().catch(() => '');
     if (/already exists/i.test(body)) return;
     throw new Error(`YGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
@@ -122,15 +124,16 @@ async function yggCreateDb(dbName: string): Promise<void> {
 }
 
 async function friggCreateDb(dbName: string): Promise<void> {
-  const res = await fetch(`${FRIGG_URL}/api/v1/create/${encodeURIComponent(dbName)}`, {
+  const res = await fetch(`${FRIGG_URL}/api/v1/server`, {
     method:  'POST',
-    headers: { 'Authorization': `Basic ${FRIGG_BASIC}` },
+    headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ command: `create database \`${dbName}\` if not exists` }),
     signal:  AbortSignal.timeout(15_000),
   });
-  if (!res.ok && res.status !== 409) {
+  if (!res.ok) {
     const body = await res.text().catch(() => '');
     if (/already exists/i.test(body)) return;
-    throw new Error(`FRIGG create db ${dbName}: ${res.status}`);
+    throw new Error(`FRIGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
   }
 }
 
@@ -409,14 +412,18 @@ async function markFailed(alias: string, failedStep: number, cause: string): Pro
 }
 
 async function yggDropDb(dbName: string): Promise<void> {
-  await fetch(`${YGG_URL}/api/v1/drop/${encodeURIComponent(dbName)}`, {
-    method: 'POST', headers: { 'Authorization': `Basic ${YGG_BASIC}` },
+  await fetch(`${YGG_URL}/api/v1/server`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${YGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:   JSON.stringify({ command: `drop database \`${dbName}\` if exists` }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => {});
 }
 async function friggDropDb(dbName: string): Promise<void> {
-  await fetch(`${FRIGG_URL}/api/v1/drop/${encodeURIComponent(dbName)}`, {
-    method: 'POST', headers: { 'Authorization': `Basic ${FRIGG_BASIC}` },
+  await fetch(`${FRIGG_URL}/api/v1/server`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:   JSON.stringify({ command: `drop database \`${dbName}\` if exists` }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => {});
 }
