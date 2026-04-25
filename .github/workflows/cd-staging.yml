@@ -254,7 +254,7 @@ jobs:
             # Ensure external volumes exist
             docker volume create hound_databases || true
 
-            # Start stack
+            # ── Step 1: Start / update all app services (new images) ────────────
             docker compose \
               -f docker-compose.prod.yml \
               -f docker-compose.yc.yml \
@@ -262,6 +262,24 @@ jobs:
                 echo "=== docker compose up failed ==="
                 docker ps -a
                 docker logs seer-studio-chur-1     --tail 60 2>&1 || true
+                docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
+                exit 1
+              }
+
+            # ── Step 2: Force-recreate Keycloak ──────────────────────────────────
+            # KC uses an in-container H2 database (no volume).
+            # Without --force-recreate, KC keeps running with its existing H2 state
+            # across deploys, so manual password changes in KC admin console
+            # persist and break smoke-test S-01 (admin/admin → 401).
+            # Recreating KC wipes the H2 DB and re-imports seer-realm.json,
+            # guaranteeing deterministic auth state (admin:admin) for every CI run.
+            # KC startup takes ~90s — wait_infra "KC" below handles the delay.
+            echo "=== Force-recreating Keycloak (fresh H2 DB + realm re-import) ==="
+            docker compose \
+              -f docker-compose.prod.yml \
+              -f docker-compose.yc.yml \
+              up -d --force-recreate keycloak || {
+                echo "=== KC force-recreate failed ==="
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
                 exit 1
               }
@@ -282,9 +300,11 @@ jobs:
             }
 
             echo "=== Waiting for infrastructure ==="
-            wait_infra "http://localhost:2481/api/v1/ready"     "FRIGG" || exit 1
-            wait_infra "http://localhost:2480/api/v1/ready"     "YGG"   || exit 1
-            wait_infra "http://localhost:18180/kc/realms/master"  "KC"    || exit 1
+            wait_infra "http://localhost:2481/api/v1/ready"   "FRIGG"    || exit 1
+            wait_infra "http://localhost:2480/api/v1/ready"   "YGG"      || exit 1
+            # Wait for the seer realm specifically — master realm can be ready
+            # before --import-realm finishes seeding seer-realm.json (race condition).
+            wait_infra "http://localhost:18180/kc/realms/seer" "KC(seer)" || exit 1
 
             # ── DB bootstrap ──────────────────────────────────────────────────
             echo "=== Running init-arcadedb.sh ==="
