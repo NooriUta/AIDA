@@ -146,6 +146,8 @@ jobs:
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
           script: |
             sudo mkdir -p /opt/seer-studio/infra/scripts /opt/seer-studio/infra/nginx /opt/seer-studio/scripts /opt/seer-studio/tests
+            # Clean stale test fixtures so SCP only lands the minimal repo dataset
+            sudo rm -rf /opt/seer-studio/tests/data/
             sudo chown -R ubuntu:ubuntu /opt/seer-studio
 
       - name: Copy prod compose to server
@@ -364,10 +366,8 @@ jobs:
           command_timeout: 40m
           script: |
             cd /opt/seer-studio
-            # Use repo test fixtures (tests/data/erp) as the default dataset.
-            # On the VM the full ERP dataset lives at tests/data/erp/CRM|HR|FIN|root
-            # (deployed via SCP). Repo fixtures are minimal but valid PL/SQL stubs
-            # that pass Dali parsing, so CI always has data without large file blobs.
+            # Minimal repo fixtures (2 SQL files per module) — stale full datasets
+            # are wiped in "Ensure deploy dir is writable" before each SCP.
             DATA_DIR=/opt/seer-studio/tests/data/erp
             DOMAIN=${{ secrets.DOMAIN_STAGING }} \
             TENANT=acme-ci \
