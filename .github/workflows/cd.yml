@@ -8,6 +8,14 @@ on:
       tag:
         description: 'Tag to deploy (e.g. v1.0.0)'
         required: true
+      deploy_mode:
+        description: 'Deploy mode'
+        required: false
+        default: 'merge'
+        type: choice
+        options:
+          - merge
+          - init
 
 concurrency:
   group: cd-${{ github.ref }}
@@ -237,6 +245,24 @@ jobs:
               docker pull ${REPO}/${svc}:${IMAGE_TAG}
               docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
             done
+
+            # ── Init deploy: wipe volumes for a clean start ───────────────────
+            # Triggered only by workflow_dispatch with deploy_mode=init.
+            # Destroys all FRIGG and YGG data — ArcadeDB will reinitialise
+            # root password from JAVA_OPTS on next start.
+            DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'merge' }}"
+            if [ "$DEPLOY_MODE" = "init" ]; then
+              echo "=== INIT DEPLOY: stopping stack and wiping DB volumes ==="
+              docker compose \
+                -f docker-compose.prod.yml \
+                -f docker-compose.yc.yml \
+                down --remove-orphans || true
+              docker volume rm seer-studio_frigg_data   || true
+              docker volume rm hound_databases          || true
+              docker volume rm seer-studio_hound_config || true
+              docker volume rm seer-studio_hound_logs   || true
+              echo "=== Volumes removed — fresh start ==="
+            fi
 
             # Ensure external volumes exist
             docker volume create hound_databases || true
