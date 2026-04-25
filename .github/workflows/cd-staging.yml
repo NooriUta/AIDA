@@ -319,6 +319,17 @@ jobs:
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
           command_timeout: 10m
           script: |
+            # Restart Chur to reset its in-memory rate limiter before smoke tests.
+            # Chur uses an in-process sliding-window rate limiter for /auth/login.
+            # When the image digest hasn't changed, `docker compose up -d` does NOT
+            # recreate the container — so the rate limiter accumulates across pipeline
+            # runs. Explicit restart guarantees a clean slate for S-01/S-03 tests.
+            docker restart seer-studio-chur-1
+            for i in $(seq 1 15); do
+              curl -sf http://localhost:13000/health >/dev/null 2>&1 && break
+              echo "Waiting for Chur health... (${i}/15)"; sleep 3
+            done
+
             cd /opt/seer-studio
             DOMAIN=${{ secrets.DOMAIN_STAGING }} \
             bash scripts/smoke-test.sh
