@@ -82,22 +82,23 @@ async function retry<T>(fn: () => Promise<T>, times = 2): Promise<T> {
   throw last;
 }
 
-// ArcadeDB 26.x server-command db creation is async — the DB may need a moment
-// to become accessible via the command endpoint. Poll until ready (max ~5 s).
+// ArcadeDB 26.x: after server-command create, SELECT works before DDL is ready.
+// Poll with an actual DDL probe so we know schema operations are available (max ~10 s).
 async function waitDbAccessible(baseUrl: string, auth: string, dbName: string): Promise<void> {
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     const res = await fetch(`${baseUrl}/api/v1/command/${encodeURIComponent(dbName)}`, {
       method:  'POST',
       headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ language: 'sql', command: 'SELECT 1', params: {} }),
+      body:    JSON.stringify({ language: 'sql', command: 'CREATE DOCUMENT TYPE _probe IF NOT EXISTS', params: {} }),
       signal:  AbortSignal.timeout(3_000),
     }).catch(() => null);
-    if (res && res.status !== 500) return;
+    if (res?.ok) return;
     const body = await res?.text().catch(() => '') ?? '';
-    if (!body.includes('not available')) return;
+    if (res && res.status !== 500) return;
+    if (res?.status === 500 && !body.includes('not available')) return;
   }
-  throw new Error(`DB ${dbName} did not become accessible after creation`);
+  throw new Error(`DB ${dbName} did not become accessible for DDL after creation`);
 }
 
 async function kcAdminToken(): Promise<string> {
