@@ -372,7 +372,6 @@ step "7. Delete tenant '${TENANT}'"
 DEL_RESP=$(curl -sk --max-time 30 \
   -b "$COOKIE_JAR" \
   -X DELETE "${BASE}/api/admin/tenants/${TENANT}" \
-  -H "Content-Type: application/json" \
   -H "Origin: ${ORIGIN}" \
   -w "\n%{http_code}" || echo -e "\n000")
 DEL_CODE=$(echo "$DEL_RESP" | tail -1)
