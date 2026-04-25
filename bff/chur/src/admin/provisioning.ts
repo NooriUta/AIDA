@@ -117,7 +117,7 @@ async function yggCreateDb(dbName: string): Promise<void> {
   if (!res.ok && res.status !== 409) {
     const body = await res.text().catch(() => '');
     if (/already exists/i.test(body)) return;
-    throw new Error(`YGG create db ${dbName}: ${res.status}`);
+    throw new Error(`YGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
   }
 }
 

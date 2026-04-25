@@ -117,6 +117,30 @@ else
   exit 1
 fi
 
+# ── 1b. YGG DIAGNOSTICS ──────────────────────────────────────────────────────
+step "1b. YGG connectivity diagnostics (localhost:2480)"
+# ygg maps port 2480 to the host — probe it directly from the VM
+YGG_PASS_DIAG=$(grep -oP '(?<=ARCADEDB_ADMIN_PASSWORD=).*' /opt/seer-studio/.env.prod 2>/dev/null | head -1 || echo "playwithdata")
+
+YGG_READY=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
+  http://localhost:2480/api/v1/ready 2>/dev/null || echo "CONN_ERR")
+info "YGG /api/v1/ready → ${YGG_READY}"
+
+YGG_SERVER_DIAG=$(curl -s --max-time 5 \
+  -u "root:${YGG_PASS_DIAG}" \
+  http://localhost:2480/api/v1/server 2>/dev/null | head -c 200 || echo "CONN_ERR")
+info "YGG /api/v1/server (auth) → ${YGG_SERVER_DIAG}"
+
+YGG_CREATE_CODE=$(curl -s -o /tmp/ygg_create.out -w "%{http_code}" --max-time 10 \
+  -X POST -u "root:${YGG_PASS_DIAG}" \
+  http://localhost:2480/api/v1/create/diag_ci_test 2>/dev/null || echo "CONN_ERR")
+YGG_CREATE_BODY=$(cat /tmp/ygg_create.out 2>/dev/null || echo "")
+info "YGG /api/v1/create/diag_ci_test → HTTP ${YGG_CREATE_CODE} | ${YGG_CREATE_BODY}"
+
+# Drop test db best-effort
+curl -s -o /dev/null -X DELETE -u "root:${YGG_PASS_DIAG}" \
+  http://localhost:2480/api/v1/drop/diag_ci_test 2>/dev/null || true
+
 # ── 2. CREATE TENANT ──────────────────────────────────────────────────────────
 step "2. Create tenant '${TENANT}'"
 info "POST /api/admin/tenants"
