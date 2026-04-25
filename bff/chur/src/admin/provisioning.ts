@@ -82,23 +82,27 @@ async function retry<T>(fn: () => Promise<T>, times = 2): Promise<T> {
   throw last;
 }
 
-// ArcadeDB 26.x: after server-command create, SELECT works before DDL is ready.
-// Poll with an actual DDL probe so we know schema operations are available (max ~10 s).
+// ArcadeDB 26.x: after server-command create the schema engine initialises
+// slightly later than the query engine. Poll with CREATE (no IF NOT EXISTS) so we
+// get 200 on first success or 400 "type already exists" on retry — both mean the
+// schema engine is ready. 500 "not available" means keep waiting. Max ~10 s.
 async function waitDbAccessible(baseUrl: string, auth: string, dbName: string): Promise<void> {
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 500));
     const res = await fetch(`${baseUrl}/api/v1/command/${encodeURIComponent(dbName)}`, {
       method:  'POST',
       headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ language: 'sql', command: 'CREATE DOCUMENT TYPE _probe IF NOT EXISTS', params: {} }),
+      body:    JSON.stringify({ language: 'sql', command: 'CREATE DOCUMENT TYPE _probe_init', params: {} }),
       signal:  AbortSignal.timeout(3_000),
     }).catch(() => null);
-    if (res?.ok) return;
-    const body = await res?.text().catch(() => '') ?? '';
-    if (res && res.status !== 500) return;
-    if (res?.status === 500 && !body.includes('not available')) return;
+    if (!res) continue;
+    if (res.status === 500) {
+      const body = await res.text().catch(() => '');
+      if (body.includes('not available')) continue;
+    }
+    return; // 200 (created) or 400 (already exists) or any other non-"not available" → ready
   }
-  throw new Error(`DB ${dbName} did not become accessible for DDL after creation`);
+  throw new Error(`DB ${dbName} did not become accessible for DDL within 10 s`);
 }
 
 async function kcAdminToken(): Promise<string> {
@@ -143,15 +147,24 @@ async function yggCreateDb(dbName: string): Promise<void> {
 }
 
 async function friggCreateDb(dbName: string): Promise<void> {
+  // Drop first: clears any partially-initialised state left by a prior failed run.
+  // ArcadeDB returns error if db doesn't exist — we ignore it.
+  await fetch(`${FRIGG_URL}/api/v1/server`, {
+    method:  'POST',
+    headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ command: `drop database \`${dbName}\`` }),
+    signal:  AbortSignal.timeout(10_000),
+  }).catch(() => {});
+  await new Promise(r => setTimeout(r, 300));
+
   const res = await fetch(`${FRIGG_URL}/api/v1/server`, {
     method:  'POST',
     headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ command: `create database \`${dbName}\` if not exists` }),
+    body:    JSON.stringify({ command: `create database \`${dbName}\`` }),
     signal:  AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    if (/already exists/i.test(body)) return;
     throw new Error(`FRIGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
   }
   await waitDbAccessible(FRIGG_URL, FRIGG_BASIC, dbName);
