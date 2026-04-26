@@ -1,10 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
+import { authUrl, exchangeAuthCode, exchangeCredentials, extractUserInfo, keycloakLogout } from '../keycloak';
 import { getUser } from '../keycloakAdmin';
 import { createSession, deleteSession, ensureValidSession, updateSession } from '../sessions';
 import { emitSessionEvent } from '../users/UserSessionEventsEmitter';
 import { emitToHeimdall } from '../middleware/heimdallEmit';
 import { csrfGuard } from '../middleware/csrfGuard';
+import { config } from '../config';
+import { consumePkce, createPkce } from '../auth/pkceStore';
 
 // ── In-memory rate limiter for /auth/login ────────────────────────────────────
 const IS_PROD      = process.env.NODE_ENV === 'production';
@@ -43,8 +45,144 @@ const COOKIE_OPTS = {
   ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
 };
 
+// Compute callback URL from request host + protocol (multi-app support).
+// Each Chur instance / domain gets its own redirect_uri pattern.
+// Uses headers.host (includes port) instead of req.hostname (port-stripped).
+function computeRedirectUri(req: { protocol: string; hostname: string; headers: Record<string, string | string[] | undefined> }): string {
+  const explicit = process.env.KC_REDIRECT_URI;
+  if (explicit) return explicit;
+  const proto = (req.headers['x-forwarded-proto'] as string) ?? req.protocol;
+  const host = (req.headers['x-forwarded-host'] as string)
+    ?? (req.headers['host'] as string)
+    ?? req.hostname;
+  return `${proto}://${host}/auth/callback`;
+}
+
 export const authRoutes: FastifyPluginAsync = async (app) => {
-  // ── POST /auth/login ────────────────────────────────────────────────────────
+  // Pick KC client_id based on X-Forwarded-Host or Referer so each frontend
+  // sees its own login theme (per-client KC `loginTheme` attribute).
+  // Referer fallback works even when vite proxy hasn't been restarted to forward host.
+  function pickClientId(req: { headers: Record<string, string | string[] | undefined> }): string {
+    const heimdallClient = process.env.KEYCLOAK_CLIENT_ID_HEIMDALL;
+    if (!heimdallClient) return config.keycloakClientId;
+
+    const sources = [
+      String(req.headers['x-forwarded-host'] ?? ''),
+      String(req.headers['host'] ?? ''),
+      String(req.headers['referer'] ?? ''),
+      String(req.headers['origin'] ?? ''),
+    ].join(' ');
+
+    if (sources.includes(':5174') || /heimdall/i.test(sources)) {
+      return heimdallClient;
+    }
+    return config.keycloakClientId;
+  }
+
+  // ── GET /auth/login (Auth Code flow initiator) ─────────────────────────────
+  // Redirects user to KC login page with PKCE state. Replaces ROPC POST /auth/login
+  // for browser flows. ROPC POST /auth/login remains for compat through Phase 6.
+  app.get<{ Querystring: { return_to?: string } }>(
+    '/login',
+    async (request, reply) => {
+      const redirectUri = computeRedirectUri(request);
+      const clientId = pickClientId(request);
+      // Diagnostic — visible in `docker logs aida-root-chur-1`
+      console.log('[AUTH-CODE] /auth/login picked', {
+        clientId,
+        host: request.headers['host'],
+        xfHost: request.headers['x-forwarded-host'],
+        referer: request.headers['referer'],
+        origin: request.headers['origin'],
+        redirectUri,
+      });
+      const { state, codeChallenge } = createPkce(redirectUri, request.query.return_to, clientId);
+      const params = new URLSearchParams({
+        response_type:         'code',
+        client_id:             clientId,
+        redirect_uri:          redirectUri,
+        scope:                 'openid organization',
+        state,
+        code_challenge:        codeChallenge,
+        code_challenge_method: 'S256',
+      });
+      return reply.redirect(`${authUrl()}?${params.toString()}`, 302);
+    },
+  );
+
+  // ── GET /auth/callback (Auth Code flow finalizer) ──────────────────────────
+  // Receives `code` + `state` from KC redirect, exchanges code for tokens,
+  // creates session, sets cookie, redirects to app.
+  app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>(
+    '/callback',
+    async (request, reply) => {
+      const { code, state, error, error_description } = request.query;
+      if (error) {
+        emitToHeimdall('AUTH_CALLBACK_ERROR', 'WARN', { error, error_description });
+        return reply.status(400).send({ error: 'KC error', detail: error_description ?? error });
+      }
+      if (!code || !state) return reply.status(400).send({ error: 'missing code/state' });
+      const entry = consumePkce(state);
+      if (!entry) return reply.status(400).send({ error: 'invalid or expired state' });
+
+      let tokens;
+      try {
+        // Use the same client_id used at /auth/login (saved in PKCE entry)
+        const clientSecret = entry.clientId === process.env.KEYCLOAK_CLIENT_ID_HEIMDALL
+          ? (process.env.KEYCLOAK_CLIENT_SECRET_HEIMDALL ?? config.keycloakSecret)
+          : config.keycloakSecret;
+        tokens = await exchangeAuthCode(code, entry.redirectUri, entry.codeVerifier, entry.clientId, clientSecret);
+      } catch (e) {
+        emitToHeimdall('AUTH_CALLBACK_FAILED', 'WARN', { reason: (e as Error).message });
+        return reply.status(401).send({ error: 'token exchange failed' });
+      }
+
+      const payload = JSON.parse(
+        Buffer.from(tokens.access_token.split('.')[1], 'base64url').toString(),
+      );
+      const userInfo = extractUserInfo(payload);
+
+      const sid = await createSession(
+        tokens.access_token,
+        tokens.refresh_token,
+        tokens.expires_in,
+        userInfo.sub,
+        userInfo.username,
+        userInfo.role,
+        userInfo.scopes,
+      );
+      await updateSession(sid, {
+        email:         userInfo.email,
+        firstName:     userInfo.firstName,
+        lastName:      userInfo.lastName,
+        emailVerified: userInfo.emailVerified,
+        ...(userInfo.tenantAlias ? { activeTenantAlias: userInfo.tenantAlias } : {}),
+      });
+      const activeTenantAlias = userInfo.tenantAlias ?? 'default';
+      reply.setCookie('sid', sid, COOKIE_OPTS);
+      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role, flow: 'auth_code' }, sid);
+      void emitSessionEvent({
+        userId:      userInfo.sub,
+        sessionId:   sid,
+        eventType:   'login',
+        ipAddress:   request.ip,
+        userAgent:   String(request.headers['user-agent'] ?? ''),
+        tenantAlias: activeTenantAlias,
+        result:      'success',
+      });
+      // Resolve post-login redirect:
+      // 1. explicit return_to (relative path or full URL allowed for whitelisted origins)
+      // 2. POST_LOGIN_REDIRECT env (full URL — useful in dev where chur and frontend on different ports)
+      // 3. fallback to "/" (works in prod with nginx routing chur+frontend on same domain)
+      const fallback = process.env.POST_LOGIN_REDIRECT ?? '/';
+      const isSafeReturnTo = entry.returnTo
+        && (entry.returnTo.startsWith('/') || /^https?:\/\//.test(entry.returnTo));
+      const target = isSafeReturnTo ? entry.returnTo! : fallback;
+      return reply.redirect(target, 302);
+    },
+  );
+
+  // ── POST /auth/login (legacy ROPC, kept through Phase 6 for compat) ─────────
   app.post<{ Body: { username: string; password: string } }>(
     '/login',
     {
