@@ -296,10 +296,10 @@ function SectionHeader({ title, count, collapsed, onToggle }: {
   );
 }
 
-// ── Env flag — Dev tools visible only in vite dev build + super-admin ─────────
+// ── Env flag — Dev tools visible only in vite dev build + admin or higher ──────
 function useDevVisible(): boolean {
   const role = useAuthStore(s => s.user?.role);
-  return import.meta.env.DEV && role === 'super-admin';
+  return import.meta.env.DEV && (role === 'super-admin' || role === 'admin');
 }
 
 // ── ArcadeDB clusters ────────────────────────────────────────────────────────
