@@ -40,7 +40,28 @@ export function TenantSelector({ onChange }: TenantSelectorProps) {
     if (isSuperAdmin) void load();
   }, [isSuperAdmin, load]);
 
-  if (!isSuperAdmin) return null;
+  // Non-superadmin: show a static tenant chip so the context is visible
+  if (!isSuperAdmin) {
+    const alias = user?.activeTenantAlias ?? 'default';
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: '12px', color: 'var(--t3)', whiteSpace: 'nowrap' }}>
+          {t('tenantSelector.label', 'Тенант:')}
+        </span>
+        <span
+          style={{
+            fontSize: '12px', fontFamily: 'var(--mono)',
+            padding: '2px 8px', height: 24, display: 'flex', alignItems: 'center',
+            borderRadius: 4, border: '1px solid var(--bd)',
+            background: 'var(--bg2)', color: 'var(--t1)',
+            userSelect: 'none',
+          }}
+        >
+          {alias}
+        </span>
+      </div>
+    );
+  }
 
   const handleChange = (v: string) => {
     setValue(v);
