@@ -168,10 +168,10 @@ function buildRaw(): { nodes: RawNode[]; edges: Edge[] } {
   return { nodes, edges };
 }
 
-// ── Run ELK layered DOWN with explicit layer constraints ──────────────────────
+// ── Run ELK layered RIGHT with explicit layer constraints ─────────────────────
 // Each service has a fixed layer (0 = nginx edge, 6 = storage). We feed those
 // to ELK via `layerChoiceConstraint` so the L0..L6 stacking is preserved
-// regardless of edge directions; ELK only needs to decide horizontal order
+// regardless of edge directions; ELK only needs to decide vertical order
 // within each layer to minimize crossings.
 async function runLayout(raw: ReturnType<typeof buildRaw>): Promise<{
   nodes:  Node[];
