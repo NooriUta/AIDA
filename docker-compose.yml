@@ -54,9 +54,17 @@ services:
       CORS_ORIGIN:           "https://localhost,http://localhost:5174,http://localhost:5173,http://localhost:5175"
       # Keycloak — lives in stable layer, reached via aida_net
       KEYCLOAK_URL:          http://keycloak:8180/kc
+      # Browser-facing KC URL for Auth Code redirects (chur is internal; KC must be reachable from browser)
+      KEYCLOAK_PUBLIC_URL:   ${KEYCLOAK_PUBLIC_URL:-http://localhost:18180/kc}
+      # Where to redirect after successful login (default frontend in dev)
+      POST_LOGIN_REDIRECT:   ${POST_LOGIN_REDIRECT:-http://localhost:5175/}
       KEYCLOAK_REALM:        seer
       KEYCLOAK_CLIENT_ID:    aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
+      # Per-host theme: when X-Forwarded-Host indicates heimdall (port 5174),
+      # chur uses this client_id which has loginTheme=heimdall in KC.
+      KEYCLOAK_CLIENT_ID_HEIMDALL:     ${KEYCLOAK_CLIENT_ID_HEIMDALL:-aida-bff-heimdall}
+      KEYCLOAK_CLIENT_SECRET_HEIMDALL: ${KEYCLOAK_CLIENT_SECRET_HEIMDALL:-aida-bff-heimdall-secret-dev}
       COOKIE_SECRET:         ${COOKIE_SECRET:-dev-cookie-secret}
       COOKIE_SECURE:         "true"
       # Ygg (ArcadeDB — lineage) — stable layer

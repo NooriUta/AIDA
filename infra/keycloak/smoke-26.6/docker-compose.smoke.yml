@@ -1,0 +1,39 @@
+# U0 SMOKE TEST — Keycloak 26.6 isolated stack
+#
+# Purpose: verify oidc-organization-group-membership-mapper (PR #46062, merged 26.6.0)
+# triggers in Authorization Code flow and emits org-group claim into JWT.
+#
+# Runs on port 18181 (host) → 8180 (container) — does NOT conflict with dev KC 26.2 on 18180.
+# Network: dedicated kc26smoke_net (isolated from aida_net).
+# Storage: ephemeral (no volume) — wipe by `docker compose down`.
+#
+# Usage:
+#   docker compose -f infra/keycloak/smoke-26.6/docker-compose.smoke.yml up -d
+#   bash infra/keycloak/smoke-26.6/run-smoke.sh
+#   docker compose -f infra/keycloak/smoke-26.6/docker-compose.smoke.yml down
+
+services:
+  kc26smoke:
+    image: quay.io/keycloak/keycloak:26.6
+    container_name: kc26smoke
+    command: start-dev --features=organization
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8180"
+      KC_HTTP_RELATIVE_PATH: "/kc"
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: "localhost"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "127.0.0.1:18181:8180"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /kc/health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+networks:
+  default:
+    name: kc26smoke_net

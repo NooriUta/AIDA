@@ -29,20 +29,12 @@
                         "clientAuthenticatorType":  "client-secret",
                         "secret":  "aida-bff-secret-dev",
                         "directAccessGrantsEnabled":  true,
-                        "standardFlowEnabled":  true,
+                        "standardFlowEnabled":  false,
                         "implicitFlowEnabled":  false,
                         "serviceAccountsEnabled":  false,
                         "publicClient":  false,
-                        "attributes":  {
-                                           "pkce.code.challenge.method":  "S256",
-                                           "post.logout.redirect.uris":  "+"
-                                       },
                         "redirectUris":  [
                                              "http://localhost:3000/*",
-                                             "http://localhost:13000/*",
-                                             "http://localhost:5173/*",
-                                             "http://localhost:5174/*",
-                                             "http://localhost:5175/*",
                                              "https://seidrstudio.pro/*",
                                              "https://www.seidrstudio.pro/*",
                                              "https://seer.seidrstudio.pro/*",
