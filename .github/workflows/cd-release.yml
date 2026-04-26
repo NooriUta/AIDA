@@ -1,7 +1,10 @@
 ###############################################################################
 # cd-release.yml — Release gate: INIT + UPGRADE tests → git tag
 #
-# Trigger: manual dispatch on master after prerelease is merged.
+# Trigger:
+#   auto  — push to release branch (prerelease → release PR merged)
+#           version derived automatically: latest tag + patch bump
+#   manual — workflow_dispatch with explicit version + flags
 #
 # Flow:
 #   STEP 1 — INIT test
@@ -38,11 +41,14 @@
 name: CD Release
 
 on:
+  push:
+    branches: [release]   # auto-trigger on prerelease → release merge
+
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v1.3.0)'
-        required: true
+        description: 'Release version (e.g. v1.3.8) — leave blank to auto-derive (patch bump)'
+        required: false
         type: string
       skip_upgrade_test:
         description: 'Skip upgrade test (use for first release — no N-1 exists)'
@@ -74,7 +80,7 @@ concurrency:
 
 jobs:
   release-gate:
-    name: "INIT + UPGRADE → ${{ inputs.version }}"
+    name: "INIT + UPGRADE → release gate"
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -83,15 +89,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ── Determine N-1 ──────────────────────────────────────────────────────
-      - name: Determine previous release tag (N-1)
+      # ── Determine version + N-1 ───────────────────────────────────────────
+      - name: Determine version and previous release tag (N-1)
         id: meta
         run: |
           PREV=$(git tag --sort=-version:refname \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | head -1 || true)
-          echo "prev_tag=${PREV}" >> $GITHUB_OUTPUT
-          echo "N   → ${{ inputs.version }} (IMAGE_TAG=staging)"
+
+          # Version: explicit input wins; otherwise auto patch-bump from latest tag
+          INPUT_VERSION="${{ inputs.version }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          elif [ -n "$PREV" ]; then
+            MAJOR=$(echo $PREV | cut -d. -f1 | tr -d v)
+            MINOR=$(echo $PREV | cut -d. -f2)
+            PATCH=$(echo $PREV | cut -d. -f3)
+            VERSION="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          else
+            echo "ERROR: no previous tag found and no version input — cannot derive version"; exit 1
+          fi
+
+          echo "version=${VERSION}"   >> $GITHUB_OUTPUT
+          echo "prev_tag=${PREV}"     >> $GITHUB_OUTPUT
+          echo "N   → ${VERSION} (IMAGE_TAG=staging)"
           echo "N-1 → ${PREV:-none}"
 
       # ── Refresh scripts on VM ──────────────────────────────────────────────
@@ -177,7 +198,7 @@ jobs:
 
       # ── STEP 2: UPGRADE test ───────────────────────────────────────────────
       - name: "UPGRADE — deploy N-1 → seed → upgrade N → verify survival → test"
-        if: ${{ !inputs.skip_upgrade_test && steps.meta.outputs.prev_tag != '' }}
+        if: inputs.skip_upgrade_test != true && steps.meta.outputs.prev_tag != ''
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:            ${{ secrets.DEPLOY_HOST_STAGING }}
@@ -236,7 +257,7 @@ jobs:
             # Default: false — N-1 provisioning may be incompatible with current
             # ArcadeDB version (API boundary releases). Enable for downgrade testing
             # or when N-1 app code is known compatible with current ArcadeDB.
-            if [ "${{ inputs.seed_n1 }}" = "true" ]; then
+            if [ "${{ inputs.seed_n1 || 'false' }}" = "true" ]; then
               echo "▶ UPGRADE: seeding data on N-1 (SKIP_CLEANUP=1)"
               DOMAIN=${{ secrets.DOMAIN_STAGING }} \
               TENANT=acme-legacy \
@@ -248,7 +269,7 @@ jobs:
             fi
 
             # ── 4. Upgrade based on mode ──────────────────────────────────────
-            UPGRADE_MODE="${{ inputs.upgrade_mode }}"
+            UPGRADE_MODE="${{ inputs.upgrade_mode || 'full' }}"
             echo "▶ UPGRADE: mode=${UPGRADE_MODE}"
 
             if [ "${UPGRADE_MODE}" = "full" ]; then
@@ -297,7 +318,7 @@ jobs:
             # ── 5. Verify data survived the upgrade ──────────────────────────
             # If seed_n1=true → verify acme-legacy (provisioned on N-1)
             # If seed_n1=false → verify default tenant (created by init-arcadedb.sh)
-            VERIFY_TENANT=$( [ "${{ inputs.seed_n1 }}" = "true" ] && echo "acme-legacy" || echo "default" )
+            VERIFY_TENANT=$( [ "${{ inputs.seed_n1 || 'false' }}" = "true" ] && echo "acme-legacy" || echo "default" )
             echo "▶ UPGRADE: verifying '${VERIFY_TENANT}' tenant survived upgrade"
             BASE="https://seer.${{ secrets.DOMAIN_STAGING }}"
             JAR="/tmp/upg_verify_$$.txt"
@@ -341,10 +362,10 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ inputs.version }}" \
-                  -m "Release ${{ inputs.version }}"
-          git push origin "${{ inputs.version }}"
-          echo "✅ Tagged ${{ inputs.version }} → triggers cd.yml (prod deploy)"
+          git tag -a "${{ steps.meta.outputs.version }}" \
+                  -m "Release ${{ steps.meta.outputs.version }}"
+          git push origin "${{ steps.meta.outputs.version }}"
+          echo "✅ Tagged ${{ steps.meta.outputs.version }} → triggers cd.yml (prod deploy)"
 
       # ── Notifications ──────────────────────────────────────────────────────
       - name: Notify success
@@ -354,8 +375,8 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ✅ Release ${{ inputs.version }} gate PASSED
-            INIT ✓  |  UPGRADE ${{ (!inputs.skip_upgrade_test && steps.meta.outputs.prev_tag != '') && '✓' || '— skipped' }}
+            ✅ Release ${{ steps.meta.outputs.version }} gate PASSED
+            INIT ✓  |  UPGRADE ${{ inputs.skip_upgrade_test != true && steps.meta.outputs.prev_tag != '' && '✓' || '— skipped' }}
             Tagged and pushed → prod deploy in progress
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
@@ -366,5 +387,5 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ❌ Release ${{ inputs.version }} gate FAILED
+            ❌ Release ${{ steps.meta.outputs.version }} gate FAILED
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
