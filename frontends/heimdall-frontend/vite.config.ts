@@ -85,8 +85,8 @@ export default defineConfig({
       '/docs':      { target: 'http://127.0.0.1:13000', changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
       // WebSocket event stream — browser connects to /heimdall/ws/events (resolveWsUrl in api.ts)
       '/heimdall/ws': { target: 'ws://127.0.0.1:13000', changeOrigin: true, ws: true },
-      '/dali/api':      { target: 'http://127.0.0.1:19090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
-      '/dali/q':        { target: 'http://127.0.0.1:19090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
+      '/dali/api':      { target: process.env.DALI_PROXY_TARGET ?? 'http://127.0.0.1:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
+      '/dali/q':        { target: process.env.DALI_PROXY_TARGET ?? 'http://127.0.0.1:9090',  changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },
       '/jobrunr':       { target: 'http://127.0.0.1:29091', changeOrigin: true, rewrite: (p: string) => p.replace(/^\/jobrunr/, '') },
       '/highload-plan': { target: 'http://127.0.0.1:9093', changeOrigin: true },
     },
