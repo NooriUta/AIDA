@@ -579,3 +579,180 @@ describe('POST /api/admin/tenants — provisioning CSRF + alias validation', () 
     expect(res.json<{ tenantAlias: string }>().tenantAlias).toBe('acme');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEC-01..05  RBAC scope enforcement
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SEC — RBAC scope enforcement', () => {
+  let app: App;
+  beforeEach(async () => {
+    app = await buildApp();
+    vi.stubGlobal('fetch', makeFetchStub());
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  // SEC-01: local-admin (aida:tenant:admin only) cannot reach aida:admin endpoints
+  it('SEC-01 · 403 — local-admin cannot GET tenant detail (requires aida:admin)', async () => {
+    const cookie = await sidForTenant('acme');
+    const res = await app.inject({
+      method: 'GET', url: '/api/admin/tenants/acme',
+      cookies: { sid: cookie },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-01 · 403 — local-admin cannot GET tenant list (requires aida:admin)', async () => {
+    const cookie = await sidForTenant('acme');
+    const res = await app.inject({
+      method: 'GET', url: '/api/admin/tenants',
+      cookies: { sid: cookie },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-01 · 403 — local-admin cannot GET feature-flags (requires aida:admin)', async () => {
+    const cookie = await sidForTenant('acme');
+    const res = await app.inject({
+      method: 'GET', url: '/api/admin/tenants/acme/feature-flags',
+      cookies: { sid: cookie },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-01 · 403 — local-admin cannot send role-change-signal (requires aida:admin)', async () => {
+    const cookie = await sidForTenant('acme');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/tenants/acme/role-change-signal',
+      cookies: { sid: cookie }, headers: CSRF,
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  // SEC-02: aida:admin cannot reach aida:superadmin endpoints
+  it('SEC-02 · 403 — admin cannot suspend tenant (requires aida:superadmin)', async () => {
+    const cookie = await sid('admin');
+    const res = await app.inject({
+      method: 'DELETE', url: '/api/admin/tenants/acme',
+      cookies: { sid: cookie }, headers: CSRF,
+      payload: { expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-02 · 403 — admin cannot archive tenant (requires aida:superadmin)', async () => {
+    const cookie = await sid('admin');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/tenants/acme/archive-now',
+      cookies: { sid: cookie }, headers: CSRF,
+      payload: { expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-02 · 403 — admin cannot unsuspend tenant (requires aida:superadmin)', async () => {
+    const cookie = await sid('admin');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/tenants/acme/unsuspend',
+      cookies: { sid: cookie }, headers: CSRF,
+      payload: { expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-02 · 403 — admin cannot PUT /config (requires aida:superadmin)', async () => {
+    const cookie = await sid('admin');
+    const res = await app.inject({
+      method: 'PUT', url: '/api/admin/tenants/acme/config',
+      cookies: { sid: cookie }, headers: CSRF,
+      payload: { expectedConfigVersion: 1, harvestCron: '0 6 * * *' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-02 · 403 — admin cannot resume-provisioning (requires aida:superadmin)', async () => {
+    const cookie = await sid('admin');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/tenants/acme/resume-provisioning',
+      cookies: { sid: cookie }, headers: CSRF,
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  // SEC-03: unauthenticated requests always 401
+  it('SEC-03 · 401 — unauthenticated cannot GET tenant list', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/admin/tenants' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('SEC-03 · 401 — unauthenticated cannot GET tenant detail', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/admin/tenants/acme' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('SEC-03 · 401 — unauthenticated cannot suspend', async () => {
+    const res = await app.inject({
+      method: 'DELETE', url: '/api/admin/tenants/acme', headers: CSRF,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  // SEC-04: CSRF missing on mutating endpoints returns 403
+  it('SEC-04 · 403 — missing CSRF on suspend', async () => {
+    const cookie = await sid('superadmin');
+    const res = await app.inject({
+      method: 'DELETE', url: '/api/admin/tenants/acme',
+      cookies: { sid: cookie },
+      payload: { expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-04 · 403 — missing CSRF on archive', async () => {
+    const cookie = await sid('superadmin');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/tenants/acme/archive-now',
+      cookies: { sid: cookie },
+      payload: { expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-04 · 403 — missing CSRF on PUT feature-flags', async () => {
+    const cookie = await sid('admin');
+    const res = await app.inject({
+      method: 'PUT', url: '/api/admin/tenants/acme/feature-flags',
+      cookies: { sid: cookie },
+      payload: { flags: { betaHarvest: false }, expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  // SEC-05: viewer (seer:read only) blocked everywhere
+  it('SEC-05 · 403 — viewer cannot GET tenant list', async () => {
+    const cookie = await sid('viewer');
+    const res = await app.inject({
+      method: 'GET', url: '/api/admin/tenants',
+      cookies: { sid: cookie },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-05 · 403 — viewer cannot trigger harvest', async () => {
+    const cookie = await sid('viewer');
+    const res = await app.inject({
+      method: 'POST', url: '/api/admin/tenants/acme/harvest',
+      cookies: { sid: cookie }, headers: CSRF,
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('SEC-05 · 403 — viewer cannot GET members', async () => {
+    const cookie = await sid('viewer');
+    const res = await app.inject({
+      method: 'GET', url: '/api/admin/tenants/acme/members',
+      cookies: { sid: cookie },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
