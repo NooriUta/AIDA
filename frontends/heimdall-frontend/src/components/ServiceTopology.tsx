@@ -37,7 +37,7 @@ interface ServiceNodeData {
 }
 
 // ── Node component ────────────────────────────────────────────────────────────
-// Handles on top (target) and bottom (source) — matches ELK direction = DOWN.
+// Handles on left (target) and right (source) — matches ELK direction = RIGHT.
 function ServiceNode({ data }: { data: ServiceNodeData }) {
   const borderColor = data.statusColor ?? data.color ?? 'var(--bd)';
   const openUrl = data.extPort ? `http://localhost:${data.extPort}` : undefined;
@@ -65,7 +65,7 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
         alignItems:     'center',
         gap:            2,
       }}>
-      <Handle id="t" type="target" position={Position.Top}    style={{ background: 'var(--bd)' }} />
+      <Handle id="t" type="target" position={Position.Left}  style={{ background: 'var(--bd)' }} />
 
       <div style={{
         fontSize: '11px', fontWeight: 600, color: 'var(--t1)',
@@ -92,7 +92,7 @@ function ServiceNode({ data }: { data: ServiceNodeData }) {
         </div>
       )}
 
-      <Handle id="b" type="source" position={Position.Bottom} style={{ background: 'var(--bd)' }} />
+      <Handle id="b" type="source" position={Position.Right} style={{ background: 'var(--bd)' }} />
     </div>
   );
 }
@@ -168,10 +168,10 @@ function buildRaw(): { nodes: RawNode[]; edges: Edge[] } {
   return { nodes, edges };
 }
 
-// ── Run ELK layered DOWN with explicit layer constraints ──────────────────────
+// ── Run ELK layered RIGHT with explicit layer constraints ─────────────────────
 // Each service has a fixed layer (0 = nginx edge, 6 = storage). We feed those
 // to ELK via `layerChoiceConstraint` so the L0..L6 stacking is preserved
-// regardless of edge directions; ELK only needs to decide horizontal order
+// regardless of edge directions; ELK only needs to decide vertical order
 // within each layer to minimize crossings.
 async function runLayout(raw: ReturnType<typeof buildRaw>): Promise<{
   nodes:  Node[];
@@ -182,7 +182,7 @@ async function runLayout(raw: ReturnType<typeof buildRaw>): Promise<{
     id: 'root',
     layoutOptions: {
       'elk.algorithm':                             'layered',
-      'elk.direction':                             'DOWN',
+      'elk.direction':                             'RIGHT',
       'elk.layered.spacing.nodeNodeBetweenLayers': '50',
       'elk.spacing.nodeNode':                      '34',
       'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
@@ -246,6 +246,7 @@ function healthColor(status: ServiceHealth['status'] | undefined): string | unde
 
 // ── Inner — assumes ReactFlowProvider context ─────────────────────────────────
 function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHealth[] }) {
+  const [collapsed, setCollapsed] = useState(true);
   const raw = useMemo(buildRaw, []);
 
   // ELK runs once on mount; layout is static (driven by services.ts config).
@@ -320,24 +321,37 @@ function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHea
             layout: {layoutErr}
           </span>
         )}
-        {serviceStatuses.length > 0 && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--suc)', display: 'inline-block' }} />
-              <span>up</span>
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--wrn)', display: 'inline-block' }} />
-              <span>degraded</span>
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }} />
-              <span>down</span>
-            </span>
-          </span>
-        )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+          {!collapsed && serviceStatuses.length > 0 && (
+            <>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--suc)', display: 'inline-block' }} />
+                <span>up</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--wrn)', display: 'inline-block' }} />
+                <span>degraded</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }} />
+                <span>down</span>
+              </span>
+            </>
+          )}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            style={{
+              background: 'none', border: '1px solid var(--bd)', borderRadius: 3,
+              cursor: 'pointer', color: 'var(--t2)', fontSize: 10,
+              padding: '1px 6px', fontFamily: 'var(--mono)', lineHeight: '16px',
+              textTransform: 'none', letterSpacing: 0,
+            }}
+          >
+            {collapsed ? '▶ expand' : '▼ collapse'}
+          </button>
+        </span>
       </div>
-      <div style={{ height: canvasHeight }}>
+      {!collapsed && <div style={{ height: canvasHeight }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -351,7 +365,7 @@ function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHea
           <Background color="var(--bd)" gap={20} />
           <Controls style={{ background: 'var(--bg1)', border: '1px solid var(--bd)' }} />
         </ReactFlow>
-      </div>
+      </div>}
     </div>
   );
 }

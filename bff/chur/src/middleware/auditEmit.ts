@@ -10,6 +10,7 @@ export type TenantAuditEvent =
   | 'seer.audit.tenant_archived'
   | 'seer.audit.tenant_restored'
   | 'seer.audit.tenant_purged'
+  | 'seer.audit.tenant_config_updated'
   | 'seer.audit.member_added'
   | 'seer.audit.member_removed'
   | 'seer.audit.member_role_changed'

@@ -12,9 +12,12 @@ import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import studio.seer.heimdall.RingBuffer;
 import studio.seer.heimdall.metrics.MetricsCollector;
+import studio.seer.heimdall.metrics.TenantMetricsService;
 import studio.seer.shared.HeimdallEvent;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * HTTP endpoint для приёма событий от всех эмиттеров (Hound, Dali, SHUTTLE, etc.).
@@ -39,8 +42,43 @@ public class EventResource {
     @Inject
     MetricsCollector metricsCollector;
 
+    @Inject
+    TenantMetricsService tenantMetrics;
+
+    /**
+     * HTA-14: Enforce tenant-tagging.
+     *
+     * Every event except {@code seer.platform.*} and {@code seer.audit.*} must
+     * carry {@code tenantAlias} in its payload. Emitters that forget will see 400.
+     */
+    static boolean requiresTenantTag(String eventType) {
+        if (eventType == null) return false;
+        if (eventType.startsWith("seer.platform.")) return false;
+        if (eventType.startsWith("seer.audit."))    return false;
+        return true;
+    }
+
+    static boolean hasTenantTag(HeimdallEvent event) {
+        Map<String, Object> payload = event.payload();
+        if (payload == null) return false;
+        Object v = payload.get("tenantAlias");
+        return v instanceof String s && !s.isBlank();
+    }
+
     @POST
     public Response ingest(@Valid @NotNull HeimdallEvent event) {
+
+        if (requiresTenantTag(event.eventType()) && !hasTenantTag(event)) {
+            String correlationId = event.correlationId() != null
+                    ? event.correlationId() : UUID.randomUUID().toString();
+            LOG.warnf("[HTA-14] rejected event %s from %s — missing tenant tag (corr=%s)",
+                    event.eventType(), event.sourceComponent(), correlationId);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", "missing_tenant_tag",
+                            "correlationId", correlationId,
+                            "eventType", event.eventType()))
+                    .build();
+        }
 
         // Обогащаем timestamp если эмиттер не передал (или передал 0)
         HeimdallEvent enriched = event.timestamp() > 0 ? event
@@ -57,6 +95,7 @@ public class EventResource {
 
         ringBuffer.push(enriched);
         metricsCollector.record(enriched);
+        tenantMetrics.record(enriched);
         LOG.debugf("Ingested event: %s from %s", enriched.eventType(), enriched.sourceComponent());
         return Response.accepted().build();
     }
@@ -68,10 +107,7 @@ public class EventResource {
     @Path("/batch")
     public Response ingestBatch(@NotNull @Valid List<@Valid HeimdallEvent> events) {
 
-        // HB-batch-valid: atomic ingest — reject whole batch on any malformed
-        // item (null / missing required field). Previously the filter silently
-        // dropped bad items, which broke correlation chains and let partial-
-        // success masking happen.
+        // HB-batch-valid: reject whole batch on structural issues (too large / malformed)
         if (events.size() > BATCH_MAX_SIZE) {
             return Response.status(413)
                     .entity("{\"error\":\"batch_too_large\",\"max\":" + BATCH_MAX_SIZE +
@@ -86,12 +122,22 @@ public class EventResource {
                         .build();
             }
         }
-        for (HeimdallEvent e : events) {
-            ringBuffer.push(e);
-            metricsCollector.record(e);
+
+        // HTA-14: skip untagged events (warn, don't reject the whole batch)
+        long rejected = events.stream()
+                .filter(e -> requiresTenantTag(e.eventType()) && !hasTenantTag(e))
+                .count();
+        if (rejected > 0) {
+            LOG.warnf("[HTA-14] batch skipped %d of %d events — missing tenant tag",
+                    rejected, events.size());
         }
 
-        LOG.debugf("Ingested batch of %d events", events.size());
+        long count = events.stream()
+                .filter(e -> !requiresTenantTag(e.eventType()) || hasTenantTag(e))
+                .peek(e -> { ringBuffer.push(e); metricsCollector.record(e); tenantMetrics.record(e); })
+                .count();
+
+        LOG.debugf("Ingested batch of %d events (skipped %d untagged)", count, rejected);
         return Response.accepted().build();
     }
 }

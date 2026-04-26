@@ -408,3 +408,147 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
     expect(kc.setUserEnabled).not.toHaveBeenCalled();
   });
 });
+
+// ── L2 Multi-tenant isolation + lifecycle coverage (HTA-STAB) ───────────────
+describe('Multi-tenant lifecycle isolation', () => {
+  let app: App;
+  beforeEach(async () => {
+    // MTN-27: CAS requires post-UPDATE SELECT to return configVersion + 1.
+    // Use a counter so each SELECT configVersion returns the next value in sequence,
+    // satisfying the CAS check for any number of lifecycle operations per test.
+    let cv = 1;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
+      const body = init?.body ?? '';
+      if (body.includes('SELECT configVersion')) {
+        const ret = cv++;
+        return Promise.resolve({
+          ok: true, status: 200,
+          text: async () => '', headers: { get: () => null },
+          json: async () => ({ result: [{ configVersion: ret }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true, status: 200,
+        text: async () => '', headers: { get: () => null },
+        json: async () => ({ result: [{ tenantAlias: 'acme', status: 'ACTIVE', configVersion: 1 }] }),
+      });
+    }));
+    app = await buildApp();
+  });
+
+  // ── Missing endpoints ────────────────────────────────────────────────────
+
+  it('unsuspend: 403 non-superadmin', async () => {
+    const sid = await makeSid(['aida:admin']);
+    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/unsuspend', cookies: { sid } });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('unsuspend: 200 superadmin', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/unsuspend', cookies: { sid }, headers: CSRF_HEADERS });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+  });
+
+  it('archive-now: 200 superadmin', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/archive-now', cookies: { sid }, headers: CSRF_HEADERS });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('restore: 200 superadmin', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/restore', cookies: { sid }, headers: CSRF_HEADERS });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+  });
+
+  it('retention: 400 missing retainUntil', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({
+      method: 'PUT', url: '/api/admin/tenants/acme/retention',
+      cookies: { sid }, headers: CSRF_HEADERS, payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('retention: 200 superadmin +30d', async () => {
+    // retention handler requires expectedConfigVersion in body (no readCurrentVersion call).
+    // Override fetch so post-CAS SELECT returns expectedConfigVersion + 1 = 2.
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
+      const body = init?.body ?? '';
+      if (body.includes('SELECT configVersion')) {
+        return Promise.resolve({ ok: true, status: 200, text: async () => '', headers: { get: () => null }, json: async () => ({ result: [{ configVersion: 2 }] }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, text: async () => '', headers: { get: () => null }, json: async () => ({ result: [] }) });
+    }));
+    const sid = await makeSid(['aida:superadmin']);
+    const ts  = Date.now() + 30 * 24 * 3600 * 1000;
+    const res = await app.inject({
+      method: 'PUT', url: '/api/admin/tenants/acme/retention',
+      cookies: { sid }, headers: CSRF_HEADERS, payload: { retainUntil: ts, expectedConfigVersion: 1 },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  // ── HTA-08: config update ───────────────────────────────────────────────
+
+  it('config PUT: 403 admin (not superadmin)', async () => {
+    const sid = await makeSid(['aida:admin']);
+    const res = await app.inject({
+      method: 'PUT', url: '/api/admin/tenants/acme',
+      cookies: { sid }, payload: { maxParseSessions: 50 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('config PUT: 400 empty body', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({
+      method: 'PUT', url: '/api/admin/tenants/acme',
+      cookies: { sid }, headers: CSRF_HEADERS, payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('config PUT: 200 superadmin with editable fields', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const res = await app.inject({
+      method: 'PUT', url: '/api/admin/tenants/acme',
+      cookies: { sid }, headers: CSRF_HEADERS, payload: { maxParseSessions: 100, harvestCron: '0 0 * * *' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+  });
+
+  // ── Full lifecycle ──────────────────────────────────────────────────────
+
+  it('suspend → archive → restore (acme)', async () => {
+    const sid = await makeSid(['aida:superadmin']);
+    const susp = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid }, headers: CSRF_HEADERS });
+    expect(susp.json().status).toBe('SUSPENDED');
+    const arch = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/archive-now', cookies: { sid }, headers: CSRF_HEADERS });
+    expect(arch.statusCode).toBe(200);
+    const rest = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/restore', cookies: { sid }, headers: CSRF_HEADERS });
+    expect(rest.json().ok).toBe(true);
+  });
+
+  // ── Role isolation across multiple tenants ─────────────────────────────
+
+  it('admin blocked on ALL lifecycle verbs for acme + beta + gamma', async () => {
+    const sid = await makeSid(['aida:admin']);
+    for (const t of ['acme', 'beta', 'gamma']) {
+      const cases: Array<[string, string]> = [
+        ['DELETE', `/api/admin/tenants/${t}`],
+        ['POST',   `/api/admin/tenants/${t}/unsuspend`],
+        ['POST',   `/api/admin/tenants/${t}/archive-now`],
+        ['POST',   `/api/admin/tenants/${t}/restore`],
+      ];
+      for (const [method, path] of cases) {
+        const res = await app.inject({ method: method as 'POST' | 'DELETE', url: path, cookies: { sid } });
+        expect(res.statusCode, `${method} ${path}`).toBe(403);
+      }
+    }
+  });
+});

@@ -512,6 +512,12 @@
     "searchPlaceholder":"Поиск по псевдониму…",
     "search":           "Поиск по псевдониму…",
     "total":            "тенантов",
+    "create":           "+ Создать",
+    "createTitle":      "Создать тенант",
+    "createHint":       "Псевдоним: 4–32 строчных латинских символов, дефисы, начинать с буквы.",
+    "aliasField":       "Псевдоним",
+    "createSubmit":     "Создать",
+    "config":           "Конфиг",
     "provision": {
       "button":        "+ Создать тенант",
       "title":         "Создать тенант",
@@ -529,6 +535,17 @@
       "forceCleanup":   "Удалить всё",
       "forceCleanupConfirm": "Удалить все данные тенанта?"
     },
+    "suspend":          "Приостановить",
+    "unsuspend":        "Возобновить",
+    "archiveNow":       "Архивировать",
+    "restore":          "Восстановить",
+    "extendRetention":  "Продлить хранение",
+    "confirmSuspendTitle":  "Подтвердите приостановку",
+    "confirmSuspendMsg":    "Приостановить «{{alias}}» — весь трафик тенанта заблокируется. Продолжить?",
+    "confirmArchiveTitle":  "Подтвердите архивацию",
+    "confirmArchiveMsg":    "Архивация «{{alias}}» экспортирует все базы в S3 и удалит их. Без Restore операция необратима.",
+    "confirmExtendTitle":   "Подтвердите продление хранения",
+    "confirmExtendMsg":     "Продлить хранение «{{alias}}» до {{date}} (+{{days}} дней)?",
     "statusName": {
       "ACTIVE":              "Активен",
       "SUSPENDED":           "Приостановлен",
@@ -536,6 +553,35 @@
       "PROVISIONING":        "Создаётся",
       "PROVISIONING_FAILED": "Ошибка создания",
       "PURGED":              "Удалён"
+    },
+    "statusValues": {
+      "ACTIVE":              "Активен",
+      "PROVISIONING":        "Инициализация",
+      "PROVISIONING_FAILED": "Ошибка создания",
+      "SUSPENDED":           "Приостановлен",
+      "ARCHIVED":            "В архиве",
+      "PURGED":              "Удалён"
+    },
+    "hints": {
+      "alias":                 "Уникальный псевдоним тенанта; используется в именах БД и scope claim",
+      "status":                "Жизненный цикл: ACTIVE → SUSPENDED → ARCHIVED → PURGED",
+      "configVersion":         "Инкрементится при каждом обновлении конфига (optimistic lock)",
+      "keycloakOrgId":         "ID организации в Keycloak 26.2 — источник истины пользователей",
+      "yggLineageDbName":      "ArcadeDB-база lineage-графа (hound_{alias})",
+      "yggSourceArchiveDbName":"БД архива исходников (hound_src_{alias})",
+      "friggDaliDbName":       "БД сессий Dali и задач JobRunr (dali_{alias})",
+      "yggInstanceUrl":        "URL инстанса YGG (шард) — для будущего горизонтального шардинга",
+      "harvestCron":           "6-полевой cron (sec min hour dom mon dow) для автоматического харвестинга",
+      "llmMode":               "Режим MIMIR: off | local (Ollama) | openai | azure",
+      "dataRetentionDays":     "Сколько дней хранятся события и сессии до auto-purge",
+      "maxParseSessions":      "Квота одновременно активных parse-сессий",
+      "maxAtoms":              "Лимит извлечённых атомов (stmt/column/table)",
+      "maxSources":            "Максимум подключённых источников (FS/S3/GIT)",
+      "maxConcurrentJobs":     "JobRunr concurrency cap — потоков задач тенанта",
+      "archiveS3Key":          "Ключ S3-объекта с экспортом БД (заполняется при archive)",
+      "archiveRetentionUntil": "Дата после которой purge-job удалит архив",
+      "createdAt":             "Момент успешного завершения провижена (7 шагов)",
+      "updatedAt":             "Время последнего изменения конфига или lifecycle-статуса"
     }
   },
   "tenantSelector": {
@@ -600,5 +646,46 @@
     "tos":     "Условия использования",
     "privacy": "Политика конфиденциальности",
     "accept":  "Принимаю"
+  },
+  "members": {
+    "pageTitle":         "Участники",
+    "heading":           "Участники",
+    "backToTenant":      "Тенант",
+    "username":          "Логин",
+    "email":             "Email",
+    "name":              "Имя",
+    "role":              "Роль",
+    "enabled":           "Активен",
+    "remove":            "Удалить",
+    "empty":             "Участников ещё нет.",
+    "invite":            "Пригласить",
+    "inviteTitle":       "Пригласить участника",
+    "confirmRemoveTitle":"Удалить участника",
+    "confirmRemoveMsg":  "Удалить {{name}} ({{email}}) из этого тенанта?"
+  },
+  "config": {
+    "pageTitle":   "Конфиг тенанта",
+    "heading":     "Конфиг",
+    "readOnly":    "Только для чтения",
+    "quotas":      "Квоты и лимиты",
+    "scheduling":  "Расписание и режим",
+    "save":        "Сохранить",
+    "saving":      "Сохраняю…",
+    "reset":       "Сбросить",
+    "noChanges":   "Нет изменений для сохранения."
+  },
+  "metrics": {
+    "byTenant":      "Метрики по тенантам",
+    "tenantCount":   "{{n}} тенантов",
+    "filterTenant":  "Фильтр по псевдониму…",
+    "alias":         "Псевдоним",
+    "events":        "События",
+    "sessions":      "Сессии",
+    "atoms":         "Атомы",
+    "jobs":          "Задачи",
+    "errors":        "Ошибки",
+    "last":          "Последнее событие",
+    "noTenantData":  "Активности тенантов пока нет.",
+    "moreTenants":   "ещё"
   }
 }

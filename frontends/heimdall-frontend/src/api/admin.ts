@@ -64,16 +64,26 @@ export function listTenants(signal?: AbortSignal, withStats = true): Promise<Ten
   return adminFetch<TenantSummary[]>(`/tenants${qs}`, { signal });
 }
 
-export function provisionTenant(alias: string): Promise<{ ok: boolean; tenantAlias: string }> {
-  return adminFetch('/tenants', { method: 'POST', body: JSON.stringify({ alias }) });
-}
-
 export function forceCleanupTenant(alias: string): Promise<{ ok: boolean }> {
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/force-cleanup`, { method: 'POST' });
 }
 
 export function resumeProvisioningTenant(alias: string): Promise<{ ok: boolean }> {
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/resume-provisioning`, { method: 'POST' });
+}
+
+export interface ProvisionResult {
+  tenantAlias:    string;
+  keycloakOrgId?: string;
+  lastStep?:      number;
+  correlationId?: string;
+}
+
+export function provisionTenant(alias: string): Promise<ProvisionResult> {
+  return adminFetch<ProvisionResult>('/tenants', {
+    method: 'POST',
+    body:   JSON.stringify({ alias }),
+  });
 }
 
 export function getTenant(alias: string, signal?: AbortSignal): Promise<DaliTenantConfig> {
@@ -100,6 +110,20 @@ export function extendRetention(alias: string, retainUntil: number): Promise<{ o
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/retention`, {
     method: 'PUT',
     body: JSON.stringify({ retainUntil }),
+  });
+}
+
+export type TenantConfigPatch = Partial<Pick<DaliTenantConfig,
+  'maxParseSessions' | 'maxAtoms' | 'maxSources' | 'maxConcurrentJobs'
+  | 'harvestCron' | 'llmMode' | 'dataRetentionDays'>>;
+
+export function updateTenantConfig(
+  alias: string,
+  patch: TenantConfigPatch,
+): Promise<{ ok: boolean; tenant: DaliTenantConfig }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}`, {
+    method: 'PUT',
+    body:   JSON.stringify(patch),
   });
 }
 

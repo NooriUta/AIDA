@@ -80,7 +80,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/auth': {
-        target:       'http://localhost:3000',
+        target:       process.env.CHUR_PROXY_TARGET ?? 'http://localhost:3000',
         changeOrigin: true,
       },
     },
