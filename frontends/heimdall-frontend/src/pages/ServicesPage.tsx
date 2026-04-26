@@ -443,7 +443,7 @@ export default function ServicesPage() {
 
       {/* ── Dev mode — our own services running locally (pnpm dev / quarkus dev)
            rather than in Docker. Hidden entirely in Docker-only stacks. ── */}
-      {devVisible && (raw ?? []).some(r => r.mode === 'dev') && (
+      {devVisible && (
         <section style={{
           marginBottom: 22, paddingBottom: 12,
           borderBottom: '1px dashed var(--bd)',
