@@ -6,7 +6,7 @@ import { useTenants } from '../hooks/useTenants';
 import { useTenantContext } from '../hooks/useTenantContext';
 import { TenantList } from '../components/tenants/TenantList';
 import { TenantSearchFilter } from '../components/tenants/TenantSearchFilter';
-import { TenantCreateModal } from '../components/tenants/TenantCreateModal';
+import { ProvisionModal } from '../components/tenants/ProvisionModal';
 import type { TenantStatus } from '../api/admin';
 
 const PAGE_SIZE = 20;
@@ -57,9 +57,12 @@ export default function TenantsPage() {
       </div>
 
       {createOpen && (
-        <TenantCreateModal
-          onClose={() => setCreateOpen(false)}
-          onCreated={alias => { refresh(); navigate(`/admin/tenants/${alias}`); }}
+        <ProvisionModal
+          onDone={alias => { void alias; refresh(); }}
+          onClose={alias => {
+            setCreateOpen(false);
+            if (alias) navigate(`/admin/tenants/${alias}`);
+          }}
         />
       )}
 
