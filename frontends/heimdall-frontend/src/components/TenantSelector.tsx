@@ -36,32 +36,7 @@ export function TenantSelector({ onChange }: TenantSelectorProps) {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => {
-    if (isSuperAdmin) void load();
-  }, [isSuperAdmin, load]);
-
-  // Non-superadmin: show a static tenant chip so the context is visible
-  if (!isSuperAdmin) {
-    const alias = user?.activeTenantAlias ?? 'default';
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: '12px', color: 'var(--t3)', whiteSpace: 'nowrap' }}>
-          {t('tenantSelector.label', 'Тенант:')}
-        </span>
-        <span
-          style={{
-            fontSize: '12px', fontFamily: 'var(--mono)',
-            padding: '2px 8px', height: 24, display: 'flex', alignItems: 'center',
-            borderRadius: 4, border: '1px solid var(--bd)',
-            background: 'var(--bg2)', color: 'var(--t1)',
-            userSelect: 'none',
-          }}
-        >
-          {alias}
-        </span>
-      </div>
-    );
-  }
+  useEffect(() => { void load(); }, [load]);
 
   const handleChange = (v: string) => {
     setValue(v);
@@ -81,7 +56,9 @@ export function TenantSelector({ onChange }: TenantSelectorProps) {
         className="field-input"
         style={{ fontSize: '12px', padding: '2px 6px', height: 28, minWidth: 120 }}
       >
-        <option value={ALL_TENANTS_VALUE}>{t('tenantSelector.all', 'Все тенанты')}</option>
+        {isSuperAdmin && (
+          <option value={ALL_TENANTS_VALUE}>{t('tenantSelector.all', 'Все тенанты')}</option>
+        )}
         {tenants.map(t => (
           <option key={t.tenantAlias} value={t.tenantAlias}>{t.tenantAlias}</option>
         ))}
