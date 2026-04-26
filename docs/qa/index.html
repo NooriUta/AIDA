@@ -816,20 +816,23 @@ const state = JSON.parse(localStorage.getItem(STATE_KEY) || '{}');
 
 // Session results — applied only for keys not yet in state (first load or after reset)
 const SESSION_DEFAULTS = {
-  'MT-01':'fail',  'MT-01_note':'Провижен не завершился / ошибка при создании',
+  // ── MT: Tenant lifecycle ─────────────────────────────────────────────────
+  'MT-01':'pending', 'MT-01_note':'Ранее FAIL (провижен). Pipeline теперь зелёный — нужен повторный тест.',
   'MT-02':'pass',
-  'MT-03':'fail',  'MT-03_note':'Пустой JSON: не передавался expectedConfigVersion (исправлено в admin.ts)',
-  'MT-04':'skip',
-  'MT-05':'fail',  'MT-05_note':'Пустой JSON: archive не передавал expectedConfigVersion (исправлено)',
-  'MT-06':'skip',
+  'MT-03':'pending', 'MT-03_note':'FIX: admin.ts теперь передаёт expectedConfigVersion — повторить тест.',
+  'MT-04':'pending',
+  'MT-05':'pending', 'MT-05_note':'FIX: archiveTenant тоже передаёт expectedConfigVersion — повторить тест.',
+  'MT-06':'pending',
   'MT-07':'pending',
-  'MT-08':'skip',
-  'MT-09':'skip',
+  'MT-08':'skip',    'MT-08_note':'Нет тенанта со статусом PROVISIONING_FAILED в стенде.',
+  'MT-09':'skip',    'MT-09_note':'Нет тенанта со статусом PROVISIONING_FAILED в стенде.',
   'MT-10':'pass',
-  'MT-11':'fail',  'MT-11_note':'Нет явного отображения активного тенанта на странице members',
-  'MT-12':'fail',  'MT-12_note':'Инвайт не показывал целевой тенант (исправлено: tenantAlias в заголовке)',
-  'MT-13':'fail',  'MT-13_note':'Кнопка "Remove" не поясняла что удаление из тенанта а не аккаунта (исправлено)',
-  'MT-14':'fail',  'MT-14_note':'Кнопка Config не была видна как Edit — переименована в "Edit Config"',
+  'MT-11':'pending', 'MT-11_note':'FIX: добавлен TenantStatusBadge в заголовок страницы members — повторить тест.',
+  'MT-12':'pending', 'MT-12_note':'FIX: MemberInviteModal теперь показывает → {alias} в заголовке — повторить тест.',
+  'MT-13':'pending', 'MT-13_note':'FIX: кнопка переименована в "Remove from tenant" — повторить тест.',
+  'MT-14':'pending', 'MT-14_note':'FIX: кнопка переименована в "Edit Config" — повторить тест.',
+  // ── CC: Cross-cutting ───────────────────────────────────────────────────
+  'CC-14':'pending', 'CC-14_note':'Auditor не в ADMIN_ROLES → isAdmin=false → кнопок Edit/Block нет. Проверить.',
 };
 for (const [k, v] of Object.entries(SESSION_DEFAULTS)) {
   if (!(k in state)) state[k] = v;

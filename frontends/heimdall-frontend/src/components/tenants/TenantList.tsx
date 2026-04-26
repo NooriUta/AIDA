@@ -42,7 +42,7 @@ function TenantRowActions({ tenant, onRefresh }: { tenant: TenantSummary; onRefr
     finally { setBusy(false); }
   };
 
-  const { status, tenantAlias } = tenant;
+  const { status, tenantAlias, configVersion } = tenant;
   return (
     <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
       {status === 'ACTIVE' && (
@@ -53,7 +53,7 @@ function TenantRowActions({ tenant, onRefresh }: { tenant: TenantSummary; onRefr
       )}
       {status === 'ACTIVE' && (
         <button className="btn btn-secondary btn-sm" disabled={busy}
-          onClick={() => run(() => suspendTenant(tenantAlias))}>
+          onClick={() => run(() => suspendTenant(tenantAlias, configVersion))}>
           {t('tenants.action.suspend', 'Suspend')}
         </button>
       )}
@@ -66,7 +66,7 @@ function TenantRowActions({ tenant, onRefresh }: { tenant: TenantSummary; onRefr
       {(status === 'ACTIVE' || status === 'SUSPENDED') && (
         <button className="btn btn-secondary btn-sm" disabled={busy}
           onClick={() => { if (confirm(t('tenants.action.archiveConfirm', 'Archive tenant?')))
-            void run(() => archiveTenant(tenantAlias)); }}>
+            void run(() => archiveTenant(tenantAlias, configVersion)); }}>
           {t('tenants.action.archive', 'Archive')}
         </button>
       )}
