@@ -107,7 +107,7 @@ function UserRow({
 
       {/* Tenant */}
       <td>
-        {user.tenants?.includes('*')
+        {(user.tenants?.includes('*') || user.role === 'admin' || user.role === 'super-admin')
           ? <span style={{ fontSize: 11, color: 'var(--wrn)', fontWeight: 600 }}>Platform</span>
           : user.tenants && user.tenants.length > 0
             ? <span style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
