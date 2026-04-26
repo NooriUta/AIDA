@@ -752,6 +752,15 @@ const MANUAL = [
       { id:'CC-11', title:'Page title меняется при навигации', prio:'P3',
         steps:'1. Перейди на /admin/tenants\n2. Смотри title вкладки браузера',
         exp:'Title: "Tenants — Heimðallr"' },
+      { id:'CC-12', title:'UC-HEIMDALL-ACCESS: viewer/editor/operator → 403', prio:'P0',
+        steps:'1. Войди как viewer (dev@seer.io)\n2. Открой любую страницу Heimdall\n3. Войди как editor\n4. Повтори\n5. Войди как operator, повтори',
+        exp:'Все три роли видят экран "Доступ запрещён" вместо Heimdall. Роль указана явно.' },
+      { id:'CC-13', title:'UC-HEIMDALL-ACCESS: admin/superadmin/tenant-owner/local-admin/auditor → доступ', prio:'P0',
+        steps:'1. Войди поочерёдно как admin, superadmin, tenant-owner, local-admin, auditor\n2. Открой /admin/tenants или /admin/users',
+        exp:'Все 5 ролей получают доступ в Heimdall без экрана 403.' },
+      { id:'CC-14', title:'UC-HEIMDALL-ACCESS: auditor — только чтение (нет Edit/Block кнопок)', prio:'P1',
+        steps:'1. Войди как auditor\n2. Открой /admin/users',
+        exp:'Список пользователей виден. Кнопок "Редакт." и "Заблокировать" нет.' },
     ]
   },
   {

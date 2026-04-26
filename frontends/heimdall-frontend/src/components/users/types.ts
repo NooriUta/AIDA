@@ -184,3 +184,8 @@ export const ELEVATED_ROLES: UserRole[] = [
 export const ADMIN_ROLES: UserRole[] = [
   'admin', 'super-admin', 'local-admin', 'tenant-owner',
 ];
+
+/** Roles allowed to enter Heimdall at all. viewer/editor/operator → 403. */
+export const HEIMDALL_ALLOWED_ROLES: UserRole[] = [
+  'admin', 'super-admin', 'local-admin', 'tenant-owner', 'auditor',
+];

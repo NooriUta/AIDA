@@ -438,7 +438,6 @@ export default function UsersPage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <TenantSelector onChange={v => { setActiveTenant(v); setCrossTenant(false); }} />
           {isAdmin && (
             <button className="btn btn-secondary" onClick={() => setInvite(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -485,6 +484,7 @@ export default function UsersPage() {
       {/* ── Filter bar ── */}
       <div className="filter-bar">
         <span className="section-label">Фильтр</span>
+        <TenantSelector onChange={v => { setActiveTenant(v); setCrossTenant(false); }} />
         <select
           className="field-input"
           value={roleFilter}
