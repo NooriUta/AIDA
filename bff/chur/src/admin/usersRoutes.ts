@@ -164,7 +164,11 @@ export const adminUsersRoutes: FastifyPluginAsync = async (app) => {
         const platformAdmins = realmUsers.filter(
           u => (u.role === 'admin' || u.role === 'super-admin') && !orgIds.has(u.id),
         );
-        return reply.send({ mode: 'single-tenant', tenantAlias: alias, users: [...orgUsers, ...platformAdmins] });
+        const tagged = [
+          ...orgUsers.map(u => ({ ...u, tenants: [alias] })),
+          ...platformAdmins.map(u => ({ ...u, tenants: ['*'] as string[] })),
+        ];
+        return reply.send({ mode: 'single-tenant', tenantAlias: alias, users: tagged });
       }
       // Legacy: no keycloakOrgId yet (pre-KC-ORG-02 dev), show whole realm
       const users = await listUsers();

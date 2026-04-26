@@ -53,6 +53,7 @@ export interface AidaUser {
   role:         UserRole;
   active:       boolean;
   tenantAlias?: string;
+  tenants?:     string[];  // ['*'] = platform-level; string[] = org member of those tenants
   title:      string;
   dept:       string;
   phone:      string;

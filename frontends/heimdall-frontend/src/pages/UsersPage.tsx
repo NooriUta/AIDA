@@ -26,6 +26,7 @@ interface KcUserView {
   quotas: { mimir: number; sessions: number; atoms: number; workers: number; anvil: number };
   sources: string[];
   tenantAlias?: string;
+  tenants?: string[];   // ['*'] = platform-level; string[] = org member of those tenants
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -106,11 +107,21 @@ function UserRow({
 
       {/* Tenant */}
       <td>
-        {user.tenantAlias
-          ? <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)',
-              background: 'var(--bg2)', border: '1px solid var(--bd)',
-              borderRadius: 3, padding: '1px 5px' }}>{user.tenantAlias}</span>
-          : <span style={{ color: 'var(--t3)', fontSize: 11 }}>—</span>
+        {user.tenants?.includes('*')
+          ? <span style={{ fontSize: 11, color: 'var(--wrn)', fontWeight: 600 }}>Platform</span>
+          : user.tenants && user.tenants.length > 0
+            ? <span style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                {user.tenants.map(t => (
+                  <span key={t} style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)',
+                    background: 'var(--bg2)', border: '1px solid var(--bd)',
+                    borderRadius: 3, padding: '1px 5px' }}>{t}</span>
+                ))}
+              </span>
+            : user.tenantAlias
+              ? <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)',
+                  background: 'var(--bg2)', border: '1px solid var(--bd)',
+                  borderRadius: 3, padding: '1px 5px' }}>{user.tenantAlias}</span>
+              : <span style={{ color: 'var(--t3)', fontSize: 11 }}>—</span>
         }
       </td>
 
@@ -311,7 +322,8 @@ export default function UsersPage() {
           title:       u.title,
           dept:        u.dept,
           phone:       u.phone,
-          tenantAlias: resolvedTenant,
+          tenantAlias: u.tenants ? undefined : resolvedTenant,
+          tenants:     u.tenants,
           sources: u.sources,
           quotas:  u.quotas,
           lastActive: '—',

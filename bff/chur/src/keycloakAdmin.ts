@@ -60,6 +60,9 @@ export interface KcUserView {
   notifyHarvest:  boolean;
   notifyErrors:   boolean;
   notifyDigest:   boolean;
+  // tenant memberships resolved by the caller (usersRoutes)
+  // ['*'] = platform-level access (admin/super-admin), string[] = org member of those tenants
+  tenants?: string[];
   // ── R4.3: quotas + source bindings (from KC attrs quota_* / source_bindings) ──
   quotas: {
     mimir:    number;
