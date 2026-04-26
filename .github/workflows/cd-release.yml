@@ -1,0 +1,353 @@
+###############################################################################
+# cd-release.yml — Release gate: INIT + UPGRADE tests → git tag
+#
+# Trigger: manual dispatch on master after prerelease is merged.
+#
+# Flow:
+#   STEP 1 — INIT test
+#     wipe all volumes → deploy N (staging images) from scratch
+#     → init-arcadedb → smoke + integration tests
+#
+#   STEP 2 — UPGRADE test  (skipped if first release or skip_upgrade_test=true)
+#     wipe → deploy N-1 (prev version tag from YCR)
+#     → init-arcadedb → seed data (SKIP_CLEANUP=1 integration test)
+#     → partial/full upgrade based on upgrade_mode → verify data survived
+#     → smoke + full integration test
+#
+#   STEP 3 — if both pass → git tag vX.Y.Z → triggers cd.yml (prod deploy)
+#
+# upgrade_mode values:
+#   full          — upgrade all services to N (standard upgrade path)
+#   kc_only       — upgrade only Keycloak container; YGG/FRIGG stay at N-1
+#                   Tests: KC reimport wipes org state, tenant records in FRIGG survive
+#   arcadedb_only — upgrade only YGG + FRIGG containers; KC + app stay at N-1
+#                   Tests: ArcadeDB version bump, schema/data compatibility
+#
+# Notes:
+#   • One staging VM — INIT and UPGRADE run sequentially, never parallel.
+#   • N images come from the last cd-staging.yml push (IMAGE_TAG=staging in YCR).
+#   • N-1 images are the previous git version tag in YCR (never overwritten by cd.yml).
+#   • hound_databases is an external Docker volume — wiped and recreated manually.
+#   • kc_only: KC uses no volume (H2 reimport) — after KC upgrade, FRIGG tenant
+#     records have stale keycloakOrgId. Reconciliation step (if implemented) should
+#     repair them. For now we verify tenant status stays ACTIVE via FRIGG data.
+#   • arcadedb_only: ArcadeDB in-place upgrade on live volumes. init-arcadedb.sh
+#     must be fully idempotent (IF NOT EXISTS everywhere).
+###############################################################################
+
+name: CD Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.3.0)'
+        required: true
+        type: string
+      skip_upgrade_test:
+        description: 'Skip upgrade test (use for first release — no N-1 exists)'
+        type: boolean
+        default: false
+      upgrade_mode:
+        description: |
+          Upgrade mode for STEP 2:
+            full          — upgrade all services to N
+            kc_only       — upgrade only Keycloak; YGG/FRIGG stay at N-1 version
+            arcadedb_only — upgrade only YGG + FRIGG; KC + app services stay at N-1
+        type: choice
+        default: full
+        options:
+          - full
+          - kc_only
+          - arcadedb_only
+
+concurrency:
+  group: cd-release
+  cancel-in-progress: false
+
+jobs:
+  release-gate:
+    name: "INIT + UPGRADE → ${{ inputs.version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Determine N-1 ──────────────────────────────────────────────────────
+      - name: Determine previous release tag (N-1)
+        id: meta
+        run: |
+          PREV=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | head -1 || true)
+          echo "prev_tag=${PREV}" >> $GITHUB_OUTPUT
+          echo "N   → ${{ inputs.version }} (IMAGE_TAG=staging)"
+          echo "N-1 → ${PREV:-none}"
+
+      # ── Refresh scripts on VM ──────────────────────────────────────────────
+      - name: Fix file permissions
+        run: |
+          chmod -R a+r scripts/ tests/
+          chmod a+x scripts/*.sh
+
+      - name: Copy scripts + test fixtures to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          source:   scripts/,tests/
+          target:   /opt/seer-studio/
+
+      # ── STEP 1: INIT test ──────────────────────────────────────────────────
+      - name: "INIT — wipe volumes → deploy N → smoke + integration"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:            ${{ secrets.DEPLOY_HOST_STAGING }}
+          username:        ${{ secrets.DEPLOY_USER_STAGING }}
+          key:             ${{ secrets.DEPLOY_KEY_STAGING }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            cd /opt/seer-studio
+            source .env.prod 2>/dev/null || true
+
+            wait_for() {
+              local url="$1" name="$2"
+              for i in $(seq 1 30); do
+                curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready" && return 0
+                echo "  [$name] wait $i/30…"; sleep 10
+              done
+              echo "  [$name] TIMEOUT after 300s"; return 1
+            }
+
+            echo "▶ INIT: stop all services"
+            docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+              down --remove-orphans 2>/dev/null || true
+
+            echo "▶ INIT: wipe volumes"
+            docker volume rm seer-studio_frigg_data \
+                               seer-studio_hound_config \
+                               seer-studio_hound_logs 2>/dev/null || true
+            docker volume rm hound_databases 2>/dev/null || true
+            docker volume create hound_databases
+
+            echo "▶ INIT: deploy N (IMAGE_TAG=staging)"
+            IMAGE_TAG=staging \
+            docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+              up -d --pull always --remove-orphans --force-recreate
+
+            wait_for "http://localhost:2481/api/v1/ready"      "FRIGG"
+            wait_for "http://localhost:2480/api/v1/ready"      "YGG"
+            wait_for "http://localhost:18180/kc/realms/seer"   "KC(seer)"
+
+            echo "▶ INIT: init-arcadedb.sh"
+            FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
+            FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+            YGG_URL=http://localhost:2480  YGG_USER=root \
+            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+            KC_URL=http://localhost:18180/kc \
+            KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
+            KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
+            bash scripts/init-arcadedb.sh
+
+            wait_for "http://localhost:13000/health"   "Chur"
+            wait_for "http://localhost:18080/q/health" "Shuttle"
+
+            echo "▶ INIT: smoke tests"
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} bash scripts/smoke-test.sh
+
+            echo "▶ INIT: integration tests"
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+            TENANT=acme-init \
+            DATA_DIR=/opt/seer-studio/tests/data/erp \
+            bash scripts/integration-test.sh
+
+            echo "✅ INIT PASSED"
+
+      # ── STEP 2: UPGRADE test ───────────────────────────────────────────────
+      - name: "UPGRADE — deploy N-1 → seed → upgrade N → verify survival → test"
+        if: ${{ !inputs.skip_upgrade_test && steps.meta.outputs.prev_tag != '' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:            ${{ secrets.DEPLOY_HOST_STAGING }}
+          username:        ${{ secrets.DEPLOY_USER_STAGING }}
+          key:             ${{ secrets.DEPLOY_KEY_STAGING }}
+          command_timeout: 35m
+          script: |
+            set -euo pipefail
+            cd /opt/seer-studio
+            source .env.prod 2>/dev/null || true
+            PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
+
+            wait_for() {
+              local url="$1" name="$2"
+              for i in $(seq 1 30); do
+                curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready" && return 0
+                echo "  [$name] wait $i/30…"; sleep 10
+              done
+              echo "  [$name] TIMEOUT after 300s"; return 1
+            }
+
+            # ── 1. Clean baseline ──────────────────────────────────────────────
+            echo "▶ UPGRADE: wipe for clean N-1 baseline"
+            docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+              down --remove-orphans 2>/dev/null || true
+            docker volume rm seer-studio_frigg_data \
+                               seer-studio_hound_config \
+                               seer-studio_hound_logs 2>/dev/null || true
+            docker volume rm hound_databases 2>/dev/null || true
+            docker volume create hound_databases
+
+            # ── 2. Deploy N-1 ──────────────────────────────────────────────────
+            echo "▶ UPGRADE: deploying N-1 (${PREV_TAG})"
+            IMAGE_TAG="${PREV_TAG}" \
+            docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+              up -d --pull always --remove-orphans --force-recreate
+
+            wait_for "http://localhost:2481/api/v1/ready"    "FRIGG"
+            wait_for "http://localhost:2480/api/v1/ready"    "YGG"
+            wait_for "http://localhost:18180/kc/realms/seer" "KC(seer)"
+
+            echo "▶ UPGRADE: init-arcadedb.sh on N-1"
+            FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
+            FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+            YGG_URL=http://localhost:2480  YGG_USER=root \
+            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+            KC_URL=http://localhost:18180/kc \
+            KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
+            KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
+            bash scripts/init-arcadedb.sh
+
+            wait_for "http://localhost:13000/health"   "Chur"
+            wait_for "http://localhost:18080/q/health" "Shuttle"
+
+            # ── 3. Seed data on N-1 (SKIP_CLEANUP=1 — tenant stays for upgrade check)
+            echo "▶ UPGRADE: seeding data on N-1 (SKIP_CLEANUP=1)"
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+            TENANT=acme-legacy \
+            DATA_DIR=/opt/seer-studio/tests/data/erp \
+            SKIP_CLEANUP=1 \
+            bash scripts/integration-test.sh
+
+            # ── 4. Upgrade based on mode ──────────────────────────────────────
+            UPGRADE_MODE="${{ inputs.upgrade_mode }}"
+            echo "▶ UPGRADE: mode=${UPGRADE_MODE}"
+
+            if [ "${UPGRADE_MODE}" = "full" ]; then
+              # All services → N
+              IMAGE_TAG=staging \
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                up -d --pull always --remove-orphans
+
+            elif [ "${UPGRADE_MODE}" = "kc_only" ]; then
+              # Only Keycloak container → N (new image/realm config).
+              # YGG, FRIGG, app services stay at N-1 IMAGE_TAG.
+              # KC has no volume — reimport wipes all KC organizations.
+              # FRIGG tenant records should survive (they live in ArcadeDB, not KC).
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                up -d --force-recreate keycloak
+              # Wait for seer realm specifically (reimport takes ~90s)
+              for i in $(seq 1 30); do
+                curl -sf "http://localhost:18180/kc/realms/seer" >/dev/null 2>&1 \
+                  && echo "  [KC(seer)] ready" && break
+                echo "  [KC(seer)] wait $i/30…"; sleep 10
+              done
+
+            elif [ "${UPGRADE_MODE}" = "arcadedb_only" ]; then
+              # Only YGG + FRIGG containers → N (new ArcadeDB version from compose).
+              # KC and application services (chur, shuttle, dali) stay at N-1.
+              # Tests ArcadeDB in-place version upgrade on live volumes.
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                up -d --force-recreate ygg frigg
+              wait_for "http://localhost:2481/api/v1/ready" "FRIGG"
+              wait_for "http://localhost:2480/api/v1/ready" "YGG"
+              # Re-run init-arcadedb.sh — must be idempotent (IF NOT EXISTS)
+              echo "▶ arcadedb_only: re-running init-arcadedb.sh on upgraded ArcadeDB"
+              FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
+              FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+              YGG_URL=http://localhost:2480  YGG_USER=root \
+              YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+              KC_URL=http://localhost:18180/kc \
+              KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
+              KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
+              bash scripts/init-arcadedb.sh
+            fi
+
+            wait_for "http://localhost:13000/health"   "Chur"
+            wait_for "http://localhost:18080/q/health" "Shuttle"
+
+            # ── 5. Verify FRIGG + YGG data survived the upgrade ───────────────
+            echo "▶ UPGRADE: verifying acme-legacy tenant survived upgrade"
+            BASE="https://seer.${{ secrets.DOMAIN_STAGING }}"
+            JAR="/tmp/upg_verify_$$.txt"
+
+            LOGIN_CODE=$(curl -sk --max-time 15 -c "$JAR" \
+              -X POST "${BASE}/auth/login" \
+              -H "Content-Type: application/json" \
+              -d '{"username":"admin","password":"admin"}' \
+              -o /dev/null -w "%{http_code}" || echo "000")
+            if [ "$LOGIN_CODE" != "200" ]; then
+              echo "✗ Login after upgrade: ${LOGIN_CODE}"; rm -f "$JAR"; exit 1
+            fi
+
+            TENANT_BODY=$(curl -sk --max-time 10 -b "$JAR" \
+              "${BASE}/api/admin/tenants/acme-legacy" || echo "")
+            rm -f "$JAR"
+
+            if echo "$TENANT_BODY" | grep -q '"ACTIVE"'; then
+              echo "✓ acme-legacy ACTIVE — FRIGG + YGG data survived upgrade"
+            else
+              echo "✗ acme-legacy not ACTIVE after upgrade:"
+              echo "$TENANT_BODY"
+              exit 1
+            fi
+
+            # ── 6. Full integration test on N ─────────────────────────────────
+            echo "▶ UPGRADE: smoke tests on N"
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} bash scripts/smoke-test.sh
+
+            echo "▶ UPGRADE: full integration test on N"
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+            TENANT=acme-upgrade \
+            DATA_DIR=/opt/seer-studio/tests/data/erp \
+            bash scripts/integration-test.sh
+
+            echo "✅ UPGRADE PASSED"
+
+      # ── STEP 3: Tag release ────────────────────────────────────────────────
+      - name: Create and push release tag
+        if: success()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ inputs.version }}" \
+                  -m "Release ${{ inputs.version }}"
+          git push origin "${{ inputs.version }}"
+          echo "✅ Tagged ${{ inputs.version }} → triggers cd.yml (prod deploy)"
+
+      # ── Notifications ──────────────────────────────────────────────────────
+      - name: Notify success
+        if: success()
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ✅ Release ${{ inputs.version }} gate PASSED
+            INIT ✓  |  UPGRADE ${{ (!inputs.skip_upgrade_test && steps.meta.outputs.prev_tag != '') && '✓' || '— skipped' }}
+            Tagged and pushed → prod deploy in progress
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Notify failure
+        if: failure()
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ❌ Release ${{ inputs.version }} gate FAILED
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
