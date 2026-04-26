@@ -181,6 +181,48 @@ export function LoginPage() {
               {isLoading ? t('auth.signingIn') : t('auth.login')}
             </button>
           </form>
+
+          {/* ── Auth Code (SSO) alt entry — Phase 4 scaffold ─────────────────── */}
+          {/* Removes form in Phase 6 cutover; for now both flows coexist. */}
+          <div style={{
+            marginTop:     '16px',
+            paddingTop:    '16px',
+            borderTop:     '1px dashed var(--bd)',
+            display:       'flex',
+            flexDirection: 'column',
+            gap:           '8px',
+          }}>
+            <div style={{ fontSize: '11px', color: 'var(--t3)', textAlign: 'center', letterSpacing: '0.04em' }}>
+              {t('auth.or', 'or')}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                // Передаём полный origin чтобы chur вернул нас в этот же frontend
+                // после login (а не в свой root, где 404). В прод за nginx — единый домен.
+                const returnTo = encodeURIComponent(window.location.origin + '/');
+                window.location.href = `/auth/login?return_to=${returnTo}`;
+              }}
+              style={{
+                display:        'flex',
+                alignItems:     'center',
+                justifyContent: 'center',
+                gap:            '8px',
+                padding:        '9px 16px',
+                background:     'var(--bg2)',
+                color:          'var(--t1)',
+                border:         '1px solid var(--bd)',
+                borderRadius:   'var(--seer-radius-md)',
+                fontSize:       '13px',
+                fontWeight:     500,
+                cursor:         'pointer',
+                transition:     'background 0.12s, border-color 0.12s',
+                letterSpacing:  '0.04em',
+              }}
+            >
+              {t('auth.loginSso', '🔐 Войти через Seiðr SSO (Auth Code)')}
+            </button>
+          </div>
         </div>
 
       </div>
