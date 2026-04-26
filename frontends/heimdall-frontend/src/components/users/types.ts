@@ -44,14 +44,15 @@ export interface UserPrefs {
 }
 
 export interface AidaUser {
-  id:         number;
-  kcId?:      string;   // KC UUID — for /api/admin/users/:id/* calls
-  name:       string;   // KC username
-  firstName?: string;
-  lastName?:  string;
-  email:      string;
-  role:       UserRole;
-  active:     boolean;
+  id:           number;
+  kcId?:        string;   // KC UUID — for /api/admin/users/:id/* calls
+  name:         string;   // KC username
+  firstName?:   string;
+  lastName?:    string;
+  email:        string;
+  role:         UserRole;
+  active:       boolean;
+  tenantAlias?: string;
   title:      string;
   dept:       string;
   phone:      string;
@@ -183,4 +184,9 @@ export const ELEVATED_ROLES: UserRole[] = [
 
 export const ADMIN_ROLES: UserRole[] = [
   'admin', 'super-admin', 'local-admin', 'tenant-owner',
+];
+
+/** Roles allowed to enter Heimdall at all. viewer/editor/operator → 403. */
+export const HEIMDALL_ALLOWED_ROLES: UserRole[] = [
+  'admin', 'super-admin', 'local-admin', 'tenant-owner', 'auditor',
 ];

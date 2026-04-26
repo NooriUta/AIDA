@@ -90,16 +90,22 @@ export function getTenant(alias: string, signal?: AbortSignal): Promise<DaliTena
   return adminFetch<DaliTenantConfig>(`/tenants/${encodeURIComponent(alias)}`, { signal });
 }
 
-export function suspendTenant(alias: string): Promise<{ ok: boolean; status: string }> {
-  return adminFetch(`/tenants/${encodeURIComponent(alias)}`, { method: 'DELETE' });
+export function suspendTenant(alias: string, configVersion: number): Promise<{ ok: boolean; status: string }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}`, {
+    method: 'DELETE',
+    body:   JSON.stringify({ expectedConfigVersion: configVersion }),
+  });
 }
 
 export function unsuspendTenant(alias: string): Promise<{ ok: boolean }> {
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/unsuspend`, { method: 'POST' });
 }
 
-export function archiveTenant(alias: string): Promise<{ ok: boolean }> {
-  return adminFetch(`/tenants/${encodeURIComponent(alias)}/archive-now`, { method: 'POST' });
+export function archiveTenant(alias: string, configVersion: number): Promise<{ ok: boolean }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/archive-now`, {
+    method: 'POST',
+    body:   JSON.stringify({ expectedConfigVersion: configVersion }),
+  });
 }
 
 export function restoreTenant(alias: string): Promise<{ ok: boolean }> {

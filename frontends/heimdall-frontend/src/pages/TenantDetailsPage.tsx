@@ -66,7 +66,7 @@ export default function TenantDetailsPage() {
             className="btn btn-secondary"
             onClick={() => navigate(`/admin/tenants/${alias}/config`)}
           >
-            {t('tenants.config', 'Config')}
+            {t('tenants.editConfig', 'Edit Config')}
           </button>
         )}
         <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
