@@ -335,7 +335,7 @@ jobs:
         uses: appleboy/telegram-action@v0.1.1
         with:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
-          token:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
             ✅ Release ${{ inputs.version }} gate PASSED
             INIT ✓  |  UPGRADE ${{ (!inputs.skip_upgrade_test && steps.meta.outputs.prev_tag != '') && '✓' || '— skipped' }}
@@ -347,7 +347,7 @@ jobs:
         uses: appleboy/telegram-action@v0.1.1
         with:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
-          token:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
             ❌ Release ${{ inputs.version }} gate FAILED
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
