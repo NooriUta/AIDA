@@ -292,10 +292,13 @@ export default function UsersPage() {
     fetch(url, { credentials: 'include' })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ mode: string; users: KcUserView[] }>;
+        return r.json() as Promise<{ mode: string; tenantAlias?: string; users: KcUserView[] }>;
       })
-      .then(({ mode, users: kcUsers }) => {
+      .then(({ mode, tenantAlias: envelopeTenant, users: kcUsers }) => {
         setCrossTenant(mode === 'cross-tenant');
+        // tenantAlias is envelope-level — same for all users in single-tenant mode;
+        // cross-tenant mode returns users from multiple tenants without per-user alias.
+        const resolvedTenant = envelopeTenant ?? (effectiveTenant === ALL_TENANTS ? undefined : effectiveTenant);
         const mapped: AidaUser[] = kcUsers.map((u, i) => ({
           id:          i + 1,
           kcId:        u.id,
@@ -308,7 +311,7 @@ export default function UsersPage() {
           title:       u.title,
           dept:        u.dept,
           phone:       u.phone,
-          tenantAlias: u.tenantAlias ?? (effectiveTenant === ALL_TENANTS ? undefined : effectiveTenant),
+          tenantAlias: resolvedTenant,
           sources: u.sources,
           quotas:  u.quotas,
           lastActive: '—',
