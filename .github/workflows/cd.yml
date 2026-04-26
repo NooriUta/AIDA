@@ -342,13 +342,13 @@ jobs:
             echo "Deploy OK — ${{ github.ref_name }} (${{ github.sha }})"
 
       - name: Notify success
-        if: success() && env.TELEGRAM_TOKEN != ''
+        if: success() && env.TELEGRAM_BOT_TOKEN != ''
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         uses: appleboy/telegram-action@v0.1.1
         with:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
-          token:   ${{ secrets.TELEGRAM_TOKEN }}
+          token:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
             ✅ SEER Studio deployed
             Version: `${{ github.ref_name }}`
@@ -356,13 +356,13 @@ jobs:
             By: ${{ github.actor }}
 
       - name: Notify failure
-        if: failure() && env.TELEGRAM_TOKEN != ''
+        if: failure() && env.TELEGRAM_BOT_TOKEN != ''
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         uses: appleboy/telegram-action@v0.1.1
         with:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
-          token:   ${{ secrets.TELEGRAM_TOKEN }}
+          token:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
             ❌ SEER Studio deploy FAILED
             SHA: `${{ github.sha }}`
