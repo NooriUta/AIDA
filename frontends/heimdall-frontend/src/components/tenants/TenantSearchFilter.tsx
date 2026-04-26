@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { TenantStatus } from '../../api/admin';
 
-const ALL_STATUSES: TenantStatus[] = ['ACTIVE', 'PROVISIONING', 'SUSPENDED', 'ARCHIVED', 'PURGED'];
+const ALL_STATUSES: TenantStatus[] = ['ACTIVE', 'PROVISIONING', 'PROVISIONING_FAILED', 'SUSPENDED', 'ARCHIVED', 'PURGED'];
 
 interface Props {
   search: string;

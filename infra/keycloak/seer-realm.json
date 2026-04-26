@@ -12,30 +12,6 @@
     "roles":  {
                   "realm":  [
                                 {
-                                    "name":  "viewer",
-                                    "description":  "Read-only access to lineage data"
-                                },
-                                {
-                                    "name":  "editor",
-                                    "description":  "Read + limited write access, MIMIR with quota"
-                                },
-                                {
-                                    "name":  "operator",
-                                    "description":  "Run harvest, monitor Dali, event stream"
-                                },
-                                {
-                                    "name":  "auditor",
-                                    "description":  "Audit log and tool call trace, read-only"
-                                },
-                                {
-                                    "name":  "local-admin",
-                                    "description":  "Manage tenant users and quotas"
-                                },
-                                {
-                                    "name":  "tenant-owner",
-                                    "description":  "Tenant settings, billing, assign local-admin"
-                                },
-                                {
                                     "name":  "admin",
                                     "description":  "Full HEIMDALL, Sources, restart services, DEMODEBUG"
                                 },
@@ -45,9 +21,6 @@
                                 }
                             ]
               },
-    "defaultRoles":  [
-                         "viewer"
-                     ],
     "clients":  [
                     {
                         "clientId":  "aida-bff",
@@ -157,6 +130,20 @@
                                                                         "id.token.claim":  "true",
                                                                         "access.token.claim":  "true",
                                                                         "claim.name":  "organization.alias",
+                                                                        "jsonType.label":  "String"
+                                                                    }
+                                                     },
+                                                     {
+                                                         "name":  "organization-role",
+                                                         "protocol":  "openid-connect",
+                                                         "protocolMapper":  "oidc-usermodel-attribute-mapper",
+                                                         "consentRequired":  false,
+                                                         "config":  {
+                                                                        "userinfo.token.claim":  "true",
+                                                                        "user.attribute":  "organization.role",
+                                                                        "id.token.claim":  "true",
+                                                                        "access.token.claim":  "true",
+                                                                        "claim.name":  "organization.role",
                                                                         "jsonType.label":  "String"
                                                                     }
                                                      }
@@ -339,10 +326,10 @@
                                               "temporary":  false
                                           }
                                       ],
-                      "realmRoles":  [
-                                         "editor"
-                                     ],
                       "attributes":  {
+                                         "organization.role":  [
+                                                                   "editor"
+                                                               ],
                                          "title":  [
                                                        "Data Analyst"
                                                    ],
@@ -419,10 +406,10 @@
                                               "temporary":  false
                                           }
                                       ],
-                      "realmRoles":  [
-                                         "viewer"
-                                     ],
                       "attributes":  {
+                                         "organization.role":  [
+                                                                   "viewer"
+                                                               ],
                                          "title":  [
                                                        "Junior Developer"
                                                    ],
@@ -492,10 +479,10 @@
                       "email":  "a.petrov@seer.io",
                       "enabled":  true,
                       "emailVerified":  true,
-                      "realmRoles":  [
-                                         "operator"
-                                     ],
                       "attributes":  {
+                                         "organization.role":  [
+                                                                   "operator"
+                                                               ],
                                          "title":  [
                                                        "Data Ops Engineer"
                                                    ],
@@ -565,10 +552,10 @@
                       "email":  "s.ivanov@seer.io",
                       "enabled":  true,
                       "emailVerified":  true,
-                      "realmRoles":  [
-                                         "auditor"
-                                     ],
                       "attributes":  {
+                                         "organization.role":  [
+                                                                   "auditor"
+                                                               ],
                                          "title":  [
                                                        "Security Auditor"
                                                    ],
@@ -638,10 +625,10 @@
                       "email":  "owner@acme.com",
                       "enabled":  true,
                       "emailVerified":  true,
-                      "realmRoles":  [
-                                         "tenant-owner"
-                                     ],
                       "attributes":  {
+                                         "organization.role":  [
+                                                                   "tenant-owner"
+                                                               ],
                                          "title":  [
                                                        "CTO"
                                                    ],
@@ -711,10 +698,10 @@
                       "email":  "la@acme.com",
                       "enabled":  true,
                       "emailVerified":  true,
-                      "realmRoles":  [
-                                         "local-admin"
-                                     ],
                       "attributes":  {
+                                         "organization.role":  [
+                                                                   "local-admin"
+                                                               ],
                                          "title":  [
                                                        "Team Lead"
                                                    ],

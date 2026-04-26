@@ -81,14 +81,23 @@
   },
   "commandPalette": { "title": "Командная палитра" },
   "metrics": {
-    "atoms":      "Атомы",
-    "files":      "Файлы",
-    "toolCalls":  "Вызовы",
-    "workers":    "Воркеры",
-    "queue":      "Очередь",
-    "resolution": "Разрешимость",
-    "na":         "Н/Д",
-    "waiting":    "Ожидание событий…"
+    "atoms":        "Атомы",
+    "files":        "Файлы",
+    "toolCalls":    "Вызовы",
+    "workers":      "Воркеры",
+    "queue":        "Очередь",
+    "resolution":   "Разрешимость",
+    "na":           "Н/Д",
+    "waiting":      "Ожидание событий…",
+    "byTenant":     "Метрики по тенантам",
+    "tenantCount":  "{{n}} тенантов",
+    "filterTenant": "Фильтр по псевдониму…",
+    "sessions":     "Сессии",
+    "jobs":         "Задачи",
+    "errors":       "Ошибки",
+    "last":         "Последнее событие",
+    "noTenantData": "Активности тенантов пока нет.",
+    "moreTenants":  "ещё"
   },
   "dashboard": {
     "throughput":   "Пропускная способность (событий / сек)",
@@ -562,6 +571,12 @@
       "ARCHIVED":            "В архиве",
       "PURGED":              "Удалён"
     },
+    "confirmSuspendTitle":  "Подтвердите приостановку",
+    "confirmSuspendMsg":    "Приостановить «{{alias}}» — весь трафик тенанта заблокируется. Продолжить?",
+    "confirmArchiveTitle":  "Подтвердите архивацию",
+    "confirmArchiveMsg":    "Архивация «{{alias}}» экспортирует все базы в S3 и удалит их. Без Restore операция необратима.",
+    "confirmExtendTitle":   "Подтвердите продление хранения",
+    "confirmExtendMsg":     "Продлить хранение «{{alias}}» до {{date}} (+{{days}} дней)?",
     "hints": {
       "alias":                 "Уникальный псевдоним тенанта; используется в именах БД и scope claim",
       "status":                "Жизненный цикл: ACTIVE → SUSPENDED → ARCHIVED → PURGED",
@@ -636,6 +651,33 @@
     "harvest": "События харвеста",
     "errors":  "Ошибки",
     "digest":  "Ежедневный дайджест"
+  },
+  "members": {
+    "pageTitle":          "Участники",
+    "heading":            "Участники",
+    "backToTenant":       "Тенант",
+    "username":           "Логин",
+    "email":              "Email",
+    "name":               "Имя",
+    "role":               "Роль",
+    "enabled":            "Активен",
+    "remove":             "Удалить",
+    "empty":              "Участников ещё нет.",
+    "invite":             "Пригласить",
+    "inviteTitle":        "Пригласить участника",
+    "confirmRemoveTitle": "Удалить участника",
+    "confirmRemoveMsg":   "Удалить {{name}} ({{email}}) из этого тенанта?"
+  },
+  "config": {
+    "pageTitle":  "Конфиг тенанта",
+    "heading":    "Конфиг",
+    "readOnly":   "Только для чтения",
+    "quotas":     "Квоты и лимиты",
+    "scheduling": "Расписание и режим",
+    "save":       "Сохранить",
+    "saving":     "Сохраняю…",
+    "reset":      "Сбросить",
+    "noChanges":  "Нет изменений для сохранения."
   },
   "me": {
     "conflict": "Данные изменены извне. Загружены свежие. Повторите изменения."

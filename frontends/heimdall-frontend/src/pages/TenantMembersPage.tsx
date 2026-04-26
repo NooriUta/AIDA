@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useTenantMembers } from '../hooks/useTenantMembers';
+import { useTenantDetails } from '../hooks/useTenantDetails';
+import { TenantStatusBadge } from '../components/tenants/TenantStatusBadge';
 import { MemberList } from '../components/tenants/MemberList';
 import { MemberInviteModal, type MemberRole } from '../components/tenants/MemberInviteModal';
 import { UserConfirmModal } from '../components/users/UserConfirmModal';
@@ -21,6 +23,7 @@ export default function TenantMembersPage() {
   );
 
   const { members, loading, error, refresh } = useTenantMembers(alias);
+  const { tenant } = useTenantDetails(alias);
   const [inviteOpen, setInviteOpen]   = useState(false);
   const [pendingRemove, setPendingRemove] = useState<TenantMember | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +65,11 @@ export default function TenantMembersPage() {
         <button className="btn btn-secondary" onClick={() => navigate(`/admin/tenants/${alias}`)}>
           ← {t('members.backToTenant', 'Tenant')}
         </button>
-        <h2 style={{ margin: 0, fontFamily: 'monospace' }}>{alias} · {t('members.heading', 'Members')}</h2>
+        <h2 style={{ margin: 0, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {alias}
+          {tenant && <TenantStatusBadge status={tenant.status} />}
+          <span style={{ fontFamily: 'sans-serif', fontWeight: 400, color: 'var(--t3)', fontSize: '0.9em' }}>· {t('members.heading', 'Members')}</span>
+        </h2>
         <div style={{ flex: 1 }} />
         <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
           {t('tenants.refresh', 'Refresh')}
@@ -92,8 +99,9 @@ export default function TenantMembersPage() {
         />
       )}
 
-      {inviteOpen && (
+      {inviteOpen && alias && (
         <MemberInviteModal
+          tenantAlias={alias}
           onClose={() => setInviteOpen(false)}
           onInvite={handleInvite}
         />

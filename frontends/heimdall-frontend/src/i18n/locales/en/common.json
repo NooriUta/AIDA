@@ -88,7 +88,16 @@
     "queue":      "Queue",
     "resolution": "Resolution",
     "na":         "N/A",
-    "waiting":    "Waiting for events…"
+    "waiting":    "Waiting for events…",
+    "byTenant":      "Per-tenant metrics",
+    "tenantCount":   "{{n}} tenants",
+    "filterTenant":  "Filter alias…",
+    "sessions":      "Sessions",
+    "jobs":          "Jobs",
+    "errors":        "Errors",
+    "last":          "Last event",
+    "noTenantData":  "No tenant activity yet.",
+    "moreTenants":   "more"
   },
   "dashboard": {
     "throughput":   "Throughput (events / sec)",
@@ -546,6 +555,12 @@
       "ARCHIVED":            "Archived",
       "PURGED":              "Purged"
     },
+    "confirmSuspendTitle":  "Confirm suspend",
+    "confirmSuspendMsg":    "Suspending \"{{alias}}\" blocks all tenant traffic. Continue?",
+    "confirmArchiveTitle":  "Confirm archive",
+    "confirmArchiveMsg":    "Archiving \"{{alias}}\" exports all databases to S3 and drops them. Irreversible without Restore.",
+    "confirmExtendTitle":   "Confirm extend retention",
+    "confirmExtendMsg":     "Extend retention for \"{{alias}}\" to {{date}} (+{{days}} days)?",
     "hints": {
       "alias":                 "Unique tenant alias; used in DB names and scope claim",
       "status":                "Lifecycle: ACTIVE → SUSPENDED → ARCHIVED → PURGED",
@@ -620,6 +635,33 @@
     "harvest": "Harvest events",
     "errors":  "Errors",
     "digest":  "Daily digest"
+  },
+  "members": {
+    "pageTitle":          "Members",
+    "heading":            "Members",
+    "backToTenant":       "Tenant",
+    "username":           "Username",
+    "email":              "Email",
+    "name":               "Name",
+    "role":               "Role",
+    "enabled":            "Enabled",
+    "remove":             "Remove",
+    "empty":              "No members yet.",
+    "invite":             "Invite",
+    "inviteTitle":        "Invite member",
+    "confirmRemoveTitle": "Remove member",
+    "confirmRemoveMsg":   "Remove {{name}} ({{email}}) from this tenant?"
+  },
+  "config": {
+    "pageTitle":  "Tenant config",
+    "heading":    "Config",
+    "readOnly":   "Read-only",
+    "quotas":     "Quotas & limits",
+    "scheduling": "Scheduling & mode",
+    "save":       "Save",
+    "saving":     "Saving…",
+    "reset":      "Reset",
+    "noChanges":  "No changes to save."
   },
   "me": {
     "conflict": "Data was changed externally. Fresh version loaded. Re-apply your edits."

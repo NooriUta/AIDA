@@ -136,7 +136,7 @@ describe('Regression — single tenant "default"', () => {
     expect(admin.suspendTenant).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /users\.confirm/i }));
-    await waitFor(() => expect(admin.suspendTenant).toHaveBeenCalledWith('default'));
+    await waitFor(() => expect(admin.suspendTenant).toHaveBeenCalledWith('default', 1));
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
   });
 
@@ -146,7 +146,7 @@ describe('Regression — single tenant "default"', () => {
     fireEvent.click(screen.getByRole('button', { name: /archive/i }));
     expect(admin.archiveTenant).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /users\.confirm/i }));
-    await waitFor(() => expect(admin.archiveTenant).toHaveBeenCalledWith('default'));
+    await waitFor(() => expect(admin.archiveTenant).toHaveBeenCalledWith('default', 1));
   });
 
   it('Restore → API without confirm', async () => {
@@ -167,9 +167,9 @@ describe('Multi-tenant — alias isolation', () => {
     renderActions({ tenant: tenant({ tenantAlias: 'acme', status: 'ACTIVE' }) });
     fireEvent.click(screen.getByRole('button', { name: /suspend/i }));
     fireEvent.click(screen.getByRole('button', { name: /users\.confirm/i }));
-    await waitFor(() => expect(admin.suspendTenant).toHaveBeenCalledWith('acme'));
-    expect(admin.suspendTenant).not.toHaveBeenCalledWith('beta');
-    expect(admin.suspendTenant).not.toHaveBeenCalledWith('default');
+    await waitFor(() => expect(admin.suspendTenant).toHaveBeenCalledWith('acme', 1));
+    expect(admin.suspendTenant).not.toHaveBeenCalledWith('beta', expect.anything());
+    expect(admin.suspendTenant).not.toHaveBeenCalledWith('default', expect.anything());
   });
 
   it('Restore "beta" → restoreTenant("beta") not "acme"', async () => {
@@ -190,7 +190,7 @@ describe('Multi-tenant — alias isolation', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: /suspend/i }));
       fireEvent.click(screen.getByRole('button', { name: /users\.confirm/i }));
-      await waitFor(() => expect(admin.suspendTenant).toHaveBeenCalledWith(alias));
+      await waitFor(() => expect(admin.suspendTenant).toHaveBeenCalledWith(alias, 1));
       unmount();
     }
   });

@@ -15,8 +15,8 @@ export const PROVISION_STEPS = [
 type ProvisionPhase = 'form' | 'running' | 'success' | 'error';
 
 interface Props {
-  onDone:  () => void;
-  onClose: () => void;
+  onDone:  (alias: string) => void;
+  onClose: (alias?: string) => void;
 }
 
 export function ProvisionModal({ onDone, onClose }: Props) {
@@ -70,7 +70,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
       setVisibleStep(PROVISION_STEPS.length - 1);
       setResult({ keycloakOrgId: body.keycloakOrgId });
       setPhase('success');
-      onDone();
+      onDone(a);
     } catch (e) {
       clearInterval(ticker);
       setCause(e instanceof Error ? e.message : String(e));
@@ -131,7 +131,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               4–32 символа · только строчные буквы, цифры, дефис · нельзя зарезервированные имена
             </p>
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={onClose}>
+              <button className="btn btn-secondary" onClick={() => { onClose(); }}>
                 {t('action.cancel', 'Отмена')}
               </button>
               <button data-testid="submit-btn" className="btn btn-secondary"
@@ -192,8 +192,10 @@ export function ProvisionModal({ onDone, onClose }: Props) {
                   ← Назад
                 </button>
               )}
-              <button data-testid="close-btn" className="btn btn-secondary" onClick={onClose}>
-                {phase === 'success' ? t('action.close', 'Закрыть') : t('action.cancel', 'Отмена')}
+              <button data-testid="close-btn"
+                className={phase === 'success' ? 'btn btn-primary' : 'btn btn-secondary'}
+                onClick={() => { onClose(phase === 'success' ? alias : undefined); }}>
+                {phase === 'success' ? t('tenants.provision.viewTenant', 'Открыть тенант →') : t('action.cancel', 'Отмена')}
               </button>
             </div>
           </>

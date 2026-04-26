@@ -60,6 +60,9 @@ export interface KcUserView {
   notifyHarvest:  boolean;
   notifyErrors:   boolean;
   notifyDigest:   boolean;
+  // tenant memberships resolved by the caller (usersRoutes)
+  // ['*'] = platform-level access (admin/super-admin), string[] = org member of those tenants
+  tenants?: string[];
   // ── R4.3: quotas + source bindings (from KC attrs quota_* / source_bindings) ──
   quotas: {
     mimir:    number;
@@ -98,6 +101,9 @@ function attrBool(u: KcUser, key: string, fallback = false): boolean {
 /** Build the public KcUserView shape from a raw KC user + role list. */
 function buildView(u: KcUser, kcRoles: KcRole[]): KcUserView {
   const roleNames = kcRoles.map(r => r.name);
+  // RBAC_MULTITENANT: non-platform roles are KC org roles stored as attribute (ROPC-compat)
+  const orgRole = attr(u, 'organization.role');
+  if (orgRole && !roleNames.includes(orgRole)) roleNames.push(orgRole);
   return {
     id:        u.id,
     name:      u.username,
@@ -490,19 +496,24 @@ export async function inviteUserToOrg(
       throw new Error('KC inviteUserToOrg: missing or invalid Location header');
     }
 
-    // 2 — Realm role
-    const roleRes = await fetch(
-      `${KC_BASE}/admin/realms/${realm}/roles/${encodeURIComponent(role)}`,
-      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
-    );
-    if (!roleRes.ok) throw new Error(`KC inviteUserToOrg/getRole ${roleRes.status}`);
-    const roleObj: KcRole = await roleRes.json();
-
-    await fetch(
-      `${KC_BASE}/admin/realms/${realm}/users/${encodeURIComponent(userId)}/role-mappings/realm`,
-      { method: 'POST', headers, body: JSON.stringify([roleObj]),
-        signal: AbortSignal.timeout(5_000) },
-    );
+    // 2 — Platform roles (admin/super-admin) → realm role; org roles → attribute only (ROPC-compat)
+    const PLATFORM_ROLES: UserRole[] = ['admin', 'super-admin'];
+    if (PLATFORM_ROLES.includes(role)) {
+      const roleRes = await fetch(
+        `${KC_BASE}/admin/realms/${realm}/roles/${encodeURIComponent(role)}`,
+        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+      );
+      if (!roleRes.ok) throw new Error(`KC inviteUserToOrg/getRole ${roleRes.status}`);
+      const roleObj: KcRole = await roleRes.json();
+      await fetch(
+        `${KC_BASE}/admin/realms/${realm}/users/${encodeURIComponent(userId)}/role-mappings/realm`,
+        { method: 'POST', headers, body: JSON.stringify([roleObj]),
+          signal: AbortSignal.timeout(5_000) },
+      );
+    } else {
+      // Org role: set user attribute for ROPC JWT claim (RBAC_MULTITENANT.md)
+      await setUserAttributes(userId, { 'organization.role': role });
+    }
 
     // 3 — Add user to organization
     const addRes = await fetch(
@@ -516,6 +527,15 @@ export async function inviteUserToOrg(
     );
     if (!addRes.ok && addRes.status !== 201 && addRes.status !== 204) {
       throw new Error(`KC inviteUserToOrg/addMember ${addRes.status}: ${await addRes.text().catch(() => '')}`);
+    }
+
+    // 3b — Assign KC org role (best-effort; ROPC flow uses attribute from step 2)
+    if (!PLATFORM_ROLES.includes(role)) {
+      try {
+        await assignOrgRole(orgId, userId, role);
+      } catch (e) {
+        console.warn(`[KC] inviteUserToOrg/assignOrgRole non-fatal:`, (e as Error).message);
+      }
     }
 
     // 4 — Password-reset email
@@ -564,6 +584,57 @@ export async function removeOrgMember(orgId: string, userId: string): Promise<vo
   }
 }
 
+/**
+ * RBAC_MULTITENANT: Create the 6 standard org-scoped roles in a KC Organization.
+ * Called by provisioning after KC org creation. 409 = already exists → ignored.
+ */
+export async function createOrgRoles(orgId: string): Promise<void> {
+  assertKcId(orgId, 'createOrgRoles.orgId');
+  const token   = await getAdminToken();
+  const headers: HeadersInit = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const names   = ['viewer', 'editor', 'operator', 'auditor', 'local-admin', 'tenant-owner'];
+  for (const name of names) {
+    const res = await fetch(
+      `${KC_BASE}/admin/realms/${encodeURIComponent(KC_REALM)}/organizations/${encodeURIComponent(orgId)}/roles`,
+      { method: 'POST', headers, body: JSON.stringify({ name }), signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok && res.status !== 409) {
+      console.warn(`[KC] createOrgRoles "${name}" ${res.status}`);
+    }
+  }
+}
+
+/**
+ * Assign a KC org role to a member and sync the "organization.role" user attribute
+ * so the ROPC JWT (OIDC attribute mapper) carries the role in the token.
+ */
+export async function assignOrgRole(orgId: string, userId: string, roleName: string): Promise<void> {
+  assertKcId(orgId,  'assignOrgRole.orgId');
+  assertKcId(userId, 'assignOrgRole.userId');
+  const token   = await getAdminToken();
+  const headers: HeadersInit = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  // Fetch available org roles and find the target
+  const rolesRes = await fetch(
+    `${KC_BASE}/admin/realms/${encodeURIComponent(KC_REALM)}/organizations/${encodeURIComponent(orgId)}/roles`,
+    { headers, signal: AbortSignal.timeout(5_000) },
+  );
+  if (!rolesRes.ok) throw new Error(`KC assignOrgRole/list-roles ${rolesRes.status}`);
+  const orgRoles = await rolesRes.json() as { id: string; name: string }[];
+  const role = orgRoles.find(r => r.name === roleName);
+  if (!role) throw new Error(`KC assignOrgRole: role "${roleName}" not found in org ${orgId}`);
+
+  // Grant the role to the member
+  const grantRes = await fetch(
+    `${KC_BASE}/admin/realms/${encodeURIComponent(KC_REALM)}/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}/roles`,
+    { method: 'POST', headers, body: JSON.stringify([{ id: role.id, name: role.name }]), signal: AbortSignal.timeout(5_000) },
+  );
+  if (!grantRes.ok) throw new Error(`KC assignOrgRole/grant ${grantRes.status}`);
+
+  // Sync user attribute for ROPC JWT claim
+  await setUserAttributes(userId, { 'organization.role': roleName });
+}
+
 // ── Legacy user-oriented APIs (realm-wide, pre-KC-ORG) ──────────────────────
 
 /**
@@ -607,26 +678,24 @@ export async function inviteUser(
   const userId   = location.split('/').pop();
   if (!userId) throw new Error('KC inviteUser: missing Location header');
 
-  // 2 — Look up role representation
-  const roleRes = await fetch(
-    `${KC_BASE}/admin/realms/${KC_REALM}/roles/${encodeURIComponent(role)}`,
-    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
-  );
-  if (!roleRes.ok) throw new Error(`KC inviteUser/getRole ${roleRes.status}`);
-  const roleObj: KcRole = await roleRes.json();
+  // 2 — Role assignment: platform roles → realm role; org roles → attribute (RBAC_MULTITENANT)
+  if (PLATFORM_ROLES_SET.has(role)) {
+    const roleRes = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/roles/${encodeURIComponent(role)}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!roleRes.ok) throw new Error(`KC inviteUser/getRole ${roleRes.status}`);
+    const roleObj: KcRole = await roleRes.json();
+    await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
+      { method: 'POST', headers, body: JSON.stringify([roleObj]), signal: AbortSignal.timeout(5_000) },
+    );
+  } else {
+    // Org role without org context — set attribute for JWT (callers should prefer inviteUserToOrg)
+    await setUserAttributes(userId, { 'organization.role': role });
+  }
 
-  // 3 — Assign realm role
-  await fetch(
-    `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
-    {
-      method:  'POST',
-      headers,
-      body:    JSON.stringify([roleObj]),
-      signal:  AbortSignal.timeout(5_000),
-    },
-  );
-
-  // 4 — Trigger password-reset email
+  // 3 — Trigger password-reset email
   await fetch(
     `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/execute-actions-email`,
     {
@@ -672,6 +741,8 @@ export async function listRoles(): Promise<{ id: string; name: string; descripti
  * Replace all app realm roles on a user with the single given role.
  * Built-in KC roles (offline_access, uma_authorization, default-roles-*) are untouched.
  */
+const PLATFORM_ROLES_SET = new Set<UserRole>(['admin', 'super-admin']);
+
 export async function setUserRole(userId: string, role: UserRole): Promise<void> {
   const token   = await getAdminToken();
   const headers: HeadersInit = {
@@ -679,46 +750,45 @@ export async function setUserRole(userId: string, role: UserRole): Promise<void>
     'Content-Type': 'application/json',
   };
 
-  // 1 — Get current realm roles to remove our app roles
-  const currentRes = await fetch(
-    `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
-    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
-  );
-  if (currentRes.ok) {
-    const current: KcRole[] = await currentRes.json();
-    const toRemove = current.filter(r => (APP_ROLES as string[]).includes(r.name));
-    if (toRemove.length > 0) {
-      await fetch(
-        `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
-        {
-          method:  'DELETE',
-          headers,
-          body:    JSON.stringify(toRemove),
-          signal:  AbortSignal.timeout(5_000),
-        },
-      );
+  if (PLATFORM_ROLES_SET.has(role)) {
+    // Platform roles → realm role (admin / super-admin only)
+
+    // Remove any existing platform realm roles first
+    const currentRes = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (currentRes.ok) {
+      const current: KcRole[] = await currentRes.json();
+      const toRemove = current.filter(r => (PLATFORM_ROLES_SET as Set<string>).has(r.name));
+      if (toRemove.length > 0) {
+        await fetch(
+          `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
+          { method: 'DELETE', headers, body: JSON.stringify(toRemove), signal: AbortSignal.timeout(5_000) },
+        );
+      }
     }
+
+    const roleRes = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/roles/${encodeURIComponent(role)}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!roleRes.ok) throw new Error(`KC setUserRole/getRole ${roleRes.status}`);
+    const roleObj: KcRole = await roleRes.json();
+
+    const assignRes = await fetch(
+      `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
+      { method: 'POST', headers, body: JSON.stringify([roleObj]), signal: AbortSignal.timeout(5_000) },
+    );
+    if (!assignRes.ok) throw new Error(`KC setUserRole/assign ${assignRes.status}`);
+
+    // Clear any org role attribute when upgrading to platform role
+    await setUserAttributes(userId, { 'organization.role': '' });
+  } else {
+    // Org roles (RBAC_MULTITENANT) → user attribute drives the JWT claim (ROPC-compat)
+    // The actual KC org role grant requires orgId context — callers that have it use assignOrgRole.
+    await setUserAttributes(userId, { 'organization.role': role });
   }
-
-  // 2 — Fetch the target role representation
-  const roleRes = await fetch(
-    `${KC_BASE}/admin/realms/${KC_REALM}/roles/${encodeURIComponent(role)}`,
-    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000) },
-  );
-  if (!roleRes.ok) throw new Error(`KC setUserRole/getRole ${roleRes.status}`);
-  const roleObj: KcRole = await roleRes.json();
-
-  // 3 — Assign new role
-  const assignRes = await fetch(
-    `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}/role-mappings/realm`,
-    {
-      method:  'POST',
-      headers,
-      body:    JSON.stringify([roleObj]),
-      signal:  AbortSignal.timeout(5_000),
-    },
-  );
-  if (!assignRes.ok) throw new Error(`KC setUserRole/assign ${assignRes.status}`);
 }
 
 /**
