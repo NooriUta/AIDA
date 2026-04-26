@@ -25,6 +25,7 @@ interface KcUserView {
   notifyHarvest: boolean; notifyErrors: boolean; notifyDigest: boolean;
   quotas: { mimir: number; sessions: number; atoms: number; workers: number; anvil: number };
   sources: string[];
+  tenantAlias?: string;
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -101,6 +102,16 @@ function UserRow({
             <div style={{ fontSize: 11, color: 'var(--t3)' }}>{user.email}</div>
           </div>
         </div>
+      </td>
+
+      {/* Tenant */}
+      <td>
+        {user.tenantAlias
+          ? <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)',
+              background: 'var(--bg2)', border: '1px solid var(--bd)',
+              borderRadius: 3, padding: '1px 5px' }}>{user.tenantAlias}</span>
+          : <span style={{ color: 'var(--t3)', fontSize: 11 }}>—</span>
+        }
       </td>
 
       {/* Role */}
@@ -286,17 +297,18 @@ export default function UsersPage() {
       .then(({ mode, users: kcUsers }) => {
         setCrossTenant(mode === 'cross-tenant');
         const mapped: AidaUser[] = kcUsers.map((u, i) => ({
-          id:        i + 1,
-          kcId:      u.id,
-          name:      u.name,
-          firstName: u.firstName,
-          lastName:  u.lastName,
-          email:     u.email,
-          role:      u.role,
-          active:    u.active,
-          title:     u.title,
-          dept:      u.dept,
-          phone:     u.phone,
+          id:          i + 1,
+          kcId:        u.id,
+          name:        u.name,
+          firstName:   u.firstName,
+          lastName:    u.lastName,
+          email:       u.email,
+          role:        u.role,
+          active:      u.active,
+          title:       u.title,
+          dept:        u.dept,
+          phone:       u.phone,
+          tenantAlias: u.tenantAlias ?? (effectiveTenant === ALL_TENANTS ? undefined : effectiveTenant),
           sources: u.sources,
           quotas:  u.quotas,
           lastActive: '—',
@@ -539,6 +551,7 @@ export default function UsersPage() {
             <thead>
               <tr>
                 <th>Пользователь</th>
+                <th>Тенант</th>
                 <th>Роль</th>
                 <th>Статус</th>
                 <th>Scopes</th>
@@ -556,7 +569,7 @@ export default function UsersPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32, fontSize: 12 }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32, fontSize: 12 }}>
                     Нет пользователей по заданным фильтрам
                   </td>
                 </tr>
