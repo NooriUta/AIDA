@@ -39,6 +39,7 @@ export default function EventStreamPage() {
   const [level,      setLevel]      = useState<'' | EventLevel>('');
   const [sessionId,  setSessionId]  = useState('');
   const [eventType,  setEventType]  = useState('');
+  const [tenant,     setTenant]     = useState('');
   const [paused, setPaused]         = useState(false);
 
   // Buffer of events to display when paused
@@ -62,7 +63,26 @@ export default function EventStreamPage() {
   if (!paused) {
     pausedEventsRef.current = events;
   }
-  const displayedEvents = paused ? pausedEventsRef.current : events;
+  const baseEvents = paused ? pausedEventsRef.current : events;
+
+  // HTA-14: client-side tenant filter (payload.tenantAlias exact match)
+  const displayedEvents = useMemo(() => {
+    if (!tenant) return baseEvents;
+    return baseEvents.filter(e => {
+      const v = e.payload?.['tenantAlias'];
+      return typeof v === 'string' && v === tenant;
+    });
+  }, [baseEvents, tenant]);
+
+  // Distinct tenant aliases observed in the current buffer — for the filter dropdown
+  const seenTenants = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of events) {
+      const v = e.payload?.['tenantAlias'];
+      if (typeof v === 'string' && v) s.add(v);
+    }
+    return [...s].sort();
+  }, [events]);
 
   const wsColor =
     status === 'open'       ? 'var(--suc)'
@@ -136,6 +156,14 @@ export default function EventStreamPage() {
             value={sessionId}
             onChange={e => setSessionId(e.target.value)}
           />
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-2)', fontSize: '13px', color: 'var(--t2)' }}>
+          {t('eventStream.tenant', 'Tenant')}
+          <select style={selectStyle} value={tenant} onChange={e => setTenant(e.target.value)}>
+            <option value="">{t('eventStream.all')}</option>
+            {seenTenants.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
         </label>
 
         {/* Pause / Resume */}

@@ -26,6 +26,8 @@ const UsersPage          = React.lazy(() => import('./pages/UsersPage'));
 const DocsPage           = React.lazy(() => import('./pages/DocsPage'));
 const TenantsPage        = React.lazy(() => import('./pages/TenantsPage'));
 const TenantDetailsPage  = React.lazy(() => import('./pages/TenantDetailsPage'));
+const TenantMembersPage  = React.lazy(() => import('./pages/TenantMembersPage'));
+const TenantConfigPage   = React.lazy(() => import('./pages/TenantConfigPage'));
 // Round 5 self-service
 const ProfilePage           = React.lazy(() => import('./pages/ProfilePage'));
 const PreferencesPage       = React.lazy(() => import('./pages/PreferencesPage'));
@@ -128,6 +130,12 @@ export default function App() {
             } />
             <Route path="admin/tenants/:alias" element={
               <RoleGuard require="admin"><TenantDetailsPage /></RoleGuard>
+            } />
+            <Route path="admin/tenants/:alias/members" element={
+              <RoleGuard require="local-admin"><TenantMembersPage /></RoleGuard>
+            } />
+            <Route path="admin/tenants/:alias/config" element={
+              <RoleGuard require="super-admin"><TenantConfigPage /></RoleGuard>
             } />
 
             {/* Round 5 — Self-service (any authenticated user) */}

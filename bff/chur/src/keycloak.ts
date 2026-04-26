@@ -137,7 +137,13 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
   // Fallback: standard realm_access.roles
   const realmRoles = (payload as { realm_access?: { roles?: string[] } }).realm_access?.roles;
 
-  const roles = seerRoles ?? realmRoles ?? [];
+  // RBAC_MULTITENANT: org role from "organization.role" attribute mapper (ROPC-compat)
+  const orgClaim0 = (payload as { organization?: Record<string, unknown> }).organization;
+  const orgRoleAttr = orgClaim0 && typeof orgClaim0['role'] === 'string' ? orgClaim0['role'] as string : undefined;
+
+  const rolePool = [...(seerRoles ?? realmRoles ?? [])];
+  if (orgRoleAttr && !rolePool.includes(orgRoleAttr)) rolePool.push(orgRoleAttr);
+  const roles = rolePool;
   const role  = pickHighestRole(roles);
 
   // Extract scopes from the JWT `scope` claim.
@@ -164,9 +170,9 @@ export function extractUserInfo(payload: JWTPayload): KeycloakUserInfo {
   //   2. organization.alias — custom OIDC mapper (claim.name="organization.alias") → {"organization":{"alias":"<name>"}}
   //   3. organization first key — standard KC 26 orgs format → {"organization":{"<name>":{}}}
   const seerTenant = (payload as { seer_tenant?: string }).seer_tenant;
-  const orgClaim   = (payload as { organization?: Record<string, unknown> }).organization;
+  const orgClaim   = orgClaim0;
   const orgAlias   = orgClaim && typeof orgClaim === 'object'
-    ? (typeof orgClaim['alias'] === 'string' ? orgClaim['alias'] : Object.keys(orgClaim)[0])
+    ? (typeof orgClaim['alias'] === 'string' ? orgClaim['alias'] : Object.keys(orgClaim).find(k => k !== 'role'))
     : undefined;
   const tenantAlias = seerTenant ?? orgAlias;
 
@@ -208,12 +214,13 @@ function pickHighestRole(roles: string[]): UserRole {
  * Mirrors the optionalClientScopes in seer-realm.json so that the BFF
  * enforces the same access model with or without KC scope mappers.
  */
+// Mirrors RBAC_MULTITENANT.md §2 — must match exactly
 const ROLE_AIDA_SCOPES: Record<string, string[]> = {
-  'super-admin':  ['aida:admin', 'aida:superadmin', 'aida:admin:destructive', 'seer:read', 'seer:write', 'aida:harvest', 'aida:audit'],
-  'admin':        ['aida:admin', 'seer:read', 'seer:write', 'aida:harvest', 'aida:audit'],
-  'local-admin':  ['aida:admin', 'aida:tenant:admin', 'seer:read', 'seer:write'],
-  'tenant-owner': ['aida:tenant:owner', 'aida:tenant:admin', 'seer:read', 'seer:write'],
-  'operator':     ['seer:read', 'seer:write', 'aida:harvest'],
+  'super-admin':  ['seer:read', 'seer:write', 'aida:harvest', 'aida:audit', 'aida:admin', 'aida:superadmin', 'aida:admin:destructive'],
+  'admin':        ['seer:read', 'seer:write', 'aida:harvest', 'aida:audit', 'aida:admin'],
+  'local-admin':  ['seer:read', 'seer:write', 'aida:harvest', 'aida:tenant:admin'],
+  'tenant-owner': ['seer:read', 'seer:write', 'aida:harvest', 'aida:tenant:admin', 'aida:tenant:owner'],
+  'operator':     ['seer:read', 'aida:harvest'],
   'auditor':      ['seer:read', 'aida:audit'],
   'editor':       ['seer:read', 'seer:write'],
   'viewer':       ['seer:read'],

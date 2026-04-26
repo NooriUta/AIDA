@@ -8,7 +8,9 @@ import { EventLog }             from '../components/EventLog';
 import { ServiceHealthStrip }   from '../components/ServiceHealthStrip';
 import { RecentErrors }         from '../components/RecentErrors';
 import { DaliStatsWidget }      from '../components/DaliStatsWidget';
+import { TenantMetricsPanel }   from '../components/TenantMetricsPanel';
 import { useMetrics }           from '../hooks/useMetrics';
+import { useTenantContext }     from '../hooks/useTenantContext';
 import { useEventStream }       from '../hooks/useEventStream';
 import { useDashboardStore }    from '../stores/dashboardStore';
 
@@ -20,6 +22,7 @@ export default function DashboardPage() {
   usePageTitle(t('nav.dashboard'));
   const { metrics }        = useMetrics();
   const { events, status } = useEventStream();
+  const { isSuperAdmin }   = useTenantContext();
   const setEvents          = useDashboardStore(s => s.setEvents);
   const setMetrics         = useDashboardStore(s => s.setMetrics);
 
@@ -44,6 +47,13 @@ export default function DashboardPage() {
 
       {/* Dali parse engine stats */}
       <DaliStatsWidget />
+
+      {/* HTA-10: per-tenant metrics (superadmin sees all; others see own tenant via MT routing) */}
+      {isSuperAdmin && (
+        <div style={{ padding: '0 var(--seer-space-6) var(--seer-space-4)' }}>
+          <TenantMetricsPanel />
+        </div>
+      )}
 
       {/* Chart + Gauge + RecentErrors row */}
       <div style={{ display: 'flex', gap: 'var(--seer-space-4)', padding: '0 var(--seer-space-6) var(--seer-space-4)', flexWrap: 'wrap' }}>
