@@ -4,6 +4,9 @@
  * These tests exercise the fetch-based steps directly rather than through the
  * Fastify route surface. Each scenario overrides vi.stubGlobal('fetch') with a
  * call-counting stub that routes URLs to controllable responses (ok/fail).
+ *
+ * ArcadeDB 26.x: create/drop databases go through POST /api/v1/server
+ * with body { command: "create database <name>" } — not /api/v1/create/<name>.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { provisionTenant, resumeProvisioning } from './provisioning';
@@ -38,24 +41,31 @@ function fail(status = 500, body = 'backend error'): any {
   };
 }
 
+/** Parse the server-command from a /api/v1/server request body. */
+function serverCmd(init?: any): string {
+  try { return JSON.parse(init?.body ?? '{}').command ?? ''; } catch { return ''; }
+}
+
 // ── Happy path ─────────────────────────────────────────────────────────────
 describe('provisionTenant — happy path', () => {
   it('runs all 7 steps in order and returns orgId + lastStep=7', async () => {
     const calls: string[] = [];
-    handler = async (url) => {
-      calls.push(url.split('?')[0]);
+    handler = async (url, init) => {
+      const cmd = serverCmd(init);
+      // Track URL or, for server-command calls, the command itself
+      calls.push(cmd ? `server:${cmd}` : url.split('?')[0]);
+
       if (url.includes('/realms/master/protocol/openid-connect/token')) {
         return ok({ access_token: 'admin-tok' });
       }
       if (url.includes('/admin/realms/seer/organizations?search=')) {
         return ok([]); // pre-flight conflict check: no conflict
       }
-      if (url.includes('/api/v1/server')) return ok();            // YGG + FRIGG pings
+      if (url.includes('/api/v1/server')) return ok(); // YGG + FRIGG pings + create/drop
       if (url.includes('/admin/realms/seer/organizations') && !url.includes('?')) {
         return ok({}, 201, { location: 'http://kc/admin/realms/seer/organizations/new-org-uuid' });
       }
       if (url.includes('/api/v1/command/frigg-tenants')) return ok({ result: [{ tenantAlias: 'acme' }] });
-      if (url.includes('/api/v1/create/')) return ok({}, 201);
       if (url.includes('/api/v1/command/dali_acme'))  return ok();
       if (url.includes('/api/cron/harvest'))         return ok({ ok: true });
       return ok();
@@ -67,13 +77,11 @@ describe('provisionTenant — happy path', () => {
     expect(result.keycloakOrgId).toBe('new-org-uuid');
     expect(result.tenantAlias).toBe('acme');
 
-    // Minimal shape check — should have hit Keycloak token, YGG ping, FRIGG ping,
-    // KC org create, FRIGG insert, YGG create hound_, YGG create hound_src_,
-    // FRIGG create dali_, FRIGG schema setup, Heimdall cron, FRIGG update ACTIVE.
+    // Verify key steps were executed via server-command API
     expect(calls.some(c => c.includes('/realms/seer/organizations'))).toBe(true);
-    expect(calls.some(c => c.includes('/api/v1/create/hound_acme'))).toBe(true);
-    expect(calls.some(c => c.includes('/api/v1/create/hound_src_acme'))).toBe(true);
-    expect(calls.some(c => c.includes('/api/v1/create/dali_acme'))).toBe(true);
+    expect(calls.some(c => c === 'server:create database hound_acme')).toBe(true);
+    expect(calls.some(c => c === 'server:create database hound_src_acme')).toBe(true);
+    expect(calls.some(c => c === 'server:create database dali_acme')).toBe(true);
     expect(calls.some(c => c.includes('/api/cron/harvest'))).toBe(true);
   });
 });
@@ -82,12 +90,13 @@ describe('provisionTenant — happy path', () => {
 describe('provisionTenant — pre-flight', () => {
   it('aborts if YGG is unreachable (no side effects)', async () => {
     const calls: string[] = [];
-    handler = async (url) => {
+    handler = async (url, init) => {
       calls.push(url);
       if (url.includes('/realms/master/protocol/openid-connect/token')) {
         return ok({ access_token: 'tok' });
       }
-      if (url.includes(':2480/api/v1/server')) return fail(500);   // YGG down
+      // YGG ping goes to /api/v1/server — fail it
+      if (url.includes(':2480/api/v1/server')) return fail(500);
       return ok();
     };
 
@@ -122,19 +131,29 @@ describe('provisionTenant — compensation on failure', () => {
     const compensations: string[] = [];
     handler = async (url, init) => {
       const method = init?.method ?? 'GET';
+      const cmd = serverCmd(init);
 
       if (url.includes('/realms/master/'))  return ok({ access_token: 't' });
-      if (url.includes('/api/v1/server'))    return ok();
-      if (url.includes('/admin/realms/seer/organizations?search='))
-        return ok([]);
 
-      // Compensation step 1: DELETE org (check BEFORE plain /organizations POST)
+      // All /api/v1/server calls — route by command
+      if (url.includes('/api/v1/server')) {
+        if (cmd === 'create database hound_acme')     return ok({}, 201);
+        if (cmd === 'create database hound_src_acme') return ok({}, 201);
+        if (cmd === 'create database dali_acme')      return fail(500, 'FRIGG dali create failed');
+        if (cmd === 'drop database hound_acme')       { compensations.push('drop-hound');     return ok(); }
+        if (cmd === 'drop database hound_src_acme')   { compensations.push('drop-hound-src'); return ok(); }
+        return ok(); // pings
+      }
+
+      if (url.includes('/admin/realms/seer/organizations?search=')) return ok([]);
+
+      // Compensation step 1: DELETE org
       if (url.includes('/organizations/org-uuid') && method === 'DELETE') {
         compensations.push('delete-org');
         return ok({}, 204);
       }
 
-      // Step 1: create org (POST /admin/realms/seer/organizations, no /org-uuid suffix)
+      // Step 1: create org
       if (url.endsWith('/admin/realms/seer/organizations') && method === 'POST')
         return ok({}, 201, { location: 'http://kc/admin/realms/seer/organizations/org-uuid' });
 
@@ -146,24 +165,6 @@ describe('provisionTenant — compensation on failure', () => {
         }
         return ok();
       }
-
-      // Step 3: YGG create hound_acme / comp POST drop
-      if (url.includes('/api/v1/create/hound_acme') && !url.includes('hound_src_'))
-        return ok({}, 201);
-      if (url.includes('/api/v1/drop/hound_acme') && !url.includes('hound_src_')) {
-        compensations.push('drop-hound');
-        return ok();
-      }
-
-      // Step 4: hound_src_acme
-      if (url.includes('/api/v1/create/hound_src_acme')) return ok({}, 201);
-      if (url.includes('/api/v1/drop/hound_src_acme')) {
-        compensations.push('drop-hound-src');
-        return ok();
-      }
-
-      // Step 5: fail FRIGG create dali_acme
-      if (url.includes('/api/v1/create/dali_acme')) return fail(500, 'FRIGG dali create failed');
 
       return ok();
     };
@@ -210,27 +211,32 @@ describe('resumeProvisioning', () => {
     let provisionCalled = false;
 
     handler = async (url, init) => {
-      // Assume cleanup completes after first KC token + org DELETE + YGG/FRIGG drops
-      // (we don't assert order, just that the provision phase runs to completion)
+      const method = init?.method ?? 'GET';
+      const cmd = serverCmd(init);
+
       if (url.includes('/realms/master/')) return ok({ access_token: 't' });
-      if (url.includes('/api/v1/server'))   return ok();
+
+      // All /api/v1/server calls (pings, create, drop)
+      if (url.includes('/api/v1/server')) {
+        if (cmd.startsWith('drop database'))    return ok();
+        if (cmd.startsWith('create database'))  return ok({}, 201);
+        return ok(); // ping
+      }
 
       if (url.includes('/admin/realms/seer/organizations?search=')) {
         if (phase === 'cleanup') return ok([{ alias: 'acme', id: 'old-org' }]);
-        return ok([]);                              // no conflict on re-run
+        return ok([]); // no conflict on re-run
       }
-      if (url.includes('/api/v1/drop/')) return ok();
-      if (url.endsWith('/old-org') && init?.method === 'DELETE') {
+      if (url.includes('/old-org') && method === 'DELETE') {
         phase = 'provision';
         return ok({}, 204);
       }
 
       if (url.includes('/api/v1/command/frigg-tenants')) return ok();
-      if (url.endsWith('/organizations') && init?.method === 'POST') {
+      if (url.endsWith('/organizations') && method === 'POST') {
         provisionCalled = true;
-        return ok({}, 201, { location: 'http://kc/admin/realms/seer/organizations/new-org' });
+        return ok({}, 201, { location: 'http://kc/admin/realms/seer/organizations/new-org-uuid' });
       }
-      if (url.includes('/api/v1/create/')) return ok({}, 201);
       if (url.includes('/api/v1/command/dali_acme')) return ok();
       if (url.includes('/api/cron/harvest')) return ok();
       return ok();
@@ -239,7 +245,7 @@ describe('resumeProvisioning', () => {
     const result = await resumeProvisioning('acme', 'corr-resume', 'admin');
 
     expect(result.lastStep).toBe(7);
-    expect(result.keycloakOrgId).toBe('new-org');
+    expect(result.keycloakOrgId).toBe('new-org-uuid');
     expect(provisionCalled).toBe(true);
   });
 });
