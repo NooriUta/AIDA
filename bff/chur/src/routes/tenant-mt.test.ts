@@ -48,8 +48,8 @@ async function buildApp() {
 }
 type App = Awaited<ReturnType<typeof buildApp>>;
 
-async function sid(role: 'admin' | 'superadmin' | 'viewer', extra: string[] = []): Promise<string> {
-  const scopes: string[] = role === 'superadmin'
+async function sid(role: 'admin' | 'super-admin' | 'viewer', extra: string[] = []): Promise<string> {
+  const scopes: string[] = role === 'super-admin'
     ? ['aida:superadmin', 'aida:admin']
     : role === 'admin'
     ? ['aida:admin']
@@ -187,7 +187,7 @@ describe('POST /api/admin/tenants/:alias/resume-provisioning', () => {
   });
 
   it('MT-08 · 200 — superadmin resumes provisioning', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/acme/resume-provisioning',
       cookies: { sid: cookie }, headers: CSRF,
@@ -203,7 +203,7 @@ describe('POST /api/admin/tenants/:alias/resume-provisioning', () => {
     vi.mocked(resumeProvisioning).mockRejectedValueOnce(
       Object.assign(new Error('KC timeout'), { failedStep: 3, cause: 'kc_unreachable' }),
     );
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/fail-me/resume-provisioning',
       cookies: { sid: cookie }, headers: CSRF,
@@ -243,7 +243,7 @@ describe('PUT /api/admin/tenants/:alias/config', () => {
   });
 
   it('MT-14 · 400 — missing expectedConfigVersion', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/config',
       cookies: { sid: cookie }, headers: CSRF,
@@ -253,7 +253,7 @@ describe('PUT /api/admin/tenants/:alias/config', () => {
   });
 
   it('MT-14 · 400 — no editable fields in body', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/config',
       cookies: { sid: cookie }, headers: CSRF,
@@ -264,7 +264,7 @@ describe('PUT /api/admin/tenants/:alias/config', () => {
   });
 
   it('MT-14 · 400 — invalid harvestCron (too short)', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/config',
       cookies: { sid: cookie }, headers: CSRF,
@@ -275,7 +275,7 @@ describe('PUT /api/admin/tenants/:alias/config', () => {
   });
 
   it('MT-14 · 400 — invalid llmMode', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/config',
       cookies: { sid: cookie }, headers: CSRF,
@@ -285,7 +285,7 @@ describe('PUT /api/admin/tenants/:alias/config', () => {
   });
 
   it('MT-14 · 200 — superadmin updates harvestCron', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/config',
       cookies: { sid: cookie }, headers: CSRF,
@@ -296,7 +296,7 @@ describe('PUT /api/admin/tenants/:alias/config', () => {
   });
 
   it('MT-14 · 200 — superadmin updates llmMode to local', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/config',
       cookies: { sid: cookie }, headers: CSRF,
@@ -327,7 +327,7 @@ describe('PUT /api/admin/tenants/:alias/config', () => {
       });
     }));
 
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/config',
       cookies: { sid: cookie }, headers: CSRF,
@@ -518,7 +518,7 @@ describe('MT-18 Tenant isolation — cross-tenant data access blocked', () => {
   });
 
   it('superadmin can suspend any tenant', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'DELETE', url: '/api/admin/tenants/acme',
       cookies: { sid: cookie }, headers: CSRF,
@@ -549,7 +549,7 @@ describe('POST /api/admin/tenants — provisioning CSRF + alias validation', () 
   afterEach(() => vi.unstubAllGlobals());
 
   it('MT-XX · 403 — missing CSRF on provision', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants',
       cookies: { sid: cookie },
@@ -559,7 +559,7 @@ describe('POST /api/admin/tenants — provisioning CSRF + alias validation', () 
   });
 
   it('MT-10 · 400 — alias too short', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants',
       cookies: { sid: cookie }, headers: CSRF,
@@ -569,7 +569,7 @@ describe('POST /api/admin/tenants — provisioning CSRF + alias validation', () 
   });
 
   it('MT-10 · 201 — valid alias provisions successfully', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants',
       cookies: { sid: cookie }, headers: CSRF,
@@ -699,7 +699,7 @@ describe('SEC — RBAC scope enforcement', () => {
 
   // SEC-04: CSRF missing on mutating endpoints returns 403
   it('SEC-04 · 403 — missing CSRF on suspend', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'DELETE', url: '/api/admin/tenants/acme',
       cookies: { sid: cookie },
@@ -709,7 +709,7 @@ describe('SEC — RBAC scope enforcement', () => {
   });
 
   it('SEC-04 · 403 — missing CSRF on archive', async () => {
-    const cookie = await sid('superadmin');
+    const cookie = await sid('super-admin');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/acme/archive-now',
       cookies: { sid: cookie },
