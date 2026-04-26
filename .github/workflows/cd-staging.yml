@@ -1,0 +1,418 @@
+name: CD Staging
+
+on:
+  push:
+    branches: ['prerelease']
+  workflow_dispatch:
+    inputs:
+      deploy_mode:
+        description: 'Deploy mode'
+        required: false
+        default: 'merge'
+        type: choice
+        options:
+          - merge
+          - init
+      run_load_test:
+        description: 'Run load test (k6) after deploy'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: cd-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Build + push Docker images to GHCR ──────────────────────────────────────
+  build-push:
+    name: Build & push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: verdandi
+            context: ./frontends/verdandi
+            dockerfile: ./frontends/verdandi/Dockerfile
+          - service: chur
+            context: ./bff/chur
+            dockerfile: ./bff/chur/Dockerfile
+          - service: shuttle
+            context: .
+            dockerfile: ./services/shuttle/Dockerfile
+          - service: dali
+            context: .
+            dockerfile: ./services/dali/Dockerfile
+          - service: heimdall-backend
+            context: .
+            dockerfile: ./services/heimdall-backend/Dockerfile
+          - service: heimdall-frontend
+            context: .
+            dockerfile: ./frontends/heimdall-frontend/Dockerfile
+          - service: shell
+            context: .
+            dockerfile: ./frontends/shell/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set lowercase owner
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file:    ${{ matrix.dockerfile }}
+          push: true
+          build-args: |
+            ${{ matrix.build_args }}
+            ${{ matrix.service == 'shell' && format('DOMAIN={0}', secrets.DOMAIN_STAGING) || '' }}
+          cache-from: type=gha,scope=staging-${{ matrix.service }}
+          cache-to:   type=gha,scope=staging-${{ matrix.service }},mode=max
+          tags: |
+            ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:staging
+            ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:staging-${{ github.sha }}
+
+  # ── Mirror GHCR → Yandex Container Registry ─────────────────────────────────
+  mirror-to-ycr:
+    name: Mirror ${{ matrix.service }} → YCR
+    needs: build-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      matrix:
+        service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend, shell]
+    steps:
+      - name: Set lowercase owner
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Yandex Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: cr.yandex
+          username: json_key
+          password: ${{ secrets.YC_SA_KEY }}
+
+      - name: Pull from GHCR and push to YCR
+        env:
+          GHCR: ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}
+          YCR:  cr.yandex/${{ secrets.YC_REGISTRY_ID }}/${{ matrix.service }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "=== Mirror attempt ${attempt}/3 ==="
+            docker pull ${GHCR}:staging \
+              && docker tag  ${GHCR}:staging ${YCR}:staging \
+              && docker push ${YCR}:staging \
+              && break
+            [ ${attempt} -lt 3 ] && echo "Attempt ${attempt} failed, retrying in 30s..." && sleep 30
+          done
+
+  # ── Deploy to staging ────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to staging
+    needs: mirror-to-ycr
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix file permissions for scp
+        run: |
+          chmod -R a+r docker-compose.prod.yml docker-compose.yc.yml infra/keycloak/ infra/scripts/ infra/nginx/ scripts/ tests/
+          chmod a+x infra/scripts/*.sh scripts/*.sh
+
+      - name: Ensure deploy dir is writable
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          script: |
+            sudo mkdir -p /opt/seer-studio/infra/scripts /opt/seer-studio/infra/nginx /opt/seer-studio/scripts /opt/seer-studio/tests
+            # Clean stale test fixtures so SCP only lands the minimal repo dataset
+            sudo rm -rf /opt/seer-studio/tests/data/
+            sudo chown -R ubuntu:ubuntu /opt/seer-studio
+
+      - name: Copy prod compose to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          source:   docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/,infra/scripts/,infra/nginx/,scripts/,tests/
+          target:   /opt/seer-studio/
+
+      - name: Write compose .env on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          script: |
+            cat > /opt/seer-studio/.env << 'ENVEOF'
+            DOMAIN=${{ secrets.DOMAIN_STAGING }}
+            YC_REGISTRY_ID=${{ secrets.YC_REGISTRY_ID }}
+            IMAGE_TAG=staging
+            ENVEOF
+
+      - name: Install nginx config on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          script: |
+            set -e
+            DOMAIN=${{ secrets.DOMAIN_STAGING }}
+            HEIMDALL_CIDR="${{ secrets.HEIMDALL_CIDR_STAGING }}"
+            CONF=/opt/seer-studio/infra/nginx/nginx.conf
+            CIDR="${HEIMDALL_CIDR:-0.0.0.0/0}"
+            # Используем | как разделитель sed — CIDR содержит '/' что ломает стандартный s/.../
+            sudo bash -c "sed 's|\${DOMAIN}|'"${DOMAIN}"'|g; s|\${HEIMDALL_CIDR}|'"${CIDR}"'|g' ${CONF} \
+              > /etc/nginx/sites-available/aida"
+            sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
+            # Single SAN cert covers all three domains (certbot certonly with -d seer.* -d heimdall.*)
+            # Directory is named after the first -d argument only.
+            if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+              sudo nginx -t && sudo systemctl restart nginx
+            else
+              echo "TLS cert not yet provisioned for ${DOMAIN} — skipping nginx reload"
+            fi
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /opt/seer-studio
+
+            # Sync secrets from Lockbox → .env.prod
+            if [ -f infra/scripts/lockbox-sync.sh ]; then
+              LOCKBOX_SECRET_ID=${{ secrets.LOCKBOX_SECRET_ID_STAGING }} \
+              infra/scripts/lockbox-sync.sh || echo "Lockbox sync skipped (not configured)"
+            fi
+
+            source .env.prod 2>/dev/null || true
+
+            # Remove yc credential helper for cr.yandex
+            if [ -f ~/.docker/config.json ]; then
+              jq 'del(.credHelpers["cr.yandex"])' ~/.docker/config.json \
+                > /tmp/dc.json && mv /tmp/dc.json ~/.docker/config.json
+            fi
+
+            # Login to YCR via VM service account IAM token
+            IAM_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+              http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token \
+              | jq -r .access_token)
+            echo "$IAM_TOKEN" | docker login cr.yandex -u iam --password-stdin
+
+            export IMAGE_TAG=staging
+            export YC_REGISTRY_ID=${{ secrets.YC_REGISTRY_ID }}
+            export DOMAIN=${{ secrets.DOMAIN_STAGING }}
+            export REPO=cr.yandex/${YC_REGISTRY_ID}
+
+            # Pull new images from YCR
+            for svc in verdandi chur shuttle dali heimdall-backend heimdall-frontend shell; do
+              docker pull ${REPO}/${svc}:${IMAGE_TAG}
+              docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
+            done
+
+            # ── Init deploy: wipe volumes ─────────────────────────────────────
+            DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'merge' }}"
+            if [ "$DEPLOY_MODE" = "init" ]; then
+              echo "=== INIT DEPLOY: wiping DB volumes ==="
+              docker compose \
+                -f docker-compose.prod.yml \
+                -f docker-compose.yc.yml \
+                down --remove-orphans || true
+              docker volume rm seer-studio_frigg_data   || true
+              docker volume rm hound_databases          || true
+              docker volume rm seer-studio_hound_config || true
+              docker volume rm seer-studio_hound_logs   || true
+              echo "=== Volumes removed ==="
+            fi
+
+            # Ensure external volumes exist
+            docker volume create hound_databases || true
+
+            # ── Step 1: Start / update all app services (new images) ────────────
+            docker compose \
+              -f docker-compose.prod.yml \
+              -f docker-compose.yc.yml \
+              up -d --remove-orphans || {
+                echo "=== docker compose up failed ==="
+                docker ps -a
+                docker logs seer-studio-chur-1     --tail 60 2>&1 || true
+                docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
+                exit 1
+              }
+
+            # ── Step 2: Force-recreate Keycloak ──────────────────────────────────
+            # KC uses an in-container H2 database (no volume).
+            # Without --force-recreate, KC keeps running with its existing H2 state
+            # across deploys, so manual password changes in KC admin console
+            # persist and break smoke-test S-01 (admin/admin → 401).
+            # Recreating KC wipes the H2 DB and re-imports seer-realm.json,
+            # guaranteeing deterministic auth state (admin:admin) for every CI run.
+            # KC startup takes ~90s — wait_infra "KC" below handles the delay.
+            echo "=== Force-recreating Keycloak (fresh H2 DB + realm re-import) ==="
+            docker compose \
+              -f docker-compose.prod.yml \
+              -f docker-compose.yc.yml \
+              up -d --force-recreate keycloak || {
+                echo "=== KC force-recreate failed ==="
+                docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
+                exit 1
+              }
+
+            # ── Wait for infrastructure ───────────────────────────────────────
+            wait_infra() {
+              local url="$1" name="$2"
+              if curl -sf "${url}" > /dev/null 2>&1; then
+                echo "  [${name}] already ready"; return 0
+              fi
+              for i in $(seq 1 30); do
+                if curl -sf "${url}" > /dev/null 2>&1; then
+                  echo "  [${name}] ready"; return 0
+                fi
+                echo "  [${name}] retry ${i}/30..."; sleep 10
+              done
+              echo "=== ${name} not ready after 300s — aborting ==="; return 1
+            }
+
+            echo "=== Waiting for infrastructure ==="
+            wait_infra "http://localhost:2481/api/v1/ready"   "FRIGG"    || exit 1
+            wait_infra "http://localhost:2480/api/v1/ready"   "YGG"      || exit 1
+            # Wait for the seer realm specifically — master realm can be ready
+            # before --import-realm finishes seeding seer-realm.json (race condition).
+            wait_infra "http://localhost:18180/kc/realms/seer" "KC(seer)" || exit 1
+
+            # ── DB bootstrap ──────────────────────────────────────────────────
+            echo "=== Running init-arcadedb.sh ==="
+            INIT_ARCADEDB_TIMEOUT=300 \
+            FRIGG_URL=http://localhost:2481 \
+            FRIGG_USER=root \
+            FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+            YGG_URL=http://localhost:2480 \
+            YGG_USER=root \
+            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+            KC_URL=http://localhost:18180/kc \
+            KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
+            KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
+            bash scripts/init-arcadedb.sh || {
+              echo "=== init-arcadedb.sh FAILED (non-fatal on upgrade) ==="
+            }
+
+            # ── Health checks ─────────────────────────────────────────────────
+            echo "=== Waiting for services ==="
+            wait_infra "http://localhost:13000/health" "Chur"    || { echo "Chur FAILED";    exit 1; }
+            wait_infra "http://localhost:18080/q/health" "Shuttle" || { echo "Shuttle FAILED"; exit 1; }
+            wait_infra "http://localhost:15173/"        "Verdandi" || { echo "Verdandi FAILED"; exit 1; }
+            echo "=== All services OK ==="
+            echo "Staging deploy OK — ${{ github.sha }}"
+
+      # ── Smoke tests ───────────────────────────────────────────────────────────
+      - name: Run smoke tests
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          command_timeout: 10m
+          script: |
+            # Restart Chur to reset its in-memory rate limiter before smoke tests.
+            # Chur uses an in-process sliding-window rate limiter for /auth/login.
+            # When the image digest hasn't changed, `docker compose up -d` does NOT
+            # recreate the container — so the rate limiter accumulates across pipeline
+            # runs. Explicit restart guarantees a clean slate for S-01/S-03 tests.
+            docker restart seer-studio-chur-1
+            for i in $(seq 1 15); do
+              curl -sf http://localhost:13000/health >/dev/null 2>&1 && break
+              echo "Waiting for Chur health... (${i}/15)"; sleep 3
+            done
+
+            cd /opt/seer-studio
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+            bash scripts/smoke-test.sh
+
+      # ── Integration tests ─────────────────────────────────────────────────────
+      - name: Run integration tests
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          command_timeout: 40m
+          script: |
+            cd /opt/seer-studio
+            # Minimal repo fixtures (2 SQL files per module) — stale full datasets
+            # are wiped in "Ensure deploy dir is writable" before each SCP.
+            DATA_DIR=/opt/seer-studio/tests/data/erp
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+            TENANT=acme-ci \
+            DATA_DIR=${DATA_DIR} \
+            bash scripts/integration-test.sh
+
+      # ── Load test (опционально) ───────────────────────────────────────────────
+      - name: Run load test (k6)
+        if: ${{ github.event.inputs.run_load_test == 'true' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          command_timeout: 30m
+          script: |
+            which k6 || (curl -s https://packagecloud.io/install/repositories/k6/stable/script.deb.sh | sudo bash && sudo apt-get install -y k6)
+            cd /opt/seer-studio
+            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+            k6 run scripts/load-test.js
+
+      - name: Notify success
+        if: success() && env.TELEGRAM_TOKEN != ''
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            ✅ Staging deployed
+            SHA: `${{ github.sha }}`
+            By: ${{ github.actor }}
+            URL: https://seer.${{ secrets.DOMAIN_STAGING }}
+
+      - name: Notify failure
+        if: failure() && env.TELEGRAM_TOKEN != ''
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            ❌ Staging deploy FAILED
+            SHA: `${{ github.sha }}`
+            By: ${{ github.actor }}
+            Check: https://github.com/${{ github.repository }}/actions

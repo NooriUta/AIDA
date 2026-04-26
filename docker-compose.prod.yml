@@ -50,6 +50,10 @@ services:
       ARCADE_USER:     ${ARCADEDB_USER:-root}
       ARCADE_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD:-playwithdata}
       QUARKUS_HTTP_CORS_ORIGINS: https://seidrstudio.pro,https://www.seidrstudio.pro,https://seer.seidrstudio.pro,https://heimdall.seidrstudio.pro,http://localhost:13000,http://localhost:15173
+      # CD-17: FriggYggLineageRegistry ygg.url default is localhost:2480 (dev-only)
+      # In Docker the YGG service must be reached via Docker network hostname
+      YGG_URL: "http://ygg:2480"
+      FRIGG_URL: "http://frigg:2480"
     ports:
       - "18080:8080"
     depends_on:
