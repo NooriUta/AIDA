@@ -22,16 +22,16 @@ export function TenantMetricsPanel({ lockTenant }: Props) {
   }, [tenantMetrics, filter, lockTenant]);
 
   if (error && !tenantMetrics) {
-    return <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{error}</p>;
+    return <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>;
   }
 
   return (
-    <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 6 }}>
+    <div style={{ padding: 16, border: '1px solid var(--bd)', borderRadius: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: '0.95rem' }}>
           {t('metrics.byTenant', 'Per-tenant metrics')}
         </h3>
-        <span style={{ color: 'var(--color-muted)', fontSize: '0.8rem' }}>
+        <span style={{ color: 'var(--t3)', fontSize: '0.8rem' }}>
           {t('metrics.tenantCount', '{{n}} tenants',
             { n: tenantMetrics?.tenantCount ?? 0 })}
         </span>
@@ -49,7 +49,7 @@ export function TenantMetricsPanel({ lockTenant }: Props) {
 
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+          <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--bd)' }}>
             <th style={{ padding: '6px 10px' }}>{t('metrics.alias',    'Alias')}</th>
             <th style={{ padding: '6px 10px' }}>{t('metrics.events',   'Events')}</th>
             <th style={{ padding: '6px 10px' }}>{t('metrics.sessions', 'Sessions')}</th>
@@ -62,12 +62,12 @@ export function TenantMetricsPanel({ lockTenant }: Props) {
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ padding: '12px', color: 'var(--color-muted)' }}>
+              <td colSpan={7} style={{ padding: '12px', color: 'var(--t3)' }}>
                 {t('metrics.noTenantData', 'No tenant activity yet.')}
               </td>
             </tr>
           ) : rows.map(r => (
-            <tr key={r.tenantAlias} style={{ borderBottom: '1px solid var(--border)' }}>
+            <tr key={r.tenantAlias} style={{ borderBottom: '1px solid var(--bd)' }}>
               <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{r.tenantAlias}</td>
               <td style={{ padding: '6px 10px' }}>{r.totalEvents.toLocaleString()}</td>
               <td style={{ padding: '6px 10px' }}>{r.parseSessions.toLocaleString()}</td>
@@ -75,9 +75,9 @@ export function TenantMetricsPanel({ lockTenant }: Props) {
               <td style={{ padding: '6px 10px' }}>{r.activeJobs.toLocaleString()}</td>
               <td style={{
                 padding: '6px 10px',
-                color: r.errors > 0 ? 'var(--color-danger)' : 'var(--color-muted)',
+                color: r.errors > 0 ? 'var(--danger)' : 'var(--t3)',
               }}>{r.errors.toLocaleString()}</td>
-              <td style={{ padding: '6px 10px', color: 'var(--color-muted)' }}>
+              <td style={{ padding: '6px 10px', color: 'var(--t3)' }}>
                 {r.lastEventAt ? new Date(r.lastEventAt).toLocaleTimeString() : '—'}
               </td>
             </tr>
@@ -85,7 +85,7 @@ export function TenantMetricsPanel({ lockTenant }: Props) {
         </tbody>
         {!lockTenant && tenantMetrics && tenantMetrics.rest.totalEvents > 0 && (
           <tfoot>
-            <tr style={{ borderTop: '1px solid var(--border)', color: 'var(--color-muted)' }}>
+            <tr style={{ borderTop: '1px solid var(--bd)', color: 'var(--t3)' }}>
               <td style={{ padding: '6px 10px', fontStyle: 'italic' }}>
                 … + {tenantMetrics.tenantCount - tenantMetrics.top20.length} {t('metrics.moreTenants', 'more')}
               </td>

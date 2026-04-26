@@ -76,6 +76,20 @@ export function resumeProvisioningTenant(alias: string): Promise<{ ok: boolean }
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/resume-provisioning`, { method: 'POST' });
 }
 
+export interface ProvisionResult {
+  tenantAlias:    string;
+  keycloakOrgId?: string;
+  lastStep?:      number;
+  correlationId?: string;
+}
+
+export function provisionTenant(alias: string): Promise<ProvisionResult> {
+  return adminFetch<ProvisionResult>('/tenants', {
+    method: 'POST',
+    body:   JSON.stringify({ alias }),
+  });
+}
+
 export function getTenant(alias: string, signal?: AbortSignal): Promise<DaliTenantConfig> {
   return adminFetch<DaliTenantConfig>(`/tenants/${encodeURIComponent(alias)}`, { signal });
 }

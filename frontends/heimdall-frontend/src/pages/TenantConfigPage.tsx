@@ -33,7 +33,7 @@ export default function TenantConfigPage() {
   return (
     <div style={{ padding: '24px', maxWidth: 720 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button className="btn-secondary" onClick={() => navigate(`/admin/tenants/${alias}`)}>
+        <button className="btn btn-secondary" onClick={() => navigate(`/admin/tenants/${alias}`)}>
           ← {t('members.backToTenant', 'Tenant')}
         </button>
         <h2 style={{ margin: 0, fontFamily: 'monospace' }}>
@@ -41,10 +41,10 @@ export default function TenantConfigPage() {
         </h2>
       </div>
 
-      {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {loading && !tenant && (
-        <p style={{ color: 'var(--color-muted)' }}>{t('status.loading', 'Loading…')}</p>
+        <p style={{ color: 'var(--t3)' }}>{t('status.loading', 'Loading…')}</p>
       )}
 
       {tenant && <TenantConfigEditor tenant={tenant} onSave={handleSave} saving={saving} />}

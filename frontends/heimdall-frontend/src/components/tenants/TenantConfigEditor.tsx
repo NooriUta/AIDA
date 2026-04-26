@@ -106,12 +106,12 @@ export function TenantConfigEditor({ tenant, onSave, saving }: Props) {
         </div>
       </section>
 
-      {error && <div style={{ color: 'var(--color-danger)', fontSize: 12 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</div>}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button
           type="button"
-          className="btn-secondary"
+          className="btn btn-secondary"
           disabled={saving || Object.keys(patch).length === 0}
           onClick={() => { setPatch({}); setError(null); }}
         >
@@ -119,7 +119,7 @@ export function TenantConfigEditor({ tenant, onSave, saving }: Props) {
         </button>
         <button
           type="submit"
-          className="btn-primary"
+          className="btn btn-primary"
           disabled={saving || Object.keys(patch).length === 0}
         >
           {saving ? t('config.saving', 'Saving…') : t('config.save', 'Save')}
@@ -133,7 +133,7 @@ function ReadOnlyRow({ label, value }: { label: string; value?: string | number 
   if (value == null || value === '') return null;
   return (
     <tr>
-      <td style={{ padding: '4px 8px', color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>{label}</td>
+      <td style={{ padding: '4px 8px', color: 'var(--t3)', whiteSpace: 'nowrap' }}>{label}</td>
       <td style={{ padding: '4px 8px', fontFamily: 'monospace', wordBreak: 'break-all' }}>{String(value)}</td>
     </tr>
   );

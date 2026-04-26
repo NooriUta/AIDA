@@ -60,11 +60,11 @@ export function TenantLifecycleActions({ tenant, onRefresh }: Props) {
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
       {S === 'ACTIVE' && (
         <>
-          <button className="btn-danger" disabled={busy}
+          <button className="btn btn-danger" disabled={busy}
                   onClick={() => setPending({ kind: 'suspend' })}>
             {t('tenants.suspend', 'Suspend')}
           </button>
-          <button className="btn-danger" disabled={busy}
+          <button className="btn btn-danger" disabled={busy}
                   onClick={() => setPending({ kind: 'archive' })}>
             {t('tenants.archiveNow', 'Archive now')}
           </button>
@@ -73,10 +73,10 @@ export function TenantLifecycleActions({ tenant, onRefresh }: Props) {
 
       {S === 'SUSPENDED' && (
         <>
-          <button className="btn-primary" disabled={busy} onClick={doUnsuspend}>
+          <button className="btn btn-primary" disabled={busy} onClick={doUnsuspend}>
             {t('tenants.unsuspend', 'Unsuspend')}
           </button>
-          <button className="btn-danger" disabled={busy}
+          <button className="btn btn-danger" disabled={busy}
                   onClick={() => setPending({ kind: 'archive' })}>
             {t('tenants.archiveNow', 'Archive now')}
           </button>
@@ -85,10 +85,10 @@ export function TenantLifecycleActions({ tenant, onRefresh }: Props) {
 
       {S === 'ARCHIVED' && (
         <>
-          <button className="btn-primary" disabled={busy} onClick={doRestore}>
+          <button className="btn btn-primary" disabled={busy} onClick={doRestore}>
             {t('tenants.restore', 'Restore')}
           </button>
-          <button className="btn-secondary" disabled={busy}
+          <button className="btn btn-secondary" disabled={busy}
                   onClick={() => setPending({
                     kind: 'extend',
                     retainUntil: Date.now() + DEFAULT_EXTEND_DAYS * 24 * 3600 * 1000,
@@ -98,7 +98,7 @@ export function TenantLifecycleActions({ tenant, onRefresh }: Props) {
         </>
       )}
 
-      {error && <span style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{error}</span>}
+      {error && <span style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</span>}
 
       {pending?.kind === 'suspend' && (
         <UserConfirmModal

@@ -59,17 +59,17 @@ export default function TenantMembersPage() {
   return (
     <div style={{ padding: '24px', maxWidth: 960 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button className="btn-secondary" onClick={() => navigate(`/admin/tenants/${alias}`)}>
+        <button className="btn btn-secondary" onClick={() => navigate(`/admin/tenants/${alias}`)}>
           ← {t('members.backToTenant', 'Tenant')}
         </button>
         <h2 style={{ margin: 0, fontFamily: 'monospace' }}>{alias} · {t('members.heading', 'Members')}</h2>
         <div style={{ flex: 1 }} />
-        <button className="btn-secondary" onClick={refresh} disabled={loading}>
+        <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
           {t('tenants.refresh', 'Refresh')}
         </button>
         {canManageUsers && (
           <button
-            className="btn-primary"
+            className="btn btn-primary"
             onClick={() => setInviteOpen(true)}
             disabled={busy}
           >
@@ -79,11 +79,11 @@ export default function TenantMembersPage() {
       </div>
 
       {(error || actionError) && (
-        <p style={{ color: 'var(--color-danger)' }}>{actionError ?? error}</p>
+        <p style={{ color: 'var(--danger)' }}>{actionError ?? error}</p>
       )}
 
       {loading && members.length === 0 ? (
-        <p style={{ color: 'var(--color-muted)' }}>{t('status.loading', 'Loading…')}</p>
+        <p style={{ color: 'var(--t3)' }}>{t('status.loading', 'Loading…')}</p>
       ) : (
         <MemberList
           members={members}

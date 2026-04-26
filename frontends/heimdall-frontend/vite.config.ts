@@ -63,14 +63,7 @@ export default defineConfig({
       // Auth + admin API + user self-service go to Chur as-is
       '/auth':     { target: 'http://127.0.0.1:13000', changeOrigin: true, ...stripSecureCookie() },
       '/prefs':    { target: 'http://127.0.0.1:13000', changeOrigin: true, ...stripSecureCookie() },
-      '/api/admin': { target: 'http://127.0.0.1:13000', changeOrigin: true },  // MTN-63 + tenant admin
-      // NOTE: `/me` is deliberately NOT proxied as a top-level path — it shadows
-      // the SPA route /me/profile etc. FE code uses `/chur/me/*` which is
-      // routed through the `/chur` proxy below.
-      // Shell-style routing: '/chur/*' is prod path via shell:5175. In standalone
-      // heimdall-frontend dev, strip '/chur' prefix so /chur/api/admin/tenants →
-      // http://127.0.0.1:3000/api/admin/tenants. Fixes TenantsPage/UsersPage HTML
-      // fallback (was: Vite SPA fallback returned index.html → JSON parse error).
+      '/api/admin': { target: 'http://127.0.0.1:13000', changeOrigin: true },
       '/chur':     { target: 'http://127.0.0.1:13000', changeOrigin: true,
                      rewrite: (p: string) => p.replace(/^\/chur/, ''),
                      ...stripSecureCookie() },

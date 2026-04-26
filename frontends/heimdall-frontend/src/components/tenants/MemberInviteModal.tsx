@@ -56,23 +56,23 @@ export function MemberInviteModal({ onClose, onInvite }: Props) {
         <div style={{ fontSize: 14, fontWeight: 600 }}>{t('members.inviteTitle', 'Invite member')}</div>
 
         <label style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ color: 'var(--color-muted)' }}>{t('members.email', 'Email')}</span>
+          <span style={{ color: 'var(--t3)' }}>{t('members.email', 'Email')}</span>
           <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
         </label>
 
         <label style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ color: 'var(--color-muted)' }}>{t('members.name', 'Name')}</span>
+          <span style={{ color: 'var(--t3)' }}>{t('members.name', 'Name')}</span>
           <input type="text" value={name} onChange={e => setName(e.target.value)} required />
         </label>
 
         <label style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ color: 'var(--color-muted)' }}>{t('members.role', 'Role')}</span>
+          <span style={{ color: 'var(--t3)' }}>{t('members.role', 'Role')}</span>
           <select value={role} onChange={e => setRole(e.target.value as MemberRole)}>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
 
-        {error && <div style={{ color: 'var(--color-danger)', fontSize: 12 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>

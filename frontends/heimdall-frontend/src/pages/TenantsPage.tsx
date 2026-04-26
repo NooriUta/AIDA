@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { usePageTitle }  from '../hooks/usePageTitle';
-import { useTenants }    from '../hooks/useTenants';
-import { TenantStatusBadge } from '../components/tenants/TenantStatusBadge';
-import { ProvisionModal }    from '../components/tenants/ProvisionModal';
+import { usePageTitle }   from '../hooks/usePageTitle';
+import { useTenants }     from '../hooks/useTenants';
+import { useTenantContext } from '../hooks/useTenantContext';
+import { TenantStatusBadge }  from '../components/tenants/TenantStatusBadge';
+import { TenantCreateModal }  from '../components/tenants/TenantCreateModal';
 import type { TenantStatus, TenantSummary } from '../api/admin';
 import {
   suspendTenant, unsuspendTenant, archiveTenant,
@@ -117,10 +118,11 @@ export default function TenantsPage() {
   const navigate = useNavigate();
 
   const { tenants, loading, error, refresh } = useTenants();
+  const { isAdmin }       = useTenantContext();
   const [search, setSearch]   = useState('');
   const [status, setStatus]   = useState<TenantStatus | ''>('');
   const [page, setPage]       = useState(0);
-  const [provisionOpen, setProvisionOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const filtered = useMemo(() => {
     let result = tenants;
@@ -141,18 +143,26 @@ export default function TenantsPage() {
 
   return (
     <div style={{ padding: '24px', maxWidth: 1100 }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>{t('tenants.heading', 'Tenants')}</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary" onClick={() => setProvisionOpen(true)}>
-            + {t('tenants.provision.button', 'Создать тенант')}
-          </button>
+          {isAdmin && (
+            <button className="btn btn-primary" onClick={() => setCreateOpen(true)}>
+              {t('tenants.create', '+ Create')}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
             {loading ? t('status.loading', 'Loading…') : t('tenants.refresh', 'Refresh')}
           </button>
         </div>
       </div>
+
+      {createOpen && (
+        <TenantCreateModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={alias => { refresh(); navigate(`/admin/tenants/${alias}`); }}
+        />
+      )}
 
       {/* Filters — single row */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
@@ -266,9 +276,6 @@ export default function TenantsPage() {
         </>
       )}
 
-      {provisionOpen && (
-        <ProvisionModal onDone={refresh} onClose={() => setProvisionOpen(false)} />
-      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from './provisioning';
 import {
   requireScope,
+  requireAnyScope,
   requireSameTenant,
 } from '../middleware/requireAdmin';
 import { emitTenantAudit } from '../middleware/auditEmit';
@@ -149,12 +150,10 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
           { keycloakOrgId: result.keycloakOrgId, correlationId });
         return reply.status(201).send(result);
       } catch (e) {
-        // MTN-25: structured provisioning error — includes failedStep so caller
-        // can call /resume-provisioning with the right context.
         const msg = e instanceof Error ? e.message : String(e);
-        const failedStep        = (e as { failedStep?: number })?.failedStep;
+        const failedStep         = (e as { failedStep?: number })?.failedStep;
         const lastSuccessfulStep = (e as { lastSuccessfulStep?: number })?.lastSuccessfulStep;
-        const cause             = (e as { cause?: string })?.cause;
+        const cause              = (e as { cause?: string })?.cause;
         return reply.status(500).send({
           error:              'provisioning_failed',
           tenantAlias:        alias,
@@ -444,7 +443,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   // path for dev deployments before sync_default_keycloak_org_id was run).
 
   app.get<{ Params: { alias: string } }>('/api/admin/tenants/:alias/members',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), adminRateLimit] },
     async (request, reply) => {
       const cfg = await getTenantConfig(request.params.alias).catch(() => null);
       const orgId = cfg?.keycloakOrgId as string | undefined;
@@ -460,7 +459,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { alias: string }; Body: { email: string; name?: string; role: string } }>(
     '/api/admin/tenants/:alias/members',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { email, name, role } = request.body ?? {};
       if (!email || !role) return reply.status(400).send({ error: 'email and role are required' });
@@ -480,7 +479,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.put<{ Params: { alias: string; userId: string }; Body: { role?: string; enabled?: boolean } }>(
     '/api/admin/tenants/:alias/members/:userId',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { userId } = request.params;
       const { role, enabled } = request.body ?? {};
@@ -495,7 +494,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete<{ Params: { alias: string; userId: string } }>(
     '/api/admin/tenants/:alias/members/:userId',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { userId, alias } = request.params;
       const cfg = await getTenantConfig(alias).catch(() => null);
