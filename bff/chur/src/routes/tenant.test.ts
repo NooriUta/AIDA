@@ -412,7 +412,29 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
 // ── L2 Multi-tenant isolation + lifecycle coverage (HTA-STAB) ───────────────
 describe('Multi-tenant lifecycle isolation', () => {
   let app: App;
-  beforeEach(async () => { app = await buildApp(); });
+  beforeEach(async () => {
+    // MTN-27: CAS requires post-UPDATE SELECT to return configVersion + 1.
+    // Use a counter so each SELECT configVersion returns the next value in sequence,
+    // satisfying the CAS check for any number of lifecycle operations per test.
+    let cv = 1;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
+      const body = init?.body ?? '';
+      if (body.includes('SELECT configVersion')) {
+        const ret = cv++;
+        return Promise.resolve({
+          ok: true, status: 200,
+          text: async () => '', headers: { get: () => null },
+          json: async () => ({ result: [{ configVersion: ret }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true, status: 200,
+        text: async () => '', headers: { get: () => null },
+        json: async () => ({ result: [{ tenantAlias: 'acme', status: 'ACTIVE', configVersion: 1 }] }),
+      });
+    }));
+    app = await buildApp();
+  });
 
   // ── Missing endpoints ────────────────────────────────────────────────────
 
@@ -424,20 +446,20 @@ describe('Multi-tenant lifecycle isolation', () => {
 
   it('unsuspend: 200 superadmin', async () => {
     const sid = await makeSid(['aida:superadmin']);
-    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/unsuspend', cookies: { sid } });
+    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/unsuspend', cookies: { sid }, headers: CSRF_HEADERS });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
   });
 
   it('archive-now: 200 superadmin', async () => {
     const sid = await makeSid(['aida:superadmin']);
-    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/archive-now', cookies: { sid } });
+    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/archive-now', cookies: { sid }, headers: CSRF_HEADERS });
     expect(res.statusCode).toBe(200);
   });
 
   it('restore: 200 superadmin', async () => {
     const sid = await makeSid(['aida:superadmin']);
-    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/restore', cookies: { sid } });
+    const res = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/restore', cookies: { sid }, headers: CSRF_HEADERS });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
   });
@@ -446,17 +468,26 @@ describe('Multi-tenant lifecycle isolation', () => {
     const sid = await makeSid(['aida:superadmin']);
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/retention',
-      cookies: { sid }, payload: {},
+      cookies: { sid }, headers: CSRF_HEADERS, payload: {},
     });
     expect(res.statusCode).toBe(400);
   });
 
   it('retention: 200 superadmin +30d', async () => {
+    // retention handler requires expectedConfigVersion in body (no readCurrentVersion call).
+    // Override fetch so post-CAS SELECT returns expectedConfigVersion + 1 = 2.
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
+      const body = init?.body ?? '';
+      if (body.includes('SELECT configVersion')) {
+        return Promise.resolve({ ok: true, status: 200, text: async () => '', headers: { get: () => null }, json: async () => ({ result: [{ configVersion: 2 }] }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, text: async () => '', headers: { get: () => null }, json: async () => ({ result: [] }) });
+    }));
     const sid = await makeSid(['aida:superadmin']);
     const ts  = Date.now() + 30 * 24 * 3600 * 1000;
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme/retention',
-      cookies: { sid }, payload: { retainUntil: ts },
+      cookies: { sid }, headers: CSRF_HEADERS, payload: { retainUntil: ts, expectedConfigVersion: 1 },
     });
     expect(res.statusCode).toBe(200);
   });
@@ -476,7 +507,7 @@ describe('Multi-tenant lifecycle isolation', () => {
     const sid = await makeSid(['aida:superadmin']);
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme',
-      cookies: { sid }, payload: {},
+      cookies: { sid }, headers: CSRF_HEADERS, payload: {},
     });
     expect(res.statusCode).toBe(400);
   });
@@ -485,7 +516,7 @@ describe('Multi-tenant lifecycle isolation', () => {
     const sid = await makeSid(['aida:superadmin']);
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/tenants/acme',
-      cookies: { sid }, payload: { maxParseSessions: 100, harvestCron: '0 0 * * *' },
+      cookies: { sid }, headers: CSRF_HEADERS, payload: { maxParseSessions: 100, harvestCron: '0 0 * * *' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
@@ -495,11 +526,11 @@ describe('Multi-tenant lifecycle isolation', () => {
 
   it('suspend → archive → restore (acme)', async () => {
     const sid = await makeSid(['aida:superadmin']);
-    const susp = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid } });
+    const susp = await app.inject({ method: 'DELETE', url: '/api/admin/tenants/acme', cookies: { sid }, headers: CSRF_HEADERS });
     expect(susp.json().status).toBe('SUSPENDED');
-    const arch = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/archive-now', cookies: { sid } });
+    const arch = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/archive-now', cookies: { sid }, headers: CSRF_HEADERS });
     expect(arch.statusCode).toBe(200);
-    const rest = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/restore', cookies: { sid } });
+    const rest = await app.inject({ method: 'POST', url: '/api/admin/tenants/acme/restore', cookies: { sid }, headers: CSRF_HEADERS });
     expect(rest.json().ok).toBe(true);
   });
 

@@ -64,10 +64,6 @@ export function listTenants(signal?: AbortSignal, withStats = true): Promise<Ten
   return adminFetch<TenantSummary[]>(`/tenants${qs}`, { signal });
 }
 
-export function provisionTenant(alias: string): Promise<{ ok: boolean; tenantAlias: string }> {
-  return adminFetch('/tenants', { method: 'POST', body: JSON.stringify({ alias }) });
-}
-
 export function forceCleanupTenant(alias: string): Promise<{ ok: boolean }> {
   return adminFetch(`/tenants/${encodeURIComponent(alias)}/force-cleanup`, { method: 'POST' });
 }
