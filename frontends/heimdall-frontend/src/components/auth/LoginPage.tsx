@@ -120,108 +120,58 @@ export function LoginPage() {
           flexDirection: 'column',
           gap:           '20px',
         }}>
-          <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-            <Field label={t('auth.username')} error={errors.username ? t(errors.username.message as string) : undefined}>
-              <input
-                {...register('username')}
-                autoComplete="username"
-                autoFocus
-                onChange={() => clearError()}
-                style={inputStyle(!!errors.username)}
-              />
-            </Field>
-
-            <Field label={t('auth.password')} error={errors.password ? t(errors.password.message as string) : undefined}>
-              <input
-                {...register('password')}
-                type="password"
-                autoComplete="current-password"
-                onChange={() => clearError()}
-                style={inputStyle(!!errors.password)}
-              />
-            </Field>
-
-            {/* Server error */}
-            {error && (
-              <div style={{
-                fontSize:     '12px',
-                color:        'var(--wrn)',
-                background:   'color-mix(in srgb, var(--wrn) 10%, transparent)',
-                border:       '1px solid color-mix(in srgb, var(--wrn) 25%, transparent)',
-                borderRadius: 'var(--seer-radius-sm)',
-                padding:      '8px 10px',
-              }}>
-                {t(error, error)}
-              </div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              style={{
-                display:        'flex',
-                alignItems:     'center',
-                justifyContent: 'center',
-                gap:            '8px',
-                padding:        '9px 16px',
-                background:     isLoading ? 'var(--bg3)' : 'var(--acc)',
-                color:          isLoading ? 'var(--t3)'  : 'var(--bg0)',
-                border:         'none',
-                borderRadius:   'var(--seer-radius-md)',
-                fontSize:       '13px',
-                fontWeight:     500,
-                cursor:         isLoading ? 'not-allowed' : 'pointer',
-                transition:     'background 0.12s, color 0.12s',
-                letterSpacing:  '0.04em',
-              }}
-            >
-              <LogIn size={14} />
-              {isLoading ? t('auth.signingIn') : t('auth.login')}
-            </button>
-          </form>
-
-          {/* ── Auth Code (SSO) alt entry — Phase 4 scaffold ─────────────────── */}
-          {/* Removes form in Phase 6 cutover; for now both flows coexist. */}
-          <div style={{
-            marginTop:     '16px',
-            paddingTop:    '16px',
-            borderTop:     '1px dashed var(--bd)',
-            display:       'flex',
-            flexDirection: 'column',
-            gap:           '8px',
-          }}>
-            <div style={{ fontSize: '11px', color: 'var(--t3)', textAlign: 'center', letterSpacing: '0.04em' }}>
-              {t('auth.or', 'or')}
+          {/* Server error (для случая если Auth Code callback вернулся с ошибкой) */}
+          {error && (
+            <div style={{
+              fontSize:     '12px',
+              color:        'var(--wrn)',
+              background:   'color-mix(in srgb, var(--wrn) 10%, transparent)',
+              border:       '1px solid color-mix(in srgb, var(--wrn) 25%, transparent)',
+              borderRadius: 'var(--seer-radius-sm)',
+              padding:      '8px 10px',
+            }}>
+              {t(error, error)}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                // Передаём полный origin чтобы chur вернул нас в этот же frontend
-                // после login (а не в свой root, где 404). В прод за nginx — единый домен.
-                const returnTo = encodeURIComponent(window.location.origin + '/');
-                window.location.href = `/auth/login?return_to=${returnTo}`;
-              }}
-              style={{
-                display:        'flex',
-                alignItems:     'center',
-                justifyContent: 'center',
-                gap:            '8px',
-                padding:        '9px 16px',
-                background:     'var(--bg2)',
-                color:          'var(--t1)',
-                border:         '1px solid var(--bd)',
-                borderRadius:   'var(--seer-radius-md)',
-                fontSize:       '13px',
-                fontWeight:     500,
-                cursor:         'pointer',
-                transition:     'background 0.12s, border-color 0.12s',
-                letterSpacing:  '0.04em',
-              }}
-            >
-              {t('auth.loginSso', '🔐 Войти через Seiðr SSO (Auth Code)')}
-            </button>
+          )}
+
+          {/* Auth Code (SSO) — единственный способ входа.
+              ROPC форма удалена в sprint/auth-redesign-2026q2 — теперь только KC redirect flow. */}
+          <button
+            type="button"
+            data-testid="login-sso-btn"
+            onClick={() => {
+              const returnTo = encodeURIComponent(window.location.origin + '/');
+              window.location.href = `/auth/login?return_to=${returnTo}`;
+            }}
+            style={{
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              gap:            '8px',
+              padding:        '12px 20px',
+              background:     'var(--acc)',
+              color:          'var(--bg0)',
+              border:         'none',
+              borderRadius:   'var(--seer-radius-md)',
+              fontSize:       '14px',
+              fontWeight:     600,
+              cursor:         'pointer',
+              transition:     'background 0.12s, transform 0.12s',
+              letterSpacing:  '0.04em',
+            }}
+          >
+            <LogIn size={16} />
+            {t('auth.loginSso', 'Войти через Seiðr SSO')}
+          </button>
+
+          <div style={{
+            fontSize:      '11px',
+            color:         'var(--t3)',
+            textAlign:     'center',
+            marginTop:     '4px',
+            letterSpacing: '0.04em',
+          }}>
+            {t('auth.ssoNote', 'OAuth 2.0 Authorization Code + PKCE через Seiðr Studio')}
           </div>
         </div>
 

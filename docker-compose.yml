@@ -58,6 +58,8 @@ services:
       KEYCLOAK_PUBLIC_URL:   ${KEYCLOAK_PUBLIC_URL:-http://localhost:18180/kc}
       # Where to redirect after successful login (default frontend in dev)
       POST_LOGIN_REDIRECT:   ${POST_LOGIN_REDIRECT:-http://localhost:5175/}
+      # Cookie domain для cross-port sharing (vite :5173/:5174/:5175 + chur :13000)
+      COOKIE_DOMAIN:         ${COOKIE_DOMAIN:-localhost}
       KEYCLOAK_REALM:        seer
       KEYCLOAK_CLIENT_ID:    aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
