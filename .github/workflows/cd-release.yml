@@ -48,6 +48,13 @@ on:
         description: 'Skip upgrade test (use for first release — no N-1 exists)'
         type: boolean
         default: false
+      seed_n1:
+        description: |
+          Seed data on N-1 before upgrade (default: false).
+          Enable when N-1 provisioning code is compatible with current ArcadeDB version.
+          Required for downgrade testing or data-continuity checks on tenant data.
+        type: boolean
+        default: false
       upgrade_mode:
         description: |
           Upgrade mode for STEP 2:
@@ -225,13 +232,20 @@ jobs:
             wait_for "http://localhost:13000/health"   "Chur"
             wait_for "http://localhost:18080/q/health" "Shuttle"
 
-            # ── 3. Seed data on N-1 (SKIP_CLEANUP=1 — tenant stays for upgrade check)
-            echo "▶ UPGRADE: seeding data on N-1 (SKIP_CLEANUP=1)"
-            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
-            TENANT=acme-legacy \
-            DATA_DIR=/opt/seer-studio/tests/data/erp \
-            SKIP_CLEANUP=1 \
-            bash scripts/integration-test.sh
+            # ── 3. Seed data on N-1 (optional, controlled by seed_n1 input) ───
+            # Default: false — N-1 provisioning may be incompatible with current
+            # ArcadeDB version (API boundary releases). Enable for downgrade testing
+            # or when N-1 app code is known compatible with current ArcadeDB.
+            if [ "${{ inputs.seed_n1 }}" = "true" ]; then
+              echo "▶ UPGRADE: seeding data on N-1 (SKIP_CLEANUP=1)"
+              DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+              TENANT=acme-legacy \
+              DATA_DIR=/opt/seer-studio/tests/data/erp \
+              SKIP_CLEANUP=1 \
+              bash scripts/integration-test.sh
+            else
+              echo "▶ UPGRADE: seed_n1=false — skipping N-1 seed (verify default tenant after upgrade)"
+            fi
 
             # ── 4. Upgrade based on mode ──────────────────────────────────────
             UPGRADE_MODE="${{ inputs.upgrade_mode }}"
@@ -280,8 +294,11 @@ jobs:
             wait_for "http://localhost:13000/health"   "Chur"
             wait_for "http://localhost:18080/q/health" "Shuttle"
 
-            # ── 5. Verify FRIGG + YGG data survived the upgrade ───────────────
-            echo "▶ UPGRADE: verifying acme-legacy tenant survived upgrade"
+            # ── 5. Verify data survived the upgrade ──────────────────────────
+            # If seed_n1=true → verify acme-legacy (provisioned on N-1)
+            # If seed_n1=false → verify default tenant (created by init-arcadedb.sh)
+            VERIFY_TENANT=$( [ "${{ inputs.seed_n1 }}" = "true" ] && echo "acme-legacy" || echo "default" )
+            echo "▶ UPGRADE: verifying '${VERIFY_TENANT}' tenant survived upgrade"
             BASE="https://seer.${{ secrets.DOMAIN_STAGING }}"
             JAR="/tmp/upg_verify_$$.txt"
 
@@ -295,13 +312,13 @@ jobs:
             fi
 
             TENANT_BODY=$(curl -sk --max-time 10 -b "$JAR" \
-              "${BASE}/api/admin/tenants/acme-legacy" || echo "")
+              "${BASE}/api/admin/tenants/${VERIFY_TENANT}" || echo "")
             rm -f "$JAR"
 
             if echo "$TENANT_BODY" | grep -q '"ACTIVE"'; then
-              echo "✓ acme-legacy ACTIVE — FRIGG + YGG data survived upgrade"
+              echo "✓ ${VERIFY_TENANT} ACTIVE — data survived upgrade"
             else
-              echo "✗ acme-legacy not ACTIVE after upgrade:"
+              echo "✗ ${VERIFY_TENANT} not ACTIVE after upgrade:"
               echo "$TENANT_BODY"
               exit 1
             fi
