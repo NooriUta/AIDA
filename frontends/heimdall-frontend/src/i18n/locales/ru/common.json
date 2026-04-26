@@ -521,6 +521,12 @@
     "searchPlaceholder":"Поиск по псевдониму…",
     "search":           "Поиск по псевдониму…",
     "total":            "тенантов",
+    "create":           "+ Создать",
+    "createTitle":      "Создать тенант",
+    "createHint":       "Псевдоним: 4–32 строчных латинских символов, дефисы, начинать с буквы.",
+    "aliasField":       "Псевдоним",
+    "createSubmit":     "Создать",
+    "config":           "Конфиг",
     "provision": {
       "button":        "+ Создать тенант",
       "title":         "Создать тенант",
@@ -538,6 +544,17 @@
       "forceCleanup":   "Удалить всё",
       "forceCleanupConfirm": "Удалить все данные тенанта?"
     },
+    "suspend":          "Приостановить",
+    "unsuspend":        "Возобновить",
+    "archiveNow":       "Архивировать",
+    "restore":          "Восстановить",
+    "extendRetention":  "Продлить хранение",
+    "confirmSuspendTitle":  "Подтвердите приостановку",
+    "confirmSuspendMsg":    "Приостановить «{{alias}}» — весь трафик тенанта заблокируется. Продолжить?",
+    "confirmArchiveTitle":  "Подтвердите архивацию",
+    "confirmArchiveMsg":    "Архивация «{{alias}}» экспортирует все базы в S3 и удалит их. Без Restore операция необратима.",
+    "confirmExtendTitle":   "Подтвердите продление хранения",
+    "confirmExtendMsg":     "Продлить хранение «{{alias}}» до {{date}} (+{{days}} дней)?",
     "statusName": {
       "ACTIVE":              "Активен",
       "SUSPENDED":           "Приостановлен",
@@ -547,11 +564,12 @@
       "PURGED":              "Удалён"
     },
     "statusValues": {
-      "ACTIVE":       "Активен",
-      "PROVISIONING": "Инициализация",
-      "SUSPENDED":    "Приостановлен",
-      "ARCHIVED":     "В архиве",
-      "PURGED":       "Удалён"
+      "ACTIVE":              "Активен",
+      "PROVISIONING":        "Инициализация",
+      "PROVISIONING_FAILED": "Ошибка создания",
+      "SUSPENDED":           "Приостановлен",
+      "ARCHIVED":            "В архиве",
+      "PURGED":              "Удалён"
     },
     "confirmSuspendTitle":  "Подтвердите приостановку",
     "confirmSuspendMsg":    "Приостановить «{{alias}}» — весь трафик тенанта заблокируется. Продолжить?",
@@ -670,5 +688,46 @@
     "tos":     "Условия использования",
     "privacy": "Политика конфиденциальности",
     "accept":  "Принимаю"
+  },
+  "members": {
+    "pageTitle":         "Участники",
+    "heading":           "Участники",
+    "backToTenant":      "Тенант",
+    "username":          "Логин",
+    "email":             "Email",
+    "name":              "Имя",
+    "role":              "Роль",
+    "enabled":           "Активен",
+    "remove":            "Удалить",
+    "empty":             "Участников ещё нет.",
+    "invite":            "Пригласить",
+    "inviteTitle":       "Пригласить участника",
+    "confirmRemoveTitle":"Удалить участника",
+    "confirmRemoveMsg":  "Удалить {{name}} ({{email}}) из этого тенанта?"
+  },
+  "config": {
+    "pageTitle":   "Конфиг тенанта",
+    "heading":     "Конфиг",
+    "readOnly":    "Только для чтения",
+    "quotas":      "Квоты и лимиты",
+    "scheduling":  "Расписание и режим",
+    "save":        "Сохранить",
+    "saving":      "Сохраняю…",
+    "reset":       "Сбросить",
+    "noChanges":   "Нет изменений для сохранения."
+  },
+  "metrics": {
+    "byTenant":      "Метрики по тенантам",
+    "tenantCount":   "{{n}} тенантов",
+    "filterTenant":  "Фильтр по псевдониму…",
+    "alias":         "Псевдоним",
+    "events":        "События",
+    "sessions":      "Сессии",
+    "atoms":         "Атомы",
+    "jobs":          "Задачи",
+    "errors":        "Ошибки",
+    "last":          "Последнее событие",
+    "noTenantData":  "Активности тенантов пока нет.",
+    "moreTenants":   "ещё"
   }
 }

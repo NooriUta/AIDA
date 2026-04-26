@@ -78,7 +78,7 @@ export default function TenantsPage() {
         <p style={{ color: 'var(--t3)' }}>{t('status.loading', 'Loading…')}</p>
       ) : (
         <>
-          <TenantList tenants={pageSlice} />
+          <TenantList tenants={pageSlice} onRefresh={refresh} />
 
           {pageCount > 1 && (
             <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>

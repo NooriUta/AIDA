@@ -19,6 +19,7 @@ YGG_URL="${YGG_URL:-http://localhost:2480}"
 YGG_USER="${YGG_USER:-root}"
 YGG_PASS="${YGG_PASS:-playwithdata}"
 
+
 TIMEOUT="${INIT_ARCADEDB_TIMEOUT:-30}"
 INTERVAL=2
 

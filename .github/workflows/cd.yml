@@ -191,16 +191,16 @@ jobs:
             # If HEIMDALL_CIDR secret is empty, fall back to deny-all (0.0.0.0/32)
             # to avoid nginx "invalid number of arguments in allow directive" error.
             CIDR="${HEIMDALL_CIDR:-0.0.0.0/32}"
-            sudo bash -c "sed 's/\${DOMAIN}/'"${DOMAIN}"'/g; s/\${HEIMDALL_CIDR}/'"${CIDR}"'/g' ${CONF} \
+            # Используем | как разделитель sed — CIDR содержит '/' что ломает стандартный s/.../
+            sudo bash -c "sed 's|\${DOMAIN}|'"${DOMAIN}"'|g; s|\${HEIMDALL_CIDR}|'"${CIDR}"'|g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
-            # Reload only if all three certs exist (root, seer, heimdall)
-            if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ] && \
-               [ -f "/etc/letsencrypt/live/seer.${DOMAIN}/fullchain.pem" ] && \
-               [ -f "/etc/letsencrypt/live/heimdall.${DOMAIN}/fullchain.pem" ]; then
+            # Single SAN cert covers all three domains (certbot certonly with -d seer.* -d heimdall.*)
+            # Directory named after the first -d argument only.
+            if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
               sudo nginx -t && sudo systemctl restart nginx
             else
-              echo "TLS certs not yet provisioned for all subdomains — skipping nginx reload"
+              echo "TLS cert not yet provisioned for ${DOMAIN} — skipping nginx reload"
             fi
 
       - name: Deploy
@@ -309,7 +309,7 @@ jobs:
             # Sending wrong credentials causes 403 even when server is healthy — no auth here.
             wait_infra "http://localhost:2481/api/v1/ready"     "FRIGG" "" || exit 1
             wait_infra "http://localhost:2480/api/v1/ready"     "YGG"  "" || exit 1
-            wait_infra "http://localhost:18180/kc/health/ready" "KC"   "" || exit 1
+            wait_infra "http://localhost:18180/kc/realms/master" "KC"   "" || exit 1
 
             # ── DB bootstrap / idempotent schema init ──────────────────────────
             # FRIGG + YGG + KC are ready. Creates frigg-tenants, dali_default,

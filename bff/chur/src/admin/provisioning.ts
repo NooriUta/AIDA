@@ -19,6 +19,13 @@ import { config } from '../config';
 
 const ALIAS_REGEX = /^[a-z][a-z0-9-]{2,30}[a-z0-9]$/;
 
+/**
+ * ArcadeDB database names must match [a-zA-Z_$][a-zA-Z0-9_$]* — no hyphens.
+ * Tenant aliases may contain hyphens (e.g. "acme-ci"), so we replace them with
+ * underscores when constructing ArcadeDB database names.
+ */
+const dbSafe = (alias: string) => alias.replace(/-/g, '_');
+
 const RESERVED = new Set([
   'default', 'lore', 'audit', 'system', 'admin', 'api', 'www', 'test',
   'staging', 'prod', 'heimdall', 'frigg', 'ygg', 'dali', 'mimir', 'anvil',
@@ -75,6 +82,27 @@ async function retry<T>(fn: () => Promise<T>, times = 2): Promise<T> {
   throw last;
 }
 
+// ArcadeDB 26.x: after server-command create the schema engine initialises
+// asynchronously. Poll with a DDL probe until 200/400 (ready) or timeout (120 s).
+async function waitDbAccessible(baseUrl: string, auth: string, dbName: string): Promise<void> {
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 1_000));
+    const res = await fetch(`${baseUrl}/api/v1/command/${encodeURIComponent(dbName)}`, {
+      method:  'POST',
+      headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ language: 'sql', command: 'CREATE DOCUMENT TYPE _probe_init', params: {} }),
+      signal:  AbortSignal.timeout(5_000),
+    }).catch(() => null);
+    if (!res) continue;
+    if (res.status === 500) {
+      const body = await res.text().catch(() => '');
+      if (body.includes('not available')) continue;
+    }
+    return; // 200 created / 400 type-already-exists / anything else → schema engine up
+  }
+  throw new Error(`DB ${dbName} did not become accessible for DDL within 120 s`);
+}
+
 async function kcAdminToken(): Promise<string> {
   const res = await fetch(`${KC_BASE}/realms/master/protocol/openid-connect/token`, {
     method:  'POST',
@@ -92,39 +120,63 @@ async function kcAdminToken(): Promise<string> {
 }
 
 async function friggSql(db: string, command: string, params?: Record<string, unknown>): Promise<void> {
-  const res = await fetch(`${FRIGG_URL}/api/v1/command/${encodeURIComponent(db)}`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${FRIGG_BASIC}` },
-    body:    JSON.stringify({ language: 'sql', command, params: params ?? {} }),
-    signal:  AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`FRIGG ${res.status}: ${await res.text().catch(() => '')}`);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const res = await fetch(`${FRIGG_URL}/api/v1/command/${encodeURIComponent(db)}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${FRIGG_BASIC}` },
+      body:    JSON.stringify({ language: 'sql', command, params: params ?? {} }),
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (res.ok) return;
+    const body = await res.text().catch(() => '');
+    if (res.status === 500 && body.includes('not available')) {
+      await new Promise(r => setTimeout(r, 1_000));
+      continue;
+    }
+    throw new Error(`FRIGG ${res.status}: ${body}`);
+  }
+  throw new Error(`FRIGG: DB ${db} not available after 60 s`);
 }
 
 async function yggCreateDb(dbName: string): Promise<void> {
-  const res = await fetch(`${YGG_URL}/api/v1/create/${encodeURIComponent(dbName)}`, {
+  // ArcadeDB 26.x server-command API — plain name, no backtick quoting, no IF NOT EXISTS clause.
+  // Backticks and IF NOT EXISTS are stored literally as part of the DB name in 26.3.x.
+  const res = await fetch(`${YGG_URL}/api/v1/server`, {
     method:  'POST',
-    headers: { 'Authorization': `Basic ${YGG_BASIC}` },
+    headers: { 'Authorization': `Basic ${YGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ command: `create database ${dbName}` }),
     signal:  AbortSignal.timeout(15_000),
   });
-  if (!res.ok && res.status !== 409) {
+  if (!res.ok) {
     const body = await res.text().catch(() => '');
     if (/already exists/i.test(body)) return;
-    throw new Error(`YGG create db ${dbName}: ${res.status}`);
+    throw new Error(`YGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
   }
 }
 
 async function friggCreateDb(dbName: string): Promise<void> {
-  const res = await fetch(`${FRIGG_URL}/api/v1/create/${encodeURIComponent(dbName)}`, {
+  // Drop first: clears any partially-initialised state left by a prior failed run.
+  // ArcadeDB returns error if db doesn't exist — we ignore it.
+  // Plain name only — no backtick quoting, no IF NOT EXISTS (stored literally in 26.3.x).
+  await fetch(`${FRIGG_URL}/api/v1/server`, {
     method:  'POST',
-    headers: { 'Authorization': `Basic ${FRIGG_BASIC}` },
+    headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ command: `drop database ${dbName}` }),
+    signal:  AbortSignal.timeout(10_000),
+  }).catch(() => {});
+  await new Promise(r => setTimeout(r, 300));
+
+  const res = await fetch(`${FRIGG_URL}/api/v1/server`, {
+    method:  'POST',
+    headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ command: `create database ${dbName}` }),
     signal:  AbortSignal.timeout(15_000),
   });
-  if (!res.ok && res.status !== 409) {
+  if (!res.ok) {
     const body = await res.text().catch(() => '');
-    if (/already exists/i.test(body)) return;
-    throw new Error(`FRIGG create db ${dbName}: ${res.status}`);
+    throw new Error(`FRIGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
   }
+  await waitDbAccessible(FRIGG_URL, FRIGG_BASIC, dbName);
 }
 
 // ── Cron jitter ───────────────────────────────────────────────────────────────
@@ -293,9 +345,9 @@ export async function provisionTenant(
       {
         alias,
         orgId:       keycloakOrgId,
-        lineageDb:   `hound_${alias}`,
-        sourceDb:    `hound_src_${alias}`,
-        daliDb:      `dali_${alias}`,
+        lineageDb:   `hound_${dbSafe(alias)}`,
+        sourceDb:    `hound_src_${dbSafe(alias)}`,
+        daliDb:      `dali_${dbSafe(alias)}`,
         harvestCron: harvestCron(alias),
         ts:          Date.now(),
       },
@@ -309,26 +361,26 @@ export async function provisionTenant(
 
   // Step 3 — YGG lineage DB (compensation: drop)
   await runStep(3, async () => {
-    await yggCreateDb(`hound_${alias}`);
+    await yggCreateDb(`hound_${dbSafe(alias)}`);
   }, async () => {
-    await yggDropDb(`hound_${alias}`).catch(() => {});
+    await yggDropDb(`hound_${dbSafe(alias)}`).catch(() => {});
   });
 
   // Step 4 — YGG source archive DB (compensation: drop)
   await runStep(4, async () => {
-    await yggCreateDb(`hound_src_${alias}`);
+    await yggCreateDb(`hound_src_${dbSafe(alias)}`);
   }, async () => {
-    await yggDropDb(`hound_src_${alias}`).catch(() => {});
+    await yggDropDb(`hound_src_${dbSafe(alias)}`).catch(() => {});
   });
 
   // Step 5 — FRIGG dali DB (compensation: drop)
   await runStep(5, async () => {
-    await friggCreateDb(`dali_${alias}`);
-    await friggSql(`dali_${alias}`, `CREATE DOCUMENT TYPE DaliSession IF NOT EXISTS`);
-    await friggSql(`dali_${alias}`, `CREATE PROPERTY DaliSession.sessionId IF NOT EXISTS STRING`);
-    await friggSql(`dali_${alias}`, `CREATE INDEX IF NOT EXISTS ON DaliSession (sessionId) UNIQUE`);
+    await friggCreateDb(`dali_${dbSafe(alias)}`);
+    await friggSql(`dali_${dbSafe(alias)}`, `CREATE DOCUMENT TYPE DaliSession IF NOT EXISTS`);
+    await friggSql(`dali_${dbSafe(alias)}`, `CREATE PROPERTY DaliSession.sessionId IF NOT EXISTS STRING`);
+    await friggSql(`dali_${dbSafe(alias)}`, `CREATE INDEX IF NOT EXISTS ON DaliSession (sessionId) UNIQUE`);
   }, async () => {
-    await friggDropDb(`dali_${alias}`).catch(() => {});
+    await friggDropDb(`dali_${dbSafe(alias)}`).catch(() => {});
   });
 
   // Step 6 — Register harvest cron (best-effort; HEIMDALL may not be up yet in dev)
@@ -402,14 +454,18 @@ async function markFailed(alias: string, failedStep: number, cause: string): Pro
 }
 
 async function yggDropDb(dbName: string): Promise<void> {
-  await fetch(`${YGG_URL}/api/v1/drop/${encodeURIComponent(dbName)}`, {
-    method: 'POST', headers: { 'Authorization': `Basic ${YGG_BASIC}` },
+  await fetch(`${YGG_URL}/api/v1/server`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${YGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:   JSON.stringify({ command: `drop database ${dbName}` }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => {});
 }
 async function friggDropDb(dbName: string): Promise<void> {
-  await fetch(`${FRIGG_URL}/api/v1/drop/${encodeURIComponent(dbName)}`, {
-    method: 'POST', headers: { 'Authorization': `Basic ${FRIGG_BASIC}` },
+  await fetch(`${FRIGG_URL}/api/v1/server`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${FRIGG_BASIC}`, 'Content-Type': 'application/json' },
+    body:   JSON.stringify({ command: `drop database ${dbName}` }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => {});
 }
@@ -459,12 +515,12 @@ export async function forceCleanupTenant(alias: string): Promise<void> {
   }
 
   // Drop YGG DBs (best-effort)
-  for (const db of [`hound_${alias}`, `hound_src_${alias}`]) {
+  for (const db of [`hound_${dbSafe(alias)}`, `hound_src_${dbSafe(alias)}`]) {
     await yggDropDb(db);
   }
 
   // Drop FRIGG dali DB (best-effort)
-  await friggDropDb(`dali_${alias}`);
+  await friggDropDb(`dali_${dbSafe(alias)}`);
 
   // Delete tenant config row
   await friggSql('frigg-tenants',

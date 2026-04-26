@@ -59,6 +59,13 @@
       "runtimeArgs": ["-m", "http.server", "5199", "--directory", "C:/AIDA/docs/current/specs"],
       "port": 5199,
       "cwd": "."
+    },
+    {
+      "name": "heimdall-frontend-docker",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "require('http').createServer((req,res)=>{const h=require('http');const r=h.request({host:'localhost',port:25174,path:req.url,method:req.method,headers:req.headers},pr=>{res.writeHead(pr.statusCode,pr.headers);pr.pipe(res);});req.pipe(r);r.on('error',e=>{res.writeHead(502);res.end(e.message);});}).listen(5180,()=>console.log('proxy 5180 → docker 25174'))"],
+      "port": 5180,
+      "cwd": "."
     }
   ]
 }
