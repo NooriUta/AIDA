@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIDA QA Dashboard</title>
+<style>
+:root {
+  --bg0:#0e1117;--bg1:#161b22;--bg2:#1c2128;--bg3:#21262d;
+  --bd:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;
+  --suc:#3fb950;--wrn:#d29922;--danger:#f85149;--info:#58a6ff;--purple:#bc8cff;
+  --mono:'Fira Mono','Consolas',monospace;--r:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;}
+
+/* ─ Header ─────────────────────────────────────────────────────────────── */
+header{background:var(--bg1);border-bottom:1px solid var(--bd);padding:12px 20px;position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+header h1{font-size:14px;font-weight:700;white-space:nowrap;}
+.tab-bar{display:flex;gap:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:3px;}
+.tab{padding:4px 14px;border-radius:4px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:transparent;color:var(--t2);transition:all .15s;}
+.tab.active{background:var(--bg0);color:var(--t1);}
+.tab:hover:not(.active){color:var(--t1);}
+.hdr-stat{font-size:11px;white-space:nowrap;}
+.hdr-stat b{font-size:13px;}
+.hdr-stat.green b{color:var(--suc);}
+.hdr-stat.red b{color:var(--danger);}
+.hdr-stat.blue b{color:var(--info);}
+.run-time{font-size:10px;color:var(--t3);margin-left:auto;}
+.btn{padding:4px 10px;border-radius:var(--r);border:1px solid var(--bd);cursor:pointer;font-size:11px;font-family:inherit;background:var(--bg2);color:var(--t1);}
+.btn:hover{background:var(--bg3);}
+.btn-primary{background:#238636;border-color:#2ea043;color:#fff;}
+.btn-danger{background:#b62324;border-color:#f85149;color:#fff;}
+
+/* ─ Main ────────────────────────────────────────────────────────────────── */
+main{max-width:1320px;margin:0 auto;padding:20px 16px 80px;}
+.pane{display:none;}
+.pane.active{display:block;}
+
+/* ─ Summary grid ────────────────────────────────────────────────────────── */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:24px;}
+.scard{background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r);padding:10px 12px;}
+.scard .sname{font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+.scard .sscore{font-size:18px;font-weight:700;}
+.scard .sbar{height:3px;background:var(--bg3);border-radius:2px;margin-top:5px;overflow:hidden;}
+.scard .sfill{height:100%;border-radius:2px;}
+.green{color:var(--suc);} .fill-green{background:var(--suc);}
+.yellow{color:var(--wrn);} .fill-yellow{background:var(--wrn);}
+.red{color:var(--danger);} .fill-red{background:var(--danger);}
+.blue{color:var(--info);} .fill-blue{background:var(--info);}
+
+/* ─ Sections ────────────────────────────────────────────────────────────── */
+.section{margin-bottom:28px;}
+.sec-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--bd);}
+.sec-hdr h2{font-size:13px;font-weight:700;}
+.badge{display:inline-flex;align-items:center;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;border:1px solid;}
+.badge.green{color:var(--suc);border-color:#3fb95088;background:#3fb95018;}
+.badge.yellow{color:var(--wrn);border-color:#d2992288;background:#d2992218;}
+.badge.red{color:var(--danger);border-color:#f8514988;background:#f8514918;}
+.badge.blue{color:var(--info);border-color:#58a6ff88;background:#58a6ff18;}
+
+/* ─ Manual test table ───────────────────────────────────────────────────── */
+.tc-table{width:100%;border-collapse:collapse;}
+.tc-table th{text-align:left;padding:5px 8px;font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bd);}
+.tc-table td{padding:6px 8px;vertical-align:top;border-bottom:1px solid var(--bd);}
+.tc-table tr:last-child td{border-bottom:none;}
+.tc-table tr:hover td{background:var(--bg2);}
+.tc-id{font-family:var(--mono);font-size:10px;color:var(--t3);white-space:nowrap;}
+.tc-title{font-weight:500;}
+.tc-steps{font-size:11px;color:var(--t2);margin-top:2px;line-height:1.5;white-space:pre-line;}
+.tc-expected{font-size:11px;color:var(--info);font-style:italic;margin-top:2px;}
+.prio{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;}
+.p0{background:#f8514930;color:var(--danger);}
+.p1{background:#d2992230;color:var(--wrn);}
+.p2{background:#58a6ff20;color:var(--info);}
+.p3{background:var(--bg3);color:var(--t3);}
+.status-sel{background:var(--bg2);border:1px solid var(--bd);color:var(--t1);font-size:11px;border-radius:4px;padding:2px 5px;cursor:pointer;font-family:inherit;}
+.status-sel.pass{border-color:var(--suc);color:var(--suc);}
+.status-sel.fail{border-color:var(--danger);color:var(--danger);}
+.status-sel.skip{border-color:var(--t3);color:var(--t3);}
+.status-sel.unclear{border-color:var(--wrn);color:var(--wrn);}
+#save-ind{font-size:10px;color:var(--t3);opacity:0;transition:opacity .5s;margin-left:8px;}
+.notes-in{background:var(--bg2);border:1px solid var(--bd);color:var(--t1);font-size:11px;border-radius:4px;padding:2px 5px;width:100%;min-width:100px;font-family:inherit;resize:vertical;}
+.notes-in:focus{outline:none;border-color:var(--info);}
+
+/* ─ Auto test display ───────────────────────────────────────────────────── */
+.suite-block{background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:10px;overflow:hidden;}
+.suite-hdr{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none;}
+.suite-hdr:hover{background:var(--bg2);}
+.suite-file{font-family:var(--mono);font-size:11px;color:var(--t2);}
+.suite-label{font-size:12px;font-weight:600;color:var(--t1);}
+.suite-counts{margin-left:auto;display:flex;gap:8px;font-size:11px;}
+.cnt-pass{color:var(--suc);}
+.cnt-fail{color:var(--danger);}
+.suite-chevron{color:var(--t3);font-size:10px;transition:transform .2s;}
+.suite-chevron.open{transform:rotate(90deg);}
+.suite-tests{display:none;border-top:1px solid var(--bd);}
+.suite-tests.open{display:block;}
+.group-label{padding:6px 14px 4px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;background:var(--bg2);border-bottom:1px solid var(--bd);}
+.test-row{display:flex;align-items:baseline;gap:8px;padding:4px 14px 4px 20px;border-bottom:1px solid var(--bd);}
+.test-row:last-child{border-bottom:none;}
+.test-row:hover{background:var(--bg2);}
+.test-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.dot-pass{background:var(--suc);}
+.dot-fail{background:var(--danger);}
+.test-name{font-size:11px;color:var(--t1);flex:1;}
+.test-dur{font-size:10px;color:var(--t3);white-space:nowrap;}
+.fail-msg{font-size:10px;color:var(--danger);font-family:var(--mono);margin-top:2px;padding:4px 8px;background:#f8514910;border-radius:3px;}
+
+/* ─ Footer bar ──────────────────────────────────────────────────────────── */
+.foot{position:fixed;bottom:0;left:0;right:0;background:var(--bg1);border-top:1px solid var(--bd);padding:8px 20px;display:flex;align-items:center;gap:16px;font-size:12px;}
+.foot-lbl{color:var(--t2);}
+.foot-val{font-weight:700;}
+
+/* ─ Progress bar ────────────────────────────────────────────────────────── */
+.pbar-wrap{width:140px;}
+.pbar-lbl{font-size:10px;color:var(--t2);display:flex;justify-content:space-between;margin-bottom:2px;}
+.pbar{height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.pbar-fill{height:100%;border-radius:3px;transition:width .3s;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧪 AIDA QA Dashboard</h1>
+
+  <div class="tab-bar">
+    <button class="tab active" onclick="switchTab('summary')">Summary</button>
+    <button class="tab" onclick="switchTab('manual')">Ручные тесты</button>
+    <button class="tab" onclick="switchTab('auto')">Автотесты</button>
+  </div>
+
+  <div class="hdr-stat blue">Auto <b id="hdr-auto-pass">209</b>/<b id="hdr-auto-total">209</b></div>
+  <div class="hdr-stat green">Manual <b id="hdr-m-pass">0</b>/<b id="hdr-m-total">52</b></div>
+  <div class="hdr-stat red" id="hdr-fail-wrap" style="display:none">⚠ FAIL <b id="hdr-fail">0</b></div>
+
+  <span class="run-time">Auto last run: <span id="run-time-lbl">—</span></span>
+  <div style="display:flex;gap:6px;margin-left:auto;align-items:center">
+    <span id="save-ind">💾 saved</span>
+    <button class="btn" onclick="exportReport()">Export TXT</button>
+    <button class="btn btn-danger" onclick="resetManual()">Reset ручных</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ═══ SUMMARY ═══════════════════════════════════════════════════════════ -->
+<div id="pane-summary" class="pane active">
+  <div id="summary-grid" class="summary-grid"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="section">
+      <div class="sec-hdr"><h2>Автотесты — по файлам</h2><span id="auto-badge" class="badge green">209 / 209</span></div>
+      <div id="auto-summary-list"></div>
+    </div>
+    <div class="section">
+      <div class="sec-hdr"><h2>Ручные тесты — по категориям</h2><span id="manual-badge" class="badge yellow">0 / 52</span></div>
+      <div id="manual-summary-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MANUAL ════════════════════════════════════════════════════════════ -->
+<div id="pane-manual" class="pane">
+  <div id="manual-sections"></div>
+</div>
+
+<!-- ═══ AUTO ══════════════════════════════════════════════════════════════ -->
+<div id="pane-auto" class="pane">
+  <div id="auto-sections"></div>
+</div>
+
+</main>
+
+<div class="foot">
+  <span class="foot-lbl">Ручных пройдено:</span>
+  <span class="foot-val" id="foot-m-pass">0</span>/<span id="foot-m-total">52</span>
+  <span class="foot-lbl" style="margin-left:8px">Упало:</span>
+  <span class="foot-val red" id="foot-m-fail">0</span>
+  <span class="foot-lbl" style="margin-left:8px">Авто:</span>
+  <span class="foot-val green" id="foot-auto">209 / 209 ✓</span>
+  <div style="margin-left:auto;display:flex;gap:6px;">
+    <button class="btn btn-danger" onclick="markAllFail()">Все FAIL</button>
+    <button class="btn btn-primary" onclick="markAllPass()">Все PASS</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════
+// AUTO_RESULTS — обновляется мной после каждого запуска vitest
+// ══════════════════════════════════════════════════════════════════════════
+/* AUTO_RESULTS_START */
+const AUTO_RESULTS = {
+  runAt: '2026-04-26T10:38:02Z',
+  total: 209, passed: 209, failed: 0,
+  suites: [
+    {
+      file: 'admin/provisioning.test.ts',
+      label: 'Provisioning saga',
+      tags: ['provisioning'],
+      total: 6, passed: 6, failed: 0,
+      groups: [
+        { name: 'provisionTenant — happy path', tests: [
+          { t: 'runs all 7 steps in order and returns orgId + lastStep=7', s: 'passed', d: 1321 },
+        ]},
+        { name: 'provisionTenant — pre-flight', tests: [
+          { t: 'aborts if YGG is unreachable (no side effects)', s: 'passed', d: 2 },
+          { t: 'aborts with 409 when KC org with same alias already exists', s: 'passed', d: 1 },
+        ]},
+        { name: 'provisionTenant — compensation on failure', tests: [
+          { t: 'step 5 fails → compensates steps 4, 3, 2, 1 in reverse', s: 'passed', d: 611 },
+          { t: 'step 1 fails → only pre-flight done, no compensation', s: 'passed', d: 1 },
+        ]},
+        { name: 'resumeProvisioning', tests: [
+          { t: 'calls forceCleanup then provisionTenant (happy-path retry)', s: 'passed', d: 1309 },
+        ]},
+      ]
+    },
+    {
+      file: 'plugins/rbac.test.ts',
+      label: 'Write query guard (isWriteQuery)',
+      tags: ['rbac', 'security'],
+      total: 13, passed: 13, failed: 0,
+      groups: [
+        { name: 'isWriteQuery', tests: [
+          { t: 'detects INSERT', s: 'passed', d: 1 },
+          { t: 'detects UPDATE', s: 'passed', d: 0 },
+          { t: 'detects DELETE', s: 'passed', d: 0 },
+          { t: 'detects CREATE', s: 'passed', d: 0 },
+          { t: 'detects DROP', s: 'passed', d: 0 },
+          { t: 'detects ALTER', s: 'passed', d: 0 },
+          { t: 'detects MERGE', s: 'passed', d: 0 },
+          { t: 'detects SET', s: 'passed', d: 0 },
+          { t: 'allows SELECT', s: 'passed', d: 0 },
+          { t: 'allows MATCH (Cypher)', s: 'passed', d: 0 },
+          { t: 'is case-insensitive for keywords', s: 'passed', d: 0 },
+          { t: 'ignores leading whitespace', s: 'passed', d: 0 },
+          { t: 'does not match write keywords mid-string', s: 'passed', d: 0 },
+        ]},
+      ]
+    },
+    {
+      file: 'middleware/csrfGuard.test.ts',
+      label: 'CSRF guard',
+      tags: ['security', 'csrf'],
+      total: 8, passed: 8, failed: 0,
+      groups: [
+        { name: 'csrfGuard', tests: [
+          { t: 'allows GET without headers (safe method)', s: 'passed', d: 67 },
+          { t: 'rejects POST without Origin or Referer', s: 'passed', d: 2 },
+          { t: 'allows POST with matching Origin', s: 'passed', d: 1 },
+          { t: 'allows POST with matching Referer (fallback when Origin absent)', s: 'passed', d: 1 },
+          { t: 'rejects POST with mismatching Origin', s: 'passed', d: 2 },
+          { t: 'rejects PUT and DELETE similarly', s: 'passed', d: 2 },
+          { t: 'bypasses check for Bearer-auth (M2M callers)', s: 'passed', d: 1 },
+          { t: 'rejects malformed Origin header', s: 'passed', d: 1 },
+        ]},
+      ]
+    },
+    {
+      file: 'middleware/quotaCheck.test.ts',
+      label: 'Quota enforcement',
+      tags: ['quota'],
+      total: 9, passed: 9, failed: 0,
+      groups: [
+        { name: 'checkQuota', tests: [
+          { t: 'allows when cap is absent (Infinity)', s: 'passed', d: 2 },
+          { t: 'allows when current < cap', s: 'passed', d: 1 },
+          { t: 'returns 429 when current == cap (soft cap)', s: 'passed', d: 0 },
+          { t: 'returns 403 when current > cap (hard cap, config lowered)', s: 'passed', d: 0 },
+          { t: 'atoms cap currently not enforced (returns 0 count)', s: 'passed', d: 0 },
+          { t: 'caches results within TTL (single FRIGG fetch pair)', s: 'passed', d: 0 },
+          { t: 'fails open on FRIGG error (count = 0)', s: 'passed', d: 0 },
+        ]},
+        { name: 'bumpCachedCount', tests: [
+          { t: 'increments the cached count for a tenant/resource', s: 'passed', d: 0 },
+          { t: 'is a no-op when no cache entry exists', s: 'passed', d: 0 },
+        ]},
+      ]
+    },
+    {
+      file: 'middleware/tier4.test.ts',
+      label: 'Audit rate limit + sanitize + retention',
+      tags: ['audit', 'security'],
+      total: 22, passed: 22, failed: 0,
+      groups: [
+        { name: 'sanitizeString', tests: [
+          { t: 'strips newlines (prevents fake event injection)', s: 'passed', d: 1 },
+          { t: 'strips ANSI escape sequences', s: 'passed', d: 0 },
+          { t: 'strips zero-width chars', s: 'passed', d: 0 },
+          { t: 'truncates overlong strings', s: 'passed', d: 0 },
+          { t: 'leaves normal strings untouched', s: 'passed', d: 0 },
+        ]},
+        { name: 'sanitizeForAudit (recursive)', tests: [
+          { t: 'recurses into nested objects', s: 'passed', d: 0 },
+          { t: 'preserves primitive non-string values', s: 'passed', d: 0 },
+          { t: 'sanitizes keys too', s: 'passed', d: 1 },
+          { t: 'handles null / undefined', s: 'passed', d: 0 },
+        ]},
+        { name: 'checkRetentionChange', tests: [
+          { t: 'allows data retention change when no legal hold', s: 'passed', d: 0 },
+          { t: 'blocks data retention going below legal hold', s: 'passed', d: 0 },
+          { t: 'allows data retention equal to legal hold', s: 'passed', d: 0 },
+          { t: 'blocks archive retention downgrade without force flag', s: 'passed', d: 0 },
+          { t: 'allows archive retention downgrade with forceDowngrade=true', s: 'passed', d: 0 },
+          { t: 'allows archive retention INCREASE always', s: 'passed', d: 0 },
+        ]},
+        { name: 'checkAuditRate', tests: [
+          { t: 'first 1000 events emit normally', s: 'passed', d: 9 },
+          { t: '1001..10000 are EMIT_SAMPLED', s: 'passed', d: 0 },
+          { t: 'first flood event emits DROP_WITH_FLOOD_SIGNAL, subsequent DROP', s: 'passed', d: 2 },
+          { t: 'separate tenants have separate buckets', s: 'passed', d: 0 },
+          { t: 'blank tenant falls back to default bucket', s: 'passed', d: 0 },
+        ]},
+        { name: 'timingSafe403 config', tests: [
+          { t: 'has sane delay bounds', s: 'passed', d: 0 },
+        ]},
+      ]
+    },
+    {
+      file: 'secrets/secretProvider.test.ts',
+      label: 'Secret provider (env)',
+      tags: ['secrets'],
+      total: 9, passed: 9, failed: 0,
+      groups: [
+        { name: 'envKey mapping', tests: [
+          { t: 'maps slash-separated path to SEER_SECRET_*', s: 'passed', d: 2 },
+          { t: 'handles dots and hyphens', s: 'passed', d: 0 },
+        ]},
+        { name: 'readSecret (env provider)', tests: [
+          { t: 'returns value when env var is set', s: 'passed', d: 1 },
+          { t: 'throws when env var is missing and no default', s: 'passed', d: 1 },
+          { t: 'returns default when env var is missing and default provided', s: 'passed', d: 1 },
+          { t: 'empty string default is respected', s: 'passed', d: 0 },
+        ]},
+        { name: 'readSecretOptional', tests: [
+          { t: 'returns undefined for missing secret (no throw)', s: 'passed', d: 0 },
+          { t: 'returns value for set secret', s: 'passed', d: 1 },
+        ]},
+        { name: 'refreshSecret', tests: [
+          { t: 'is a no-op on env provider (resolves without throwing)', s: 'passed', d: 1 },
+        ]},
+      ]
+    },
+    {
+      file: 'session/encryption.test.ts',
+      label: 'Session token encryption (AES-256-GCM)',
+      tags: ['security', 'encryption'],
+      total: 15, passed: 15, failed: 0,
+      groups: [
+        { name: 'encryption — with DEK configured', tests: [
+          { t: 'roundtrip returns the original plaintext', s: 'passed', d: 2 },
+          { t: 'produces different ciphertext for identical plaintext (random IV)', s: 'passed', d: 0 },
+          { t: 'ciphertext wire format has 4 dot-separated segments starting with version', s: 'passed', d: 1 },
+          { t: 'rejects tampered ciphertext via GCM auth tag', s: 'passed', d: 1 },
+          { t: 'rejects unsupported version', s: 'passed', d: 0 },
+          { t: 'rejects malformed segments', s: 'passed', d: 0 },
+          { t: 'passes through plaintext (legacy) if not a ciphertext blob', s: 'passed', d: 0 },
+          { t: 'empty and nullish inputs pass through', s: 'passed', d: 0 },
+          { t: 'rejects key of wrong length on load', s: 'passed', d: 0 },
+        ]},
+        { name: 'encryption — without DEK (dev plaintext fallback)', tests: [
+          { t: 'encryptToken returns plaintext unchanged', s: 'passed', d: 1 },
+          { t: 'decryptToken of plaintext returns plaintext', s: 'passed', d: 0 },
+          { t: 'decryptToken of valid-looking blob throws (no key to decrypt with)', s: 'passed', d: 0 },
+        ]},
+        { name: 'isCiphertext', tests: [
+          { t: 'returns true for well-formed blobs (>= 16 chars)', s: 'passed', d: 0 },
+          { t: 'returns false for JWT-like plaintext', s: 'passed', d: 0 },
+          { t: 'returns false for empty / short', s: 'passed', d: 0 },
+        ]},
+      ]
+    },
+    {
+      file: 'routes/auth.test.ts',
+      label: 'Auth routes (login / logout / me)',
+      tags: ['auth'],
+      total: 8, passed: 8, failed: 0,
+      groups: [
+        { name: 'POST /auth/login', tests: [
+          { t: 'returns 200 with user data on valid credentials', s: 'passed', d: 106 },
+          { t: 'returns 401 on invalid credentials', s: 'passed', d: 20 },
+          { t: 'returns 400 when body is missing username', s: 'passed', d: 15 },
+          { t: 'returns 400 when body is missing password', s: 'passed', d: 8 },
+          { t: 'rate limit error message contains "Too many"', s: 'passed', d: 7 },
+        ]},
+        { name: 'POST /auth/logout', tests: [
+          { t: 'clears the sid cookie', s: 'passed', d: 7 },
+        ]},
+        { name: 'GET /auth/me', tests: [
+          { t: 'returns 401 without a valid cookie', s: 'passed', d: 9 },
+          { t: 'returns user info with a valid session cookie', s: 'passed', d: 8 },
+        ]},
+      ]
+    },
+    {
+      file: 'routes/admin.test.ts',
+      label: 'Admin routes (users / members / profile)',
+      tags: ['admin', 'rbac'],
+      total: 21, passed: 21, failed: 0,
+      groups: [
+        { name: 'GET /admin/tenants', tests: [
+          { t: '401 — no session', s: 'passed', d: 72 },
+          { t: '200 — viewer gets own tenant', s: 'passed', d: 4 },
+          { t: '200 — local-admin gets own tenant', s: 'passed', d: 2 },
+          { t: '200 — admin with aida:admin scope gets all tenants', s: 'passed', d: 27 },
+        ]},
+        { name: 'GET /admin/tenants/:tenantId/users', tests: [
+          { t: '401 — no session', s: 'passed', d: 3 },
+          { t: '403 — viewer missing aida:tenant:admin', s: 'passed', d: 3 },
+          { t: '200 — local-admin with aida:tenant:admin scope', s: 'passed', d: 5 },
+          { t: '200 — admin also passes', s: 'passed', d: 3 },
+        ]},
+        { name: 'POST /admin/tenants/:tenantId/users/invite', tests: [
+          { t: '403 — local-admin cannot assign elevated role "admin"', s: 'passed', d: 5 },
+          { t: '403 — local-admin cannot assign "super-admin"', s: 'passed', d: 4 },
+          { t: '202 — local-admin invites with non-elevated role "viewer"', s: 'passed', d: 3 },
+          { t: '202 — admin (aida:admin scope) can invite with elevated role', s: 'passed', d: 3 },
+        ]},
+        { name: 'PUT /admin/tenants/:tenantId/users/:userId/role', tests: [
+          { t: '403 — local-admin cannot assign elevated role to existing user', s: 'passed', d: 2 },
+          { t: '200 — local-admin assigns non-elevated role', s: 'passed', d: 4 },
+          { t: '200 — tenant-owner can assign elevated role', s: 'passed', d: 2 },
+        ]},
+        { name: 'GET /admin/me/profile + prefs + PUT', tests: [
+          { t: '401 — no session (profile)', s: 'passed', d: 2 },
+          { t: '200 — any authenticated user can read own profile', s: 'passed', d: 2 },
+          { t: '401 — no session (prefs)', s: 'passed', d: 2 },
+          { t: '200 — returns prefs with defaults', s: 'passed', d: 2 },
+          { t: '200 — viewer can update own profile', s: 'passed', d: 2 },
+          { t: '200 — viewer can update own prefs', s: 'passed', d: 2 },
+        ]},
+      ]
+    },
+    {
+      file: 'routes/graphql.test.ts',
+      label: 'GraphQL proxy (lineage-api / Hound)',
+      tags: ['graphql', 'hound'],
+      total: 5, passed: 5, failed: 0,
+      groups: [
+        { name: 'POST /graphql — HTTP proxy', tests: [
+          { t: 'proxies mutation to lineage-api and returns result', s: 'passed', d: 75 },
+          { t: 'returns 401 when no session cookie', s: 'passed', d: 4 },
+          { t: 'returns 503 when lineage-api is unreachable', s: 'passed', d: 2 },
+        ]},
+        { name: 'GET /graphql — introspection', tests: [
+          { t: 'proxies introspection query to lineage-api', s: 'passed', d: 2 },
+        ]},
+        { name: 'WS /graphql — subscription proxy', tests: [
+          { t: 'rejects WebSocket upgrade without session cookie', s: 'passed', d: 2 },
+        ]},
+      ]
+    },
+    {
+      file: 'routes/tenant.test.ts',
+      label: 'Tenant lifecycle (CAS / KC-ORG / suspension)',
+      tags: ['tenant', 'cas'],
+      total: 30, passed: 30, failed: 0,
+      groups: [
+        { name: 'GET /api/admin/tenants', tests: [
+          { t: '401 — no session', s: 'passed', d: 73 },
+          { t: '403 — viewer without aida:admin', s: 'passed', d: 5 },
+          { t: '200 — admin with aida:admin', s: 'passed', d: 3 },
+        ]},
+        { name: 'POST /api/admin/tenants — provisioning', tests: [
+          { t: '400 — invalid alias', s: 'passed', d: 5 },
+          { t: '201 — valid alias provisions tenant', s: 'passed', d: 4 },
+        ]},
+        { name: 'DELETE /api/admin/tenants/:alias — suspend', tests: [
+          { t: '403 — admin (not superadmin) cannot suspend', s: 'passed', d: 3 },
+          { t: '200 — superadmin can suspend', s: 'passed', d: 3 },
+          { t: '409 — stale expectedConfigVersion returns conflict (MTN-27)', s: 'passed', d: 7 },
+        ]},
+        { name: 'PUT .../retention — MTN-27 optimistic lock', tests: [
+          { t: '400 — missing expectedConfigVersion is rejected', s: 'passed', d: 4 },
+          { t: '200 — concurrent write with matching configVersion succeeds', s: 'passed', d: 4 },
+          { t: '409 — stale expectedConfigVersion returns conflict with current value', s: 'passed', d: 3 },
+        ]},
+        { name: 'POST .../force-cleanup', tests: [
+          { t: '403 — admin without destructive scope', s: 'passed', d: 4 },
+          { t: '200 — admin with destructive scope purges tenant', s: 'passed', d: 3 },
+        ]},
+        { name: 'POST .../reconnect', tests: [
+          { t: '200 — admin broadcasts registry invalidation', s: 'passed', d: 3 },
+        ]},
+        { name: 'KC-ORG — member isolation via keycloakOrgId', tests: [
+          { t: 'GET /tenants/default/members — returns only default-org members', s: 'passed', d: 4 },
+          { t: 'GET /tenants/acme/members — returns only acme-org members (1 user)', s: 'passed', d: 3 },
+          { t: 'default members and acme members are DISJOINT (no cross-tenant leak)', s: 'passed', d: 3 },
+          { t: 'POST .../members invite → inviteUserToOrg("org-default", "default", ...)', s: 'passed', d: 4 },
+          { t: 'DELETE .../members/:userId → removeOrgMember (not setUserEnabled)', s: 'passed', d: 2 },
+        ]},
+        { name: 'Multi-tenant lifecycle isolation', tests: [
+          { t: 'unsuspend: 403 non-superadmin', s: 'passed', d: 2 },
+          { t: 'unsuspend: 200 superadmin', s: 'passed', d: 2 },
+          { t: 'archive-now: 200 superadmin', s: 'passed', d: 2 },
+          { t: 'restore: 200 superadmin', s: 'passed', d: 2 },
+          { t: 'retention: 400 missing retainUntil', s: 'passed', d: 2 },
+          { t: 'retention: 200 superadmin +30d', s: 'passed', d: 5 },
+          { t: 'config PUT: 403 admin (not superadmin)', s: 'passed', d: 2 },
+          { t: 'config PUT: 400 empty body', s: 'passed', d: 2 },
+          { t: 'config PUT: 200 superadmin with editable fields', s: 'passed', d: 1 },
+          { t: 'suspend → archive → restore (acme)', s: 'passed', d: 2 },
+          { t: 'admin blocked on ALL lifecycle verbs for acme + beta + gamma', s: 'passed', d: 3 },
+        ]},
+      ]
+    },
+    {
+      file: 'routes/tenant-mt.test.ts',
+      label: 'MT-R1-R5 + SEC — new endpoints (Chur API)',
+      tags: ['mt', 'sec', 'rbac'],
+      total: 54, passed: 54, failed: 0,
+      groups: [
+        { name: 'POST .../harvest (MT-07)', tests: [
+          { t: 'MT-07 · 403 — viewer cannot trigger harvest', s: 'passed', d: 74 },
+          { t: 'MT-07 · 403 — missing CSRF header', s: 'passed', d: 4 },
+          { t: 'MT-07 · 200 — admin triggers harvest, returns harvestId', s: 'passed', d: 4 },
+          { t: 'MT-07 · 503 — Dali unreachable returns dali_unreachable error', s: 'passed', d: 3 },
+          { t: 'MT-07 · 401 — unauthenticated', s: 'passed', d: 3 },
+        ]},
+        { name: 'POST .../resume-provisioning (MT-08)', tests: [
+          { t: 'MT-08 · 403 — admin (not superadmin) cannot resume', s: 'passed', d: 3 },
+          { t: 'MT-08 · 200 — superadmin resumes provisioning', s: 'passed', d: 3 },
+          { t: 'MT-08 · 500 — provisioning failure returns structured error', s: 'passed', d: 6 },
+          { t: 'MT-08 · 401 — unauthenticated', s: 'passed', d: 3 },
+        ]},
+        { name: 'PUT .../config (MT-14/15)', tests: [
+          { t: 'MT-14 · 403 — admin (not superadmin) cannot update config', s: 'passed', d: 5 },
+          { t: 'MT-14 · 400 — missing expectedConfigVersion', s: 'passed', d: 4 },
+          { t: 'MT-14 · 400 — no editable fields in body', s: 'passed', d: 4 },
+          { t: 'MT-14 · 400 — invalid harvestCron (too short)', s: 'passed', d: 3 },
+          { t: 'MT-14 · 400 — invalid llmMode', s: 'passed', d: 4 },
+          { t: 'MT-14 · 200 — superadmin updates harvestCron', s: 'passed', d: 3 },
+          { t: 'MT-14 · 200 — superadmin updates llmMode to local', s: 'passed', d: 2 },
+          { t: 'MT-15 · 409 — stale configVersion returns conflict', s: 'passed', d: 2 },
+        ]},
+        { name: 'GET/PUT .../feature-flags', tests: [
+          { t: 'GET · 200 — returns parsed feature flags', s: 'passed', d: 2 },
+          { t: 'GET · 403 — viewer cannot read feature flags', s: 'passed', d: 2 },
+          { t: 'PUT · 200 — admin sets feature flag', s: 'passed', d: 3 },
+          { t: 'PUT · 400 — missing flags field', s: 'passed', d: 2 },
+        ]},
+        { name: 'POST .../role-change-signal (MTN-39)', tests: [
+          { t: '403 — viewer cannot send role-change signal', s: 'passed', d: 2 },
+          { t: '200 — admin sends role-change signal', s: 'passed', d: 2 },
+          { t: '401 — unauthenticated', s: 'passed', d: 5 },
+        ]},
+        { name: 'PUT .../members/:userId (MT-12)', tests: [
+          { t: 'MT-12 · 200 — local-admin with same-tenant scope can update member role', s: 'passed', d: 3 },
+          { t: 'MT-18 · 403 — local-admin for tenant A cannot update tenant B members', s: 'passed', d: 2 },
+          { t: '401 — unauthenticated', s: 'passed', d: 2 },
+        ]},
+        { name: 'MT-18 Tenant isolation — cross-tenant data access blocked', tests: [
+          { t: 'tenant-A local-admin cannot GET tenant-B members', s: 'passed', d: 1 },
+          { t: 'tenant-A local-admin cannot POST invite to tenant-B', s: 'passed', d: 1 },
+          { t: 'tenant-A local-admin cannot DELETE member from tenant-B', s: 'passed', d: 1 },
+          { t: 'admin (aida:admin) can access any tenant members (cross-tenant admin)', s: 'passed', d: 1 },
+          { t: 'superadmin can suspend any tenant', s: 'passed', d: 4 },
+          { t: 'admin cannot suspend tenant (superadmin-only)', s: 'passed', d: 2 },
+        ]},
+        { name: 'POST /api/admin/tenants — provisioning (MT-10)', tests: [
+          { t: 'MT-XX · 403 — missing CSRF on provision', s: 'passed', d: 2 },
+          { t: 'MT-10 · 400 — alias too short', s: 'passed', d: 3 },
+          { t: 'MT-10 · 201 — valid alias provisions successfully', s: 'passed', d: 3 },
+        ]},
+        { name: 'SEC — RBAC scope enforcement', tests: [
+          { t: 'SEC-01 · 403 — local-admin cannot GET tenant detail', s: 'passed', d: 2 },
+          { t: 'SEC-01 · 403 — local-admin cannot GET tenant list', s: 'passed', d: 2 },
+          { t: 'SEC-01 · 403 — local-admin cannot GET feature-flags', s: 'passed', d: 2 },
+          { t: 'SEC-01 · 403 — local-admin cannot send role-change-signal', s: 'passed', d: 2 },
+          { t: 'SEC-02 · 403 — admin cannot suspend tenant', s: 'passed', d: 6 },
+          { t: 'SEC-02 · 403 — admin cannot archive tenant', s: 'passed', d: 2 },
+          { t: 'SEC-02 · 403 — admin cannot unsuspend tenant', s: 'passed', d: 1 },
+          { t: 'SEC-02 · 403 — admin cannot PUT /config', s: 'passed', d: 1 },
+          { t: 'SEC-02 · 403 — admin cannot resume-provisioning', s: 'passed', d: 1 },
+          { t: 'SEC-03 · 401 — unauthenticated cannot GET tenant list', s: 'passed', d: 1 },
+          { t: 'SEC-03 · 401 — unauthenticated cannot GET tenant detail', s: 'passed', d: 1 },
+          { t: 'SEC-03 · 401 — unauthenticated cannot suspend', s: 'passed', d: 1 },
+          { t: 'SEC-04 · 403 — missing CSRF on suspend', s: 'passed', d: 1 },
+          { t: 'SEC-04 · 403 — missing CSRF on archive', s: 'passed', d: 1 },
+          { t: 'SEC-04 · 403 — missing CSRF on PUT feature-flags', s: 'passed', d: 2 },
+          { t: 'SEC-05 · 403 — viewer cannot GET tenant list', s: 'passed', d: 1 },
+          { t: 'SEC-05 · 403 — viewer cannot trigger harvest', s: 'passed', d: 2 },
+          { t: 'SEC-05 · 403 — viewer cannot GET members', s: 'passed', d: 1 },
+        ]},
+      ]
+    },
+    {
+      file: 'users/FriggUserRepository.test.ts',
+      label: 'FriggUserRepository (ArcadeDB upsert / get / delete)',
+      tags: ['user', 'arcadedb'],
+      total: 9, passed: 9, failed: 0,
+      groups: [
+        { name: 'upsertUserVertex — singleton types', tests: [
+          { t: 'inserts a new row with configVersion=1 when no row exists', s: 'passed', d: 3 },
+          { t: 'increments configVersion on existing row', s: 'passed', d: 1 },
+          { t: 'returns conflict when expectedConfigVersion mismatches current', s: 'passed', d: 1 },
+          { t: 'rejects expectedConfigVersion>0 when no row exists', s: 'passed', d: 1 },
+          { t: 'rejects non-singleton types', s: 'passed', d: 1 },
+          { t: 'rejects invalid userId', s: 'passed', d: 0 },
+        ]},
+        { name: 'getUserVertex', tests: [
+          { t: 'returns null when no row exists', s: 'passed', d: 1 },
+          { t: 'parses payload JSON + meta fields', s: 'passed', d: 1 },
+        ]},
+        { name: 'deleteUserVertex', tests: [
+          { t: 'returns count from ArcadeDB delete response', s: 'passed', d: 1 },
+        ]},
+      ]
+    },
+  ]
+};
+/* AUTO_RESULTS_END */
+
+// ══════════════════════════════════════════════════════════════════════════
+// MANUAL TEST DATA
+// ══════════════════════════════════════════════════════════════════════════
+const MANUAL = [
+  {
+    id: 'mt-r1-r5', label: 'Multitenant R1–R5', prio: 'P0',
+    tests: [
+      { id:'MT-01', title:'Создание тенанта через UI', prio:'P0',
+        steps:'1. Перейди /admin/tenants\n2. Нажми "+ Create"\n3. Введи alias (напр. qa-test-01)\n4. Submit',
+        exp:'Тенант создан, статус PROVISIONING → ACTIVE (~10 сек). Появился в таблице.' },
+      { id:'MT-02', title:'Таблица тенантов — колонки Users/Sources/Atoms', prio:'P0',
+        steps:'1. Открой /admin/tenants\n2. Найди только что созданный тенант',
+        exp:'Видны колонки: Alias, Status, Users, Sources, Atoms, Harvest cron, Config v, Actions.' },
+      { id:'MT-03', title:'Suspend тенанта', prio:'P0',
+        steps:'1. В таблице найди ACTIVE тенант\n2. Нажми "Suspend"\n3. Подтверди диалог',
+        exp:'Статус меняется на SUSPENDED. Кнопки: Restore, Archive.' },
+      { id:'MT-04', title:'Unsuspend (Restore) тенанта', prio:'P0',
+        steps:'1. Найди SUSPENDED тенант\n2. Нажми "Restore"',
+        exp:'Статус → ACTIVE. Кнопки: Harvest, Suspend, Archive.' },
+      { id:'MT-05', title:'Archive тенанта', prio:'P0',
+        steps:'1. Найди ACTIVE или SUSPENDED тенант\n2. Нажми "Archive"\n3. Подтверди диалог',
+        exp:'Статус → ARCHIVED. Кнопка: Restore.' },
+      { id:'MT-06', title:'Restore из архива', prio:'P0',
+        steps:'1. Найди ARCHIVED тенант\n2. Нажми "Restore"',
+        exp:'Статус → ACTIVE.' },
+      { id:'MT-07', title:'Trigger Harvest', prio:'P0',
+        steps:'1. Найди ACTIVE тенант\n2. Нажми "Harvest"',
+        exp:'Alert "Harvest queued: <harvestId>". Job виден в JobRunr.' },
+      { id:'MT-08', title:'PROVISIONING_FAILED — Retry', prio:'P0',
+        steps:'1. Найди тенант со статусом PROVISIONING_FAILED\n2. Нажми "Retry"',
+        exp:'Статус → PROVISIONING, затем ACTIVE или снова PROVISIONING_FAILED.' },
+      { id:'MT-09', title:'PROVISIONING_FAILED — Cleanup', prio:'P0',
+        steps:'1. Найди тенант со статусом PROVISIONING_FAILED\n2. Нажми "Cleanup"\n3. Подтверди',
+        exp:'Тенант удалён из таблицы или перешёл в PURGED.' },
+      { id:'MT-10', title:'Детальная страница тенанта', prio:'P0',
+        steps:'1. Кликни по строке тенанта или на alias',
+        exp:'Переход на /admin/tenants/<alias>. Видны все поля конфига.' },
+      { id:'MT-11', title:'Список участников тенанта', prio:'P0',
+        steps:'1. Выбери тенант\n2. Открой /admin/tenants/<alias>/members',
+        exp:'Список пользователей KC-организации. Колонки: username, email, role.' },
+      { id:'MT-12', title:'Инвайт участника в тенант', prio:'P0',
+        steps:'1. На странице members нажми "Invite"\n2. Введи email и роль\n3. Submit',
+        exp:'Пользователь добавлен в список. Появился в KC Organization.' },
+      { id:'MT-13', title:'Удаление участника из тенанта', prio:'P1',
+        steps:'1. Найди участника в списке\n2. Нажми "Remove"',
+        exp:'Участник удалён из списка.' },
+      { id:'MT-14', title:'Редактирование конфига тенанта', prio:'P0',
+        steps:'1. Открой /admin/tenants/<alias>/config\n2. Измени harvestCron\n3. Save',
+        exp:'Сохранено без ошибок. configVersion увеличился на 1.' },
+      { id:'MT-15', title:'Optimistic lock — конфликт версии', prio:'P1',
+        steps:'1. Открой конфиг в двух вкладках\n2. Сохрани в первой\n3. Попробуй сохранить во второй',
+        exp:'409 Conflict — сообщение об ошибке версии.' },
+      { id:'MT-16', title:'EventStream фильтр по тенанту', prio:'P1',
+        steps:'1. Открой /overview/events\n2. Выбери тенант в фильтре',
+        exp:'Поток событий фильтруется по tenantAlias.' },
+      { id:'MT-17', title:'События тегируются tenantAlias', prio:'P1',
+        steps:'1. Запусти Harvest для тенанта\n2. Открой EventStream без фильтра',
+        exp:'События harvest содержат tenantAlias в payload/tags.' },
+      { id:'MT-18', title:'Изоляция: user тенанта A не видит данные B (UI)', prio:'P0',
+        steps:'1. Войди как user тенанта A\n2. Попробуй открыть /admin/tenants/B/members',
+        exp:'Страница недоступна / 403 ошибка.' },
+      { id:'MT-19', title:'Фильтр по статусу', prio:'P1',
+        steps:'1. Открой /admin/tenants\n2. Выбери "SUSPENDED" в фильтре статуса',
+        exp:'Таблица показывает только SUSPENDED тенанты.' },
+      { id:'MT-20', title:'Фильтр по alias', prio:'P1',
+        steps:'1. Введи часть alias в строке поиска',
+        exp:'Таблица фильтруется в реальном времени.' },
+      { id:'MT-21', title:'Пагинация тенантов', prio:'P2',
+        steps:'1. Если тенантов > 20 — появились ← → кнопки\n2. Нажми →',
+        exp:'Следующая страница загружается.' },
+      { id:'MT-22', title:'Статус PROVISIONING_FAILED в фильтре', prio:'P1',
+        steps:'1. Выбери "PROVISIONING_FAILED" в фильтре статуса',
+        exp:'Только тенанты с ошибкой провижна.' },
+      { id:'MT-23', title:'Кнопка Refresh обновляет список', prio:'P2',
+        steps:'1. Нажми Refresh\n2. Данные обновились без перезагрузки страницы',
+        exp:'Spinner → данные обновлены.' },
+    ]
+  },
+  {
+    id: 'security', label: 'Security (UI/UX)', prio: 'P1',
+    tests: [
+      { id:'SEC-03', title:'Неаутентифицированный запрос → redirect login', prio:'P0',
+        steps:'1. Открой /admin/tenants в режиме инкогнито',
+        exp:'Redirect на /login.' },
+      { id:'SEC-04', title:'Сессия истекает → redirect login', prio:'P1',
+        steps:'1. Войди\n2. Удали session cookie в DevTools\n3. Обнови страницу',
+        exp:'Redirect на /login.' },
+      { id:'SEC-06', title:'Нет доступа к /admin/tenants для обычного пользователя', prio:'P0',
+        steps:'1. Войди как user (без роли admin)\n2. Перейди /admin/tenants',
+        exp:'Страница не отображается / redirect.' },
+      { id:'SEC-07', title:'Rate limiting на /auth/login (UI)', prio:'P1',
+        steps:'1. Введи неверный пароль 10+ раз',
+        exp:'Сообщение об ошибке: Too Many Requests.' },
+      { id:'SEC-08', title:'API Key аутентификация', prio:'P1',
+        steps:'1. Сгенерируй API Key\n2. Отправь запрос с X-API-Key заголовком',
+        exp:'200 OK.' },
+      { id:'SEC-09', title:'Невалидный API Key → 401', prio:'P1',
+        steps:'1. Отправь запрос с X-API-Key: invalid',
+        exp:'401 Unauthorized.' },
+      { id:'SEC-10', title:'XSS: alias с <script> не исполняется', prio:'P1',
+        steps:'1. Попробуй создать тенант с alias содержащим < > символы',
+        exp:'Валидация отклоняет / символы экранированы в UI.' },
+    ]
+  },
+  {
+    id: 'cross-cutting', label: 'Cross-cutting (UI)', prio: 'P1',
+    tests: [
+      { id:'CC-01', title:'DEV секция видна для admin в dev-режиме', prio:'P1',
+        steps:'1. Запусти heimdall-frontend локально (npm run dev)\n2. Войди как admin\n3. Открой /overview/services',
+        exp:'Вкладка "Dev" видна. Список dev-сервисов отображается.' },
+      { id:'CC-02', title:'DEV секция скрыта в prod-сборке', prio:'P1',
+        steps:'1. Открой staging окружение (prod build)\n2. Войди как admin',
+        exp:'Вкладки Dev нет.' },
+      { id:'CC-03', title:'ServiceTopology — collapse/expand', prio:'P1',
+        steps:'1. Открой /overview/services (dev)\n2. По умолчанию свёрнут\n3. Нажми "▶ expand"',
+        exp:'Граф разворачивается. Направление — слева направо (LR). "▼ collapse" — сворачивается.' },
+      { id:'CC-04', title:'ServiceTopology — ELK LR направление', prio:'P1',
+        steps:'1. Раскрой Service Topology\n2. Смотри направление рёбер',
+        exp:'Граф идёт слева направо. Входящие стрелки слева, исходящие справа.' },
+      { id:'CC-05', title:'i18n переключение RU→EN', prio:'P2',
+        steps:'1. Переключи язык на EN\n2. Проверь страницу тенантов',
+        exp:'Все надписи на English, включая статусы тенантов.' },
+      { id:'CC-06', title:'i18n переключение EN→RU', prio:'P2',
+        steps:'1. Переключи на RU\n2. Проверь страницу тенантов',
+        exp:'Все надписи на русском.' },
+      { id:'CC-07', title:'RoleGuard: admin видит кнопку Create в /admin/tenants', prio:'P1',
+        steps:'1. Войди как admin\n2. Открой /admin/tenants',
+        exp:'Кнопка "+ Create" видна.' },
+      { id:'CC-08', title:'RoleGuard: local-admin не видит Create', prio:'P1',
+        steps:'1. Войди как local-admin\n2. Открой /admin/tenants',
+        exp:'Кнопки "+ Create" нет.' },
+      { id:'CC-09', title:'Vite proxy: CHUR_PROXY_TARGET работает', prio:'P2',
+        steps:'1. Запусти с CHUR_PROXY_TARGET=http://localhost:3000\n2. Проверь /auth/session',
+        exp:'200 OK — прокси настроен правильно.' },
+      { id:'CC-10', title:'ConsentModal появляется при первом входе', prio:'P2',
+        steps:'1. Зайди под новым пользователем\n2. Или сбрось consent в настройках',
+        exp:'Модал T&C/Privacy появляется.' },
+      { id:'CC-11', title:'Page title меняется при навигации', prio:'P3',
+        steps:'1. Перейди на /admin/tenants\n2. Смотри title вкладки браузера',
+        exp:'Title: "Tenants — Heimðallr"' },
+    ]
+  },
+  {
+    id: 'dali', label: 'Dali (UI/Upload)', prio: 'P2',
+    tests: [
+      { id:'DL-01', title:'Upload SQL файла через UI', prio:'P1',
+        steps:'1. Открой /dali/sources\n2. Выбери источник\n3. Загрузи .sql файл',
+        exp:'Файл загружен. Job создан в JobRunr.' },
+      { id:'DL-02', title:'Job COMPLETED в JobRunr', prio:'P1',
+        steps:'1. После upload подожди\n2. Открой /jobrunr',
+        exp:'Job в статусе SUCCEEDED.' },
+      { id:'DL-03', title:'Создание DaliSource', prio:'P1',
+        steps:'1. /dali/sources → "+ Add Source"\n2. Введи имя и параметры\n3. Save',
+        exp:'Источник создан, появился в списке.' },
+      { id:'DL-04', title:'Список сессий Dali', prio:'P2',
+        steps:'1. Открой /dali/sessions',
+        exp:'Таблица сессий с колонками: ID, Source, Status, Atoms, Resolution.' },
+      { id:'DL-05', title:'Dali proxy через DALI_PROXY_TARGET', prio:'P2',
+        steps:'1. Запусти с DALI_PROXY_TARGET\n2. Открой /dali/sessions',
+        exp:'Данные загружаются с нужного Dali-инстанса.' },
+      { id:'DL-06', title:'Retry failed Dali job', prio:'P2',
+        steps:'1. Найди FAILED job в JobRunr\n2. Нажми Requeue',
+        exp:'Job перезапущен.' },
+    ]
+  },
+  {
+    id: 'verdandi', label: 'Verdandi (UI)', prio: 'P2',
+    tests: [
+      { id:'VD-01', title:'SQL инспектор — открыть сессию', prio:'P1',
+        steps:'1. Открой Verdandi\n2. Выбери сессию Dali',
+        exp:'Граф запроса отображается.' },
+      { id:'VD-02', title:'Command Palette — поиск', prio:'P2',
+        steps:'1. Нажми Cmd/Ctrl+K\n2. Введи текст поиска',
+        exp:'Palette открывается, результаты появляются.' },
+      { id:'VD-03', title:'Undo/Redo в канвасе', prio:'P2',
+        steps:'1. Переместим ноду\n2. Ctrl+Z\n3. Ctrl+Y',
+        exp:'Undo и Redo работают.' },
+      { id:'VD-04', title:'Фильтрация нод', prio:'P2',
+        steps:'1. Введи текст в фильтр\n2. Нода скрывается/подсвечивается',
+        exp:'Фильтр работает.' },
+      { id:'VD-05', title:'Профиль пользователя — сохранение настроек', prio:'P3',
+        steps:'1. Открой ProfileModal\n2. Измени тему\n3. Закрой и открой снова',
+        exp:'Тема сохранилась.' },
+    ]
+  },
+];
+
+// ══════════════════════════════════════════════════════════════════════════
+// STATE & STORAGE
+// ══════════════════════════════════════════════════════════════════════════
+const STATE_KEY = 'aida_qa_v4';
+const state = JSON.parse(localStorage.getItem(STATE_KEY) || '{}');
+
+// Session results — applied only for keys not yet in state (first load or after reset)
+const SESSION_DEFAULTS = {
+  'MT-01':'fail',  'MT-01_note':'Провижен не завершился / ошибка при создании',
+  'MT-02':'pass',
+  'MT-03':'fail',  'MT-03_note':'Пустой JSON: не передавался expectedConfigVersion (исправлено в admin.ts)',
+  'MT-04':'skip',
+  'MT-05':'fail',  'MT-05_note':'Пустой JSON: archive не передавал expectedConfigVersion (исправлено)',
+  'MT-06':'skip',
+  'MT-07':'pending',
+  'MT-08':'skip',
+  'MT-09':'skip',
+  'MT-10':'pass',
+  'MT-11':'fail',  'MT-11_note':'Нет явного отображения активного тенанта на странице members',
+  'MT-12':'fail',  'MT-12_note':'Инвайт не показывал целевой тенант (исправлено: tenantAlias в заголовке)',
+  'MT-13':'fail',  'MT-13_note':'Кнопка "Remove" не поясняла что удаление из тенанта а не аккаунта (исправлено)',
+  'MT-14':'fail',  'MT-14_note':'Кнопка Config не была видна как Edit — переименована в "Edit Config"',
+};
+for (const [k, v] of Object.entries(SESSION_DEFAULTS)) {
+  if (!(k in state)) state[k] = v;
+}
+function saveState() {
+  localStorage.setItem(STATE_KEY, JSON.stringify(state));
+  const ind = document.getElementById('save-ind');
+  if (ind) { ind.style.opacity = '1'; setTimeout(() => ind.style.opacity = '0', 1200); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ══════════════════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('pane-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MANUAL RENDER
+// ══════════════════════════════════════════════════════════════════════════
+function renderManual() {
+  const container = document.getElementById('manual-sections');
+  container.innerHTML = '';
+  for (const cat of MANUAL) {
+    const sec = document.createElement('div');
+    sec.className = 'section';
+    const pass = cat.tests.filter(t => state[t.id] === 'pass').length;
+    const fail = cat.tests.filter(t => state[t.id] === 'fail').length;
+    const pct = Math.round(pass / cat.tests.length * 100);
+    const bcls = fail > 0 ? 'red' : pct === 100 ? 'green' : 'yellow';
+    sec.innerHTML = `
+      <div class="sec-hdr">
+        <h2>${cat.label}</h2>
+        <span class="badge ${bcls}">${pass}/${cat.tests.length} passed${fail ? ' · ' + fail + ' FAIL' : ''}</span>
+        <span class="prio p${cat.prio[1]}">${cat.prio}</span>
+      </div>
+      <table class="tc-table">
+        <colgroup><col style="width:70px"><col style="width:55px"><col style="width:260px"><col><col style="width:100px"><col style="width:130px"></colgroup>
+        <thead><tr><th>ID</th><th>Prio</th><th>Тест</th><th>Ожидается</th><th>Статус</th><th>Заметки</th></tr></thead>
+        <tbody>${cat.tests.map(t => renderTestRow(t)).join('')}</tbody>
+      </table>`;
+    container.appendChild(sec);
+  }
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderTestRow(t) {
+  const s = state[t.id] || 'pending';
+  const sc = s === 'pass' ? 'pass' : s === 'fail' ? 'fail' : s === 'skip' ? 'skip' : s === 'unclear' ? 'unclear' : '';
+  return `<tr>
+    <td><span class="tc-id">${esc(t.id)}</span></td>
+    <td><span class="prio p${t.prio[1]}">${esc(t.prio)}</span></td>
+    <td>
+      <div class="tc-title">${esc(t.title)}</div>
+      <div class="tc-steps">${esc(t.steps)}</div>
+    </td>
+    <td><div class="tc-expected">${esc(t.exp)}</div></td>
+    <td>
+      <select class="status-sel ${sc}" onchange="setStatus('${t.id}', this)">
+        <option value="pending" ${s==='pending'?'selected':''}>— pending</option>
+        <option value="pass" ${s==='pass'?'selected':''}>✓ PASS</option>
+        <option value="fail" ${s==='fail'?'selected':''}>✗ FAIL</option>
+        <option value="skip" ${s==='skip'?'selected':''}>⊘ SKIP</option>
+        <option value="unclear" ${s==='unclear'?'selected':''}>? UNCLEAR</option>
+      </select>
+    </td>
+    <td><textarea class="notes-in" rows="1" placeholder="Заметки…"
+      onchange="setNote('${t.id}', this.value)">${esc(state[t.id+'_note'] || '')}</textarea></td>
+  </tr>`;
+}
+
+function setStatus(id, sel) {
+  state[id] = sel.value;
+  sel.className = 'status-sel ' + (sel.value !== 'pending' ? sel.value : '');
+  saveState();
+  updateStats();
+  renderSummary();
+}
+
+function setNote(id, val) {
+  state[id + '_note'] = val;
+  saveState();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// AUTO RENDER
+// ══════════════════════════════════════════════════════════════════════════
+function renderAuto() {
+  const container = document.getElementById('auto-sections');
+  container.innerHTML = '';
+
+  const dt = new Date(AUTO_RESULTS.runAt);
+  document.getElementById('run-time-lbl').textContent =
+    dt.toLocaleString('ru', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+
+  for (const suite of AUTO_RESULTS.suites) {
+    const block = document.createElement('div');
+    block.className = 'suite-block';
+    const statusCls = suite.failed > 0 ? 'fill-red' : 'fill-green';
+    block.innerHTML = `
+      <div class="suite-hdr" onclick="toggleSuite(this)">
+        <span class="suite-chevron">▶</span>
+        <div>
+          <div class="suite-label">${suite.label}</div>
+          <div class="suite-file">${suite.file}</div>
+        </div>
+        <div class="suite-counts">
+          <span class="cnt-pass">✓ ${suite.passed}</span>
+          ${suite.failed > 0 ? `<span class="cnt-fail">✗ ${suite.failed}</span>` : ''}
+        </div>
+        <div style="width:80px">
+          <div class="pbar"><div class="pbar-fill ${statusCls}" style="width:${Math.round(suite.passed/suite.total*100)}%"></div></div>
+        </div>
+      </div>
+      <div class="suite-tests">
+        ${suite.groups.map(g => `
+          <div class="group-label">${g.name}</div>
+          ${g.tests.map(t => `
+            <div class="test-row">
+              <div class="test-dot ${t.s==='passed'?'dot-pass':'dot-fail'}"></div>
+              <div class="test-name">${t.t}</div>
+              <div class="test-dur">${t.d}ms</div>
+            </div>
+            ${t.msg ? `<div class="fail-msg">${t.msg}</div>` : ''}
+          `).join('')}
+        `).join('')}
+      </div>`;
+    container.appendChild(block);
+  }
+}
+
+function toggleSuite(hdr) {
+  const tests = hdr.nextElementSibling;
+  const chev = hdr.querySelector('.suite-chevron');
+  tests.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SUMMARY
+// ══════════════════════════════════════════════════════════════════════════
+function renderSummary() {
+  // Auto summary list
+  const autoList = document.getElementById('auto-summary-list');
+  autoList.innerHTML = AUTO_RESULTS.suites.map(s => {
+    const pct = Math.round(s.passed / s.total * 100);
+    const cls = s.failed > 0 ? 'red' : 'green';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd)">
+      <div class="pbar-wrap" style="width:120px">
+        <div class="pbar"><div class="pbar-fill fill-${cls}" style="width:${pct}%"></div></div>
+      </div>
+      <span class="${cls}" style="font-size:11px;font-weight:700;width:36px">${s.passed}/${s.total}</span>
+      <span style="font-size:11px;color:var(--t2);flex:1">${s.label}</span>
+    </div>`;
+  }).join('');
+
+  // Manual summary list
+  const manList = document.getElementById('manual-summary-list');
+  manList.innerHTML = MANUAL.map(cat => {
+    const pass = cat.tests.filter(t => state[t.id] === 'pass').length;
+    const fail = cat.tests.filter(t => state[t.id] === 'fail').length;
+    const pct = cat.tests.length ? Math.round(pass / cat.tests.length * 100) : 0;
+    const cls = fail > 0 ? 'red' : pct === 100 ? 'green' : 'yellow';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd)">
+      <div class="pbar-wrap" style="width:120px">
+        <div class="pbar"><div class="pbar-fill fill-${cls}" style="width:${pct}%"></div></div>
+      </div>
+      <span class="${cls}" style="font-size:11px;font-weight:700;width:36px">${pass}/${cat.tests.length}</span>
+      <span style="font-size:11px;color:var(--t2);flex:1">${cat.label}</span>
+      ${fail ? `<span style="font-size:10px;color:var(--danger)">${fail} FAIL</span>` : ''}
+    </div>`;
+  }).join('');
+
+  // Summary cards
+  const grid = document.getElementById('summary-grid');
+  const totalManual = MANUAL.reduce((a,c)=>a+c.tests.length,0);
+  const passManual  = MANUAL.reduce((a,c)=>a+c.tests.filter(t=>state[t.id]==='pass').length,0);
+  const failManual  = MANUAL.reduce((a,c)=>a+c.tests.filter(t=>state[t.id]==='fail').length,0);
+  const cards = [
+    { label:'Авто всего', val:`${AUTO_RESULTS.passed}/${AUTO_RESULTS.total}`,
+      pct:Math.round(AUTO_RESULTS.passed/AUTO_RESULTS.total*100),
+      cls: AUTO_RESULTS.failed>0?'red':'green' },
+    { label:'Ручных пройдено', val:`${passManual}/${totalManual}`,
+      pct:Math.round(passManual/totalManual*100),
+      cls: failManual>0?'red':passManual===totalManual?'green':'yellow' },
+    { label:'Ручных упало', val:failManual+'', pct:0, cls: failManual>0?'red':'green' },
+    { label:'Всего авто файлов', val:AUTO_RESULTS.suites.length+'', pct:100, cls:'blue' },
+  ];
+  grid.innerHTML = cards.map(c=>`
+    <div class="scard">
+      <div class="sname">${c.label}</div>
+      <div class="sscore ${c.cls}">${c.val}</div>
+      <div class="sbar"><div class="sfill fill-${c.cls}" style="width:${c.pct}%"></div></div>
+    </div>`).join('');
+
+  // Badges
+  document.getElementById('auto-badge').textContent =
+    `${AUTO_RESULTS.passed} / ${AUTO_RESULTS.total}${AUTO_RESULTS.failed?` · ${AUTO_RESULTS.failed} FAIL`:''}`;
+  document.getElementById('manual-badge').textContent = `${passManual} / ${totalManual}`;
+  document.getElementById('manual-badge').className =
+    'badge ' + (failManual>0?'red':passManual===totalManual?'green':'yellow');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// FOOTER STATS
+// ══════════════════════════════════════════════════════════════════════════
+function updateStats() {
+  const totalM = MANUAL.reduce((a,c)=>a+c.tests.length,0);
+  const passM  = MANUAL.reduce((a,c)=>a+c.tests.filter(t=>state[t.id]==='pass').length,0);
+  const failM  = MANUAL.reduce((a,c)=>a+c.tests.filter(t=>state[t.id]==='fail').length,0);
+
+  document.getElementById('foot-m-pass').textContent  = passM;
+  document.getElementById('foot-m-total').textContent = totalM;
+  document.getElementById('foot-m-fail').textContent  = failM;
+
+  document.getElementById('hdr-m-pass').textContent  = passM;
+  document.getElementById('hdr-m-total').textContent = totalM;
+  const failWrap = document.getElementById('hdr-fail-wrap');
+  if (failM > 0) {
+    failWrap.style.display = '';
+    document.getElementById('hdr-fail').textContent = failM;
+  } else {
+    failWrap.style.display = 'none';
+  }
+
+  document.getElementById('foot-auto').textContent =
+    `${AUTO_RESULTS.passed} / ${AUTO_RESULTS.total} ${AUTO_RESULTS.failed?'⚠':'✓'}`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// BULK ACTIONS
+// ══════════════════════════════════════════════════════════════════════════
+function markAllPass() {
+  for (const cat of MANUAL) for (const t of cat.tests) state[t.id] = 'pass';
+  saveState(); renderManual(); updateStats(); renderSummary();
+}
+function markAllFail() {
+  for (const cat of MANUAL) for (const t of cat.tests) state[t.id] = 'fail';
+  saveState(); renderManual(); updateStats(); renderSummary();
+}
+function resetManual() {
+  if (!confirm('Сбросить все ручные результаты?')) return;
+  for (const cat of MANUAL) for (const t of cat.tests) { delete state[t.id]; delete state[t.id+'_note']; }
+  saveState(); renderManual(); updateStats(); renderSummary();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════════════════════════════════════
+function exportReport() {
+  const lines = [`AIDA QA Report — ${new Date().toLocaleString('ru')}\n`];
+  lines.push(`AUTO  ${AUTO_RESULTS.passed}/${AUTO_RESULTS.total} passed (${AUTO_RESULTS.failed} failed)`);
+  lines.push(`Last run: ${AUTO_RESULTS.runAt}\n`);
+  lines.push('MANUAL RESULTS:');
+  for (const cat of MANUAL) {
+    lines.push(`\n## ${cat.label}`);
+    for (const t of cat.tests) {
+      const s = state[t.id] || 'pending';
+      const note = state[t.id+'_note'] ? ` | ${state[t.id+'_note']}` : '';
+      lines.push(`  [${s.toUpperCase().padEnd(7)}] ${t.id} — ${t.title}${note}`);
+    }
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `aida-qa-${Date.now()}.txt`;
+  a.click();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════════════
+renderManual();
+renderAuto();
+renderSummary();
+updateStats();
+</script>
+</body>
+</html>

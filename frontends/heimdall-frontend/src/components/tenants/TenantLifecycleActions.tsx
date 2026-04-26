@@ -46,9 +46,9 @@ export function TenantLifecycleActions({ tenant, onRefresh }: Props) {
     }
   }
 
-  async function doSuspend()   { await run(() => suspendTenant(tenant.tenantAlias)); }
+  async function doSuspend()   { await run(() => suspendTenant(tenant.tenantAlias, tenant.configVersion)); }
   async function doUnsuspend() { await run(() => unsuspendTenant(tenant.tenantAlias)); }
-  async function doArchive()   { await run(() => archiveTenant(tenant.tenantAlias)); }
+  async function doArchive()   { await run(() => archiveTenant(tenant.tenantAlias, tenant.configVersion)); }
   async function doRestore()   { await run(() => restoreTenant(tenant.tenantAlias)); }
   async function doExtend(retainUntil: number) {
     await run(() => extendRetention(tenant.tenantAlias, retainUntil));

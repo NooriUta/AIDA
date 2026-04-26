@@ -40,7 +40,7 @@ export function MemberList({ members, onRemove, busy }: Props) {
                 disabled={busy}
                 onClick={() => onRemove(m)}
               >
-                {t('members.remove', 'Remove')}
+                {t('members.remove', 'Remove from tenant')}
               </button>
             </td>
           </tr>

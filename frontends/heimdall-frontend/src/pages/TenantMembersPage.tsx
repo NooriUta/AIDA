@@ -92,8 +92,9 @@ export default function TenantMembersPage() {
         />
       )}
 
-      {inviteOpen && (
+      {inviteOpen && alias && (
         <MemberInviteModal
+          tenantAlias={alias}
           onClose={() => setInviteOpen(false)}
           onInvite={handleInvite}
         />

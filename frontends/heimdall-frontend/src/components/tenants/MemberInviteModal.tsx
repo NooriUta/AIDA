@@ -4,13 +4,14 @@ import { useTranslation } from 'react-i18next';
 export type MemberRole = 'viewer' | 'editor' | 'local-admin' | 'tenant-owner';
 
 interface Props {
+  tenantAlias: string;
   onClose:  () => void;
   onInvite: (email: string, name: string, role: MemberRole) => Promise<void>;
 }
 
 const ROLES: MemberRole[] = ['viewer', 'editor', 'local-admin', 'tenant-owner'];
 
-export function MemberInviteModal({ onClose, onInvite }: Props) {
+export function MemberInviteModal({ tenantAlias, onClose, onInvite }: Props) {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [name,  setName]  = useState('');
@@ -53,7 +54,10 @@ export function MemberInviteModal({ onClose, onInvite }: Props) {
         className="confirm-box"
         style={{ minWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}
       >
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{t('members.inviteTitle', 'Invite member')}</div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>
+          {t('members.inviteTitle', 'Invite member')}
+          <span style={{ marginLeft: 8, fontFamily: 'monospace', color: 'var(--t3)', fontSize: 12 }}>→ {tenantAlias}</span>
+        </div>
 
         <label style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ color: 'var(--t3)' }}>{t('members.email', 'Email')}</span>
