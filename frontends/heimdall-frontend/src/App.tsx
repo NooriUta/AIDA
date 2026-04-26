@@ -46,9 +46,8 @@ function AppLayout() {
           <Outlet />
         </Suspense>
       </main>
-      {/* Round 5 — T&C / Privacy consent interruptor (opens when user's
-          latest accepted version is older than current) */}
-      <ConsentModal />
+      {/* ConsentModal disabled — re-enable when T&C copy is ready */}
+      {/* <ConsentModal /> */}
     </div>
   );
 }
