@@ -85,8 +85,8 @@ export function requireSameTenant() {
       return reply.status(403).send({ error: 'Forbidden: tenant alias mismatch' });
     }
 
-    // Phase 2: enforce session tenantAlias vs route param
-    const sessionAlias = (request.user as any).tenantAlias as string | undefined;
+    // Phase 2: enforce session activeTenantAlias vs route param (CAP-16 fix)
+    const sessionAlias = (request.user as any).activeTenantAlias as string | undefined;
     if (sessionAlias && sessionAlias !== targetAlias) {
       return reply.status(403).send({ error: 'Forbidden: cross-tenant access denied' });
     }
