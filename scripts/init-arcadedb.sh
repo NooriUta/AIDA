@@ -46,20 +46,45 @@ wait_ready() {
 
 ensure_db() {
   local base_url="$1" user="$2" pass="$3" db="$4"
-  local dbs
-  dbs=$(curl -sf --max-time 5 -u "$user:$pass" "$base_url/api/v1/databases" 2>/dev/null || echo "")
+
+  # After a fresh volume wipe + container start, /api/v1/ready passes immediately
+  # but authenticated calls may return 401/403 until the root password is fully
+  # initialised. Retry the authenticated probe up to 30 s before giving up.
+  local auth_elapsed=0 dbs=""
+  while [ "$auth_elapsed" -lt 30 ]; do
+    dbs=$(curl -s --max-time 5 -u "$user:$pass" "$base_url/api/v1/databases" 2>/dev/null || echo "")
+    # A valid databases response contains "result"
+    if echo "$dbs" | grep -q '"result"'; then
+      break
+    fi
+    sleep 3
+    auth_elapsed=$((auth_elapsed + 3))
+  done
+
   if echo "$dbs" | grep -q "\"$db\""; then
     log "  '$db' — already exists, skip."
+    return
+  fi
+
+  # Primary path: dedicated create endpoint (ArcadeDB REST: POST /api/v1/create/{db})
+  # Uses -s only (no -f) so curl never hides the actual HTTP response code.
+  local http_code
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+    -u "$user:$pass" -X POST "$base_url/api/v1/create/$db" 2>/dev/null || echo "000")
+  if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
+    log "  '$db' — created (HTTP $http_code)."
+    return
+  fi
+
+  # Fallback: server command endpoint (older ArcadeDB builds)
+  local result
+  result=$(curl -s --max-time 10 -u "$user:$pass" -X POST "$base_url/api/v1/server" \
+    -H "Content-Type: application/json" \
+    -d "{\"command\":\"create database $db\"}" 2>/dev/null || echo "")
+  if echo "$result" | grep -q '"ok"'; then
+    log "  '$db' — created via server command."
   else
-    local result
-    result=$(curl -sf --max-time 5 -u "$user:$pass" -X POST "$base_url/api/v1/server" \
-      -H "Content-Type: application/json" \
-      -d "{\"command\":\"create database $db\"}" 2>/dev/null || echo "error")
-    if echo "$result" | grep -q '"ok"'; then
-      log "  '$db' — created."
-    else
-      log "  '$db' — unexpected response: $result"
-    fi
+    log "  '$db' — WARNING: create failed (HTTP $http_code): ${result:0:200}"
   fi
 }
 
