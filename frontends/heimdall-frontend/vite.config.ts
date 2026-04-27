@@ -3,12 +3,18 @@ import react from '@vitejs/plugin-react';
 import { federation } from '@module-federation/vite';
 import type { ServerOptions } from 'http-proxy';
 
-// Strip `Secure` from Set-Cookie headers so Vite HTTP dev server (port 5174)
-// can work with the real Docker Chur (COOKIE_SECURE=true). Production HTTPS
-// traffic flows through nginx:443 where Secure is correct and expected.
+// Strip `Secure` from Set-Cookie + forward original Host so chur generates
+// correct redirect_uri for Auth Code flow (must match :5174 vite dev port).
 function stripSecureCookie() {
   return {
     configure(proxy: import('http-proxy').Server) {
+      proxy.on('proxyReq', (proxyReq: import('http').ClientRequest, req: import('http').IncomingMessage) => {
+        // Forward original host so chur knows the public-facing port (:5174)
+        if (req.headers.host) {
+          proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+          proxyReq.setHeader('X-Forwarded-Proto', 'http');
+        }
+      });
       proxy.on('proxyRes', (proxyRes: import('http').IncomingMessage) => {
         const cookies = proxyRes.headers['set-cookie'];
         if (cookies) {

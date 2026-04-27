@@ -1,30 +1,10 @@
-import { useState }          from 'react';
 import { useTranslation }    from 'react-i18next';
 import { LogIn }             from 'lucide-react';
 import { useShellAuthStore } from '../stores/authStore';
-import type { ReactNode }    from 'react';
 
 export function LoginPage() {
   const { t } = useTranslation();
-  const { login, isLoading, error, clearError } = useShellAuthStore();
-
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({ username: '', password: '' });
-
-  const validate = (): boolean => {
-    const errs = { username: '', password: '' };
-    if (!username.trim()) errs.username = t('auth.error.required');
-    if (!password)        errs.password = t('auth.error.required');
-    setFieldErrors(errs);
-    return !errs.username && !errs.password;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-    await login(username, password);
-  };
+  const { error } = useShellAuthStore();
 
   return (
     <div style={{
@@ -84,65 +64,56 @@ export function LoginPage() {
           flexDirection: 'column',
           gap:           '20px',
         }}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {error && (
+            <div style={{
+              fontSize:     '12px',
+              color:        'var(--wrn)',
+              background:   'color-mix(in srgb, var(--wrn) 10%, transparent)',
+              border:       '1px solid color-mix(in srgb, var(--wrn) 25%, transparent)',
+              borderRadius: 'var(--seer-radius-sm)',
+              padding:      '8px 10px',
+            }}>
+              {t(error, error)}
+            </div>
+          )}
 
-            <Field label={t('auth.username')} error={fieldErrors.username}>
-              <input
-                value={username}
-                onChange={e => { setUsername(e.target.value); clearError(); setFieldErrors(p => ({ ...p, username: '' })); }}
-                autoComplete="username"
-                autoFocus
-                style={inputStyle(!!fieldErrors.username)}
-              />
-            </Field>
+          <button
+            type="button"
+            data-testid="login-sso-btn"
+            onClick={() => {
+              const returnTo = encodeURIComponent(window.location.origin + '/');
+              window.location.href = `/auth/login?return_to=${returnTo}`;
+            }}
+            style={{
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              gap:            '8px',
+              padding:        '12px 20px',
+              background:     'var(--acc)',
+              color:          'var(--bg0)',
+              border:         'none',
+              borderRadius:   'var(--seer-radius-md)',
+              fontSize:       '14px',
+              fontWeight:     600,
+              cursor:         'pointer',
+              transition:     'background 0.12s, transform 0.12s',
+              letterSpacing:  '0.04em',
+            }}
+          >
+            <LogIn size={16} />
+            {t('auth.loginSso', 'Войти через Seiðr SSO')}
+          </button>
 
-            <Field label={t('auth.password')} error={fieldErrors.password}>
-              <input
-                type="password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); clearError(); setFieldErrors(p => ({ ...p, password: '' })); }}
-                autoComplete="current-password"
-                style={inputStyle(!!fieldErrors.password)}
-              />
-            </Field>
-
-            {error && (
-              <div style={{
-                fontSize:     '12px',
-                color:        'var(--wrn)',
-                background:   'color-mix(in srgb, var(--wrn) 10%, transparent)',
-                border:       '1px solid color-mix(in srgb, var(--wrn) 25%, transparent)',
-                borderRadius: 'var(--seer-radius-sm)',
-                padding:      '8px 10px',
-              }}>
-                {t(error, error)}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              style={{
-                display:        'flex',
-                alignItems:     'center',
-                justifyContent: 'center',
-                gap:            '8px',
-                padding:        '9px 16px',
-                background:     isLoading ? 'var(--bg3)' : 'var(--acc)',
-                color:          isLoading ? 'var(--t3)'  : 'var(--bg0)',
-                border:         'none',
-                borderRadius:   'var(--seer-radius-md)',
-                fontSize:       '13px',
-                fontWeight:     500,
-                cursor:         isLoading ? 'not-allowed' : 'pointer',
-                transition:     'background 0.12s, color 0.12s',
-                letterSpacing:  '0.04em',
-              }}
-            >
-              <LogIn size={14} />
-              {isLoading ? t('auth.signingIn') : t('auth.login')}
-            </button>
-          </form>
+          <div style={{
+            fontSize:      '11px',
+            color:         'var(--t3)',
+            textAlign:     'center',
+            marginTop:     '4px',
+            letterSpacing: '0.04em',
+          }}>
+            {t('auth.ssoNote', 'OAuth 2.0 Authorization Code + PKCE через Seiðr Studio')}
+          </div>
         </div>
 
       </div>
@@ -150,31 +121,3 @@ export function LoginPage() {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <label style={{ fontSize: '12px', color: 'var(--t2)', letterSpacing: '0.04em' }}>
-        {label}
-      </label>
-      {children}
-      {error && <span style={{ fontSize: '11px', color: 'var(--wrn)' }}>{error}</span>}
-    </div>
-  );
-}
-
-function inputStyle(hasError: boolean): React.CSSProperties {
-  return {
-    width:        '100%',
-    padding:      '8px 10px',
-    background:   'var(--bg2)',
-    border:       `1px solid ${hasError ? 'var(--wrn)' : 'var(--bd)'}`,
-    borderRadius: 'var(--seer-radius-sm)',
-    color:        'var(--t1)',
-    fontSize:     '13px',
-    outline:      'none',
-    boxSizing:    'border-box',
-    fontFamily:   'inherit',
-    transition:   'border-color 0.12s',
-  };
-}

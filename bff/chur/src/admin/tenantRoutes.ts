@@ -16,6 +16,7 @@ import {
   requireAnyScope,
   requireSameTenant,
 } from '../middleware/requireAdmin';
+import { checkElevation } from '../middleware/preventElevation';
 import { emitTenantAudit } from '../middleware/auditEmit';
 import { adminRateLimit, provisioningRateLimit } from '../middleware/rateLimit';
 import { csrfGuard } from '../middleware/csrfGuard';
@@ -169,8 +170,9 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ── GET /api/admin/tenants/:alias ───────────────────────────────────────────
+  // G2: per spec §3.4 local-admin/tenant-owner can read own tenant config.
   app.get<{ Params: { alias: string } }>('/api/admin/tenants/:alias',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), adminRateLimit] },
     async (request, reply) => {
       const cfg = await getTenantConfig(request.params.alias).catch(() => null);
       if (!cfg) return reply.status(404).send({ error: 'Tenant not found' });
@@ -463,6 +465,9 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { email, name, role } = request.body ?? {};
       if (!email || !role) return reply.status(400).send({ error: 'email and role are required' });
+      // G3: prevent privilege elevation per spec §3.5
+      const elev = checkElevation(request.user?.scopes, request.user?.role, role);
+      if (!elev.ok) return reply.status(403).send({ error: 'Forbidden: ' + elev.error });
       const { alias } = request.params;
       const cfg = await getTenantConfig(alias).catch(() => null);
       const orgId = cfg?.keycloakOrgId as string | undefined;
@@ -484,6 +489,9 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       const { userId } = request.params;
       const { role, enabled } = request.body ?? {};
       if (role !== undefined) {
+        // G4: prevent privilege elevation on role change per spec §3.5
+        const elev = checkElevation(request.user?.scopes, request.user?.role, role);
+        if (!elev.ok) return reply.status(403).send({ error: 'Forbidden: ' + elev.error });
         await setUserRole(userId, role as any);
         emitTenantAudit('seer.audit.member_role_changed', request.user.username, request.params.alias, { userId, role });
       }
@@ -642,12 +650,13 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ── POST /api/admin/tenants/:alias/harvest — trigger Dali harvest ────────────
-  // Admin-only. Forwards to Dali's /api/sessions/harvest with tenant header.
+  // G1 fix: spec §3.3 — operator/local-admin/tenant-owner with aida:harvest scope.
+  // Forwards to Dali's /api/sessions/harvest with tenant header.
   const DALI_URL = (process.env.DALI_URL ?? 'http://127.0.0.1:9090').replace(/\/$/, '');
 
   app.post<{ Params: { alias: string } }>(
     '/api/admin/tenants/:alias/harvest',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:harvest', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
       try {

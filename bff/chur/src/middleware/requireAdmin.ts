@@ -57,10 +57,13 @@ export function requireAnyScope(...scopes: string[]) {
 }
 
 /**
- * CAP-10/15: Blocks cross-tenant access and enforces JWT ↔ header alias consistency.
+ * G6 + G7: Blocks cross-tenant access. Fail-closed for non-superadmin/non-admin
+ * when session has no activeTenantAlias.
  *
- * Phase 2 (multi-tenant): validates that the JWT organization.alias claim matches
- * the :alias route param. Superadmin bypasses the check.
+ * Source of truth: `request.user.activeTenantAlias` (verified server-side, set
+ * during Auth Code callback or ROPC login from JWT). The legacy unverified
+ * Bearer-token decode is removed (G7) — session is authoritative.
+ *
  * Mismatch emits seer.audit.tenant_spoof_attempt.
  */
 export function requireSameTenant() {
@@ -68,43 +71,35 @@ export function requireSameTenant() {
     if (!request.user) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
+    // Platform-tier roles bypass tenant scoping (admin can act across tenants;
+    // super-admin even more so). Per spec §3 cross-tenant access matrix.
     if (request.user.scopes?.includes('aida:superadmin')) return;
+    if (request.user.scopes?.includes('aida:admin')) return;
 
     const targetAlias = (request.params as Record<string, string>)?.alias
       ?? (request.params as Record<string, string>)?.tenantId;
     if (!targetAlias) return; // route has no tenant scoping
 
-    // Extract JWT organization.alias claim (CAP-15 anti-spoofing)
-    const jwtAlias = extractJwtOrgAlias(request);
-    if (jwtAlias && jwtAlias !== targetAlias) {
+    // G6: fail-closed — non-platform user MUST have an active tenant in session.
+    const sessionAlias = (request.user as any).activeTenantAlias as string | undefined;
+    if (!sessionAlias) {
       console.warn(
-        `[RBAC] spoof attempt — user=${request.user.username} ` +
-        `jwt_alias=${jwtAlias} header_alias=${targetAlias}`,
+        `[RBAC] G6 fail-closed — user=${request.user.username} ` +
+        `role=${request.user.role} session has no activeTenantAlias, target=${targetAlias}`,
       );
-      emitSpoofAttempt(request.user.username, targetAlias, jwtAlias);
-      return reply.status(403).send({ error: 'Forbidden: tenant alias mismatch' });
+      return reply.status(403).send({
+        error: 'Forbidden: session has no active tenant',
+        message: 'Re-authenticate or switch tenant via PATCH /auth/me/tenant',
+      });
     }
 
-    // Phase 2: enforce session activeTenantAlias vs route param (CAP-16 fix)
-    const sessionAlias = (request.user as any).activeTenantAlias as string | undefined;
-    if (sessionAlias && sessionAlias !== targetAlias) {
+    if (sessionAlias !== targetAlias) {
+      console.warn(
+        `[RBAC] cross-tenant denied — user=${request.user.username} ` +
+        `session_alias=${sessionAlias} target=${targetAlias}`,
+      );
+      emitSpoofAttempt(request.user.username, targetAlias, sessionAlias);
       return reply.status(403).send({ error: 'Forbidden: cross-tenant access denied' });
     }
   };
-}
-
-// ── Internal: lightweight JWT claim extraction ────────────────────────────────
-
-function extractJwtOrgAlias(request: FastifyRequest): string | null {
-  const auth = request.headers.authorization ?? '';
-  if (!auth.startsWith('Bearer ')) return null;
-  const token = auth.slice(7);
-  const parts = token.split('.');
-  if (parts.length < 2) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8'));
-    return (payload?.organization?.alias as string | undefined) ?? null;
-  } catch {
-    return null;
-  }
 }

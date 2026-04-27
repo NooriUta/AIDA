@@ -16,12 +16,14 @@ export function TenantSearchFilter({ search, status, onSearch, onStatus }: Props
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
       <input
         type="search"
+        data-testid="search-alias"
         value={search}
         onChange={e => onSearch(e.target.value)}
         placeholder={t('tenants.searchPlaceholder', 'Search by alias…')}
         style={{ flex: '1 1 180px', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--bd)' }}
       />
       <select
+        data-testid="status-filter"
         value={status}
         onChange={e => onStatus(e.target.value as TenantStatus | '')}
         style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg2)' }}
