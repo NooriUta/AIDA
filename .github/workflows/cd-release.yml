@@ -84,7 +84,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
-      contents: write   # needed for git tag + push in "Create and push release tag"
+      contents: write   # needed for git operations
+      actions: write    # needed for gh workflow run (trigger cd.yml)
 
     steps:
       - uses: actions/checkout@v4
@@ -369,16 +370,20 @@ jobs:
 
             echo "✅ UPGRADE PASSED"
 
-      # ── STEP 3: Tag release ────────────────────────────────────────────────
-      - name: Create and push release tag
+      # ── STEP 3: Trigger prod CD (tag created AFTER prod deploy succeeds) ─────
+      # Tag is NOT created here — it's created in cd.yml after prod deploy passes.
+      # This ensures tags only exist for prod-verified releases.
+      - name: Trigger prod CD (tag created on prod success)
         if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.meta.outputs.version }}" \
-                  -m "Release ${{ steps.meta.outputs.version }}"
-          git push origin "${{ steps.meta.outputs.version }}"
-          echo "✅ Tagged ${{ steps.meta.outputs.version }} → triggers cd.yml (prod deploy)"
+          gh workflow run "CD" \
+            --repo ${{ github.repository }} \
+            --ref release \
+            -f tag=${{ steps.meta.outputs.version }} \
+            -f deploy_mode=init
+          echo "✅ Prod CD dispatched for ${{ steps.meta.outputs.version }} — tag created on prod success"
 
       # ── Notifications ──────────────────────────────────────────────────────
       - name: Notify success
@@ -388,10 +393,11 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ✅ Release ${{ steps.meta.outputs.version }} gate PASSED
+            ✅ Release gate PASSED — prod CD dispatched
+            Version: `${{ steps.meta.outputs.version }}`
             INIT ✓  |  UPGRADE ${{ inputs.skip_upgrade_test != true && steps.meta.outputs.prev_tag != '' && '✓' || '— skipped' }}
-            Tagged and pushed → prod deploy in progress
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Tag будет создан после успешного prod deploy.
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Notify failure
         if: failure()
@@ -400,5 +406,6 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ❌ Release ${{ steps.meta.outputs.version }} gate FAILED
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ❌ Release gate FAILED — ${{ steps.meta.outputs.version }}
+            Staging tests не прошли — prod CD не запущен, тег не создан.
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
