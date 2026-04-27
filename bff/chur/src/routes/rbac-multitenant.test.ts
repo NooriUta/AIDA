@@ -546,15 +546,14 @@ describe('RBAC-HARVEST: harvest access per role', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('tettt3 operator cannot trigger harvest on tettt3 — route requires aida:admin (spec gap)', async () => {
+  it('tettt3 operator can trigger harvest on own tenant (aida:harvest + requireSameTenant)', async () => {
     vi.stubGlobal('fetch', makeFetch('tettt3'));
     const sid = await makeSession('operator', 'tettt3');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/tettt3/harvest',
       cookies: { sid }, headers: CSRF,
     });
-    // TODO: should be 200 once route is updated to accept aida:harvest + requireSameTenant()
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
   });
 });
 
@@ -567,26 +566,23 @@ describe('RBAC-CONFIG: tenant config access', () => {
   beforeEach(async () => { app = await buildApp(); vi.stubGlobal('fetch', makeFetch('acme')); });
   afterEach(() => vi.unstubAllGlobals());
 
-  // NOTE: RBAC_MULTITENANT §3.4 says local-admin/tenant-owner should read their own tenant config.
-  // tenantRoutes.ts GET /:alias uses requireScope('aida:admin') — spec gap tracked as backlog item.
-  it('local-admin cannot read tenant config (acme) — route requires aida:admin (spec gap)', async () => {
+  // G2 fix: local-admin/tenant-owner can now read their own tenant config (aida:tenant:admin scope).
+  it('local-admin can read own tenant config (aida:tenant:admin + requireSameTenant)', async () => {
     const sid = await makeSession('local-admin', 'acme');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants/acme',
       cookies: { sid },
     });
-    // TODO: should be 200 once route is updated to accept aida:tenant:admin + requireSameTenant()
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
   });
 
-  it('tenant-owner cannot read tenant config (acme) — route requires aida:admin (spec gap)', async () => {
+  it('tenant-owner can read own tenant config (aida:tenant:admin + requireSameTenant)', async () => {
     const sid = await makeSession('tenant-owner', 'acme');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants/acme',
       cookies: { sid },
     });
-    // TODO: should be 200 once route is updated to accept aida:tenant:admin + requireSameTenant()
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
   });
 
   it('viewer cannot read tenant config', async () => {
