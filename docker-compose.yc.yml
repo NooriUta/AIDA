@@ -170,14 +170,17 @@ services:
 
   # ── FRIGG (ArcadeDB state store) ───────────────────────────────────────────
   frigg:
+    environment:
+      # Override prod JAVA_OPTS: 60% heap of 2G limit = ~1.2G heap + ~400M JVM overhead = ~1.6G total < 2G
+      JAVA_OPTS: "-XX:MaxRAMPercentage=60.0 -XX:InitialRAMPercentage=20.0"
     <<: *env_file
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 1536M
+          memory: 2G
         reservations:
-          memory: 768M
+          memory: 1G
     logging: *default_logging
 
   # ── Ygg (ArcadeDB lineage graph) ───────────────────────────────────
