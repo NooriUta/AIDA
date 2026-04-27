@@ -1,23 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import { LogIn } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
-const schema = z.object({
-  username: z.string().min(1, 'auth.error.required'),
-  password: z.string().min(1, 'auth.error.required'),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore();
+  const { error, isAuthenticated } = useAuthStore();
 
   // Pick a random slogan once — useRef persists across re-renders without setter overhead
   const sloganRef = useRef('');
@@ -26,12 +16,6 @@ export function LoginPage() {
     sloganRef.current = Array.isArray(list) ? list[Math.floor(Math.random() * list.length)] : t('app.tagline');
   }
   const slogan = sloganRef.current;
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
   // Redirect if already authenticated.
   // NOTE: `navigate` is intentionally excluded from deps — React Router's
@@ -44,10 +28,6 @@ export function LoginPage() {
     if (isAuthenticated) navigate('..', { replace: true, relative: 'path' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
-
-  const onSubmit = async ({ username, password }: FormValues) => {
-    await login(username, password);
-  };
 
   return (
     <div style={{
@@ -169,42 +149,3 @@ export function LoginPage() {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <label style={{ fontSize: '12px', color: 'var(--t2)', letterSpacing: '0.04em' }}>
-        {label}
-      </label>
-      {children}
-      {error && (
-        <span style={{ fontSize: '11px', color: 'var(--wrn)' }}>{error}</span>
-      )}
-    </div>
-  );
-}
-
-function inputStyle(hasError: boolean): React.CSSProperties {
-  return {
-    width: '100%',
-    padding: '8px 10px',
-    background: 'var(--bg2)',
-    border: `1px solid ${hasError ? 'var(--wrn)' : 'var(--bd)'}`,
-    borderRadius: 'var(--seer-radius-sm)',
-    color: 'var(--t1)',
-    fontSize: '13px',
-    outline: 'none',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit',
-    transition: 'border-color 0.12s',
-  };
-}

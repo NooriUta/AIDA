@@ -1,30 +1,10 @@
-import { useState }          from 'react';
 import { useTranslation }    from 'react-i18next';
 import { LogIn }             from 'lucide-react';
 import { useShellAuthStore } from '../stores/authStore';
-import type { ReactNode }    from 'react';
 
 export function LoginPage() {
   const { t } = useTranslation();
-  const { login, isLoading, error, clearError } = useShellAuthStore();
-
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({ username: '', password: '' });
-
-  const validate = (): boolean => {
-    const errs = { username: '', password: '' };
-    if (!username.trim()) errs.username = t('auth.error.required');
-    if (!password)        errs.password = t('auth.error.required');
-    setFieldErrors(errs);
-    return !errs.username && !errs.password;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-    await login(username, password);
-  };
+  const { error } = useShellAuthStore();
 
   return (
     <div style={{
@@ -141,31 +121,3 @@ export function LoginPage() {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <label style={{ fontSize: '12px', color: 'var(--t2)', letterSpacing: '0.04em' }}>
-        {label}
-      </label>
-      {children}
-      {error && <span style={{ fontSize: '11px', color: 'var(--wrn)' }}>{error}</span>}
-    </div>
-  );
-}
-
-function inputStyle(hasError: boolean): React.CSSProperties {
-  return {
-    width:        '100%',
-    padding:      '8px 10px',
-    background:   'var(--bg2)',
-    border:       `1px solid ${hasError ? 'var(--wrn)' : 'var(--bd)'}`,
-    borderRadius: 'var(--seer-radius-sm)',
-    color:        'var(--t1)',
-    fontSize:     '13px',
-    outline:      'none',
-    boxSizing:    'border-box',
-    fontFamily:   'inherit',
-    transition:   'border-color 0.12s',
-  };
-}

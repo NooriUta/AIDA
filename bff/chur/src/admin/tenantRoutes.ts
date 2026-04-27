@@ -656,7 +656,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { alias: string } }>(
     '/api/admin/tenants/:alias/harvest',
-    { preHandler: [app.authenticate, requireScope('aida:harvest'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:harvest', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
       try {

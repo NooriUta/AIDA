@@ -9,7 +9,6 @@ import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
-import { ConsentModal }    from './components/ConsentModal';
 import { useAuthStore }    from './stores/authStore';
 import { usePrefsStore }   from './stores/prefsStore';
 import { RoleGuard }       from './components/RoleGuard';
