@@ -252,7 +252,7 @@ jobs:
             # ── Init deploy: wipe volumes for a clean start ───────────────────
             # Triggered only by workflow_dispatch with deploy_mode=init.
             # Destroys all FRIGG and YGG data — ArcadeDB will reinitialise
-            # root password from JAVA_OPTS on next start.
+            # root password from ARCADEDB_SERVER_ROOTPASSWORD env var on next start.
             DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'merge' }}"
             if [ "$DEPLOY_MODE" = "init" ]; then
               echo "=== INIT DEPLOY: stopping stack and wiping DB volumes ==="
@@ -277,6 +277,8 @@ jobs:
               up -d --remove-orphans || {
                 echo "=== docker compose up failed ==="
                 docker ps -a
+                docker logs seer-studio-frigg-1    --tail 40 2>&1 || true
+                docker logs Ygg-1                  --tail 40 2>&1 || true
                 docker logs seer-studio-chur-1     --tail 60 2>&1 || true
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
                 exit 1

@@ -126,11 +126,12 @@ services:
     volumes:
       - frigg_data:/home/arcadedb/databases
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2480/api/v1/ready || exit 1"]
+      # bash /dev/tcp: no external tools needed; /api/v1/ready returns 204 when ArcadeDB is ready
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
       interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
+      timeout: 8s
+      retries: 20
+      start_period: 120s
 
   # ── Ygg (ArcadeDB — lineage graph) ────────────────────────────────
   ygg:
@@ -147,11 +148,12 @@ services:
       - hound_config:/home/arcadedb/.arcadedb
       - hound_logs:/home/arcadedb/log
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2480/api/v1/ready || exit 1"]
+      # bash /dev/tcp: no external tools needed; /api/v1/ready returns 204 when ArcadeDB is ready
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
       interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
+      timeout: 8s
+      retries: 20
+      start_period: 120s
 
   # ── Dali (async PL/SQL parse service) ─────────────────────────────────────
   dali:
