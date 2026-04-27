@@ -77,6 +77,9 @@ services:
       COOKIE_DOMAIN:          ".seidrstudio.pro"
       COOKIE_SECURE:          "true"
       KEYCLOAK_URL:           http://keycloak:8180/kc
+      # Public KC URL for Auth Code browser redirect (≠ KEYCLOAK_URL which is Docker-internal).
+      # nginx proxies /kc → KC container; DOMAIN is set by CD pipeline (.env file).
+      KEYCLOAK_PUBLIC_URL:    "https://seer.${DOMAIN:-seidrstudio.pro}/kc"
       KEYCLOAK_REALM:         seer
       KEYCLOAK_CLIENT_ID:     aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
