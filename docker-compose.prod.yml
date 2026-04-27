@@ -19,7 +19,7 @@ networks:
 services:
   # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.2
+    image: quay.io/keycloak/keycloak:26.6
     command: start-dev --import-realm
     restart: unless-stopped
     environment:
@@ -77,6 +77,9 @@ services:
       COOKIE_DOMAIN:          ".seidrstudio.pro"
       COOKIE_SECURE:          "true"
       KEYCLOAK_URL:           http://keycloak:8180/kc
+      # Public KC URL for Auth Code browser redirect (≠ KEYCLOAK_URL which is Docker-internal).
+      # nginx proxies /kc → KC container; DOMAIN is set by CD pipeline (.env file).
+      KEYCLOAK_PUBLIC_URL:    "https://seer.${DOMAIN:-seidrstudio.pro}/kc"
       KEYCLOAK_REALM:         seer
       KEYCLOAK_CLIENT_ID:     aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
@@ -116,17 +119,22 @@ services:
     image: arcadedata/arcadedb:26.3.2
     restart: unless-stopped
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_PASSWORD:-playwithdata} -XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0"
+      # Password passed as a dedicated env-var so special characters (spaces,
+      # shell meta-chars) in the Lockbox secret don't break JVM arg parsing.
+      # ArcadeDB 26.x reads ARCADEDB_SERVER_ROOTPASSWORD directly.
+      ARCADEDB_SERVER_ROOTPASSWORD: "${FRIGG_PASSWORD:-playwithdata}"
+      JAVA_OPTS: "-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0"
     ports:
       - "2481:2480"
     volumes:
       - frigg_data:/home/arcadedb/databases
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2480/api/v1/ready || exit 1"]
+      # bash /dev/tcp: no external tools needed; /api/v1/ready returns 204 when ArcadeDB is ready
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
       interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
+      timeout: 8s
+      retries: 20
+      start_period: 120s
 
   # ── Ygg (ArcadeDB — lineage graph) ────────────────────────────────
   ygg:
@@ -134,7 +142,8 @@ services:
     image: arcadedata/arcadedb:26.3.2
     restart: unless-stopped
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ADMIN_PASSWORD:-playwithdata} -XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0"
+      ARCADEDB_SERVER_ROOTPASSWORD: "${ARCADEDB_ADMIN_PASSWORD:-playwithdata}"
+      JAVA_OPTS: "-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0"
     ports:
       - "2480:2480"
     volumes:
@@ -142,11 +151,12 @@ services:
       - hound_config:/home/arcadedb/.arcadedb
       - hound_logs:/home/arcadedb/log
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2480/api/v1/ready || exit 1"]
+      # bash /dev/tcp: no external tools needed; /api/v1/ready returns 204 when ArcadeDB is ready
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
       interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
+      timeout: 8s
+      retries: 20
+      start_period: 120s
 
   # ── Dali (async PL/SQL parse service) ─────────────────────────────────────
   dali:

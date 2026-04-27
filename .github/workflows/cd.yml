@@ -56,8 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set lowercase owner
-        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+      - name: Set release tag and lowercase owner
+        run: |
+          echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       - uses: docker/login-action@v3
         with:
@@ -78,7 +80,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,scope=${{ matrix.service }},mode=max
           tags: |
-            ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:${{ github.ref_name }}
+            ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:${{ env.RELEASE_TAG }}
             ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:${{ github.sha }}
             ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:latest
 
@@ -94,8 +96,10 @@ jobs:
       matrix:
         service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend, shell]
     steps:
-      - name: Set lowercase owner
-        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+      - name: Set release tag and lowercase owner
+        run: |
+          echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       - uses: docker/login-action@v3
         with:
@@ -119,10 +123,10 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             echo "=== Mirror attempt ${attempt}/3 ==="
-            docker pull ${GHCR}:${{ github.ref_name }} \
-              && docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:${{ github.ref_name }} \
-              && docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:latest \
-              && docker push ${YCR}:${{ github.ref_name }} \
+            docker pull ${GHCR}:${{ env.RELEASE_TAG }} \
+              && docker tag  ${GHCR}:${{ env.RELEASE_TAG }} ${YCR}:${{ env.RELEASE_TAG }} \
+              && docker tag  ${GHCR}:${{ env.RELEASE_TAG }} ${YCR}:latest \
+              && docker push ${YCR}:${{ env.RELEASE_TAG }} \
               && docker push ${YCR}:latest \
               && break
             [ ${attempt} -lt 3 ] && echo "Attempt ${attempt} failed, retrying in 30s..." && sleep 30
@@ -133,9 +137,17 @@ jobs:
     name: Deploy to production
     needs: mirror-to-ycr
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed for git tag push after successful prod deploy
     # NOTE: no 'environment: production' — requires paid GitHub plan for private repos
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
 
       - name: Fix file permissions for scp
         run: |
@@ -219,8 +231,11 @@ jobs:
               infra/scripts/lockbox-sync.sh || echo "Lockbox sync skipped (not configured)"
             fi
 
-            # Source secrets early — passwords needed for ArcadeDB health checks below
-            source .env.prod 2>/dev/null || true
+            # Source secrets and auto-export all vars so docker compose child process
+            # inherits FRIGG_PASSWORD, ARCADEDB_ADMIN_PASSWORD, etc.
+            # Without set -a, sourced vars are shell-local and docker compose falls
+            # back to :-playwithdata defaults → ArcadeDB gets wrong password.
+            set -a; source .env.prod 2>/dev/null || true; set +a
 
             # Remove yc credential helper for cr.yandex (conflicts with docker login)
             if [ -f ~/.docker/config.json ]; then
@@ -235,7 +250,7 @@ jobs:
             echo "$IAM_TOKEN" | docker login cr.yandex -u iam --password-stdin
 
             # Load compose env vars
-            export IMAGE_TAG=${{ github.ref_name }}
+            export IMAGE_TAG=${{ env.RELEASE_TAG }}
             export YC_REGISTRY_ID=${{ secrets.YC_REGISTRY_ID }}
             export DOMAIN=${{ secrets.DOMAIN }}
             export REPO=cr.yandex/${YC_REGISTRY_ID}
@@ -249,7 +264,7 @@ jobs:
             # ── Init deploy: wipe volumes for a clean start ───────────────────
             # Triggered only by workflow_dispatch with deploy_mode=init.
             # Destroys all FRIGG and YGG data — ArcadeDB will reinitialise
-            # root password from JAVA_OPTS on next start.
+            # root password from ARCADEDB_SERVER_ROOTPASSWORD env var on next start.
             DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'merge' }}"
             if [ "$DEPLOY_MODE" = "init" ]; then
               echo "=== INIT DEPLOY: stopping stack and wiping DB volumes ==="
@@ -274,6 +289,8 @@ jobs:
               up -d --remove-orphans || {
                 echo "=== docker compose up failed ==="
                 docker ps -a
+                docker logs seer-studio-frigg-1    --tail 40 2>&1 || true
+                docker logs Ygg-1                  --tail 40 2>&1 || true
                 docker logs seer-studio-chur-1     --tail 60 2>&1 || true
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
                 exit 1
@@ -339,7 +356,21 @@ jobs:
             wait_infra "http://localhost:15173/"        "Verdandi" "" || { echo "Verdandi health check FAILED"; exit 1; }
             echo "  All services OK"
 
-            echo "Deploy OK — ${{ github.ref_name }} (${{ github.sha }})"
+            echo "Deploy OK — ${{ env.RELEASE_TAG }} (${{ github.sha }})"
+
+      # ── Create git tag after successful prod deploy ───────────────────────────
+      # Tag is created HERE (after prod verified), not in cd-release.yml.
+      # Only when triggered via workflow_dispatch from cd-release.yml (inputs.tag set).
+      # For push:tags trigger (manual/legacy), tag already exists — skip.
+      - name: Create and push release tag (prod-verified)
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ env.RELEASE_TAG }}" \
+                  -m "Release ${{ env.RELEASE_TAG }} — prod deploy verified"
+          git push origin "${{ env.RELEASE_TAG }}"
+          echo "✅ Tagged ${{ env.RELEASE_TAG }} — prod-verified"
 
       - name: Notify success
         if: success() && env.TELEGRAM_TOKEN != ''
@@ -350,10 +381,11 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ✅ SEER Studio deployed
-            Version: `${{ github.ref_name }}`
+            ✅ SEER Studio deployed to prod
+            Version: `${{ env.RELEASE_TAG }}`
             SHA: `${{ github.sha }}`
             By: ${{ github.actor }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Notify failure
         if: failure() && env.TELEGRAM_TOKEN != ''
@@ -364,7 +396,8 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ❌ SEER Studio deploy FAILED
+            ❌ SEER Studio prod deploy FAILED
+            Version: `${{ env.RELEASE_TAG }}`
             SHA: `${{ github.sha }}`
             By: ${{ github.actor }}
-            Check: https://github.com/${{ github.repository }}/actions
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -213,7 +213,7 @@ jobs:
               infra/scripts/lockbox-sync.sh || echo "Lockbox sync skipped (not configured)"
             fi
 
-            source .env.prod 2>/dev/null || true
+            set -a; source .env.prod 2>/dev/null || true; set +a
 
             # Remove yc credential helper for cr.yandex
             if [ -f ~/.docker/config.json ]; then
