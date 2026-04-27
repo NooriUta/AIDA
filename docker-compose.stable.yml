@@ -26,9 +26,13 @@ services:
       KC_HTTP_PORT: "8180"
       KC_HTTP_RELATIVE_PATH: "/kc"
       KC_HEALTH_ENABLED: "true"
-      KC_PROXY_HEADERS: "xforwarded"
+      # KC_PROXY_HEADERS убран — он заставлял KC default'ить Secure на cookies даже в plain HTTP
+      # (без X-Forwarded-Proto KC интерпретировал scheme как https → Secure flag).
+      # Browser/curl на HTTP localhost не отправляли Secure cookies → cookie_not_found на login submit.
+      # Включить обратно для prod через nginx где X-Forwarded-Proto=https действительно есть.
       KC_HOSTNAME: "localhost"
       KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_FEATURES: "organization"
     ports:
       - "127.0.0.1:18180:8180"

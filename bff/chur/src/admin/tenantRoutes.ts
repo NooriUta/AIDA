@@ -650,12 +650,13 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ── POST /api/admin/tenants/:alias/harvest — trigger Dali harvest ────────────
-  // Admin-only. Forwards to Dali's /api/sessions/harvest with tenant header.
+  // G1 fix: spec §3.3 — operator/local-admin/tenant-owner with aida:harvest scope.
+  // Forwards to Dali's /api/sessions/harvest with tenant header.
   const DALI_URL = (process.env.DALI_URL ?? 'http://127.0.0.1:9090').replace(/\/$/, '');
 
   app.post<{ Params: { alias: string } }>(
     '/api/admin/tenants/:alias/harvest',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireScope('aida:harvest'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
       try {

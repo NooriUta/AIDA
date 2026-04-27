@@ -15,7 +15,7 @@ export function MemberList({ members, onRemove, busy }: Props) {
   }
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+    <table data-testid="members-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
       <thead>
         <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--bd)' }}>
           <th style={{ padding: '8px 12px' }}>{t('members.username', 'Username')}</th>
@@ -37,6 +37,7 @@ export function MemberList({ members, onRemove, busy }: Props) {
             <td style={{ padding: '8px 12px', textAlign: 'right' }}>
               <button
                 className="btn btn-danger"
+                data-testid={`member-remove-${m.username}`}
                 disabled={busy}
                 onClick={() => onRemove(m)}
               >

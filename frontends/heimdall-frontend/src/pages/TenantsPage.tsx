@@ -46,11 +46,11 @@ export default function TenantsPage() {
         <h2 style={{ margin: 0 }}>{t('tenants.heading', 'Tenants')}</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           {isAdmin && (
-            <button className="btn btn-primary" onClick={() => setCreateOpen(true)}>
+            <button className="btn btn-primary" data-testid="btn-create-tenant" onClick={() => setCreateOpen(true)}>
               {t('tenants.create', '+ Create')}
             </button>
           )}
-          <button className="btn btn-secondary" onClick={refresh} disabled={loading}>
+          <button className="btn btn-secondary" data-testid="btn-refresh" onClick={refresh} disabled={loading}>
             {loading ? t('status.loading', 'Loading…') : t('tenants.refresh', 'Refresh')}
           </button>
         </div>
