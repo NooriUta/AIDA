@@ -54,7 +54,11 @@ async function sid(role: 'admin' | 'super-admin' | 'viewer', extra: string[] = [
     : role === 'admin'
     ? ['aida:admin']
     : ['seer:read'];
-  return sessions.createSession('tok', 'rt', 3600, 'uid', role, role, [...scopes, ...extra]);
+  const cookie = await sessions.createSession('tok', 'rt', 3600, 'uid', role, role, [...scopes, ...extra]);
+  // Platform-tier roles (admin/super-admin) bypass requireSameTenant(), but we set
+  // activeTenantAlias anyway so other middleware/assertions don't see a null alias.
+  await sessions.updateSession(cookie, { activeTenantAlias: 'acme' });
+  return cookie;
 }
 
 // ── Stateful FRIGG fetch stub ─────────────────────────────────────────────────
@@ -592,14 +596,14 @@ describe('SEC — RBAC scope enforcement', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  // SEC-01: local-admin (aida:tenant:admin only) cannot reach aida:admin endpoints
-  it('SEC-01 · 403 — local-admin cannot GET tenant detail (requires aida:admin)', async () => {
+  // SEC-01: G2 fix — local-admin (aida:tenant:admin) CAN read own tenant config
+  it('SEC-01 · 200 — local-admin can GET own tenant detail (aida:tenant:admin)', async () => {
     const cookie = await sidForTenant('acme');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants/acme',
       cookies: { sid: cookie },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
   });
 
   it('SEC-01 · 403 — local-admin cannot GET tenant list (requires aida:admin)', async () => {

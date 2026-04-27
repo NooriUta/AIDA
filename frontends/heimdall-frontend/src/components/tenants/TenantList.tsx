@@ -113,11 +113,11 @@ export function TenantList({ tenants, onRefresh }: Props) {
 
   return (
     <div className="data-panel">
-      <table className="data-table">
+      <table className="data-table" data-testid="tenants-table">
         <thead>
           <tr>
-            <th style={{ textAlign: 'left' }}>{t('tenants.alias', 'Alias')}</th>
-            <th style={{ textAlign: 'left' }}>{t('tenants.status', 'Status')}</th>
+            <th style={{ textAlign: 'left' }} data-testid="th-alias">{t('tenants.alias', 'Alias')}</th>
+            <th style={{ textAlign: 'left' }} data-testid="th-status">{t('tenants.status', 'Status')}</th>
             <th style={{ textAlign: 'right' }} title={t('tenants.membersCount.hint', 'KC users in org')}>
               {t('tenants.membersCount', 'Users')}
             </th>
@@ -134,7 +134,9 @@ export function TenantList({ tenants, onRefresh }: Props) {
         </thead>
         <tbody>
           {tenants.map(tenant => (
-            <tr key={tenant.tenantAlias} style={{ cursor: 'pointer' }}
+            <tr key={tenant.tenantAlias}
+              data-testid={`tenant-row-${tenant.tenantAlias}`}
+              style={{ cursor: 'pointer' }}
               onClick={() => navigate(`/admin/tenants/${tenant.tenantAlias}`)}>
               <td>
                 <span style={{ fontWeight: 600, color: 'var(--t1)', fontSize: 13 }}>

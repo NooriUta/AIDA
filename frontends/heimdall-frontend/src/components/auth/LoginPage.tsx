@@ -1,25 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import { LogIn } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
-import type { ReactNode } from 'react';
-
-// ── Validation ────────────────────────────────────────────────────────────────
-const schema = z.object({
-  username: z.string().min(1, 'auth.error.required'),
-  password: z.string().min(1, 'auth.error.required'),
-});
-type FormValues = z.infer<typeof schema>;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function LoginPage() {
   const { t }  = useTranslation();
   const navigate = useNavigate();
-  const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore();
+  const { error, isAuthenticated } = useAuthStore();
 
   // Pick random slogan once per mount
   const sloganRef = useRef('');
@@ -30,17 +19,9 @@ export function LoginPage() {
       : t('app.tagline');
   }
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-  });
-
   useEffect(() => {
     if (isAuthenticated) navigate('/overview/services', { replace: true });
   }, [isAuthenticated, navigate]);
-
-  const onSubmit = async ({ username, password }: FormValues) => {
-    await login(username, password);
-  };
 
   return (
     <div style={{
@@ -120,67 +101,59 @@ export function LoginPage() {
           flexDirection: 'column',
           gap:           '20px',
         }}>
-          <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Server error (для случая если Auth Code callback вернулся с ошибкой) */}
+          {error && (
+            <div style={{
+              fontSize:     '12px',
+              color:        'var(--wrn)',
+              background:   'color-mix(in srgb, var(--wrn) 10%, transparent)',
+              border:       '1px solid color-mix(in srgb, var(--wrn) 25%, transparent)',
+              borderRadius: 'var(--seer-radius-sm)',
+              padding:      '8px 10px',
+            }}>
+              {t(error, error)}
+            </div>
+          )}
 
-            <Field label={t('auth.username')} error={errors.username ? t(errors.username.message as string) : undefined}>
-              <input
-                {...register('username')}
-                autoComplete="username"
-                autoFocus
-                onChange={() => clearError()}
-                style={inputStyle(!!errors.username)}
-              />
-            </Field>
+          {/* Auth Code (SSO) — единственный способ входа.
+              ROPC форма удалена в sprint/auth-redesign-2026q2 — теперь только KC redirect flow. */}
+          <button
+            type="button"
+            data-testid="login-sso-btn"
+            onClick={() => {
+              const returnTo = encodeURIComponent(window.location.origin + '/');
+              window.location.href = `/auth/login?return_to=${returnTo}`;
+            }}
+            style={{
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              gap:            '8px',
+              padding:        '12px 20px',
+              background:     'var(--acc)',
+              color:          'var(--bg0)',
+              border:         'none',
+              borderRadius:   'var(--seer-radius-md)',
+              fontSize:       '14px',
+              fontWeight:     600,
+              cursor:         'pointer',
+              transition:     'background 0.12s, transform 0.12s',
+              letterSpacing:  '0.04em',
+            }}
+          >
+            <LogIn size={16} />
+            {t('auth.loginSso', 'Войти через Seiðr SSO')}
+          </button>
 
-            <Field label={t('auth.password')} error={errors.password ? t(errors.password.message as string) : undefined}>
-              <input
-                {...register('password')}
-                type="password"
-                autoComplete="current-password"
-                onChange={() => clearError()}
-                style={inputStyle(!!errors.password)}
-              />
-            </Field>
-
-            {/* Server error */}
-            {error && (
-              <div style={{
-                fontSize:     '12px',
-                color:        'var(--wrn)',
-                background:   'color-mix(in srgb, var(--wrn) 10%, transparent)',
-                border:       '1px solid color-mix(in srgb, var(--wrn) 25%, transparent)',
-                borderRadius: 'var(--seer-radius-sm)',
-                padding:      '8px 10px',
-              }}>
-                {t(error, error)}
-              </div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              style={{
-                display:        'flex',
-                alignItems:     'center',
-                justifyContent: 'center',
-                gap:            '8px',
-                padding:        '9px 16px',
-                background:     isLoading ? 'var(--bg3)' : 'var(--acc)',
-                color:          isLoading ? 'var(--t3)'  : 'var(--bg0)',
-                border:         'none',
-                borderRadius:   'var(--seer-radius-md)',
-                fontSize:       '13px',
-                fontWeight:     500,
-                cursor:         isLoading ? 'not-allowed' : 'pointer',
-                transition:     'background 0.12s, color 0.12s',
-                letterSpacing:  '0.04em',
-              }}
-            >
-              <LogIn size={14} />
-              {isLoading ? t('auth.signingIn') : t('auth.login')}
-            </button>
-          </form>
+          <div style={{
+            fontSize:      '11px',
+            color:         'var(--t3)',
+            textAlign:     'center',
+            marginTop:     '4px',
+            letterSpacing: '0.04em',
+          }}>
+            {t('auth.ssoNote', 'OAuth 2.0 Authorization Code + PKCE через Seiðr Studio')}
+          </div>
         </div>
 
       </div>
@@ -188,31 +161,3 @@ export function LoginPage() {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <label style={{ fontSize: '12px', color: 'var(--t2)', letterSpacing: '0.04em' }}>
-        {label}
-      </label>
-      {children}
-      {error && <span style={{ fontSize: '11px', color: 'var(--wrn)' }}>{error}</span>}
-    </div>
-  );
-}
-
-function inputStyle(hasError: boolean): React.CSSProperties {
-  return {
-    width:        '100%',
-    padding:      '8px 10px',
-    background:   'var(--bg2)',
-    border:       `1px solid ${hasError ? 'var(--wrn)' : 'var(--bd)'}`,
-    borderRadius: 'var(--seer-radius-sm)',
-    color:        'var(--t1)',
-    fontSize:     '13px',
-    outline:      'none',
-    boxSizing:    'border-box',
-    fontFamily:   'inherit',
-    transition:   'border-color 0.12s',
-  };
-}

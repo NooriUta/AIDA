@@ -82,6 +82,22 @@ export default defineConfig({
       '/auth': {
         target:       process.env.CHUR_PROXY_TARGET ?? 'http://localhost:3000',
         changeOrigin: true,
+        configure: (proxy: import('http-proxy').Server) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // Forward original host so chur generates correct redirect_uri
+            if (req.headers.host) {
+              proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+              proxyReq.setHeader('X-Forwarded-Proto', 'http');
+            }
+          });
+          proxy.on('proxyRes', (proxyRes) => {
+            const cookies = proxyRes.headers['set-cookie'];
+            if (cookies) {
+              proxyRes.headers['set-cookie'] = (cookies as string[]).map(c =>
+                c.replace(/;\s*Secure/gi, ''));
+            }
+          });
+        },
       },
     },
   },

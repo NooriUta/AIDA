@@ -9,7 +9,6 @@ import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
-import { ConsentModal }    from './components/ConsentModal';
 import { useAuthStore }    from './stores/authStore';
 import { usePrefsStore }   from './stores/prefsStore';
 import { RoleGuard }       from './components/RoleGuard';
@@ -46,9 +45,8 @@ function AppLayout() {
           <Outlet />
         </Suspense>
       </main>
-      {/* Round 5 — T&C / Privacy consent interruptor (opens when user's
-          latest accepted version is older than current) */}
-      <ConsentModal />
+      {/* ConsentModal disabled — re-enable when T&C copy is ready */}
+      {/* <ConsentModal /> */}
     </div>
   );
 }
