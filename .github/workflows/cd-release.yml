@@ -125,13 +125,13 @@ jobs:
           chmod -R a+r scripts/ tests/
           chmod a+x scripts/*.sh
 
-      - name: Copy scripts + test fixtures to VM
+      - name: Copy scripts + compose files + test fixtures to VM
         uses: appleboy/scp-action@v0.1.7
         with:
           host:     ${{ secrets.DEPLOY_HOST_STAGING }}
           username: ${{ secrets.DEPLOY_USER_STAGING }}
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
-          source:   scripts/,tests/
+          source:   scripts/,tests/,docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/
           target:   /opt/seer-studio/
 
       # ── STEP 1: INIT test ──────────────────────────────────────────────────
