@@ -119,6 +119,17 @@ jobs:
           echo "N   → ${VERSION} (IMAGE_TAG=staging)"
           echo "N-1 → ${PREV:-none}"
 
+      # ── Notify start ──────────────────────────────────────────────────────
+      - name: Notify start
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚀 Release gate STARTED — ${{ steps.meta.outputs.version }}
+            INIT + UPGRADE → prod CD
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
       # ── Refresh scripts on VM ──────────────────────────────────────────────
       - name: Fix file permissions
         run: |
