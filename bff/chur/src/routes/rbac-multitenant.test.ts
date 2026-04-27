@@ -257,16 +257,15 @@ describe('RBAC-TI: tenant isolation', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  // admin has aida:admin scope but requireSameTenant() still enforces activeTenantAlias
-  // — only aida:superadmin bypasses it. Admin must be in the same tenant session.
-  it('admin → GET /test-ci/members 403 (activeTenantAlias=default ≠ test-ci)', async () => {
+  // admin has aida:admin scope → requireSameTenant() bypasses, cross-tenant access allowed
+  it('admin → GET /test-ci/members 200 even with activeTenantAlias=default (aida:admin bypasses)', async () => {
     vi.stubGlobal('fetch', makeFetch('test-ci'));
     const sid = await makeSession('admin', 'default');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants/test-ci/members',
       cookies: { sid },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
   });
 
   it('admin → GET /test-ci/members 200 when activeTenantAlias matches', async () => {
@@ -320,18 +319,15 @@ describe('RBAC-INVITE: invite role restrictions', () => {
     expect(res.statusCode).toBe(202);
   });
 
-  // NOTE: tenantRoutes.ts POST /members does NOT check role elevation —
-  // the guard (local-admin cannot assign admin) lives only in legacy admin.ts route.
-  // This is a SPEC GAP (RBAC_MULTITENANT §3.5) — tracked as backlog item.
-  it('acme local-admin invite admin → 202 (elevation guard not yet in tenantRoutes)', async () => {
+  // G3/G4: elevation guard now in tenantRoutes.ts — local-admin cannot assign admin
+  it('acme local-admin invite admin → 403 (elevation guard blocks role escalation)', async () => {
     const sid = await makeSession('local-admin', 'acme');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/acme/members',
       cookies: { sid }, headers: CSRF,
       payload: { email: 'hacker@acme.io', role: 'admin' },
     });
-    // TODO: should be 403 once elevation check is added to tenantRoutes.ts
-    expect(res.statusCode).toBe(202);
+    expect(res.statusCode).toBe(403);
   });
 
   it('viewer cannot invite anyone', async () => {
@@ -514,27 +510,25 @@ describe('RBAC-HARVEST: harvest access per role', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  // NOTE: RBAC_MULTITENANT §3.3 says operator/local-admin (aida:harvest) should trigger harvest.
-  // tenantRoutes.ts POST /harvest uses requireScope('aida:admin') — spec gap tracked as backlog item.
-  it('operator cannot trigger harvest (ghjjh) — route requires aida:admin (spec gap)', async () => {
+  // G1: harvest route now accepts aida:harvest + requireSameTenant()
+  it('operator can trigger harvest on own tenant (ghjjh)', async () => {
     vi.stubGlobal('fetch', makeFetch('ghjjh'));
     const sid = await makeSession('operator', 'ghjjh');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/ghjjh/harvest',
       cookies: { sid }, headers: CSRF,
     });
-    // TODO: should be 200 once route is updated to accept aida:harvest + requireSameTenant()
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
   });
 
-  it('local-admin cannot trigger harvest (acme) — route requires aida:admin (spec gap)', async () => {
+  it('local-admin can trigger harvest on own tenant (acme)', async () => {
+    vi.stubGlobal('fetch', makeFetch('acme'));
     const sid = await makeSession('local-admin', 'acme');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/acme/harvest',
       cookies: { sid }, headers: CSRF,
     });
-    // TODO: should be 200 once route is updated to accept aida:harvest + requireSameTenant()
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
   });
 
   it('operator cannot trigger harvest on another tenant (testci → acme)', async () => {
