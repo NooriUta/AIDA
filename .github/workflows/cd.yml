@@ -383,8 +383,8 @@ jobs:
               docker ps -a --format "  {{.Names}}  {{.Status}}  {{.Image}}" 2>/dev/null || true
               docker stats --no-stream --format "  {{.Name}}  mem={{.MemUsage}}  cpu={{.CPUPerc}}" 2>/dev/null || true
               local svcname="${name,,}"; svcname="${svcname//(/}"; svcname="${svcname//)/}"
-              docker logs "seer-studio-${svcname}-1" --no-log-prefix --tail 40 2>&1 || \
-              docker logs "${svcname}-1"             --no-log-prefix --tail 40 2>&1 || true
+              docker logs "seer-studio-${svcname}-1" --tail 40 2>&1 || \
+              docker logs "${svcname}-1"             --tail 40 2>&1 || true
               return 1
             }
             echo "=== Waiting for infrastructure ==="
