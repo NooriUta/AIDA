@@ -131,7 +131,7 @@ services:
     healthcheck:
       # ArcadeDB image (eclipse-temurin) has bash as /bin/sh — /dev/tcp works.
       # 120s start_period covers fresh-volume init; retries:20 = +200s buffer.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 3 cat <&3 | grep -q '204'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
       interval: 10s
       timeout: 8s
       retries: 20
@@ -154,7 +154,7 @@ services:
     healthcheck:
       # ArcadeDB image (eclipse-temurin) has bash as /bin/sh — /dev/tcp works.
       # 120s start_period covers fresh-volume init; retries:20 = +200s buffer.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 3 cat <&3 | grep -q '204'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
       interval: 10s
       timeout: 8s
       retries: 20
