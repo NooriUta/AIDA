@@ -148,12 +148,17 @@ jobs:
             set -a; source .env.prod 2>/dev/null || true; set +a
 
             wait_for() {
-              local url="$1" name="$2"
-              for i in $(seq 1 30); do
+              local url="$1" name="$2" retries="${3:-60}"
+              for i in $(seq 1 "$retries"); do
                 curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready" && return 0
-                echo "  [$name] wait $i/30…"; sleep 10
+                echo "  [$name] wait $i/$retries…"; sleep 10
               done
-              echo "  [$name] TIMEOUT after 300s"; return 1
+              echo "  [$name] TIMEOUT after $((retries * 10))s"
+              echo "  [$name] container status:"
+              docker ps -a --filter "name=$name" --format "  id={{.ID}} status={{.Status}} restarts={{.RunningFor}}" 2>/dev/null || true
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                logs --no-color --tail=30 "${name,,}" 2>/dev/null || true
+              return 1
             }
 
             echo "▶ INIT: stop all services"
@@ -172,8 +177,9 @@ jobs:
             docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
               up -d --pull always --remove-orphans --force-recreate
 
-            wait_for "http://localhost:2481/api/v1/ready"      "FRIGG"
-            wait_for "http://localhost:2480/api/v1/ready"      "YGG"
+            # ArcadeDB fresh-volume init can take 5-10 min (JVM + DB schema creation)
+            wait_for "http://localhost:2481/api/v1/ready"      "FRIGG"  60
+            wait_for "http://localhost:2480/api/v1/ready"      "YGG"    60
             wait_for "http://localhost:18180/kc/realms/seer"   "KC(seer)"
 
             echo "▶ INIT: init-arcadedb.sh"
