@@ -356,6 +356,19 @@ jobs:
                 exit 1
               }
 
+            # ── Capture early FRIGG/YGG startup logs (before wait loop) ──────────
+            # Give ArcadeDB containers 15s to emit initial log lines, then capture.
+            # This appears in GitHub Actions output even if containers crash later.
+            sleep 15
+            echo "=== FRIGG early logs ==="
+            docker logs seer-studio-frigg-1 --tail 60 2>&1 || true
+            echo "=== YGG early logs ==="
+            docker logs Ygg-1 --tail 40 2>&1 || true
+            echo "=== FRIGG inspect ==="
+            docker inspect seer-studio-frigg-1 \
+              --format='ExitCode={{.State.ExitCode}}  OOMKilled={{.State.OOMKilled}}  Running={{.State.Running}}' \
+              2>/dev/null || true
+
             # ── Wait for infrastructure only: FRIGG, YGG, KC ──────────────────
             # Must run BEFORE init-arcadedb.sh. App services (Chur/Dali) are not
             # waited here — they depend on DBs that init creates.
