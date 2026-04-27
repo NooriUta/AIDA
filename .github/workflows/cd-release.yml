@@ -345,6 +345,16 @@ jobs:
             fi
 
             # ── 6. Full integration test on N ─────────────────────────────────
+            # Reset Chur in-memory rate limiter before final test run.
+            # The seed + upgrade phases generate multiple logins; without a restart
+            # the superadmin cleanup call (delete tenant) hits 429.
+            echo "▶ UPGRADE: restarting Chur to reset rate limiter"
+            docker restart seer-studio-chur-1
+            for i in $(seq 1 15); do
+              curl -sf http://localhost:13000/health >/dev/null 2>&1 && break
+              echo "  waiting for Chur... (${i}/15)"; sleep 3
+            done
+
             echo "▶ UPGRADE: smoke tests on N"
             DOMAIN=${{ secrets.DOMAIN_STAGING }} bash scripts/smoke-test.sh
 
