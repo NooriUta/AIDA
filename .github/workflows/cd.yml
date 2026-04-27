@@ -281,7 +281,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          command_timeout: 30m
+          command_timeout: 50m
           script: |
             set -e
             cd /opt/seer-studio
