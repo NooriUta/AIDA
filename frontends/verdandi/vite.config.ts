@@ -6,11 +6,17 @@ import path from 'path';
 import type { ProxyOptions } from 'vite';
 import type { IncomingMessage } from 'http';
 
-// Strip `Secure` from Set-Cookie so the HTTP Vite dev server works with
-// Docker Chur (COOKIE_SECURE=true). Prod traffic uses nginx:443.
+// Strip `Secure` from Set-Cookie + forward original Host so chur generates
+// correct redirect_uri (must match Vite dev port like :5173).
 function stripSecureCookie(): ProxyOptions {
   return {
     configure(proxy) {
+      proxy.on('proxyReq', (proxyReq, req) => {
+        if (req.headers.host) {
+          proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+          proxyReq.setHeader('X-Forwarded-Proto', 'http');
+        }
+      });
       proxy.on('proxyRes', (proxyRes: IncomingMessage) => {
         const cookies = proxyRes.headers['set-cookie'];
         if (cookies) {

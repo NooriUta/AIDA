@@ -486,34 +486,35 @@ export default function UsersPage() {
 
       {/* ── Stats grid ── */}
       <div className="stats-grid">
-        <div className="stat-card">
-          <div className="section-label">{t('users.total')}</div>
-          <div className="stat-val" style={{ color: 'var(--t1)' }}>{stats.total}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.total')}</div>
+          <div className="stat-val" style={{ color: 'var(--t1)' }} data-testid="kpi-value">{stats.total}</div>
           <div className="stat-sub">{stats.active} активных</div>
         </div>
-        <div className="stat-card">
-          <div className="section-label">{t('users.active')}</div>
-          <div className="stat-val" style={{ color: 'var(--suc)' }}>{stats.active}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.active')}</div>
+          <div className="stat-val" style={{ color: 'var(--suc)' }} data-testid="kpi-value">{stats.active}</div>
           <div className="stat-sub">{stats.total - stats.active} заблокировано</div>
         </div>
-        <div className="stat-card">
-          <div className="section-label">{t('users.admins')}</div>
-          <div className="stat-val" style={{ color: 'var(--wrn)' }}>{stats.admins}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.admins')}</div>
+          <div className="stat-val" style={{ color: 'var(--wrn)' }} data-testid="kpi-value">{stats.admins}</div>
           <div className="stat-sub">local-admin и выше</div>
         </div>
-        <div className="stat-card">
-          <div className="section-label">{t('users.sourceBindings')}</div>
-          <div className="stat-val" style={{ color: 'var(--inf)' }}>{stats.bindings}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.sourceBindings')}</div>
+          <div className="stat-val" style={{ color: 'var(--inf)' }} data-testid="kpi-value">{stats.bindings}</div>
           <div className="stat-sub">ограничены по источникам</div>
         </div>
       </div>
 
       {/* ── Filter bar ── */}
-      <div className="filter-bar">
+      <div className="filter-bar" data-testid="tenant-filter">
         <span className="section-label">Фильтр</span>
         <TenantSelector onChange={v => { setActiveTenant(v); setCrossTenant(false); }} />
         <select
           className="field-input"
+          data-testid="select-role"
           value={roleFilter}
           onChange={e => setRole(e.target.value)}
           style={{ width: 'auto' }}
@@ -525,6 +526,7 @@ export default function UsersPage() {
         </select>
         <select
           className="field-input"
+          data-testid="status-filter-users"
           value={statusFilter}
           onChange={e => setStatus(e.target.value)}
           style={{ width: 'auto' }}

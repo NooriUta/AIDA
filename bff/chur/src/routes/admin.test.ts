@@ -40,8 +40,10 @@ type App = Awaited<ReturnType<typeof buildApp>>;
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 
-async function makeSid(role: string, scopes: string[]): Promise<string> {
-  return sessions.createSession('tok', 'rt', 3600, 'uid-1', 'testuser', role as any, scopes);
+async function makeSid(role: string, scopes: string[], tenantAlias = 'default'): Promise<string> {
+  const cookie = await sessions.createSession('tok', 'rt', 3600, 'uid-1', 'testuser', role as any, scopes);
+  await sessions.updateSession(cookie, { activeTenantAlias: tenantAlias });
+  return cookie;
 }
 
 // ── GET /admin/tenants ────────────────────────────────────────────────────────

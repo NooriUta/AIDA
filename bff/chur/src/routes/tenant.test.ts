@@ -56,8 +56,10 @@ async function buildApp() {
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
-async function makeSid(scopes: string[]): Promise<string> {
-  return sessions.createSession('tok', 'rt', 3600, 'uid', 'admin', 'admin', scopes);
+async function makeSid(scopes: string[], tenantAlias?: string): Promise<string> {
+  const cookie = await sessions.createSession('tok', 'rt', 3600, 'uid', 'admin', 'admin', scopes);
+  if (tenantAlias) await sessions.updateSession(cookie, { activeTenantAlias: tenantAlias });
+  return cookie;
 }
 
 // MTN-44: csrfGuard requires Origin/Referer matching config.corsOrigin on
@@ -351,7 +353,7 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
   });
 
   it('GET /tenants/default/members — returns only default-org members (not realm-wide)', async () => {
-    const sid = await makeSid(['aida:tenant:admin']);
+    const sid = await makeSid(['aida:tenant:admin'], 'default');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants/default/members', cookies: { sid },
     });
@@ -363,7 +365,7 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
   });
 
   it('GET /tenants/acme/members — returns only acme-org members (1 user)', async () => {
-    const sid = await makeSid(['aida:tenant:admin']);
+    const sid = await makeSid(['aida:tenant:admin'], 'acme');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants/acme/members', cookies: { sid },
     });
@@ -374,7 +376,8 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
   });
 
   it('default members and acme members are DISJOINT (no cross-tenant leak)', async () => {
-    const sid = await makeSid(['aida:tenant:admin']);
+    // aida:admin bypasses requireSameTenant() — test focuses on data isolation, not RBAC
+    const sid = await makeSid(['aida:admin']);
     const d = await app.inject({ method: 'GET', url: '/api/admin/tenants/default/members', cookies: { sid } });
     const a = await app.inject({ method: 'GET', url: '/api/admin/tenants/acme/members',    cookies: { sid } });
     const dIds = new Set((d.json() as Array<{ id: string }>).map(u => u.id));
@@ -384,7 +387,7 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
   });
 
   it('POST /tenants/default/members invite → inviteUserToOrg("org-default", "default", ...)', async () => {
-    const sid = await makeSid(['aida:tenant:admin']);
+    const sid = await makeSid(['aida:tenant:admin'], 'default');
     const res = await app.inject({
       method: 'POST', url: '/api/admin/tenants/default/members',
       cookies: { sid }, headers: CSRF_HEADERS,
@@ -398,7 +401,7 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
   });
 
   it('DELETE /tenants/default/members/:userId → removeOrgMember (not setUserEnabled)', async () => {
-    const sid = await makeSid(['aida:tenant:admin']);
+    const sid = await makeSid(['aida:tenant:admin'], 'default');
     const res = await app.inject({
       method: 'DELETE', url: '/api/admin/tenants/default/members/u1',
       cookies: { sid }, headers: CSRF_HEADERS,

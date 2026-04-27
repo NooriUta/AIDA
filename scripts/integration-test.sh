@@ -371,13 +371,24 @@ upload_dir "${DATA_DIR}/CRM" "CRM_CLEAR" "true"
 # DELETE requires aida:superadmin — login as superadmin for this step.
 step "7. Delete tenant '${TENANT}'"
 DEL_JAR="/tmp/del_cookies_$$.txt"
-DEL_LOGIN=$(curl -sk --max-time 15 \
-  -c "$DEL_JAR" \
-  -X POST "${BASE}/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"superadmin","password":"superadmin"}' \
-  -w "\n%{http_code}" 2>/dev/null || echo -e "\n000")
-DEL_LOGIN_CODE=$(echo "$DEL_LOGIN" | tail -1)
+DEL_LOGIN_CODE="000"
+for attempt in 1 2 3 4 5; do
+  DEL_LOGIN=$(curl -sk --max-time 15 \
+    -c "$DEL_JAR" \
+    -X POST "${BASE}/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"superadmin","password":"superadmin"}' \
+    -w "\n%{http_code}" 2>/dev/null || echo -e "\n000")
+  DEL_LOGIN_CODE=$(echo "$DEL_LOGIN" | tail -1)
+  [ "$DEL_LOGIN_CODE" = "200" ] && break
+  if [ "$DEL_LOGIN_CODE" = "429" ]; then
+    info "Delete step: rate limited (попытка ${attempt}/5) — ожидаем 35s..."
+    sleep 35
+  else
+    info "Delete step: login попытка ${attempt}/5 → ${DEL_LOGIN_CODE}"
+    sleep 5
+  fi
+done
 
 if [ "$DEL_LOGIN_CODE" != "200" ]; then
   fail "Delete tenant: superadmin login → ${DEL_LOGIN_CODE}"
