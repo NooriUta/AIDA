@@ -19,7 +19,7 @@ on:
 
 concurrency:
   group: cd-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false   # never cancel a running prod deploy — queue instead
 
 jobs:
   # ── Notify prod CD start + collect changelog ─────────────────────────────────
