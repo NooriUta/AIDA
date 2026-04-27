@@ -171,20 +171,30 @@ services:
   # ── FRIGG (ArcadeDB state store) ───────────────────────────────────────────
   frigg:
     environment:
-      # Override prod JAVA_OPTS: 60% heap of 2G limit = ~1.2G heap + ~400M JVM overhead = ~1.6G total < 2G
-      JAVA_OPTS: "-XX:MaxRAMPercentage=60.0 -XX:InitialRAMPercentage=20.0"
+      # ArcadeDB 26.3.2 image bakes in ARCADEDB_OPTS_MEMORY=-Xms2G -Xmx2G.
+      # That variable is appended AFTER JAVA_OPTS in the start script, so it
+      # silently overrides MaxRAMPercentage. We override it here with values
+      # safe for the 3G container limit (~1.8G heap + ~600M JVM overhead = ~2.4G < 3G).
+      ARCADEDB_OPTS_MEMORY: "-Xms512m -Xmx1843m"
+      JAVA_OPTS: "-XX:InitialRAMPercentage=20.0"
     <<: *env_file
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 2G
+          memory: 3G
         reservations:
-          memory: 1G
+          memory: 1536M
     logging: *default_logging
 
   # ── Ygg (ArcadeDB lineage graph) ───────────────────────────────────
   ygg:
+    environment:
+      # Same image bakes in ARCADEDB_OPTS_MEMORY=-Xms2G -Xmx2G.
+      # Override to explicit safe values for 4G container limit
+      # (~2.8G heap + ~600M overhead = ~3.4G < 4G).
+      ARCADEDB_OPTS_MEMORY: "-Xms1G -Xmx2867m"
+      JAVA_OPTS: "-XX:InitialRAMPercentage=25.0"
     <<: *env_file
     deploy:
       resources:
