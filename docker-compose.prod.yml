@@ -132,7 +132,7 @@ services:
       # ArcadeDB image (eclipse-temurin) has bash as /bin/sh — /dev/tcp works.
       # 180s start_period + retries:30 = 480s total; covers fresh-volume init
       # when KC 26.6 JVM startup competes for CPU on the same VM.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 204"]
       interval: 10s
       timeout: 8s
       retries: 30
@@ -156,7 +156,7 @@ services:
       # ArcadeDB image (eclipse-temurin) has bash as /bin/sh — /dev/tcp works.
       # 180s start_period + retries:30 = 480s total; covers fresh-volume init
       # when KC 26.6 JVM startup competes for CPU on the same VM.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '204'"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 204"]
       interval: 10s
       timeout: 8s
       retries: 30
