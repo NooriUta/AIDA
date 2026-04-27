@@ -176,7 +176,12 @@ services:
       # silently overrides MaxRAMPercentage. We override it here with values
       # safe for the 3G container limit (~1.8G heap + ~600M JVM overhead = ~2.4G < 3G).
       ARCADEDB_OPTS_MEMORY: "-Xms512m -Xmx1843m"
-      JAVA_OPTS: "-XX:InitialRAMPercentage=20.0"
+      # ARCADEDB_SERVER_ROOTPASSWORD env var is present (from prod compose) but ArcadeDB
+      # 26.x reads the password from JVM system property -Darcadedb.server.rootPassword,
+      # not from the env var directly. Without this property the server falls through to
+      # interactive mode (System.console() returns null in Docker → random-password loop).
+      # NOTE: FRIGG_PASSWORD must not contain spaces, $, or other shell metacharacters.
+      JAVA_OPTS: "-XX:InitialRAMPercentage=20.0 -Darcadedb.server.rootPassword=${FRIGG_PASSWORD:-playwithdata}"
     <<: *env_file
     deploy:
       resources:
@@ -194,7 +199,9 @@ services:
       # Override to explicit safe values for 4G container limit
       # (~2.8G heap + ~600M overhead = ~3.4G < 4G).
       ARCADEDB_OPTS_MEMORY: "-Xms1G -Xmx2867m"
-      JAVA_OPTS: "-XX:InitialRAMPercentage=25.0"
+      # Same root-password JVM property fix as FRIGG above.
+      # NOTE: ARCADEDB_ADMIN_PASSWORD must not contain spaces, $, or shell metacharacters.
+      JAVA_OPTS: "-XX:InitialRAMPercentage=25.0 -Darcadedb.server.rootPassword=${ARCADEDB_ADMIN_PASSWORD:-playwithdata}"
     <<: *env_file
     deploy:
       resources:
