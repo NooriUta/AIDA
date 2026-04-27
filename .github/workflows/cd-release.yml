@@ -83,11 +83,14 @@ jobs:
     name: "INIT + UPGRADE → release gate"
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: write   # needed for git tag + push in "Create and push release tag"
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # ── Determine version + N-1 ───────────────────────────────────────────
       - name: Determine version and previous release tag (N-1)
