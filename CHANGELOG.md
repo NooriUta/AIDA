@@ -1,3 +1,11 @@
+## [v1.3.9] — 2026-04-27
+
+### Bug Fixes
+
+- **compose**: pass ArcadeDB root password via env var, not JAVA_OPTS ([`4054485`](https://github.com/NooriUta/AIDA/commit/40544854a40b17f995c10eb175247d5a54d0d830))
+
+- **cd**: set -a before source .env.prod so secrets export to docker compose ([`e0c457d`](https://github.com/NooriUta/AIDA/commit/e0c457d2ef83fbcb138b4c1d1e73b6ee44c4a993))
+
 ## [v1.3.7] — 2026-04-24
 
 ### Bug Fixes
