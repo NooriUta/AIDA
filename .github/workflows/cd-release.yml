@@ -144,7 +144,7 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/seer-studio
-            source .env.prod 2>/dev/null || true
+            set -a; source .env.prod 2>/dev/null || true; set +a
 
             wait_for() {
               local url="$1" name="$2"
@@ -211,7 +211,7 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/seer-studio
-            source .env.prod 2>/dev/null || true
+            set -a; source .env.prod 2>/dev/null || true; set +a
             PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
 
             wait_for() {

@@ -219,8 +219,11 @@ jobs:
               infra/scripts/lockbox-sync.sh || echo "Lockbox sync skipped (not configured)"
             fi
 
-            # Source secrets early — passwords needed for ArcadeDB health checks below
-            source .env.prod 2>/dev/null || true
+            # Source secrets and auto-export all vars so docker compose child process
+            # inherits FRIGG_PASSWORD, ARCADEDB_ADMIN_PASSWORD, etc.
+            # Without set -a, sourced vars are shell-local and docker compose falls
+            # back to :-playwithdata defaults → ArcadeDB gets wrong password.
+            set -a; source .env.prod 2>/dev/null || true; set +a
 
             # Remove yc credential helper for cr.yandex (conflicts with docker login)
             if [ -f ~/.docker/config.json ]; then
