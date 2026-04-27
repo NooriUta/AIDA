@@ -365,7 +365,7 @@ jobs:
             #   • Uses a function to correctly propagate non-zero exit on timeout
             #     (bare for-loop exits 0 if last cmd is `sleep`; function avoids this)
             wait_infra() {
-              local url="$1" name="$2" auth="${3:-}"
+              local url="$1" name="$2" auth="${3:-}" retries="${4:-60}"
               local auth_flag=""
               [ -n "$auth" ] && auth_flag="-u $auth"
               # Quick pre-check: if already ready (e.g. services Up 7+ days), return immediately
@@ -373,13 +373,19 @@ jobs:
                 echo "  [${name}] already ready"; return 0
               fi
               local i
-              for i in $(seq 1 30); do
+              for i in $(seq 1 "$retries"); do
                 if curl -sf $auth_flag "${url}" > /dev/null 2>&1; then
-                  echo "  [${name}] ready"; return 0
+                  echo "  [${name}] ready in $((i * 10))s"; return 0
                 fi
-                echo "  [${name}] retry ${i}/30..."; sleep 10
+                echo "  [${name}] retry ${i}/${retries}..."; sleep 10
               done
-              echo "=== ${name} not ready after 300s — aborting ==="; return 1
+              echo "=== ${name} not ready after $((retries * 10))s — diagnostics ==="
+              docker ps -a --format "  {{.Names}}  {{.Status}}  {{.Image}}" 2>/dev/null || true
+              docker stats --no-stream --format "  {{.Name}}  mem={{.MemUsage}}  cpu={{.CPUPerc}}" 2>/dev/null || true
+              local svcname="${name,,}"; svcname="${svcname//(/}"; svcname="${svcname//)/}"
+              docker logs "seer-studio-${svcname}-1" --no-log-prefix --tail 40 2>&1 || \
+              docker logs "${svcname}-1"             --no-log-prefix --tail 40 2>&1 || true
+              return 1
             }
             echo "=== Waiting for infrastructure ==="
             # ArcadeDB /api/v1/ready is unauthenticated (returns 204 without creds).

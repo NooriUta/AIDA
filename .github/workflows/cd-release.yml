@@ -399,8 +399,8 @@ jobs:
             --repo ${{ github.repository }} \
             --ref release \
             -f tag=${{ steps.meta.outputs.version }} \
-            -f deploy_mode=init
-          echo "✅ Prod CD dispatched for ${{ steps.meta.outputs.version }} — tag created on prod success"
+            -f deploy_mode=merge
+          echo "✅ Prod CD dispatched for ${{ steps.meta.outputs.version }} (deploy_mode=merge) — tag created on prod success"
 
       # ── Notifications ──────────────────────────────────────────────────────
       - name: Notify success
