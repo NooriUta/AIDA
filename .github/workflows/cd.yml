@@ -321,11 +321,40 @@ jobs:
               docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
             done
 
-            # ── Init deploy: wipe volumes for a clean start ───────────────────
-            # Triggered only by workflow_dispatch with deploy_mode=init.
-            # Destroys all FRIGG and YGG data — ArcadeDB will reinitialise
-            # root password from ARCADEDB_SERVER_ROOTPASSWORD env var on next start.
             DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'merge' }}"
+
+            # ── MERGE deploy: backup DBs → graceful stop → compose up ─────────
+            # Standard upgrade path: preserves data.
+            # Backup via ArcadeDB API (non-fatal: skip if DBs not running yet).
+            # Graceful stop of DB containers ensures clean shutdown before new
+            # version starts (avoids journal corruption on ArcadeDB upgrade).
+            if [ "$DEPLOY_MODE" = "merge" ]; then
+              echo "=== MERGE DEPLOY: backup + graceful DB stop ==="
+
+              FRIGG_READY=$(curl -sf -o /dev/null -w "%{http_code}" \
+                http://localhost:2481/api/v1/ready 2>/dev/null || echo "000")
+              YGG_READY=$(curl -sf -o /dev/null -w "%{http_code}" \
+                http://localhost:2480/api/v1/ready 2>/dev/null || echo "000")
+
+              if [ "${FRIGG_READY}" = "204" ] || [ "${YGG_READY}" = "204" ]; then
+                echo "=== Databases up — running pre-upgrade backup ==="
+                bash infra/scripts/backup-arcadedb.sh \
+                  || echo "[backup] WARNING: backup failed or incomplete (deploy continues)"
+              else
+                echo "=== Databases not running — skipping backup (first deploy) ==="
+              fi
+
+              echo "=== Stopping DB containers for upgrade ==="
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                stop frigg ygg 2>/dev/null || true
+              sleep 5  # Wait for graceful ArcadeDB shutdown (flushes WAL)
+            fi
+
+            # ── INIT deploy: wipe all volumes for a clean start ───────────────
+            # Triggered manually with deploy_mode=init.
+            # Destroys ALL FRIGG and YGG data — use only for first deploy or
+            # disaster recovery. Data is intentionally not backed up here since
+            # init = "start from scratch".
             if [ "$DEPLOY_MODE" = "init" ]; then
               echo "=== INIT DEPLOY: stopping stack and wiping DB volumes ==="
               docker compose \
