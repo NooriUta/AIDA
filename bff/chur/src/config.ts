@@ -36,7 +36,7 @@ export const config = {
   // ── FRIGG (port 2481) — session store + tenants registry + per-user data ──
   friggUrl:         (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, ''),
   friggUser:        process.env.FRIGG_USER  ?? 'root',
-  friggPass:        process.env.FRIGG_PASS  ?? '',
+  friggPass:        process.env.FRIGG_PASSWORD ?? '',
   friggSessionDb:   process.env.FRIGG_SESSION_DB ?? 'frigg-sessions',
   friggUsersDb:     process.env.FRIGG_USERS_DB   ?? 'frigg-users',
   friggTenantsDb:   process.env.FRIGG_TENANTS_DB ?? 'frigg-tenants',

@@ -25,7 +25,7 @@ public class TenantDatabaseAdmin {
 
     @ConfigProperty(name = "frigg.url",  defaultValue = "http://localhost:2481") String friggUrl;
     @ConfigProperty(name = "frigg.user", defaultValue = "root")                   String friggUser;
-    @ConfigProperty(name = "frigg.pass", defaultValue = "playwithdata")           String friggPass;
+    @ConfigProperty(name = "frigg.password", defaultValue = "playwithdata")       String friggPass;
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
