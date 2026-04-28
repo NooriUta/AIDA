@@ -158,7 +158,7 @@ export default function EventStreamPage() {
           />
         </label>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-2)', fontSize: '13px', color: 'var(--t2)' }}>
+        <label data-testid="filter-tenant" style={{ display: 'flex', alignItems: 'center', gap: 'var(--seer-space-2)', fontSize: '13px', color: 'var(--t2)' }}>
           {t('eventStream.tenant', 'Tenant')}
           <select style={selectStyle} value={tenant} onChange={e => setTenant(e.target.value)}>
             <option value="">{t('eventStream.all')}</option>

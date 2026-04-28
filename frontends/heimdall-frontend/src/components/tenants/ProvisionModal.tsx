@@ -30,7 +30,12 @@ export function ProvisionModal({ onDone, onClose }: Props) {
   const [validationErr, setValidationErr] = useState<string | null>(null);
 
   const submit = async () => {
-    const a = alias.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const trimmed = alias.trim().toLowerCase();
+    const a = trimmed.replace(/[^a-z0-9-]/g, '');
+    if (a !== trimmed) {
+      setValidationErr('Только строчные буквы, цифры и дефис (a-z, 0-9, -)');
+      return;
+    }
     if (a.length < 4) {
       setValidationErr('Alias должен быть не менее 4 символов');
       return;
@@ -124,7 +129,8 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               onKeyDown={e => e.key === 'Enter' && void submit()}
             />
             {validationErr && (
-              <p data-testid="validation-error" style={{ color: 'var(--danger)', fontSize: 11, marginTop: 6 }}>
+              <p data-testid="validation-error" role="alert"
+                style={{ color: 'var(--danger)', fontSize: 11, marginTop: 6 }}>
                 {validationErr}
               </p>
             )}
