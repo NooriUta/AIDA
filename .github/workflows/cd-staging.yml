@@ -238,8 +238,20 @@ jobs:
               docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
             done
 
-            # ── Init deploy: wipe volumes ─────────────────────────────────────
             DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'merge' }}"
+
+            # ── MERGE deploy: graceful DB stop before new images ──────────────
+            # Graceful stop of DB containers ensures clean shutdown before new
+            # version starts (avoids journal corruption on ArcadeDB upgrade).
+            # No backup on staging — no real persistent data to preserve.
+            if [ "$DEPLOY_MODE" = "merge" ]; then
+              echo "=== MERGE DEPLOY: graceful DB stop ==="
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                stop frigg ygg 2>/dev/null || true
+              sleep 5  # Wait for graceful ArcadeDB shutdown (flushes WAL)
+            fi
+
+            # ── INIT deploy: wipe volumes ─────────────────────────────────────
             if [ "$DEPLOY_MODE" = "init" ]; then
               echo "=== INIT DEPLOY: wiping DB volumes ==="
               docker compose \
@@ -287,26 +299,36 @@ jobs:
               }
 
             # ── Wait for infrastructure ───────────────────────────────────────
+            # Matches prod wait_infra: pre-check, configurable retries, diagnostics.
             wait_infra() {
-              local url="$1" name="$2"
+              local url="$1" name="$2" retries="${3:-60}"
+              # Quick pre-check: if already ready (e.g. services Up across deploys), return immediately
               if curl -sf "${url}" > /dev/null 2>&1; then
                 echo "  [${name}] already ready"; return 0
               fi
-              for i in $(seq 1 30); do
+              local i
+              for i in $(seq 1 "$retries"); do
                 if curl -sf "${url}" > /dev/null 2>&1; then
-                  echo "  [${name}] ready"; return 0
+                  echo "  [${name}] ready in $((i * 10))s"; return 0
                 fi
-                echo "  [${name}] retry ${i}/30..."; sleep 10
+                echo "  [${name}] retry ${i}/${retries}..."; sleep 10
               done
-              echo "=== ${name} not ready after 300s — aborting ==="; return 1
+              echo "=== ${name} not ready after $((retries * 10))s — diagnostics ==="
+              docker ps -a --format "  {{.Names}}  {{.Status}}  {{.Image}}" 2>/dev/null || true
+              docker stats --no-stream --format "  {{.Name}}  mem={{.MemUsage}}  cpu={{.CPUPerc}}" 2>/dev/null || true
+              local svcname="${name,,}"; svcname="${svcname//(seer)/}"; svcname="${svcname//(/}"; svcname="${svcname//)/}"
+              svcname="${svcname// /}"
+              docker logs "seer-studio-${svcname}-1" --tail 40 2>&1 || \
+              docker logs "${svcname}-1"             --tail 40 2>&1 || true
+              return 1
             }
 
             echo "=== Waiting for infrastructure ==="
-            wait_infra "http://localhost:2481/api/v1/ready"   "FRIGG"    || exit 1
-            wait_infra "http://localhost:2480/api/v1/ready"   "YGG"      || exit 1
+            wait_infra "http://localhost:2481/api/v1/ready"    "FRIGG"    60 || exit 1
+            wait_infra "http://localhost:2480/api/v1/ready"    "YGG"      60 || exit 1
             # Wait for the seer realm specifically — master realm can be ready
             # before --import-realm finishes seeding seer-realm.json (race condition).
-            wait_infra "http://localhost:18180/kc/realms/seer" "KC(seer)" || exit 1
+            wait_infra "http://localhost:18180/kc/realms/seer" "KC(seer)" 60 || exit 1
 
             # ── DB bootstrap ──────────────────────────────────────────────────
             echo "=== Running init-arcadedb.sh ==="

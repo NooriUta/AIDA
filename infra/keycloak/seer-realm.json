@@ -46,14 +46,20 @@
                 "https://seidrstudio.pro/*",
                 "https://www.seidrstudio.pro/*",
                 "https://seer.seidrstudio.pro/*",
-                "https://heimdall.seidrstudio.pro/*"
+                "https://heimdall.seidrstudio.pro/*",
+                "https://test.seidrstudio.pro/*",
+                "https://seer.test.seidrstudio.pro/*",
+                "https://heimdall.test.seidrstudio.pro/*"
             ],
             "webOrigins": [
                 "http://localhost:3000",
                 "https://seidrstudio.pro",
                 "https://www.seidrstudio.pro",
                 "https://seer.seidrstudio.pro",
-                "https://heimdall.seidrstudio.pro"
+                "https://heimdall.seidrstudio.pro",
+                "https://test.seidrstudio.pro",
+                "https://seer.test.seidrstudio.pro",
+                "https://heimdall.test.seidrstudio.pro"
             ],
             "protocol": "openid-connect",
             "defaultClientScopes": [
@@ -141,14 +147,20 @@
                 "https://seidrstudio.pro/*",
                 "https://www.seidrstudio.pro/*",
                 "https://seer.seidrstudio.pro/*",
-                "https://heimdall.seidrstudio.pro/*"
+                "https://heimdall.seidrstudio.pro/*",
+                "https://test.seidrstudio.pro/*",
+                "https://seer.test.seidrstudio.pro/*",
+                "https://heimdall.test.seidrstudio.pro/*"
             ],
             "webOrigins": [
                 "http://localhost:3000",
                 "https://seidrstudio.pro",
                 "https://www.seidrstudio.pro",
                 "https://seer.seidrstudio.pro",
-                "https://heimdall.seidrstudio.pro"
+                "https://heimdall.seidrstudio.pro",
+                "https://test.seidrstudio.pro",
+                "https://seer.test.seidrstudio.pro",
+                "https://heimdall.test.seidrstudio.pro"
             ],
             "protocol": "openid-connect",
             "defaultClientScopes": [
