@@ -313,10 +313,10 @@ jobs:
             INIT_ARCADEDB_TIMEOUT=300 \
             FRIGG_URL=http://localhost:2481 \
             FRIGG_USER=root \
-            FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+            FRIGG_PASS="${FRIGG_PASSWORD}" \
             YGG_URL=http://localhost:2480 \
             YGG_USER=root \
-            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD}" \
             KC_URL=http://localhost:18180/kc \
             KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
             KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \

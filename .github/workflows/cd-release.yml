@@ -195,9 +195,9 @@ jobs:
 
             echo "▶ INIT: init-arcadedb.sh"
             FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
-            FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+            FRIGG_PASS="${FRIGG_PASSWORD}" \
             YGG_URL=http://localhost:2480  YGG_USER=root \
-            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD}" \
             KC_URL=http://localhost:18180/kc \
             KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
             KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
@@ -263,9 +263,9 @@ jobs:
 
             echo "▶ UPGRADE: init-arcadedb.sh on N-1"
             FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
-            FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+            FRIGG_PASS="${FRIGG_PASSWORD}" \
             YGG_URL=http://localhost:2480  YGG_USER=root \
-            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+            YGG_PASS="${ARCADEDB_ADMIN_PASSWORD}" \
             KC_URL=http://localhost:18180/kc \
             KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
             KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
@@ -324,9 +324,9 @@ jobs:
               # Re-run init-arcadedb.sh — must be idempotent (IF NOT EXISTS)
               echo "▶ arcadedb_only: re-running init-arcadedb.sh on upgraded ArcadeDB"
               FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
-              FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}" \
+              FRIGG_PASS="${FRIGG_PASSWORD}" \
               YGG_URL=http://localhost:2480  YGG_USER=root \
-              YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}" \
+              YGG_PASS="${ARCADEDB_ADMIN_PASSWORD}" \
               KC_URL=http://localhost:18180/kc \
               KC_ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}" \
               KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
