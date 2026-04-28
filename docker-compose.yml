@@ -51,7 +51,7 @@ services:
     environment:
       NODE_ENV:              ${NODE_ENV:-development}
       PORT:                  "3000"
-      CORS_ORIGIN:           "https://localhost,http://localhost:5174,http://localhost:5173,http://localhost:5175"
+      CORS_ORIGIN:           "https://localhost,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:13000"
       # Keycloak — lives in stable layer, reached via aida_net
       KEYCLOAK_URL:          http://keycloak:8180/kc
       # Browser-facing KC URL for Auth Code redirects (chur is internal; KC must be reachable from browser)
