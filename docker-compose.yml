@@ -78,7 +78,7 @@ services:
       FRIGG_URL:             http://frigg:2480
       FRIGG_SESSION_DB:      frigg-sessions
       FRIGG_USER:            root
-      FRIGG_PASS:            ${FRIGG_ROOT_PASSWORD:-playwithdata}
+      FRIGG_PASSWORD:        ${FRIGG_ROOT_PASSWORD:-playwithdata}
       # SHUTTLE — backend layer
       LINEAGE_API_URL:       http://shuttle:8080
       # HEIMDALL — backend layer
