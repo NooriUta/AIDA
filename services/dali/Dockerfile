@@ -32,8 +32,9 @@ COPY libraries/tenant-routing/src               libraries/tenant-routing/src
 RUN gradle :services:dali:build -x test --no-daemon \
     -Dquarkus.package.jar.type=uber-jar
 
-FROM eclipse-temurin:21-jre AS runner
+FROM eclipse-temurin:21.0.9_10-jre AS runner
 # Debian-based image has glibc natively — sevenzipjbinding works without gcompat
+# Pinned to 21.0.9_10 for reproducible builds. Do NOT switch to -alpine: glibc required.
 WORKDIR /app
 COPY --from=builder /app/services/dali/build/*-runner.jar app.jar
 EXPOSE 9090

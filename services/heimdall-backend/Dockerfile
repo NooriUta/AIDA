@@ -30,7 +30,7 @@ COPY services/heimdall-backend/src                    services/heimdall-backend/
 RUN gradle :services:heimdall-backend:build -x test --no-daemon \
     -Dquarkus.package.jar.type=uber-jar
 
-FROM eclipse-temurin:21-jre-alpine AS runner
+FROM eclipse-temurin:21.0.9_10-jre-alpine AS runner
 RUN apk add --no-cache docker-cli
 WORKDIR /app
 COPY --from=builder /app/services/heimdall-backend/build/*-runner.jar app.jar
