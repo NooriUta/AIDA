@@ -432,9 +432,11 @@ jobs:
             echo "=== Waiting for infrastructure ==="
             # ArcadeDB /api/v1/ready is unauthenticated (returns 204 without creds).
             # Sending wrong credentials causes 403 even when server is healthy — no auth here.
-            wait_infra "http://localhost:2481/api/v1/ready"     "FRIGG" "" || exit 1
-            wait_infra "http://localhost:2480/api/v1/ready"     "YGG"  "" || exit 1
-            wait_infra "http://localhost:18180/kc/realms/master" "KC"   "" || exit 1
+            wait_infra "http://localhost:2481/api/v1/ready"      "FRIGG"    "" || exit 1
+            wait_infra "http://localhost:2480/api/v1/ready"      "YGG"     "" || exit 1
+            # Wait for seer realm (not master) — seer realm may finish importing
+            # after master is ready (--import-realm runs asynchronously in KC startup)
+            wait_infra "http://localhost:18180/kc/realms/seer"   "KC(seer)" "" || exit 1
 
             # ── DB bootstrap / idempotent schema init ──────────────────────────
             # FRIGG + YGG + KC are ready. Creates frigg-tenants, dali_default,

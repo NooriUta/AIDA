@@ -160,15 +160,20 @@ jobs:
 
             wait_for() {
               local url="$1" name="$2" retries="${3:-60}"
+              # Quick pre-check (matches prod wait_infra pattern)
+              curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] already ready" && return 0
+              local i
               for i in $(seq 1 "$retries"); do
-                curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready" && return 0
+                curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready in $((i * 10))s" && return 0
                 echo "  [$name] wait $i/$retries…"; sleep 10
               done
-              echo "  [$name] TIMEOUT after $((retries * 10))s"
-              echo "  [$name] container status:"
-              docker ps -a --filter "name=$name" --format "  id={{.ID}} status={{.Status}} restarts={{.RunningFor}}" 2>/dev/null || true
-              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
-                logs --no-color --tail=30 "${name,,}" 2>/dev/null || true
+              echo "=== $name not ready after $((retries * 10))s — diagnostics ==="
+              docker ps -a --format "  {{.Names}}  {{.Status}}  {{.Image}}" 2>/dev/null || true
+              docker stats --no-stream --format "  {{.Name}}  mem={{.MemUsage}}  cpu={{.CPUPerc}}" 2>/dev/null || true
+              local svcname="${name,,}"; svcname="${svcname//(seer)/}"; svcname="${svcname//(/}"; svcname="${svcname//)/}"
+              svcname="${svcname// /}"
+              docker logs "seer-studio-${svcname}-1" --tail 40 2>&1 || \
+              docker logs "${svcname}-1"             --tail 40 2>&1 || true
               return 1
             }
 
@@ -194,6 +199,7 @@ jobs:
             wait_for "http://localhost:18180/kc/realms/seer"   "KC(seer)"
 
             echo "▶ INIT: init-arcadedb.sh"
+            INIT_ARCADEDB_TIMEOUT=300 \
             FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
             FRIGG_PASS="${FRIGG_PASSWORD}" \
             YGG_URL=http://localhost:2480  YGG_USER=root \
@@ -233,12 +239,22 @@ jobs:
             PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
 
             wait_for() {
-              local url="$1" name="$2"
-              for i in $(seq 1 30); do
-                curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready" && return 0
-                echo "  [$name] wait $i/30…"; sleep 10
+              local url="$1" name="$2" retries="${3:-60}"
+              # Quick pre-check (matches prod wait_infra pattern)
+              curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] already ready" && return 0
+              local i
+              for i in $(seq 1 "$retries"); do
+                curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready in $((i * 10))s" && return 0
+                echo "  [$name] wait $i/$retries…"; sleep 10
               done
-              echo "  [$name] TIMEOUT after 300s"; return 1
+              echo "=== $name not ready after $((retries * 10))s — diagnostics ==="
+              docker ps -a --format "  {{.Names}}  {{.Status}}  {{.Image}}" 2>/dev/null || true
+              docker stats --no-stream --format "  {{.Name}}  mem={{.MemUsage}}  cpu={{.CPUPerc}}" 2>/dev/null || true
+              local svcname="${name,,}"; svcname="${svcname//(seer)/}"; svcname="${svcname//(/}"; svcname="${svcname//)/}"
+              svcname="${svcname// /}"
+              docker logs "seer-studio-${svcname}-1" --tail 40 2>&1 || \
+              docker logs "${svcname}-1"             --tail 40 2>&1 || true
+              return 1
             }
 
             # ── 1. Clean baseline ──────────────────────────────────────────────
@@ -262,6 +278,7 @@ jobs:
             wait_for "http://localhost:18180/kc/realms/seer" "KC(seer)"
 
             echo "▶ UPGRADE: init-arcadedb.sh on N-1"
+            INIT_ARCADEDB_TIMEOUT=300 \
             FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
             FRIGG_PASS="${FRIGG_PASSWORD}" \
             YGG_URL=http://localhost:2480  YGG_USER=root \
@@ -323,6 +340,7 @@ jobs:
               wait_for "http://localhost:2480/api/v1/ready" "YGG"
               # Re-run init-arcadedb.sh — must be idempotent (IF NOT EXISTS)
               echo "▶ arcadedb_only: re-running init-arcadedb.sh on upgraded ArcadeDB"
+              INIT_ARCADEDB_TIMEOUT=300 \
               FRIGG_URL=http://localhost:2481 FRIGG_USER=root \
               FRIGG_PASS="${FRIGG_PASSWORD}" \
               YGG_URL=http://localhost:2480  YGG_USER=root \
