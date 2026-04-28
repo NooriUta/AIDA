@@ -96,6 +96,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label={t('tenants.provision.title', 'Создать тенант')}
+      data-testid="modal-create-tenant"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
                display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}
     >
@@ -113,7 +114,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               {t('tenants.provision.aliasLabel', 'Alias (a-z, 0-9, дефис)')}
             </label>
             <input
-              data-testid="alias-input"
+              data-testid="input-tenant-alias"
               className="field-input"
               style={{ width: '100%' }}
               value={alias}
