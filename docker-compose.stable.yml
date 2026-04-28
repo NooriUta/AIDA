@@ -54,7 +54,7 @@ services:
   # ── FRIGG (ArcadeDB — session/tenant/user store) ────────────────────────────
   # Host port 2481 → container 2480  (Ygg gets 2480 on host)
   frigg:
-    image: arcadedata/arcadedb:26.3.2
+    image: arcadedata/arcadedb:26.4.1
     environment:
       JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_ROOT_PASSWORD:-playwithdata}"
     ports:
@@ -71,9 +71,11 @@ services:
   # ── Ygg (ArcadeDB — lineage graph, база hound) ──────────────────────────────
   ygg:
     container_name: Ygg-1
-    image: arcadedata/arcadedb:26.3.2
+    image: arcadedata/arcadedb:26.4.1
     environment:
       JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:-playwithdata}"
+      # NOTE: In 26.3.2 ARCADEDB_OPTS_MEMORY overwrites JAVA_OPTS entirely.
+      # Verify this behaviour is unchanged in 26.4.1 before first start.
       ARCADEDB_OPTS_MEMORY: "-Xms2G -Xmx2G"
     ports:
       - "127.0.0.1:2480:2480"
