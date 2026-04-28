@@ -9,6 +9,7 @@
     "accessTokenLifespan": 14400,
     "ssoSessionIdleTimeout": 36000,
     "ssoSessionMaxLifespan": 36000,
+    "loginTheme": "seer",
     "roles": {
         "realm": [
             {
