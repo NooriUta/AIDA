@@ -1,3 +1,20 @@
+## [v1.3.12] — 2026-04-28
+
+### Bug Fixes
+
+- **cd**: handle existing tag on prod-verified annotate step ([`95de175`](https://github.com/NooriUta/AIDA/commit/95de175f563e35aa92553ad1df18d065079048c7))
+
+- **auth**: replace FRIGG_PASS with FRIGG_PASSWORD in all Chur FRIGG clients ([`d327097`](https://github.com/NooriUta/AIDA/commit/d32709765ccd41f6778ac82f7c13210259a8614c))
+
+- **auth**: align FRIGG_PASS → FRIGG_PASSWORD in chur and heimdall-backend ([`8e19f35`](https://github.com/NooriUta/AIDA/commit/8e19f35d643d784e78014b1eaa0494bb9487379f))
+
+- **kc**: mount custom themes + set realm loginTheme=seer ([`8614787`](https://github.com/NooriUta/AIDA/commit/86147875f85c4882cd7b8083c31e472fcd468dbd))
+
+
+### Miscellaneous
+
+- **cd**: align deploy algorithms across prod/staging/prerelease + fix KC staging redirect ([`5f2fd54`](https://github.com/NooriUta/AIDA/commit/5f2fd546657dda83f885219f6f465c669e3c7a6b))
+
 ## [v1.3.9] — 2026-04-27
 
 ### Bug Fixes
