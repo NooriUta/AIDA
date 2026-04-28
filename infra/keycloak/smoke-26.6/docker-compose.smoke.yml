@@ -14,7 +14,7 @@
 
 services:
   kc26smoke:
-    image: quay.io/keycloak/keycloak:26.6.2
+    image: quay.io/keycloak/keycloak:26.6.1
     container_name: kc26smoke
     command: start-dev --features=organization
     environment:
