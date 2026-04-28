@@ -74,6 +74,10 @@ services:
       ARCADEDB_DB:           ${ARCADEDB_DB:-hound}
       ARCADEDB_USER:         ${ARCADEDB_USER:-root}
       ARCADEDB_PASS:         ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      # YGG_* — provisioning.ts reads these (not ARCADEDB_*)
+      YGG_URL:               http://ygg:2480
+      YGG_USER:              ${ARCADEDB_USER:-root}
+      YGG_PASS:              ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
       # FRIGG — stable layer
       FRIGG_URL:             http://frigg:2480
       FRIGG_SESSION_DB:      frigg-sessions
