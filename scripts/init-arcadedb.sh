@@ -13,11 +13,11 @@ set -euo pipefail
 
 FRIGG_URL="${FRIGG_URL:-http://localhost:2481}"
 FRIGG_USER="${FRIGG_USER:-root}"
-FRIGG_PASS="${FRIGG_PASS:-playwithdata}"
+FRIGG_PASS="${FRIGG_PASS}"
 
 YGG_URL="${YGG_URL:-http://localhost:2480}"
 YGG_USER="${YGG_USER:-root}"
-YGG_PASS="${YGG_PASS:-playwithdata}"
+YGG_PASS="${YGG_PASS}"
 
 
 TIMEOUT="${INIT_ARCADEDB_TIMEOUT:-30}"

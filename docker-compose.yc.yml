@@ -59,9 +59,12 @@ services:
       # CD-16: FriggYggLineageRegistry default frigg.url=localhost:2481 — override for Docker
       FRIGG_URL: "http://frigg:2480"
       FRIGG_USER: "root"
-      # CD-17: FriggYggLineageRegistry default ygg.url=localhost:2480 — override for Docker
+      # FRIGG_PASSWORD comes from env_file (.env.prod) → frigg.password config property ✓
+      # CD-17: FriggYggLineageRegistry ygg.password → env var YGG_PASSWORD (not YGG_PASS)
       # yggInstanceUrl in DaliTenantConfig is null → falls back to ygg.url config property
       YGG_URL: "http://ygg:2480"
+      YGG_USER: "root"
+      YGG_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD}
     <<: *env_file
     deploy:
       resources:
@@ -89,7 +92,7 @@ services:
       # DB creation. Default in code is localhost:2480 (dev only) — must override for Docker.
       YGG_URL:  "http://ygg:2480"
       YGG_USER: "root"
-      YGG_PASS: ${ARCADEDB_ADMIN_PASSWORD:-playwithdata}
+      YGG_PASS: ${ARCADEDB_ADMIN_PASSWORD}
     <<: *env_file
     deploy:
       resources:
@@ -183,7 +186,7 @@ services:
       # Double-quoting the option value handles passwords with spaces.
       # ArcadeDB 26.x ignores ARCADEDB_SERVER_ROOTPASSWORD env var and requires
       # the JVM system property to bypass the interactive password setup loop.
-      JDK_JAVA_OPTIONS: '"-Darcadedb.server.rootPassword=${FRIGG_PASSWORD:-playwithdata}"'
+      JDK_JAVA_OPTIONS: '"-Darcadedb.server.rootPassword=${FRIGG_PASSWORD}"'
     <<: *env_file
     deploy:
       resources:
@@ -203,7 +206,7 @@ services:
       ARCADEDB_OPTS_MEMORY: "-Xms1G -Xmx2867m"
       JAVA_OPTS: "-XX:InitialRAMPercentage=25.0"
       # Same rationale as FRIGG — JDK_JAVA_OPTIONS bypasses shell expansion.
-      JDK_JAVA_OPTIONS: '"-Darcadedb.server.rootPassword=${ARCADEDB_ADMIN_PASSWORD:-playwithdata}"'
+      JDK_JAVA_OPTIONS: '"-Darcadedb.server.rootPassword=${ARCADEDB_ADMIN_PASSWORD}"'
     <<: *env_file
     deploy:
       resources:

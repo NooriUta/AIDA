@@ -31,12 +31,12 @@ export const config = {
   arcadeUrl:     process.env.ARCADEDB_URL  ?? 'http://127.0.0.1:2480',
   arcadeDb:      process.env.ARCADEDB_DB   ?? 'hound',
   arcadeUser:    process.env.ARCADEDB_USER ?? 'root',
-  arcadePass:    process.env.ARCADEDB_PASS ?? 'playwithdata',
+  arcadePass:    process.env.ARCADEDB_PASS ?? '',
 
   // ── FRIGG (port 2481) — session store + tenants registry + per-user data ──
   friggUrl:         (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, ''),
   friggUser:        process.env.FRIGG_USER  ?? 'root',
-  friggPass:        process.env.FRIGG_PASS  ?? 'playwithdata',
+  friggPass:        process.env.FRIGG_PASS  ?? '',
   friggSessionDb:   process.env.FRIGG_SESSION_DB ?? 'frigg-sessions',
   friggUsersDb:     process.env.FRIGG_USERS_DB   ?? 'frigg-users',
   friggTenantsDb:   process.env.FRIGG_TENANTS_DB ?? 'frigg-tenants',
