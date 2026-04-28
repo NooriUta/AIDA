@@ -294,7 +294,7 @@ function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHea
   const canvasHeight = layout ? Math.max(360, Math.min(640, layout.height + 60)) : 420;
 
   return (
-    <div style={{
+    <div data-testid="service-topology" style={{
       background:   'var(--bg1)',
       border:       '1px solid var(--bd)',
       borderRadius: 'var(--seer-radius-md)',
@@ -339,6 +339,7 @@ function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHea
             </>
           )}
           <button
+            data-testid={collapsed ? 'topology-expand' : 'topology-collapse'}
             onClick={() => setCollapsed(c => !c)}
             style={{
               background: 'none', border: '1px solid var(--bd)', borderRadius: 3,
@@ -351,7 +352,7 @@ function ServiceTopologyInner({ serviceStatuses }: { serviceStatuses: ServiceHea
           </button>
         </span>
       </div>
-      {!collapsed && <div style={{ height: canvasHeight }}>
+      {!collapsed && <div data-testid="topology-graph" style={{ height: canvasHeight }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
