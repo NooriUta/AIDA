@@ -59,12 +59,12 @@ services:
       # CD-16: FriggYggLineageRegistry default frigg.url=localhost:2481 — override for Docker
       FRIGG_URL: "http://frigg:2480"
       FRIGG_USER: "root"
-      FRIGG_PASS: ${FRIGG_PASSWORD}
-      # CD-17: FriggYggLineageRegistry default ygg.url=localhost:2480 — override for Docker
+      # FRIGG_PASSWORD comes from env_file (.env.prod) → frigg.password config property ✓
+      # CD-17: FriggYggLineageRegistry ygg.password → env var YGG_PASSWORD (not YGG_PASS)
       # yggInstanceUrl in DaliTenantConfig is null → falls back to ygg.url config property
       YGG_URL: "http://ygg:2480"
       YGG_USER: "root"
-      YGG_PASS: ${ARCADEDB_ADMIN_PASSWORD}
+      YGG_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD}
     <<: *env_file
     deploy:
       resources:
