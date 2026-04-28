@@ -29,6 +29,11 @@ export function ProvisionModal({ onDone, onClose }: Props) {
   const [result, setResult]           = useState<{ keycloakOrgId?: string } | null>(null);
   const [validationErr, setValidationErr] = useState<string | null>(null);
 
+  /** Real-time: alias с недопустимыми символами → ошибка до submit */
+  const ALIAS_RE = /^[a-z0-9-]*$/;
+  const aliasHasInvalidChars = alias.trim().length > 0 && !ALIAS_RE.test(alias.trim().toLowerCase());
+  const aliasCanSubmit = !aliasHasInvalidChars && alias.trim().length >= 4;
+
   const submit = async () => {
     const trimmed = alias.trim().toLowerCase();
     const a = trimmed.replace(/[^a-z0-9-]/g, '');
@@ -123,7 +128,15 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               className="field-input"
               style={{ width: '100%' }}
               value={alias}
-              onChange={e => { setAlias(e.target.value); setValidationErr(null); }}
+              onChange={e => {
+                setAlias(e.target.value);
+                setValidationErr(null);
+                // real-time: show error immediately for invalid chars (XSS, spaces, etc.)
+                const v = e.target.value.trim().toLowerCase();
+                if (v.length > 0 && !ALIAS_RE.test(v)) {
+                  setValidationErr('Только строчные буквы, цифры и дефис (a-z, 0-9, -)');
+                }
+              }}
               placeholder="my-tenant"
               autoFocus
               onKeyDown={e => e.key === 'Enter' && void submit()}
@@ -141,8 +154,8 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               <button className="btn btn-secondary" onClick={() => { onClose(); }}>
                 {t('action.cancel', 'Отмена')}
               </button>
-              <button data-testid="submit-btn" className="btn btn-secondary"
-                onClick={submit} disabled={!alias.trim()}>
+              <button data-testid="btn-submit-tenant" className="btn btn-secondary"
+                onClick={submit} disabled={!aliasCanSubmit}>
                 {t('tenants.provision.confirm', 'Создать')}
               </button>
             </div>

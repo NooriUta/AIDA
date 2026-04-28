@@ -523,6 +523,8 @@ export const Header = memo(() => {
 
       {/* Theme toggle */}
       <button
+        data-testid="theme-toggle"
+        data-theme={theme}
         onClick={toggleTheme}
         title={t(theme === 'dark' ? 'theme.light' : 'theme.dark')}
         style={{
@@ -542,6 +544,7 @@ export const Header = memo(() => {
       {/* User badge → ProfileModal */}
       {user && (
         <button
+          data-testid="profile-btn"
           onClick={() => setProfileOpen(true)}
           title={`${user.username} · ${user.role}`}
           style={{
