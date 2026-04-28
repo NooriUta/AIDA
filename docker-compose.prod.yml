@@ -19,7 +19,7 @@ networks:
 services:
   # ── Keycloak (IAM) ─────────────────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.6
+    image: quay.io/keycloak/keycloak:26.6.2
     command: start-dev --import-realm
     restart: unless-stopped
     environment:

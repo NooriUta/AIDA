@@ -18,7 +18,7 @@ networks:
 services:
   # ── Keycloak (IAM) ──────────────────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.6
+    image: quay.io/keycloak/keycloak:26.6.2
     command: start-dev --import-realm --features=organization
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin

@@ -1,3 +1,6 @@
+# Local backups (ArcadeDB pre-upgrade snapshots)
+backups/
+
 # Gradle
 .gradle/
 build/
