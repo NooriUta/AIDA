@@ -56,7 +56,7 @@ services:
   frigg:
     image: arcadedata/arcadedb:26.3.2
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_ROOT_PASSWORD}"
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${FRIGG_ROOT_PASSWORD:-playwithdata}"
     ports:
       - "127.0.0.1:2481:2480"
     volumes:
@@ -73,7 +73,7 @@ services:
     container_name: Ygg-1
     image: arcadedata/arcadedb:26.3.2
     environment:
-      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD}"
+      JAVA_OPTS: "-Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:-playwithdata}"
       ARCADEDB_OPTS_MEMORY: "-Xms2G -Xmx2G"
     ports:
       - "127.0.0.1:2480:2480"
@@ -100,7 +100,7 @@ services:
       frigg:
         condition: service_healthy
     environment:
-      FRIGG_PASS: ${FRIGG_ROOT_PASSWORD}
+      FRIGG_PASS: ${FRIGG_ROOT_PASSWORD:-playwithdata}
     command: >
       sh -c "
         create_db() {

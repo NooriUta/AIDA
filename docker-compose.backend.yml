@@ -28,7 +28,7 @@ services:
       QUARKUS_REST_CLIENT_ARCADE_URL: ${ARCADEDB_URL:-http://ygg:2480}
       ARCADE_DB:       ${ARCADEDB_DB:-hound}
       ARCADE_USER:     ${ARCADEDB_USER:-root}
-      ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD}
+      ARCADE_PASSWORD: ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
       QUARKUS_HTTP_CORS_ORIGINS: http://localhost:13000,http://localhost:15173
       HEIMDALL_URL:    http://heimdall-backend:9093
       DALI_URL:        http://dali:9090
@@ -63,7 +63,7 @@ services:
       FRIGG_URL:      http://frigg:2480
       FRIGG_DB:       dali
       FRIGG_USER:     root
-      FRIGG_PASSWORD: ${FRIGG_PASSWORD}
+      FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
       HEIMDALL_URL:   http://heimdall-backend:9093
       YGG_URL:        http://ygg:2480
       COMPOSE_PROJECT_NAME: aida-root
@@ -89,7 +89,7 @@ services:
       QUARKUS_REST_CLIENT_FRIGG_API_URL: http://frigg:2480
       FRIGG_DB:       heimdall
       FRIGG_USER:     root
-      FRIGG_PASSWORD: ${FRIGG_PASSWORD}
+      FRIGG_PASSWORD: ${FRIGG_PASSWORD:-playwithdata}
       COMPOSE_PROJECT_NAME: aida-root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
