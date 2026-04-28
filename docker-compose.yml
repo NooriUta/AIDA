@@ -85,7 +85,7 @@ services:
       HEIMDALL_URL:          http://heimdall-backend:9093
       # KC Admin API
       KC_ADMIN_USER:         ${KC_ADMIN_USER:-admin}
-      KC_ADMIN_PASS:         ${KC_ADMIN_PASS:-admin}
+      KC_ADMIN_PASS:         ${KC_ADMIN_PASS:-sae0611!}
     ports:
       - "13000:3000"
     # Cross-layer deps (KC, FRIGG, SHUTTLE) are not declared here —
