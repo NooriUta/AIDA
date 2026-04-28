@@ -19,12 +19,72 @@ on:
 
 concurrency:
   group: cd-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false   # never cancel a running prod deploy — queue instead
 
 jobs:
+  # ── Notify prod CD start + collect changelog ─────────────────────────────────
+  notify-start:
+    name: Notify prod CD start
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      prev_tag:    ${{ steps.meta.outputs.prev_tag }}
+      # Base64-encoded changelog — safe across job boundaries (no shell-quoting issues
+      # with commit messages that contain quotes, $, backticks, etc.)
+      changelog_b64: ${{ steps.meta.outputs.changelog_b64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect release metadata + send start notification
+        id: meta
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          RELEASE_TAG="${{ inputs.tag || github.ref_name }}"
+          echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+
+          # Previous semver tag (exclude the tag being deployed — may not exist yet)
+          PREV=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -v "^${RELEASE_TAG}$" \
+            | head -1 || true)
+          echo "prev_tag=${PREV:-none}" >> $GITHUB_OUTPUT
+
+          # Commits since prev tag — subject only, max 20, no merges
+          if [ -n "$PREV" ]; then
+            LOG=$(git log "${PREV}..HEAD" --format="• %s" --no-merges | head -20)
+            FROM_LABEL="since ${PREV}"
+          else
+            LOG=$(git log --format="• %s" --no-merges -10)
+            FROM_LABEL="(first release)"
+          fi
+
+          # Base64-encode so special chars in commit messages don't break outputs
+          echo "changelog_b64=$(echo "$LOG" | base64 -w0)" >> $GITHUB_OUTPUT
+
+          # Send Telegram notification (skip silently if token not configured)
+          [ -z "${TG_TOKEN}" ] && exit 0
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf "🚀 Prod CD started — %s\nBuild → Mirror YCR → Deploy\n\nChanges %s:\n%s\n\nRun: %s" \
+            "$RELEASE_TAG" "$FROM_LABEL" "$LOG" "$RUN_URL")
+
+          jq -n --arg chat "$TG_CHAT" --arg text "$MSG" \
+            '{"chat_id":$chat,"text":$text}' \
+          | curl -sf -X POST \
+              "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d @- || true
+
   # ── Build + push Docker images to GHCR ──────────────────────────────────────
   build-push:
     name: Build & push ${{ matrix.service }}
+    needs: notify-start
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,8 +116,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set lowercase owner
-        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+      - name: Set release tag and lowercase owner
+        run: |
+          echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       - uses: docker/login-action@v3
         with:
@@ -78,7 +140,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,scope=${{ matrix.service }},mode=max
           tags: |
-            ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:${{ github.ref_name }}
+            ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:${{ env.RELEASE_TAG }}
             ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:${{ github.sha }}
             ghcr.io/${{ env.OWNER }}/verdandi/${{ matrix.service }}:latest
 
@@ -94,8 +156,10 @@ jobs:
       matrix:
         service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend, shell]
     steps:
-      - name: Set lowercase owner
-        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+      - name: Set release tag and lowercase owner
+        run: |
+          echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       - uses: docker/login-action@v3
         with:
@@ -119,10 +183,10 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             echo "=== Mirror attempt ${attempt}/3 ==="
-            docker pull ${GHCR}:${{ github.ref_name }} \
-              && docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:${{ github.ref_name }} \
-              && docker tag  ${GHCR}:${{ github.ref_name }} ${YCR}:latest \
-              && docker push ${YCR}:${{ github.ref_name }} \
+            docker pull ${GHCR}:${{ env.RELEASE_TAG }} \
+              && docker tag  ${GHCR}:${{ env.RELEASE_TAG }} ${YCR}:${{ env.RELEASE_TAG }} \
+              && docker tag  ${GHCR}:${{ env.RELEASE_TAG }} ${YCR}:latest \
+              && docker push ${YCR}:${{ env.RELEASE_TAG }} \
               && docker push ${YCR}:latest \
               && break
             [ ${attempt} -lt 3 ] && echo "Attempt ${attempt} failed, retrying in 30s..." && sleep 30
@@ -131,11 +195,19 @@ jobs:
   # ── Deploy to production ─────────────────────────────────────────────────────
   deploy:
     name: Deploy to production
-    needs: mirror-to-ycr
+    needs: [mirror-to-ycr, notify-start]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed for git tag push after successful prod deploy
     # NOTE: no 'environment: production' — requires paid GitHub plan for private repos
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
 
       - name: Fix file permissions for scp
         run: |
@@ -209,7 +281,7 @@ jobs:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_KEY }}
-          command_timeout: 30m
+          command_timeout: 50m
           script: |
             set -e
             cd /opt/seer-studio
@@ -219,8 +291,11 @@ jobs:
               infra/scripts/lockbox-sync.sh || echo "Lockbox sync skipped (not configured)"
             fi
 
-            # Source secrets early — passwords needed for ArcadeDB health checks below
-            source .env.prod 2>/dev/null || true
+            # Source secrets and auto-export all vars so docker compose child process
+            # inherits FRIGG_PASSWORD, ARCADEDB_ADMIN_PASSWORD, etc.
+            # Without set -a, sourced vars are shell-local and docker compose falls
+            # back to :-playwithdata defaults → ArcadeDB gets wrong password.
+            set -a; source .env.prod 2>/dev/null || true; set +a
 
             # Remove yc credential helper for cr.yandex (conflicts with docker login)
             if [ -f ~/.docker/config.json ]; then
@@ -235,7 +310,7 @@ jobs:
             echo "$IAM_TOKEN" | docker login cr.yandex -u iam --password-stdin
 
             # Load compose env vars
-            export IMAGE_TAG=${{ github.ref_name }}
+            export IMAGE_TAG=${{ env.RELEASE_TAG }}
             export YC_REGISTRY_ID=${{ secrets.YC_REGISTRY_ID }}
             export DOMAIN=${{ secrets.DOMAIN }}
             export REPO=cr.yandex/${YC_REGISTRY_ID}
@@ -246,11 +321,40 @@ jobs:
               docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
             done
 
-            # ── Init deploy: wipe volumes for a clean start ───────────────────
-            # Triggered only by workflow_dispatch with deploy_mode=init.
-            # Destroys all FRIGG and YGG data — ArcadeDB will reinitialise
-            # root password from JAVA_OPTS on next start.
             DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'merge' }}"
+
+            # ── MERGE deploy: backup DBs → graceful stop → compose up ─────────
+            # Standard upgrade path: preserves data.
+            # Backup via ArcadeDB API (non-fatal: skip if DBs not running yet).
+            # Graceful stop of DB containers ensures clean shutdown before new
+            # version starts (avoids journal corruption on ArcadeDB upgrade).
+            if [ "$DEPLOY_MODE" = "merge" ]; then
+              echo "=== MERGE DEPLOY: backup + graceful DB stop ==="
+
+              FRIGG_READY=$(curl -sf -o /dev/null -w "%{http_code}" \
+                http://localhost:2481/api/v1/ready 2>/dev/null || echo "000")
+              YGG_READY=$(curl -sf -o /dev/null -w "%{http_code}" \
+                http://localhost:2480/api/v1/ready 2>/dev/null || echo "000")
+
+              if [ "${FRIGG_READY}" = "204" ] || [ "${YGG_READY}" = "204" ]; then
+                echo "=== Databases up — running pre-upgrade backup ==="
+                bash infra/scripts/backup-arcadedb.sh \
+                  || echo "[backup] WARNING: backup failed or incomplete (deploy continues)"
+              else
+                echo "=== Databases not running — skipping backup (first deploy) ==="
+              fi
+
+              echo "=== Stopping DB containers for upgrade ==="
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                stop frigg ygg 2>/dev/null || true
+              sleep 5  # Wait for graceful ArcadeDB shutdown (flushes WAL)
+            fi
+
+            # ── INIT deploy: wipe all volumes for a clean start ───────────────
+            # Triggered manually with deploy_mode=init.
+            # Destroys ALL FRIGG and YGG data — use only for first deploy or
+            # disaster recovery. Data is intentionally not backed up here since
+            # init = "start from scratch".
             if [ "$DEPLOY_MODE" = "init" ]; then
               echo "=== INIT DEPLOY: stopping stack and wiping DB volumes ==="
               docker compose \
@@ -274,10 +378,25 @@ jobs:
               up -d --remove-orphans || {
                 echo "=== docker compose up failed ==="
                 docker ps -a
+                docker logs seer-studio-frigg-1    --tail 40 2>&1 || true
+                docker logs Ygg-1                  --tail 40 2>&1 || true
                 docker logs seer-studio-chur-1     --tail 60 2>&1 || true
                 docker logs seer-studio-keycloak-1 --tail 40 2>&1 || true
                 exit 1
               }
+
+            # ── Capture early FRIGG/YGG startup logs (before wait loop) ──────────
+            # Give ArcadeDB containers 15s to emit initial log lines, then capture.
+            # This appears in GitHub Actions output even if containers crash later.
+            sleep 15
+            echo "=== FRIGG early logs ==="
+            docker logs seer-studio-frigg-1 --tail 60 2>&1 || true
+            echo "=== YGG early logs ==="
+            docker logs Ygg-1 --tail 40 2>&1 || true
+            echo "=== FRIGG inspect ==="
+            docker inspect seer-studio-frigg-1 \
+              --format='ExitCode={{.State.ExitCode}}  OOMKilled={{.State.OOMKilled}}  Running={{.State.Running}}' \
+              2>/dev/null || true
 
             # ── Wait for infrastructure only: FRIGG, YGG, KC ──────────────────
             # Must run BEFORE init-arcadedb.sh. App services (Chur/Dali) are not
@@ -288,7 +407,7 @@ jobs:
             #   • Uses a function to correctly propagate non-zero exit on timeout
             #     (bare for-loop exits 0 if last cmd is `sleep`; function avoids this)
             wait_infra() {
-              local url="$1" name="$2" auth="${3:-}"
+              local url="$1" name="$2" auth="${3:-}" retries="${4:-60}"
               local auth_flag=""
               [ -n "$auth" ] && auth_flag="-u $auth"
               # Quick pre-check: if already ready (e.g. services Up 7+ days), return immediately
@@ -296,13 +415,19 @@ jobs:
                 echo "  [${name}] already ready"; return 0
               fi
               local i
-              for i in $(seq 1 30); do
+              for i in $(seq 1 "$retries"); do
                 if curl -sf $auth_flag "${url}" > /dev/null 2>&1; then
-                  echo "  [${name}] ready"; return 0
+                  echo "  [${name}] ready in $((i * 10))s"; return 0
                 fi
-                echo "  [${name}] retry ${i}/30..."; sleep 10
+                echo "  [${name}] retry ${i}/${retries}..."; sleep 10
               done
-              echo "=== ${name} not ready after 300s — aborting ==="; return 1
+              echo "=== ${name} not ready after $((retries * 10))s — diagnostics ==="
+              docker ps -a --format "  {{.Names}}  {{.Status}}  {{.Image}}" 2>/dev/null || true
+              docker stats --no-stream --format "  {{.Name}}  mem={{.MemUsage}}  cpu={{.CPUPerc}}" 2>/dev/null || true
+              local svcname="${name,,}"; svcname="${svcname//(/}"; svcname="${svcname//)/}"
+              docker logs "seer-studio-${svcname}-1" --tail 40 2>&1 || \
+              docker logs "${svcname}-1"             --tail 40 2>&1 || true
+              return 1
             }
             echo "=== Waiting for infrastructure ==="
             # ArcadeDB /api/v1/ready is unauthenticated (returns 204 without creds).
@@ -339,32 +464,59 @@ jobs:
             wait_infra "http://localhost:15173/"        "Verdandi" "" || { echo "Verdandi health check FAILED"; exit 1; }
             echo "  All services OK"
 
-            echo "Deploy OK — ${{ github.ref_name }} (${{ github.sha }})"
+            echo "Deploy OK — ${{ env.RELEASE_TAG }} (${{ github.sha }})"
+
+      # ── Create git tag after successful prod deploy ───────────────────────────
+      # Tag is created HERE (after prod verified), not in cd-release.yml.
+      # Only when triggered via workflow_dispatch from cd-release.yml (inputs.tag set).
+      # For push:tags trigger (manual/legacy), tag already exists — skip.
+      - name: Create and push release tag (prod-verified)
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ env.RELEASE_TAG }}" \
+                  -m "Release ${{ env.RELEASE_TAG }} — prod deploy verified"
+          git push origin "${{ env.RELEASE_TAG }}"
+          echo "✅ Tagged ${{ env.RELEASE_TAG }} — prod-verified"
 
       - name: Notify success
-        if: success() && env.TELEGRAM_TOKEN != ''
+        if: success()
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        uses: appleboy/telegram-action@v0.1.1
-        with:
-          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
-          token:   ${{ secrets.TELEGRAM_TOKEN }}
-          message: |
-            ✅ SEER Studio deployed
-            Version: `${{ github.ref_name }}`
-            SHA: `${{ github.sha }}`
-            By: ${{ github.actor }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          [ -z "${TG_TOKEN}" ] && exit 0
+          # Decode changelog (base64 → original multiline text with any special chars)
+          CHANGELOG=$(echo "${{ needs.notify-start.outputs.changelog_b64 }}" | base64 -d)
+          PREV="${{ needs.notify-start.outputs.prev_tag }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf "✅ SEER Studio deployed to prod\nVersion: %s\nSHA: %s\nBy: %s\n\nChanges since %s:\n%s\n\nRun: %s" \
+            "${{ env.RELEASE_TAG }}" "${{ github.sha }}" "${{ github.actor }}" \
+            "$PREV" "$CHANGELOG" "$RUN_URL")
+          jq -n --arg chat "$TG_CHAT" --arg text "$MSG" \
+            '{"chat_id":$chat,"text":$text}' \
+          | curl -sf -X POST \
+              "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d @- || true
 
       - name: Notify failure
-        if: failure() && env.TELEGRAM_TOKEN != ''
+        if: failure()
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        uses: appleboy/telegram-action@v0.1.1
-        with:
-          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
-          token:   ${{ secrets.TELEGRAM_TOKEN }}
-          message: |
-            ❌ SEER Studio deploy FAILED
-            SHA: `${{ github.sha }}`
-            By: ${{ github.actor }}
-            Check: https://github.com/${{ github.repository }}/actions
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          [ -z "${TG_TOKEN}" ] && exit 0
+          CHANGELOG=$(echo "${{ needs.notify-start.outputs.changelog_b64 }}" | base64 -d)
+          PREV="${{ needs.notify-start.outputs.prev_tag }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG=$(printf "❌ SEER Studio prod deploy FAILED\nVersion: %s\nSHA: %s\nBy: %s\n\nChanges since %s:\n%s\n\nRun: %s" \
+            "${{ env.RELEASE_TAG }}" "${{ github.sha }}" "${{ github.actor }}" \
+            "$PREV" "$CHANGELOG" "$RUN_URL")
+          jq -n --arg chat "$TG_CHAT" --arg text "$MSG" \
+            '{"chat_id":$chat,"text":$text}' \
+          | curl -sf -X POST \
+              "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d @- || true

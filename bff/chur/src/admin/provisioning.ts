@@ -14,6 +14,7 @@
  *   7. UPDATE DaliTenantConfig → status=ACTIVE
  */
 import { config } from '../config';
+import { createOrgRoles } from '../keycloakAdmin';
 
 // ── Alias validation ──────────────────────────────────────────────────────────
 
@@ -319,6 +320,10 @@ export async function provisionTenant(
         .find(o => o.alias === alias);
       if (!found) throw new Error(`KC org "${alias}" not found after create`);
       orgId = found.id;
+    }
+    // Create the 6 org-scoped RBAC roles (RBAC_MULTITENANT.md) — best-effort
+    try { await createOrgRoles(orgId); } catch (e) {
+      console.warn(`[provision] createOrgRoles non-fatal: ${(e as Error).message}`);
     }
     return orgId;
   }, async () => {

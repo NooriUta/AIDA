@@ -1,7 +1,10 @@
 ###############################################################################
 # cd-release.yml — Release gate: INIT + UPGRADE tests → git tag
 #
-# Trigger: manual dispatch on master after prerelease is merged.
+# Trigger:
+#   auto  — push to release branch (prerelease → release PR merged)
+#           version derived automatically: latest tag + patch bump
+#   manual — workflow_dispatch with explicit version + flags
 #
 # Flow:
 #   STEP 1 — INIT test
@@ -38,14 +41,24 @@
 name: CD Release
 
 on:
+  push:
+    branches: [release]   # auto-trigger on prerelease → release merge
+
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v1.3.0)'
-        required: true
+        description: 'Release version (e.g. v1.3.8) — leave blank to auto-derive (patch bump)'
+        required: false
         type: string
       skip_upgrade_test:
         description: 'Skip upgrade test (use for first release — no N-1 exists)'
+        type: boolean
+        default: false
+      seed_n1:
+        description: |
+          Seed data on N-1 before upgrade (default: false).
+          Enable when N-1 provisioning code is compatible with current ArcadeDB version.
+          Required for downgrade testing or data-continuity checks on tenant data.
         type: boolean
         default: false
       upgrade_mode:
@@ -67,25 +80,55 @@ concurrency:
 
 jobs:
   release-gate:
-    name: "INIT + UPGRADE → ${{ inputs.version }}"
+    name: "INIT + UPGRADE → release gate"
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: write   # needed for git operations
+      actions: write    # needed for gh workflow run (trigger cd.yml)
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Determine N-1 ──────────────────────────────────────────────────────
-      - name: Determine previous release tag (N-1)
+      # ── Determine version + N-1 ───────────────────────────────────────────
+      - name: Determine version and previous release tag (N-1)
         id: meta
         run: |
           PREV=$(git tag --sort=-version:refname \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | head -1 || true)
-          echo "prev_tag=${PREV}" >> $GITHUB_OUTPUT
-          echo "N   → ${{ inputs.version }} (IMAGE_TAG=staging)"
+
+          # Version: explicit input wins; otherwise auto patch-bump from latest tag
+          INPUT_VERSION="${{ inputs.version }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          elif [ -n "$PREV" ]; then
+            MAJOR=$(echo $PREV | cut -d. -f1 | tr -d v)
+            MINOR=$(echo $PREV | cut -d. -f2)
+            PATCH=$(echo $PREV | cut -d. -f3)
+            VERSION="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          else
+            echo "ERROR: no previous tag found and no version input — cannot derive version"; exit 1
+          fi
+
+          echo "version=${VERSION}"   >> $GITHUB_OUTPUT
+          echo "prev_tag=${PREV}"     >> $GITHUB_OUTPUT
+          echo "N   → ${VERSION} (IMAGE_TAG=staging)"
           echo "N-1 → ${PREV:-none}"
+
+      # ── Notify start ──────────────────────────────────────────────────────
+      - name: Notify start
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚀 Release gate STARTED — ${{ steps.meta.outputs.version }}
+            INIT + UPGRADE → prod CD
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       # ── Refresh scripts on VM ──────────────────────────────────────────────
       - name: Fix file permissions
@@ -93,13 +136,13 @@ jobs:
           chmod -R a+r scripts/ tests/
           chmod a+x scripts/*.sh
 
-      - name: Copy scripts + test fixtures to VM
+      - name: Copy scripts + compose files + test fixtures to VM
         uses: appleboy/scp-action@v0.1.7
         with:
           host:     ${{ secrets.DEPLOY_HOST_STAGING }}
           username: ${{ secrets.DEPLOY_USER_STAGING }}
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
-          source:   scripts/,tests/
+          source:   scripts/,tests/,docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/
           target:   /opt/seer-studio/
 
       # ── STEP 1: INIT test ──────────────────────────────────────────────────
@@ -113,15 +156,20 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/seer-studio
-            source .env.prod 2>/dev/null || true
+            set -a; source .env.prod 2>/dev/null || true; set +a
 
             wait_for() {
-              local url="$1" name="$2"
-              for i in $(seq 1 30); do
+              local url="$1" name="$2" retries="${3:-60}"
+              for i in $(seq 1 "$retries"); do
                 curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready" && return 0
-                echo "  [$name] wait $i/30…"; sleep 10
+                echo "  [$name] wait $i/$retries…"; sleep 10
               done
-              echo "  [$name] TIMEOUT after 300s"; return 1
+              echo "  [$name] TIMEOUT after $((retries * 10))s"
+              echo "  [$name] container status:"
+              docker ps -a --filter "name=$name" --format "  id={{.ID}} status={{.Status}} restarts={{.RunningFor}}" 2>/dev/null || true
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                logs --no-color --tail=30 "${name,,}" 2>/dev/null || true
+              return 1
             }
 
             echo "▶ INIT: stop all services"
@@ -140,8 +188,9 @@ jobs:
             docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
               up -d --pull always --remove-orphans --force-recreate
 
-            wait_for "http://localhost:2481/api/v1/ready"      "FRIGG"
-            wait_for "http://localhost:2480/api/v1/ready"      "YGG"
+            # ArcadeDB fresh-volume init can take 5-10 min (JVM + DB schema creation)
+            wait_for "http://localhost:2481/api/v1/ready"      "FRIGG"  60
+            wait_for "http://localhost:2480/api/v1/ready"      "YGG"    60
             wait_for "http://localhost:18180/kc/realms/seer"   "KC(seer)"
 
             echo "▶ INIT: init-arcadedb.sh"
@@ -170,7 +219,7 @@ jobs:
 
       # ── STEP 2: UPGRADE test ───────────────────────────────────────────────
       - name: "UPGRADE — deploy N-1 → seed → upgrade N → verify survival → test"
-        if: ${{ !inputs.skip_upgrade_test && steps.meta.outputs.prev_tag != '' }}
+        if: inputs.skip_upgrade_test != true && steps.meta.outputs.prev_tag != ''
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:            ${{ secrets.DEPLOY_HOST_STAGING }}
@@ -180,7 +229,7 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/seer-studio
-            source .env.prod 2>/dev/null || true
+            set -a; source .env.prod 2>/dev/null || true; set +a
             PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
 
             wait_for() {
@@ -225,16 +274,23 @@ jobs:
             wait_for "http://localhost:13000/health"   "Chur"
             wait_for "http://localhost:18080/q/health" "Shuttle"
 
-            # ── 3. Seed data on N-1 (SKIP_CLEANUP=1 — tenant stays for upgrade check)
-            echo "▶ UPGRADE: seeding data on N-1 (SKIP_CLEANUP=1)"
-            DOMAIN=${{ secrets.DOMAIN_STAGING }} \
-            TENANT=acme-legacy \
-            DATA_DIR=/opt/seer-studio/tests/data/erp \
-            SKIP_CLEANUP=1 \
-            bash scripts/integration-test.sh
+            # ── 3. Seed data on N-1 (optional, controlled by seed_n1 input) ───
+            # Default: false — N-1 provisioning may be incompatible with current
+            # ArcadeDB version (API boundary releases). Enable for downgrade testing
+            # or when N-1 app code is known compatible with current ArcadeDB.
+            if [ "${{ inputs.seed_n1 || 'false' }}" = "true" ]; then
+              echo "▶ UPGRADE: seeding data on N-1 (SKIP_CLEANUP=1)"
+              DOMAIN=${{ secrets.DOMAIN_STAGING }} \
+              TENANT=acme-legacy \
+              DATA_DIR=/opt/seer-studio/tests/data/erp \
+              SKIP_CLEANUP=1 \
+              bash scripts/integration-test.sh
+            else
+              echo "▶ UPGRADE: seed_n1=false — skipping N-1 seed (verify default tenant after upgrade)"
+            fi
 
             # ── 4. Upgrade based on mode ──────────────────────────────────────
-            UPGRADE_MODE="${{ inputs.upgrade_mode }}"
+            UPGRADE_MODE="${{ inputs.upgrade_mode || 'full' }}"
             echo "▶ UPGRADE: mode=${UPGRADE_MODE}"
 
             if [ "${UPGRADE_MODE}" = "full" ]; then
@@ -280,8 +336,11 @@ jobs:
             wait_for "http://localhost:13000/health"   "Chur"
             wait_for "http://localhost:18080/q/health" "Shuttle"
 
-            # ── 5. Verify FRIGG + YGG data survived the upgrade ───────────────
-            echo "▶ UPGRADE: verifying acme-legacy tenant survived upgrade"
+            # ── 5. Verify data survived the upgrade ──────────────────────────
+            # If seed_n1=true → verify acme-legacy (provisioned on N-1)
+            # If seed_n1=false → verify default tenant (created by init-arcadedb.sh)
+            VERIFY_TENANT=$( [ "${{ inputs.seed_n1 || 'false' }}" = "true" ] && echo "acme-legacy" || echo "default" )
+            echo "▶ UPGRADE: verifying '${VERIFY_TENANT}' tenant survived upgrade"
             BASE="https://seer.${{ secrets.DOMAIN_STAGING }}"
             JAR="/tmp/upg_verify_$$.txt"
 
@@ -295,18 +354,28 @@ jobs:
             fi
 
             TENANT_BODY=$(curl -sk --max-time 10 -b "$JAR" \
-              "${BASE}/api/admin/tenants/acme-legacy" || echo "")
+              "${BASE}/api/admin/tenants/${VERIFY_TENANT}" || echo "")
             rm -f "$JAR"
 
             if echo "$TENANT_BODY" | grep -q '"ACTIVE"'; then
-              echo "✓ acme-legacy ACTIVE — FRIGG + YGG data survived upgrade"
+              echo "✓ ${VERIFY_TENANT} ACTIVE — data survived upgrade"
             else
-              echo "✗ acme-legacy not ACTIVE after upgrade:"
+              echo "✗ ${VERIFY_TENANT} not ACTIVE after upgrade:"
               echo "$TENANT_BODY"
               exit 1
             fi
 
             # ── 6. Full integration test on N ─────────────────────────────────
+            # Reset Chur in-memory rate limiter before final test run.
+            # The seed + upgrade phases generate multiple logins; without a restart
+            # the superadmin cleanup call (delete tenant) hits 429.
+            echo "▶ UPGRADE: restarting Chur to reset rate limiter"
+            docker restart seer-studio-chur-1
+            for i in $(seq 1 15); do
+              curl -sf http://localhost:13000/health >/dev/null 2>&1 && break
+              echo "  waiting for Chur... (${i}/15)"; sleep 3
+            done
+
             echo "▶ UPGRADE: smoke tests on N"
             DOMAIN=${{ secrets.DOMAIN_STAGING }} bash scripts/smoke-test.sh
 
@@ -318,16 +387,20 @@ jobs:
 
             echo "✅ UPGRADE PASSED"
 
-      # ── STEP 3: Tag release ────────────────────────────────────────────────
-      - name: Create and push release tag
+      # ── STEP 3: Trigger prod CD (tag created AFTER prod deploy succeeds) ─────
+      # Tag is NOT created here — it's created in cd.yml after prod deploy passes.
+      # This ensures tags only exist for prod-verified releases.
+      - name: Trigger prod CD (tag created on prod success)
         if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ inputs.version }}" \
-                  -m "Release ${{ inputs.version }}"
-          git push origin "${{ inputs.version }}"
-          echo "✅ Tagged ${{ inputs.version }} → triggers cd.yml (prod deploy)"
+          gh workflow run "CD" \
+            --repo ${{ github.repository }} \
+            --ref release \
+            -f tag=${{ steps.meta.outputs.version }} \
+            -f deploy_mode=merge
+          echo "✅ Prod CD dispatched for ${{ steps.meta.outputs.version }} (deploy_mode=merge) — tag created on prod success"
 
       # ── Notifications ──────────────────────────────────────────────────────
       - name: Notify success
@@ -337,10 +410,11 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ✅ Release ${{ inputs.version }} gate PASSED
-            INIT ✓  |  UPGRADE ${{ (!inputs.skip_upgrade_test && steps.meta.outputs.prev_tag != '') && '✓' || '— skipped' }}
-            Tagged and pushed → prod deploy in progress
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ✅ Release gate PASSED — prod CD dispatched
+            Version: `${{ steps.meta.outputs.version }}`
+            INIT ✓  |  UPGRADE ${{ inputs.skip_upgrade_test != true && steps.meta.outputs.prev_tag != '' && '✓' || '— skipped' }}
+            Tag будет создан после успешного prod deploy.
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Notify failure
         if: failure()
@@ -349,5 +423,6 @@ jobs:
           to:      ${{ secrets.TELEGRAM_CHAT_ID }}
           token:   ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ❌ Release ${{ inputs.version }} gate FAILED
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ❌ Release gate FAILED — ${{ steps.meta.outputs.version }}
+            Staging tests не прошли — prod CD не запущен, тег не создан.
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -13,8 +13,10 @@ import {
 } from './provisioning';
 import {
   requireScope,
+  requireAnyScope,
   requireSameTenant,
 } from '../middleware/requireAdmin';
+import { checkElevation } from '../middleware/preventElevation';
 import { emitTenantAudit } from '../middleware/auditEmit';
 import { adminRateLimit, provisioningRateLimit } from '../middleware/rateLimit';
 import { csrfGuard } from '../middleware/csrfGuard';
@@ -149,12 +151,10 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
           { keycloakOrgId: result.keycloakOrgId, correlationId });
         return reply.status(201).send(result);
       } catch (e) {
-        // MTN-25: structured provisioning error — includes failedStep so caller
-        // can call /resume-provisioning with the right context.
         const msg = e instanceof Error ? e.message : String(e);
-        const failedStep        = (e as { failedStep?: number })?.failedStep;
+        const failedStep         = (e as { failedStep?: number })?.failedStep;
         const lastSuccessfulStep = (e as { lastSuccessfulStep?: number })?.lastSuccessfulStep;
-        const cause             = (e as { cause?: string })?.cause;
+        const cause              = (e as { cause?: string })?.cause;
         return reply.status(500).send({
           error:              'provisioning_failed',
           tenantAlias:        alias,
@@ -170,8 +170,9 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ── GET /api/admin/tenants/:alias ───────────────────────────────────────────
+  // G2: per spec §3.4 local-admin/tenant-owner can read own tenant config.
   app.get<{ Params: { alias: string } }>('/api/admin/tenants/:alias',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), adminRateLimit] },
     async (request, reply) => {
       const cfg = await getTenantConfig(request.params.alias).catch(() => null);
       if (!cfg) return reply.status(404).send({ error: 'Tenant not found' });
@@ -303,6 +304,56 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // ── PUT /api/admin/tenants/:alias — update editable config (HTA-08) ─────────
+  app.put<{
+    Params: { alias: string };
+    Body: Partial<{
+      maxParseSessions:   number;
+      maxAtoms:           number;
+      maxSources:         number;
+      maxConcurrentJobs:  number;
+      harvestCron:        string;
+      llmMode:            string;
+      dataRetentionDays:  number;
+    }>;
+  }>('/api/admin/tenants/:alias',
+    { preHandler: [app.authenticate, requireScope('aida:superadmin'), adminRateLimit] },
+    async (request, reply) => {
+      const { alias } = request.params;
+      const body      = request.body ?? {};
+
+      const EDITABLE = [
+        'maxParseSessions', 'maxAtoms', 'maxSources', 'maxConcurrentJobs',
+        'harvestCron', 'llmMode', 'dataRetentionDays',
+      ] as const;
+
+      const setClauses: string[]               = [];
+      const params: Record<string, unknown>    = { alias, ts: Date.now() };
+      for (const field of EDITABLE) {
+        const v = (body as Record<string, unknown>)[field];
+        if (v !== undefined && v !== null) {
+          setClauses.push(`${field} = :${field}`);
+          params[field] = v;
+        }
+      }
+
+      if (setClauses.length === 0) {
+        return reply.status(400).send({ error: 'No editable fields provided' });
+      }
+
+      setClauses.push('updatedAt = :ts');
+      setClauses.push('configVersion = configVersion + 1');
+
+      await friggSql('frigg-tenants',
+        `UPDATE DaliTenantConfig SET ${setClauses.join(', ')} WHERE tenantAlias = :alias`,
+        params,
+      );
+      emitTenantAudit('seer.audit.tenant_config_updated', request.user.username, alias);
+      const updated = await getTenantConfig(alias);
+      return reply.send({ ok: true, tenant: updated });
+    },
+  );
+
   // ── POST /api/admin/tenants/:alias/force-cleanup — CAP-06 ───────────────────
   app.post<{ Params: { alias: string } }>('/api/admin/tenants/:alias/force-cleanup',
     { preHandler: [app.authenticate, requireScope('aida:admin', 'aida:admin:destructive'), csrfGuard, provisioningRateLimit] },
@@ -394,7 +445,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   // path for dev deployments before sync_default_keycloak_org_id was run).
 
   app.get<{ Params: { alias: string } }>('/api/admin/tenants/:alias/members',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), adminRateLimit] },
     async (request, reply) => {
       const cfg = await getTenantConfig(request.params.alias).catch(() => null);
       const orgId = cfg?.keycloakOrgId as string | undefined;
@@ -410,10 +461,13 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { alias: string }; Body: { email: string; name?: string; role: string } }>(
     '/api/admin/tenants/:alias/members',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { email, name, role } = request.body ?? {};
       if (!email || !role) return reply.status(400).send({ error: 'email and role are required' });
+      // G3: prevent privilege elevation per spec §3.5
+      const elev = checkElevation(request.user?.scopes, request.user?.role, role);
+      if (!elev.ok) return reply.status(403).send({ error: 'Forbidden: ' + elev.error });
       const { alias } = request.params;
       const cfg = await getTenantConfig(alias).catch(() => null);
       const orgId = cfg?.keycloakOrgId as string | undefined;
@@ -430,11 +484,14 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.put<{ Params: { alias: string; userId: string }; Body: { role?: string; enabled?: boolean } }>(
     '/api/admin/tenants/:alias/members/:userId',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { userId } = request.params;
       const { role, enabled } = request.body ?? {};
       if (role !== undefined) {
+        // G4: prevent privilege elevation on role change per spec §3.5
+        const elev = checkElevation(request.user?.scopes, request.user?.role, role);
+        if (!elev.ok) return reply.status(403).send({ error: 'Forbidden: ' + elev.error });
         await setUserRole(userId, role as any);
         emitTenantAudit('seer.audit.member_role_changed', request.user.username, request.params.alias, { userId, role });
       }
@@ -445,7 +502,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete<{ Params: { alias: string; userId: string } }>(
     '/api/admin/tenants/:alias/members/:userId',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant(), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:tenant:admin', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { userId, alias } = request.params;
       const cfg = await getTenantConfig(alias).catch(() => null);
@@ -593,12 +650,13 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ── POST /api/admin/tenants/:alias/harvest — trigger Dali harvest ────────────
-  // Admin-only. Forwards to Dali's /api/sessions/harvest with tenant header.
+  // G1 fix: spec §3.3 — operator/local-admin/tenant-owner with aida:harvest scope.
+  // Forwards to Dali's /api/sessions/harvest with tenant header.
   const DALI_URL = (process.env.DALI_URL ?? 'http://127.0.0.1:9090').replace(/\/$/, '');
 
   app.post<{ Params: { alias: string } }>(
     '/api/admin/tenants/:alias/harvest',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), csrfGuard, adminRateLimit] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:harvest', 'aida:admin', 'aida:superadmin'), requireSameTenant(), csrfGuard, adminRateLimit] },
     async (request, reply) => {
       const { alias } = request.params;
       try {

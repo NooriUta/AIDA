@@ -25,6 +25,8 @@ interface KcUserView {
   notifyHarvest: boolean; notifyErrors: boolean; notifyDigest: boolean;
   quotas: { mimir: number; sessions: number; atoms: number; workers: number; anvil: number };
   sources: string[];
+  tenantAlias?: string;
+  tenants?: string[];   // ['*'] = platform-level; string[] = org member of those tenants
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -101,6 +103,26 @@ function UserRow({
             <div style={{ fontSize: 11, color: 'var(--t3)' }}>{user.email}</div>
           </div>
         </div>
+      </td>
+
+      {/* Tenant */}
+      <td>
+        {(user.tenants?.includes('*') || user.role === 'admin' || user.role === 'super-admin')
+          ? <span style={{ fontSize: 11, color: 'var(--wrn)', fontWeight: 600 }}>Platform</span>
+          : user.tenants && user.tenants.length > 0
+            ? <span style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                {user.tenants.map(t => (
+                  <span key={t} style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)',
+                    background: 'var(--bg2)', border: '1px solid var(--bd)',
+                    borderRadius: 3, padding: '1px 5px' }}>{t}</span>
+                ))}
+              </span>
+            : user.tenantAlias
+              ? <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--t2)',
+                  background: 'var(--bg2)', border: '1px solid var(--bd)',
+                  borderRadius: 3, padding: '1px 5px' }}>{user.tenantAlias}</span>
+              : <span style={{ color: 'var(--t3)', fontSize: 11 }}>—</span>
+        }
       </td>
 
       {/* Role */}
@@ -281,22 +303,27 @@ export default function UsersPage() {
     fetch(url, { credentials: 'include' })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ mode: string; users: KcUserView[] }>;
+        return r.json() as Promise<{ mode: string; tenantAlias?: string; users: KcUserView[] }>;
       })
-      .then(({ mode, users: kcUsers }) => {
+      .then(({ mode, tenantAlias: envelopeTenant, users: kcUsers }) => {
         setCrossTenant(mode === 'cross-tenant');
+        // tenantAlias is envelope-level — same for all users in single-tenant mode;
+        // cross-tenant mode returns users from multiple tenants without per-user alias.
+        const resolvedTenant = envelopeTenant ?? (effectiveTenant === ALL_TENANTS ? undefined : effectiveTenant);
         const mapped: AidaUser[] = kcUsers.map((u, i) => ({
-          id:        i + 1,
-          kcId:      u.id,
-          name:      u.name,
-          firstName: u.firstName,
-          lastName:  u.lastName,
-          email:     u.email,
-          role:      u.role,
-          active:    u.active,
-          title:     u.title,
-          dept:      u.dept,
-          phone:     u.phone,
+          id:          i + 1,
+          kcId:        u.id,
+          name:        u.name,
+          firstName:   u.firstName,
+          lastName:    u.lastName,
+          email:       u.email,
+          role:        u.role,
+          active:      u.active,
+          title:       u.title,
+          dept:        u.dept,
+          phone:       u.phone,
+          tenantAlias: u.tenants ? undefined : resolvedTenant,
+          tenants:     u.tenants,
           sources: u.sources,
           quotas:  u.quotas,
           lastActive: '—',
@@ -438,7 +465,6 @@ export default function UsersPage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <TenantSelector onChange={v => { setActiveTenant(v); setCrossTenant(false); }} />
           {isAdmin && (
             <button className="btn btn-secondary" onClick={() => setInvite(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -460,33 +486,35 @@ export default function UsersPage() {
 
       {/* ── Stats grid ── */}
       <div className="stats-grid">
-        <div className="stat-card">
-          <div className="section-label">{t('users.total')}</div>
-          <div className="stat-val" style={{ color: 'var(--t1)' }}>{stats.total}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.total')}</div>
+          <div className="stat-val" style={{ color: 'var(--t1)' }} data-testid="kpi-value">{stats.total}</div>
           <div className="stat-sub">{stats.active} активных</div>
         </div>
-        <div className="stat-card">
-          <div className="section-label">{t('users.active')}</div>
-          <div className="stat-val" style={{ color: 'var(--suc)' }}>{stats.active}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.active')}</div>
+          <div className="stat-val" style={{ color: 'var(--suc)' }} data-testid="kpi-value">{stats.active}</div>
           <div className="stat-sub">{stats.total - stats.active} заблокировано</div>
         </div>
-        <div className="stat-card">
-          <div className="section-label">{t('users.admins')}</div>
-          <div className="stat-val" style={{ color: 'var(--wrn)' }}>{stats.admins}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.admins')}</div>
+          <div className="stat-val" style={{ color: 'var(--wrn)' }} data-testid="kpi-value">{stats.admins}</div>
           <div className="stat-sub">local-admin и выше</div>
         </div>
-        <div className="stat-card">
-          <div className="section-label">{t('users.sourceBindings')}</div>
-          <div className="stat-val" style={{ color: 'var(--inf)' }}>{stats.bindings}</div>
+        <div className="stat-card" data-testid="stat-card">
+          <div className="section-label" data-testid="kpi-label">{t('users.sourceBindings')}</div>
+          <div className="stat-val" style={{ color: 'var(--inf)' }} data-testid="kpi-value">{stats.bindings}</div>
           <div className="stat-sub">ограничены по источникам</div>
         </div>
       </div>
 
       {/* ── Filter bar ── */}
-      <div className="filter-bar">
+      <div className="filter-bar" data-testid="tenant-filter">
         <span className="section-label">Фильтр</span>
+        <TenantSelector onChange={v => { setActiveTenant(v); setCrossTenant(false); }} />
         <select
           className="field-input"
+          data-testid="select-role"
           value={roleFilter}
           onChange={e => setRole(e.target.value)}
           style={{ width: 'auto' }}
@@ -498,6 +526,7 @@ export default function UsersPage() {
         </select>
         <select
           className="field-input"
+          data-testid="status-filter-users"
           value={statusFilter}
           onChange={e => setStatus(e.target.value)}
           style={{ width: 'auto' }}
@@ -539,6 +568,7 @@ export default function UsersPage() {
             <thead>
               <tr>
                 <th>Пользователь</th>
+                <th>Тенант</th>
                 <th>Роль</th>
                 <th>Статус</th>
                 <th>Scopes</th>
@@ -556,7 +586,7 @@ export default function UsersPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32, fontSize: 12 }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: 'var(--t3)', padding: 32, fontSize: 12 }}>
                     Нет пользователей по заданным фильтрам
                   </td>
                 </tr>

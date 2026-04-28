@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { TenantStatus } from '../../api/admin';
 
-const ALL_STATUSES: TenantStatus[] = ['ACTIVE', 'PROVISIONING', 'SUSPENDED', 'ARCHIVED', 'PURGED'];
+const ALL_STATUSES: TenantStatus[] = ['ACTIVE', 'PROVISIONING', 'PROVISIONING_FAILED', 'SUSPENDED', 'ARCHIVED', 'PURGED'];
 
 interface Props {
   search: string;
@@ -16,19 +16,21 @@ export function TenantSearchFilter({ search, status, onSearch, onStatus }: Props
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
       <input
         type="search"
+        data-testid="search-alias"
         value={search}
         onChange={e => onSearch(e.target.value)}
         placeholder={t('tenants.searchPlaceholder', 'Search by alias…')}
-        style={{ flex: '1 1 180px', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)' }}
+        style={{ flex: '1 1 180px', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--bd)' }}
       />
       <select
+        data-testid="status-filter"
         value={status}
         onChange={e => onStatus(e.target.value as TenantStatus | '')}
-        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)' }}
+        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--bd)', background: 'var(--bg2)' }}
       >
         <option value="">{t('tenants.allStatuses', 'All statuses')}</option>
         {ALL_STATUSES.map(s => (
-          <option key={s} value={s}>{s}</option>
+          <option key={s} value={s}>{t(`tenants.statusValues.${s}`, s)}</option>
         ))}
       </select>
     </div>

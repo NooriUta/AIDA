@@ -149,15 +149,26 @@ export const adminUsersRoutes: FastifyPluginAsync = async (app) => {
       // the caller specifies tenantAlias explicitly or we fall back to default.
       const orgId = await lookupKeycloakOrgId(alias);
       if (orgId) {
-        const users = await listOrgMembers(orgId);
+        const orgUsers = await listOrgMembers(orgId);
         // If the org has no members yet (freshly provisioned tenant — or `default`
         // that predates KC orgs), fall back to the realm user list so admins are
         // not staring at an empty page. Mode marker lets the UI show a hint.
-        if (users.length === 0) {
+        if (orgUsers.length === 0) {
           const realmUsers = await listUsers();
           return reply.send({ mode: 'single-tenant-empty-org', tenantAlias: alias, users: realmUsers });
         }
-        return reply.send({ mode: 'single-tenant', tenantAlias: alias, users });
+        // Platform admins (admin, super-admin) belong to no KC org — always merge
+        // them in so every tenant view shows who has platform-level access.
+        const orgIds = new Set(orgUsers.map(u => u.id));
+        const realmUsers = await listUsers();
+        const platformAdmins = realmUsers.filter(
+          u => (u.role === 'admin' || u.role === 'super-admin') && !orgIds.has(u.id),
+        );
+        const tagged = [
+          ...orgUsers.map(u => ({ ...u, tenants: [alias] })),
+          ...platformAdmins.map(u => ({ ...u, tenants: ['*'] as string[] })),
+        ];
+        return reply.send({ mode: 'single-tenant', tenantAlias: alias, users: tagged });
       }
       // Legacy: no keycloakOrgId yet (pre-KC-ORG-02 dev), show whole realm
       const users = await listUsers();

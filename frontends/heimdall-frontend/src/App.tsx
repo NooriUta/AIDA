@@ -9,7 +9,6 @@ import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { LoginPage }       from './components/auth/LoginPage';
 import { HeimdallHeader }  from './components/layout/HeimdallHeader';
-import { ConsentModal }    from './components/ConsentModal';
 import { useAuthStore }    from './stores/authStore';
 import { usePrefsStore }   from './stores/prefsStore';
 import { RoleGuard }       from './components/RoleGuard';
@@ -26,6 +25,8 @@ const UsersPage          = React.lazy(() => import('./pages/UsersPage'));
 const DocsPage           = React.lazy(() => import('./pages/DocsPage'));
 const TenantsPage        = React.lazy(() => import('./pages/TenantsPage'));
 const TenantDetailsPage  = React.lazy(() => import('./pages/TenantDetailsPage'));
+const TenantMembersPage  = React.lazy(() => import('./pages/TenantMembersPage'));
+const TenantConfigPage   = React.lazy(() => import('./pages/TenantConfigPage'));
 // Round 5 self-service
 const ProfilePage           = React.lazy(() => import('./pages/ProfilePage'));
 const PreferencesPage       = React.lazy(() => import('./pages/PreferencesPage'));
@@ -44,9 +45,8 @@ function AppLayout() {
           <Outlet />
         </Suspense>
       </main>
-      {/* Round 5 — T&C / Privacy consent interruptor (opens when user's
-          latest accepted version is older than current) */}
-      <ConsentModal />
+      {/* ConsentModal disabled — re-enable when T&C copy is ready */}
+      {/* <ConsentModal /> */}
     </div>
   );
 }
@@ -128,6 +128,12 @@ export default function App() {
             } />
             <Route path="admin/tenants/:alias" element={
               <RoleGuard require="admin"><TenantDetailsPage /></RoleGuard>
+            } />
+            <Route path="admin/tenants/:alias/members" element={
+              <RoleGuard require="local-admin"><TenantMembersPage /></RoleGuard>
+            } />
+            <Route path="admin/tenants/:alias/config" element={
+              <RoleGuard require="super-admin"><TenantConfigPage /></RoleGuard>
             } />
 
             {/* Round 5 — Self-service (any authenticated user) */}
