@@ -35,8 +35,8 @@ BACKUP_LOCAL_DIR_YGG="/var/lib/docker/volumes/seer-studio_hound_databases/_data/
 # shellcheck source=/dev/null
 source "${ENV_FILE}"
 
-FRIGG_PASS="${FRIGG_PASSWORD:-playwithdata}"
-YGG_PASS="${ARCADEDB_ADMIN_PASSWORD:-playwithdata}"
+FRIGG_PASS="${FRIGG_PASSWORD}"
+YGG_PASS="${ARCADEDB_ADMIN_PASSWORD}"
 
 DATE=$(date +%Y%m%d-%H%M%S)
 
