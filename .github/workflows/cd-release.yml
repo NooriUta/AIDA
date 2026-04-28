@@ -119,19 +119,30 @@ jobs:
           echo "N   → ${VERSION} (IMAGE_TAG=staging)"
           echo "N-1 → ${PREV:-none}"
 
+      # ── Notify start ──────────────────────────────────────────────────────
+      - name: Notify start
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚀 Release gate STARTED — ${{ steps.meta.outputs.version }}
+            INIT + UPGRADE → prod CD
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
       # ── Refresh scripts on VM ──────────────────────────────────────────────
       - name: Fix file permissions
         run: |
           chmod -R a+r scripts/ tests/
           chmod a+x scripts/*.sh
 
-      - name: Copy scripts + test fixtures to VM
+      - name: Copy scripts + compose files + test fixtures to VM
         uses: appleboy/scp-action@v0.1.7
         with:
           host:     ${{ secrets.DEPLOY_HOST_STAGING }}
           username: ${{ secrets.DEPLOY_USER_STAGING }}
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
-          source:   scripts/,tests/
+          source:   scripts/,tests/,docker-compose.prod.yml,docker-compose.yc.yml,infra/keycloak/
           target:   /opt/seer-studio/
 
       # ── STEP 1: INIT test ──────────────────────────────────────────────────
@@ -148,12 +159,17 @@ jobs:
             set -a; source .env.prod 2>/dev/null || true; set +a
 
             wait_for() {
-              local url="$1" name="$2"
-              for i in $(seq 1 30); do
+              local url="$1" name="$2" retries="${3:-60}"
+              for i in $(seq 1 "$retries"); do
                 curl -sf "$url" >/dev/null 2>&1 && echo "  [$name] ready" && return 0
-                echo "  [$name] wait $i/30…"; sleep 10
+                echo "  [$name] wait $i/$retries…"; sleep 10
               done
-              echo "  [$name] TIMEOUT after 300s"; return 1
+              echo "  [$name] TIMEOUT after $((retries * 10))s"
+              echo "  [$name] container status:"
+              docker ps -a --filter "name=$name" --format "  id={{.ID}} status={{.Status}} restarts={{.RunningFor}}" 2>/dev/null || true
+              docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
+                logs --no-color --tail=30 "${name,,}" 2>/dev/null || true
+              return 1
             }
 
             echo "▶ INIT: stop all services"
@@ -172,8 +188,9 @@ jobs:
             docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
               up -d --pull always --remove-orphans --force-recreate
 
-            wait_for "http://localhost:2481/api/v1/ready"      "FRIGG"
-            wait_for "http://localhost:2480/api/v1/ready"      "YGG"
+            # ArcadeDB fresh-volume init can take 5-10 min (JVM + DB schema creation)
+            wait_for "http://localhost:2481/api/v1/ready"      "FRIGG"  60
+            wait_for "http://localhost:2480/api/v1/ready"      "YGG"    60
             wait_for "http://localhost:18180/kc/realms/seer"   "KC(seer)"
 
             echo "▶ INIT: init-arcadedb.sh"
@@ -382,8 +399,8 @@ jobs:
             --repo ${{ github.repository }} \
             --ref release \
             -f tag=${{ steps.meta.outputs.version }} \
-            -f deploy_mode=init
-          echo "✅ Prod CD dispatched for ${{ steps.meta.outputs.version }} — tag created on prod success"
+            -f deploy_mode=merge
+          echo "✅ Prod CD dispatched for ${{ steps.meta.outputs.version }} (deploy_mode=merge) — tag created on prod success"
 
       # ── Notifications ──────────────────────────────────────────────────────
       - name: Notify success

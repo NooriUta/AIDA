@@ -58,7 +58,7 @@ services:
       - "18080:8080"
     depends_on:
       ygg:
-        condition: service_healthy
+        condition: service_started   # ygg healthcheck uses /dev/tcp; Quarkus retries connection
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
       interval: 15s
@@ -129,13 +129,14 @@ services:
     volumes:
       - frigg_data:/home/arcadedb/databases
     healthcheck:
-      # wget -O /dev/null: works in sh/dash (no bash needed); 120s start_period covers ArcadeDB
-      # fresh-volume init time; retries:20 = additional 200s buffer after start_period.
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready 2>/dev/null || exit 1"]
+      # ArcadeDB image (eclipse-temurin) has bash as /bin/sh — /dev/tcp works.
+      # 180s start_period + retries:30 = 480s total; covers fresh-volume init
+      # when KC 26.6 JVM startup competes for CPU on the same VM.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 204"]
       interval: 10s
       timeout: 8s
-      retries: 20
-      start_period: 120s
+      retries: 30
+      start_period: 180s
 
   # ── Ygg (ArcadeDB — lineage graph) ────────────────────────────────
   ygg:
@@ -152,13 +153,14 @@ services:
       - hound_config:/home/arcadedb/.arcadedb
       - hound_logs:/home/arcadedb/log
     healthcheck:
-      # wget -O /dev/null: works in sh/dash (no bash needed); 120s start_period covers ArcadeDB
-      # fresh-volume init time; retries:20 = additional 200s buffer after start_period.
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready 2>/dev/null || exit 1"]
+      # ArcadeDB image (eclipse-temurin) has bash as /bin/sh — /dev/tcp works.
+      # 180s start_period + retries:30 = 480s total; covers fresh-volume init
+      # when KC 26.6 JVM startup competes for CPU on the same VM.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2480 && echo -e 'GET /api/v1/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 204"]
       interval: 10s
       timeout: 8s
-      retries: 20
-      start_period: 120s
+      retries: 30
+      start_period: 180s
 
   # ── Dali (async PL/SQL parse service) ─────────────────────────────────────
   dali:
@@ -179,9 +181,9 @@ services:
       - "19090:9090"
     depends_on:
       frigg:
-        condition: service_healthy
+        condition: service_started   # ArcadeDB healthcheck unreliable; Quarkus retries connection
       ygg:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/q/health || exit 1"]
       interval: 10s
@@ -204,7 +206,7 @@ services:
       - "19093:9093"
     depends_on:
       frigg:
-        condition: service_healthy
+        condition: service_started   # ArcadeDB healthcheck unreliable; Quarkus retries connection
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/q/health || exit 1"]
       interval: 10s
