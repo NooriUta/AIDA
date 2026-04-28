@@ -23,7 +23,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 const BASIC = Buffer.from(
-  `${process.env.FRIGG_USER ?? 'root'}:${process.env.FRIGG_PASS ?? ''}`,
+  `${process.env.FRIGG_USER ?? 'root'}:${process.env.FRIGG_PASSWORD ?? ''}`,
 ).toString('base64');
 const FRIGG_URL = (process.env.FRIGG_URL ?? 'http://127.0.0.1:2481').replace(/\/$/, '');
 
