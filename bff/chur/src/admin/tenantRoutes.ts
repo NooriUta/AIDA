@@ -36,7 +36,7 @@ import { randomUUID } from 'node:crypto';
 
 const FRIGG_URL  = (process.env.FRIGG_URL  ?? 'http://127.0.0.1:2481').replace(/\/$/, '');
 const FRIGG_USER = process.env.FRIGG_USER  ?? 'root';
-const FRIGG_PASS = process.env.FRIGG_PASS  ?? 'playwithdata';
+const FRIGG_PASS = process.env.FRIGG_PASS  ?? '';
 const FRIGG_BASIC = Buffer.from(`${FRIGG_USER}:${FRIGG_PASS}`).toString('base64');
 const HEIMDALL_URL = (process.env.HEIMDALL_URL ?? 'http://127.0.0.1:9093').replace(/\/$/, '');
 
@@ -91,7 +91,7 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       if (!withStats) return reply.send(rows);
 
       const CONCURRENCY = 5;
-      const yggBasic = Buffer.from(`${process.env.YGG_USER ?? 'root'}:${process.env.YGG_PASS ?? 'playwithdata'}`).toString('base64');
+      const yggBasic = Buffer.from(`${process.env.YGG_USER ?? 'root'}:${process.env.YGG_PASS ?? ''}`).toString('base64');
       const YGG_URL = (process.env.YGG_URL ?? 'http://127.0.0.1:2480').replace(/\/$/, '');
 
       const countYgg = async (db: string): Promise<number | null> => {

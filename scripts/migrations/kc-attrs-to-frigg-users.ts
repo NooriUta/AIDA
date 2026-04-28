@@ -39,7 +39,7 @@ const KC_ADMIN_PASS = process.env.KC_ADMIN_PASS ?? 'admin';
 
 const FRIGG_URL     = (process.env.FRIGG_URL ?? 'http://localhost:2481').replace(/\/$/, '');
 const FRIGG_USER    = process.env.FRIGG_USER  ?? 'root';
-const FRIGG_PASS    = process.env.FRIGG_PASS  ?? 'playwithdata';
+const FRIGG_PASS    = process.env.FRIGG_PASS  ?? '';
 const FRIGG_USERS_DB = process.env.FRIGG_USERS_DB ?? 'frigg-users';
 
 const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';

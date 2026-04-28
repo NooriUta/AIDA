@@ -73,7 +73,7 @@ jobs:
       frigg:
         image: arcadedata/arcadedb:26.3.2
         env:
-          JAVA_OPTS: "-Darcadedb.server.rootPassword=playwithdata"
+          JAVA_OPTS: "-Darcadedb.server.rootPassword=ci_arcadedb_test_1"
         ports:
           - 2481:2480
         options: >-
@@ -98,7 +98,7 @@ jobs:
         run: |
           for i in $(seq 1 12); do
             CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-                   -X POST -u root:playwithdata \
+                   -X POST -u root:ci_arcadedb_test_1 \
                    -H 'Content-Type: application/json' \
                    -d '{"command":"create database dali"}' \
                    http://localhost:2481/api/v1/server)
@@ -111,7 +111,7 @@ jobs:
           done
           for i in $(seq 1 12); do
             CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-                   -X POST -u root:playwithdata \
+                   -X POST -u root:ci_arcadedb_test_1 \
                    -H 'Content-Type: application/json' \
                    -d '{"language":"sql","command":"SELECT 1"}' \
                    http://localhost:2481/api/v1/command/dali)
