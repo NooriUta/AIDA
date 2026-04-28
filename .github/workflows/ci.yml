@@ -71,7 +71,7 @@ jobs:
     # FRIGG (ArcadeDB) required by @QuarkusTest — DaliTest connects to :2481
     services:
       frigg:
-        image: arcadedata/arcadedb:26.4.1
+        image: arcadedata/arcadedb:26.4.2
         env:
           JAVA_OPTS: "-Darcadedb.server.rootPassword=ci_arcadedb_test_1"
         ports:

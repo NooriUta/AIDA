@@ -65,3 +65,6 @@ infra/terraform/
 infra/nginx/certs/*.crt
 infra/nginx/certs/*.key
 infra/nginx/certs/*.pem
+
+# ArcadeDB upgrade backups — локальные снапшоты, не коммитить
+backups/

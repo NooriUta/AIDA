@@ -120,7 +120,7 @@ services:
 
   # ── FRIGG (ArcadeDB — state store for HEIMDALL / Dali) ────────────────────
   frigg:
-    image: arcadedata/arcadedb:26.4.1
+    image: arcadedata/arcadedb:26.4.2
     restart: unless-stopped
     environment:
       # Password passed as a dedicated env-var so special characters (spaces,
@@ -145,7 +145,7 @@ services:
   # ── Ygg (ArcadeDB — lineage graph) ────────────────────────────────
   ygg:
     container_name: Ygg-1
-    image: arcadedata/arcadedb:26.4.1
+    image: arcadedata/arcadedb:26.4.2
     restart: unless-stopped
     environment:
       ARCADEDB_SERVER_ROOTPASSWORD: "${ARCADEDB_ADMIN_PASSWORD}"
