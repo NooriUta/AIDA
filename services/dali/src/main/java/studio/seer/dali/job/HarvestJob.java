@@ -4,6 +4,7 @@ import io.quarkus.arc.Unremovable;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jobrunr.jobs.annotations.Job;
+import org.jobrunr.jobs.lambdas.JobRequestHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.config.DaliConfig;
@@ -25,13 +26,22 @@ import java.util.List;
  */
 @Unremovable
 @ApplicationScoped
-public class HarvestJob {
+public class HarvestJob implements JobRequestHandler<HarvestJobRequest> {
 
     private static final Logger log = LoggerFactory.getLogger(HarvestJob.class);
 
     @Inject SessionService   sessionService;
     @Inject HeimdallEmitter  emitter;
     @Inject DaliConfig       config;
+
+    /**
+     * DMT-ASM-FIX: entry point used by {@link org.jobrunr.scheduling.JobRequestScheduler}.
+     * Delegates immediately to {@link #execute(String, String)}.
+     */
+    @Override
+    public void run(HarvestJobRequest req) throws Exception {
+        execute(req.harvestId(), req.tenantAlias());
+    }
 
     // concurrentJobsByType is JobRunr Pro only — OSS concurrency is bounded by
     // dali.jobrunr.worker-threads (default 4). Raise that config to allow more parallel harvests.

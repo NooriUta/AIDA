@@ -21,6 +21,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jobrunr.jobs.annotations.Job;
+import org.jobrunr.jobs.lambdas.JobRequestHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.heimdall.HeimdallEmitter;
@@ -61,7 +62,7 @@ import java.util.stream.Stream;
  */
 @Unremovable
 @ApplicationScoped
-public class ParseJob {
+public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
     private static final Logger log = LoggerFactory.getLogger(ParseJob.class);
 
@@ -84,6 +85,17 @@ public class ParseJob {
     // Optional — absent when HEIMDALL_URL env var is not set (e.g. CI, local dev without Heimdall).
     // SmallRye Config treats empty string "" as null; Optional maps null → empty without throwing.
     @ConfigProperty(name = "heimdall.url") Optional<String> heimdallUrl;
+
+    /**
+     * DMT-ASM-FIX: entry point used by {@link org.jobrunr.scheduling.JobRequestScheduler}.
+     * Delegates immediately to {@link #execute(String, ParseSessionInput)}.
+     * This method is called by JobRunr on the worker side when the job was enqueued
+     * via {@link ParseJobRequest} — no ASM lambda analysis occurs in that path.
+     */
+    @Override
+    public void run(ParseJobRequest req) throws Exception {
+        execute(req.sessionId(), req.input());
+    }
 
     @Job(name = "Parse SQL files", retries = 3)
     public void execute(String sessionId, ParseSessionInput input) {
