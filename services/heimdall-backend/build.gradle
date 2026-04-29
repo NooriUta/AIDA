@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'io.quarkus' version "${quarkusPlatformVersion}"
+    id 'jacoco'
 }
 
 group   = 'studio.seer.heimdall'
@@ -51,7 +52,20 @@ dependencies {
     testImplementation 'io.rest-assured:rest-assured'
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
     testImplementation 'org.assertj:assertj-core:3.27.3'
+    testImplementation 'io.quarkus:quarkus-jacoco'
 }
 
 compileJava.options.encoding     = 'UTF-8'
 compileTestJava.options.encoding = 'UTF-8'
+
+test { finalizedBy jacocoTestReport }
+jacocoTestReport {
+    dependsOn test
+    executionData fileTree(layout.buildDirectory).include(
+        'jacoco-quarkus.exec', 'jacoco/test.exec'
+    )
+    reports {
+        xml.required  = true
+        html.required = true
+    }
+}
