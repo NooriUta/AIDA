@@ -132,6 +132,12 @@ export default defineConfig({
         target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
+      // EV-09/UA-02: HEIMDALL event relay — POST /heimdall/events goes to Chur
+      // which forwards to HEIMDALL backend (fire-and-forget).
+      '/heimdall': {
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 });
