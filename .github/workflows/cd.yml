@@ -267,12 +267,17 @@ jobs:
             sudo bash -c "sed 's|\${DOMAIN}|'"${DOMAIN}"'|g; s|\${HEIMDALL_CIDR}|'"${CIDR}"'|g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
-            # Single SAN cert covers all three domains (certbot certonly with -d seer.* -d heimdall.*)
-            # Directory named after the first -d argument only.
-            if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-              sudo nginx -t && sudo systemctl restart nginx
+            # Renew cert if certbot available (idempotent — skips if not due yet)
+            if command -v certbot >/dev/null 2>&1; then
+              sudo certbot renew --quiet --deploy-hook "systemctl reload nginx" || true
+            fi
+            # Reload nginx if config test passes (works regardless of cert path)
+            if sudo nginx -t 2>/dev/null; then
+              sudo systemctl reload nginx
+              echo "Nginx reloaded OK"
             else
-              echo "TLS cert not yet provisioned for ${DOMAIN} — skipping nginx reload"
+              echo "Nginx config test failed — check cert path for ${DOMAIN}"
+              sudo nginx -t
             fi
 
       - name: Deploy
