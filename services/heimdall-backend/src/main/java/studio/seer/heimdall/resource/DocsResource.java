@@ -32,6 +32,9 @@ public class DocsResource {
     @ConfigProperty(name = "docs.root", defaultValue = "/docs")
     String docsRoot;
 
+    @ConfigProperty(name = "user.dir", defaultValue = ".")
+    String userDir;
+
     /**
      * Resolve effective docs root:
      *  1. Use docs.root if it's a valid directory (Docker: /docs mounted as volume).
@@ -43,7 +46,7 @@ public class DocsResource {
         if (Files.isDirectory(configured)) return configured;
 
         // Walk up from CWD looking for a docs/ directory with .md files
-        java.nio.file.Path dir = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
+        java.nio.file.Path dir = Paths.get(userDir).toAbsolutePath();
         for (int i = 0; i < 5; i++) {
             java.nio.file.Path candidate = dir.resolve("docs");
             if (Files.isDirectory(candidate)) {

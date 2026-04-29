@@ -136,7 +136,7 @@ class JdbcUrlSsrfBlocklistTest {
 
     @Test
     void validate_allows_publicExternalHost() {
-        var r = validator.validate("jdbc:postgresql://db.example.com:5432/prod");
+        var r = validator.validate("jdbc:postgresql://example.com:5432/prod");
         assertTrue(r.allowed(), "Public host must still be allowed: " + r.reason());
     }
 }

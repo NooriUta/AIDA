@@ -160,6 +160,10 @@ public class JdbcUrlValidator {
         if (ip.length == 4 && (ip[0] & 0xff) == 169 && (ip[1] & 0xff) == 254) {
             return "AWS/GCP/Azure metadata endpoint (169.254.169.254 family)";
         }
+        // Azure Wire Server / IMDS range 168.63.0.0/16 — not in any RFC1918 or link-local range
+        if (ip.length == 4 && (ip[0] & 0xff) == 168 && (ip[1] & 0xff) == 63) {
+            return "Azure Wire Server / IMDS endpoint (168.63.0.0/16)";
+        }
         return null;
     }
 
