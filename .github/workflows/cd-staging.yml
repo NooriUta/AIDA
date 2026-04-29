@@ -330,6 +330,29 @@ jobs:
             # before --import-realm finishes seeding seer-realm.json (race condition).
             wait_infra "http://localhost:18180/kc/realms/seer" "KC(seer)" 60 || exit 1
 
+            # ── Version assertions (warn-only on staging) ─────────────────────
+            echo "=== Version assertions ==="
+            check_arcade_ver() {
+              local url="$1" pass="$2" expected="$3" label="$4"
+              local ver
+              ver=$(curl -sf --max-time 10 -u "root:${pass}" "${url}/api/v1/server" 2>/dev/null \
+                | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo "?")
+              if echo "${ver}" | grep -qF "${expected}"; then
+                echo "  [${label}] OK — ${ver}"
+              else
+                echo "  [${label}] WARN: expected ${expected}, got: ${ver} — check image pin in docker-compose.prod.yml"
+              fi
+            }
+            check_arcade_ver "http://localhost:2481" "${FRIGG_PASSWORD}"          "26.4.2" "FRIGG"
+            check_arcade_ver "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "26.4.2" "YGG"
+            KC_VER=$(curl -sf --max-time 10 "http://localhost:18180/kc/realms/seer" 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("keycloak-version","?"))' 2>/dev/null || echo "?")
+            if echo "${KC_VER}" | grep -qF "26.6"; then
+              echo "  [KC] OK — ${KC_VER}"
+            else
+              echo "  [KC] WARN: expected 26.6.x, got: ${KC_VER} — check image pin in docker-compose.prod.yml"
+            fi
+
             # ── DB bootstrap ──────────────────────────────────────────────────
             echo "=== Running init-arcadedb.sh ==="
             INIT_ARCADEDB_TIMEOUT=300 \
@@ -348,10 +371,11 @@ jobs:
 
             # ── Health checks ─────────────────────────────────────────────────
             echo "=== Waiting for services ==="
-            wait_infra "http://localhost:13000/health"   "Chur"    || { echo "Chur FAILED";    exit 1; }
-            wait_infra "http://localhost:18080/q/health" "Shuttle" || { echo "Shuttle FAILED"; exit 1; }
-            wait_infra "http://localhost:15173/"         "Verdandi" || { echo "Verdandi FAILED"; exit 1; }
-            wait_infra "http://localhost:19090/q/health" "Dali"    || { echo "Dali FAILED";    exit 1; }
+            wait_infra "http://localhost:13000/health"   "Chur"             || { echo "Chur FAILED";             exit 1; }
+            wait_infra "http://localhost:18080/q/health" "Shuttle"          || { echo "Shuttle FAILED";          exit 1; }
+            wait_infra "http://localhost:15173/"         "Verdandi"         || { echo "Verdandi FAILED";         exit 1; }
+            wait_infra "http://localhost:19090/q/health" "Dali"             || { echo "Dali FAILED";             exit 1; }
+            wait_infra "http://localhost:19093/q/health" "heimdall-backend" || { echo "heimdall-backend FAILED"; exit 1; }
             echo "=== All services OK ==="
 
             # ── Integration test pre-clean ────────────────────────────────────

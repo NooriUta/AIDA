@@ -438,6 +438,30 @@ jobs:
             # after master is ready (--import-realm runs asynchronously in KC startup)
             wait_infra "http://localhost:18180/kc/realms/seer"   "KC(seer)" "" || exit 1
 
+            # ── Version assertions (fatal on prod) ────────────────────────────
+            # Abort deploy if ArcadeDB or KC version doesn't match the pinned version
+            # in docker-compose.prod.yml. Prevents silent mismatches after image pin changes.
+            echo "=== Version assertions ==="
+            FRIGG_VER=$(curl -sf --max-time 10 -u "root:${FRIGG_PASSWORD}" \
+              http://localhost:2481/api/v1/server 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo "?")
+            echo "  FRIGG: ${FRIGG_VER}"
+            echo "${FRIGG_VER}" | grep -qF "26.4.2" \
+              || { echo "ERROR: FRIGG version mismatch — expected 26.4.2 (update assert or image pin)"; exit 1; }
+
+            YGG_VER=$(curl -sf --max-time 10 -u "root:${ARCADEDB_ADMIN_PASSWORD}" \
+              http://localhost:2480/api/v1/server 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo "?")
+            echo "  YGG: ${YGG_VER}"
+            echo "${YGG_VER}" | grep -qF "26.4.2" \
+              || { echo "ERROR: YGG version mismatch — expected 26.4.2 (update assert or image pin)"; exit 1; }
+
+            KC_VER=$(curl -sf --max-time 10 "http://localhost:18180/kc/realms/seer" 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("keycloak-version","?"))' 2>/dev/null || echo "?")
+            echo "  KC: ${KC_VER}"
+            echo "${KC_VER}" | grep -qF "26.6" \
+              || { echo "ERROR: KC version mismatch — expected 26.6.x (update assert or image pin)"; exit 1; }
+
             # ── DB bootstrap / idempotent schema init ──────────────────────────
             # FRIGG + YGG + KC are ready. Creates frigg-tenants, dali_default,
             # hound_default, hound_src_default, seeds DaliTenantConfig('default').
@@ -461,9 +485,11 @@ jobs:
 
             # Health checks (reuse wait_infra; Chur/Shuttle/Verdandi need no auth)
             echo "Waiting for services..."
-            wait_infra "http://localhost:13000/health" "Chur"     "" || { echo "Chur health check FAILED";     exit 1; }
-            wait_infra "http://localhost:18080/q/health" "SHUTTLE" "" || { echo "SHUTTLE health check FAILED"; exit 1; }
-            wait_infra "http://localhost:15173/"        "Verdandi" "" || { echo "Verdandi health check FAILED"; exit 1; }
+            wait_infra "http://localhost:13000/health"   "Chur"             "" || { echo "Chur health check FAILED";             exit 1; }
+            wait_infra "http://localhost:18080/q/health" "Shuttle"          "" || { echo "Shuttle health check FAILED";          exit 1; }
+            wait_infra "http://localhost:15173/"         "Verdandi"         "" || { echo "Verdandi health check FAILED";         exit 1; }
+            wait_infra "http://localhost:19090/q/health" "Dali"             "" || { echo "Dali health check FAILED";             exit 1; }
+            wait_infra "http://localhost:19093/q/health" "heimdall-backend" "" || { echo "heimdall-backend health check FAILED"; exit 1; }
             echo "  All services OK"
 
             echo "Deploy OK — ${{ env.RELEASE_TAG }} (${{ github.sha }})"
