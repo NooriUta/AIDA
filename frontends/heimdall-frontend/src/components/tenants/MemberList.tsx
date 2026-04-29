@@ -28,16 +28,16 @@ export function MemberList({ members, onRemove, busy }: Props) {
       <tbody>
         {members.map(m => (
           <tr key={m.id} style={{ borderBottom: '1px solid var(--bd)' }}>
-            <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{m.username}</td>
+            <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{m.name}</td>
             <td style={{ padding: '8px 12px' }}>{m.email}</td>
             <td style={{ padding: '8px 12px' }}>{m.role}</td>
-            <td style={{ padding: '8px 12px', color: m.enabled ? 'var(--suc)' : 'var(--t3)' }}>
-              {m.enabled ? '✓' : '—'}
+            <td style={{ padding: '8px 12px', color: m.active ? 'var(--suc)' : 'var(--t3)' }}>
+              {m.active ? '✓' : '—'}
             </td>
             <td style={{ padding: '8px 12px', textAlign: 'right' }}>
               <button
                 className="btn btn-danger"
-                data-testid={`member-remove-${m.username}`}
+                data-testid={`member-remove-${m.name}`}
                 disabled={busy}
                 onClick={() => onRemove(m)}
               >

@@ -438,6 +438,26 @@ jobs:
             # after master is ready (--import-realm runs asynchronously in KC startup)
             wait_infra "http://localhost:18180/kc/realms/seer"   "KC(seer)" "" || exit 1
 
+            # ── Version assertions (fatal on prod) ────────────────────────────
+            # Abort deploy if ArcadeDB or KC image tag doesn't match the pinned version
+            # in docker-compose.prod.yml. Uses docker inspect — ArcadeDB /api/v1/server
+            # and KC realm endpoint don't expose a parseable version in these releases.
+            echo "=== Version assertions ==="
+            FRIGG_IMAGE=$(docker inspect seer-studio-frigg-1 --format='{{.Config.Image}}' 2>/dev/null || echo "?")
+            echo "  FRIGG: ${FRIGG_IMAGE}"
+            echo "${FRIGG_IMAGE}" | grep -qF "26.4.2" \
+              || { echo "ERROR: FRIGG version mismatch — expected 26.4.2 (update assert or image pin)"; exit 1; }
+
+            YGG_IMAGE=$(docker inspect Ygg-1 --format='{{.Config.Image}}' 2>/dev/null || echo "?")
+            echo "  YGG: ${YGG_IMAGE}"
+            echo "${YGG_IMAGE}" | grep -qF "26.4.2" \
+              || { echo "ERROR: YGG version mismatch — expected 26.4.2 (update assert or image pin)"; exit 1; }
+
+            KC_IMAGE=$(docker inspect seer-studio-keycloak-1 --format='{{.Config.Image}}' 2>/dev/null || echo "?")
+            echo "  KC: ${KC_IMAGE}"
+            echo "${KC_IMAGE}" | grep -qF "26.6.1" \
+              || { echo "ERROR: KC version mismatch — expected 26.6.1 (update assert or image pin)"; exit 1; }
+
             # ── DB bootstrap / idempotent schema init ──────────────────────────
             # FRIGG + YGG + KC are ready. Creates frigg-tenants, dali_default,
             # hound_default, hound_src_default, seeds DaliTenantConfig('default').
@@ -459,11 +479,46 @@ jobs:
               # Services will retry schema init on startup (FriggSchemaInitializer).
             }
 
+            # ── YGG + FRIGG warm-up probe ─────────────────────────────────────
+            # ArcadeDB lists databases in /api/v1/databases before actually opening them.
+            # init-arcadedb.sh skips creation when a DB is listed, but the DB may still
+            # be unavailable (WAL replay, corrupt journal, etc.).
+            # Probing with SELECT 1 forces ArcadeDB to open each DB before app services start.
+            # On prod: NO auto-recreate — if a DB is inaccessible, abort and alert.
+            echo "=== YGG/FRIGG database warm-up probe ==="
+            probe_db() {
+              local base_url="$1" pass="$2" db="$3"
+              local ok=0
+              for i in $(seq 1 18); do
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+                  -u "root:${pass}" -X POST "${base_url}/api/v1/query/${db}" \
+                  -H "Content-Type: application/json" \
+                  -d '{"language":"sql","command":"SELECT 1","params":{}}' 2>/dev/null || echo "000")
+                if [ "$CODE" = "200" ]; then
+                  echo "  [${db}] warm — OK (attempt ${i})"; ok=1; break
+                fi
+                echo "  [${db}] probe ${i}/18 HTTP ${CODE}..."; sleep 5
+              done
+              if [ "$ok" = "0" ]; then
+                echo "ERROR: [${db}] not available after 90s — aborting deploy (check backup + restore)"
+                return 1
+              fi
+            }
+            probe_db "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_default"     || exit 1
+            probe_db "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_src_default" || exit 1
+            probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "frigg-tenants"     || exit 1
+            probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "frigg-sessions"    || exit 1
+            probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "dali"              || exit 1
+            probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "dali_default"      || exit 1
+            probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "heimdall"          || exit 1
+
             # Health checks (reuse wait_infra; Chur/Shuttle/Verdandi need no auth)
             echo "Waiting for services..."
-            wait_infra "http://localhost:13000/health" "Chur"     "" || { echo "Chur health check FAILED";     exit 1; }
-            wait_infra "http://localhost:18080/q/health" "SHUTTLE" "" || { echo "SHUTTLE health check FAILED"; exit 1; }
-            wait_infra "http://localhost:15173/"        "Verdandi" "" || { echo "Verdandi health check FAILED"; exit 1; }
+            wait_infra "http://localhost:13000/health"   "Chur"             "" || { echo "Chur health check FAILED";             exit 1; }
+            wait_infra "http://localhost:18080/q/health" "Shuttle"          "" || { echo "Shuttle health check FAILED";          exit 1; }
+            wait_infra "http://localhost:15173/"         "Verdandi"         "" || { echo "Verdandi health check FAILED";         exit 1; }
+            wait_infra "http://localhost:19090/q/health" "Dali"             "" || { echo "Dali health check FAILED";             exit 1; }
+            wait_infra "http://localhost:19093/q/health" "heimdall-backend" "" || { echo "heimdall-backend health check FAILED"; exit 1; }
             echo "  All services OK"
 
             echo "Deploy OK — ${{ env.RELEASE_TAG }} (${{ github.sha }})"

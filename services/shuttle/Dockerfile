@@ -27,7 +27,7 @@ COPY libraries/tenant-routing/src                 libraries/tenant-routing/src
 RUN gradle :services:shuttle:build -x test --no-daemon \
     -Dquarkus.package.jar.type=uber-jar
 
-FROM eclipse-temurin:21-jre-alpine AS runner
+FROM eclipse-temurin:21.0.9_10-jre-alpine AS runner
 WORKDIR /app
 COPY --from=builder /app/services/shuttle/build/*-runner.jar app.jar
 EXPOSE 8080

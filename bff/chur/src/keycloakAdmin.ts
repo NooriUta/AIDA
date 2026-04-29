@@ -4,12 +4,16 @@
  * from the `seer` realm.
  *
  * Storage split (what lives where):
- *   KEYCLOAK attributes — profile (title, dept, phone), avatarColor,
- *                         tz, dateFmt, startPage, notify.*,
- *                         quota_*, source_bindings  (R4.3)
- *   FRIGG (M3 backlog)  — session history, usage counters
- *   localStorage (client)— theme, palette, uiFont, monoFont, fontSize,
- *                          density, lang  (synced by verdandi / ProfileModal)
+ *   KEYCLOAK attributes — profile.{title,dept,phone}, avatarColor,
+ *                         prefs.{lang,theme,tz,dateFmt,density,startPage},
+ *                         prefs.notify.*, verdandi.{palette,uiFont,monoFont,
+ *                         fontSize,graphPrefs}, source_bindings
+ *                         (quotas zeroed: MTN-58, enforcement → DaliTenantConfig)
+ *   FRIGG frigg-users   — UserProfile, UserPreferences, UserNotifications,
+ *                         UserConsents, UserSourceBindings,
+ *                         UserApplicationState, UserLifecycle,
+ *                         UserSessionEvents  (MTN-65, self-service /me/* paths)
+ *   localStorage (client)— runtime UI state synced from FRIGG on login
  */
 
 import { config } from './config';
@@ -203,61 +207,6 @@ export async function listUsers(): Promise<KcUserView[]> {
     // AbortError = timeout, TypeError = network unreachable
     console.warn('[KC] listUsers unavailable:', (err as Error).message);
     return [];
-  }
-}
-
-/**
- * Update user attributes in Keycloak (profile + prefs).
- * Does NOT change role or enabled state — those are separate KC operations.
- * Silently swallows errors if Keycloak Admin API is unavailable.
- */
-export async function updateUserAttrs(
-  userId: string,
-  patch: Partial<Omit<KcUserView, 'id' | 'name' | 'email' | 'role' | 'active' | 'quotas' | 'sources'>>
-       & { quotas?: KcUserView['quotas']; sources?: string[] },
-): Promise<void> {
-  try {
-    const token = await getAdminToken();
-
-    // Build KC attributes object (all values are string arrays)
-    const attributes: Record<string, string[]> = {};
-    if (patch.title       !== undefined) attributes['title']           = [patch.title];
-    if (patch.dept        !== undefined) attributes['dept']            = [patch.dept];
-    if (patch.phone       !== undefined) attributes['phone']           = [patch.phone];
-    if (patch.avatarColor !== undefined) attributes['avatarColor']     = [patch.avatarColor];
-    if (patch.lang        !== undefined) attributes['pref.lang']       = [patch.lang];
-    if (patch.tz          !== undefined) attributes['tz']              = [patch.tz];
-    if (patch.dateFmt     !== undefined) attributes['dateFmt']         = [patch.dateFmt];
-    if (patch.startPage   !== undefined) attributes['startPage']       = [patch.startPage];
-    if (patch.notifyEmail    !== undefined) attributes['notify.email']   = [String(patch.notifyEmail)];
-    if (patch.notifyBrowser  !== undefined) attributes['notify.browser'] = [String(patch.notifyBrowser)];
-    if (patch.notifyHarvest  !== undefined) attributes['notify.harvest'] = [String(patch.notifyHarvest)];
-    if (patch.notifyErrors   !== undefined) attributes['notify.errors']  = [String(patch.notifyErrors)];
-    if (patch.notifyDigest   !== undefined) attributes['notify.digest']  = [String(patch.notifyDigest)];
-    // MTN-58: silently ignore patch.quotas — user-level quota decommissioned;
-    // tenant-level caps set via PUT /admin/tenants/:alias instead.
-    // if (patch.quotas !== undefined) { /* no-op */ }
-    if (patch.sources !== undefined) {
-      attributes['source_bindings'] = [patch.sources.join(',')];
-    }
-
-    const res = await fetch(
-      `${KC_BASE}/admin/realms/${KC_REALM}/users/${userId}`,
-      {
-        method:  'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          firstName:  patch.firstName,
-          attributes,
-        }),
-        signal: AbortSignal.timeout(5_000),
-      },
-    );
-    if (!res.ok) {
-      console.warn(`[KC] updateUserAttrs ${res.status}`);
-    }
-  } catch (err) {
-    console.warn('[KC] updateUserAttrs unavailable:', (err as Error).message);
   }
 }
 

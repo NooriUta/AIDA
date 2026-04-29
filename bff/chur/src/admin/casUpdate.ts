@@ -58,6 +58,22 @@ export async function casUpdateTenant(
   if (typeof expectedConfigVersion !== 'number' || expectedConfigVersion < 1) {
     throw new Error('expectedConfigVersion must be a positive integer');
   }
+
+  // Pre-check: read current configVersion before attempting the update.
+  // ArcadeDB's HTTP API does not return affected-row counts, so we can't tell
+  // whether UPDATE ... WHERE configVersion = :expected was a no-op.  Without
+  // this pre-check the post-update re-SELECT would silently report success
+  // whenever current === expected + 1 (i.e. another writer already bumped it
+  // to exactly the value we would have written), causing silent data loss.
+  const pre = await friggSql(db,
+    `SELECT configVersion FROM DaliTenantConfig WHERE tenantAlias = :alias LIMIT 1`,
+    { alias: tenantAlias },
+  );
+  const currentBefore = Number((pre[0] as { configVersion?: number })?.configVersion ?? 0);
+  if (currentBefore !== expectedConfigVersion) {
+    return { ok: false, conflict: true, current: currentBefore };
+  }
+
   const params: Record<string, unknown> = {
     ...(input.params ?? {}),
     alias:    tenantAlias,
@@ -68,7 +84,7 @@ export async function casUpdateTenant(
      WHERE tenantAlias = :alias AND configVersion = :expected`,
     params,
   );
-  // ArcadeDB HTTP does not return affected-rows — re-SELECT to confirm CAS success.
+  // Confirm the write landed (narrow race window between pre-check and UPDATE).
   const after = await friggSql(db,
     `SELECT configVersion FROM DaliTenantConfig WHERE tenantAlias = :alias LIMIT 1`,
     { alias: tenantAlias },

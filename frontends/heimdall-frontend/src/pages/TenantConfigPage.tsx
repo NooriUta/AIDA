@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useTenantDetails } from '../hooks/useTenantDetails';
 import { TenantConfigEditor } from '../components/tenants/TenantConfigEditor';
-import { updateTenantConfig, type TenantConfigPatch } from '../api/admin';
+import { updateTenantConfigCAS, type TenantConfigPatch } from '../api/admin';
 
 export default function TenantConfigPage() {
   const { alias } = useParams<{ alias: string }>();
@@ -20,10 +20,10 @@ export default function TenantConfigPage() {
   const [saving, setSaving] = useState(false);
 
   async function handleSave(patch: TenantConfigPatch) {
-    if (!alias) return;
+    if (!alias || !tenant) return;
     setSaving(true);
     try {
-      await updateTenantConfig(alias, patch);
+      await updateTenantConfigCAS(alias, { ...patch, expectedConfigVersion: tenant.configVersion });
       refresh();
     } finally {
       setSaving(false);

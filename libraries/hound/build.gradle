@@ -47,7 +47,7 @@ dependencies {
 
     // ArcadeDB network client (internal write path)
     // arcadedb-engine removed — Embedded mode temporarily disabled (Q31)
-    implementation 'com.arcadedb:arcadedb-network:26.3.2'
+    implementation 'com.arcadedb:arcadedb-network:26.4.2'
 
     // Tests
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
