@@ -142,6 +142,19 @@ export function TenantList({ tenants, onRefresh }: Props) {
                 <span style={{ fontWeight: 600, color: 'var(--t1)', fontSize: 13 }}>
                   {tenant.tenantAlias}
                 </span>
+                {tenant.displayName && tenant.displayName !== tenant.tenantAlias && (
+                  <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 1 }}
+                    title={t('tenants.detail.displayName', 'KC display name')}>
+                    {tenant.displayName}
+                  </div>
+                )}
+                {tenant.drift && (
+                  <span className="badge badge-warn"
+                    title={t('tenants.detail.driftBadge', 'KC / FRIGG config out of sync')}
+                    style={{ fontSize: 10, marginTop: 2, display: 'inline-block' }}>
+                    drift
+                  </span>
+                )}
               </td>
               <td>
                 <TenantStatusBadge status={tenant.status} />

@@ -577,6 +577,10 @@
     "confirmArchiveMsg":    "Архивация «{{alias}}» экспортирует все базы в S3 и удалит их. Без Restore операция необратима.",
     "confirmExtendTitle":   "Подтвердите продление хранения",
     "confirmExtendMsg":     "Продлить хранение «{{alias}}» до {{date}} (+{{days}} дней)?",
+    "detail": {
+      "displayName":  "Отображаемое имя KC",
+      "driftBadge":   "Конфиг KC и FRIGG расходятся"
+    },
     "hints": {
       "alias":                 "Уникальный псевдоним тенанта; используется в именах БД и scope claim",
       "status":                "Жизненный цикл: ACTIVE → SUSPENDED → ARCHIVED → PURGED",
