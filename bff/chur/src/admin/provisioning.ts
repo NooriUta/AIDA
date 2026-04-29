@@ -175,6 +175,7 @@ async function friggCreateDb(dbName: string): Promise<void> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    if (/already exists/i.test(body)) return; // DROP raced — treat as success
     throw new Error(`FRIGG create db ${dbName}: ${res.status}${body ? ` — ${body.slice(0, 300)}` : ''}`);
   }
   await waitDbAccessible(FRIGG_URL, FRIGG_BASIC, dbName);
@@ -337,26 +338,43 @@ export async function provisionTenant(
 
   // Step 2 — DaliTenantConfig PROVISIONING (compensation: delete row)
   // Defaults mirror the `default` tenant row so UI/quota logic sees identical shape.
+  // Resume case: if a stale row exists (PROVISIONING_FAILED from a prior run),
+  // the INSERT hits the UNIQUE index — fall back to UPDATE so provisioning can continue.
   await runStep(2, async () => {
-    await friggSql('frigg-tenants',
-      `INSERT INTO DaliTenantConfig SET
-         tenantAlias = :alias, keycloakOrgId = :orgId, status = 'PROVISIONING',
-         yggLineageDbName = :lineageDb, yggSourceArchiveDbName = :sourceDb,
-         friggDaliDbName = :daliDb, configVersion = 1,
-         harvestCron = :harvestCron, llmMode = 'off',
-         dataRetentionDays = 30, maxParseSessions = 10, maxAtoms = 10000,
-         maxSources = 5, maxConcurrentJobs = 2,
-         createdAt = :ts, updatedAt = :ts`,
-      {
-        alias,
-        orgId:       keycloakOrgId,
-        lineageDb:   `hound_${dbSafe(alias)}`,
-        sourceDb:    `hound_src_${dbSafe(alias)}`,
-        daliDb:      `dali_${dbSafe(alias)}`,
-        harvestCron: harvestCron(alias),
-        ts:          Date.now(),
-      },
-    );
+    const params = {
+      alias,
+      orgId:       keycloakOrgId,
+      lineageDb:   `hound_${dbSafe(alias)}`,
+      sourceDb:    `hound_src_${dbSafe(alias)}`,
+      daliDb:      `dali_${dbSafe(alias)}`,
+      harvestCron: harvestCron(alias),
+      ts:          Date.now(),
+    };
+    try {
+      await friggSql('frigg-tenants',
+        `INSERT INTO DaliTenantConfig SET
+           tenantAlias = :alias, keycloakOrgId = :orgId, status = 'PROVISIONING',
+           yggLineageDbName = :lineageDb, yggSourceArchiveDbName = :sourceDb,
+           friggDaliDbName = :daliDb, configVersion = 1,
+           harvestCron = :harvestCron, llmMode = 'off',
+           dataRetentionDays = 30, maxParseSessions = 10, maxAtoms = 10000,
+           maxSources = 5, maxConcurrentJobs = 2,
+           createdAt = :ts, updatedAt = :ts`,
+        params,
+      );
+    } catch (e) {
+      if (!/(already exists|duplicate|unique)/i.test((e as Error).message)) throw e;
+      // Row exists from a prior failed run — update it to PROVISIONING so saga can continue.
+      await friggSql('frigg-tenants',
+        `UPDATE DaliTenantConfig SET
+           keycloakOrgId = :orgId, status = 'PROVISIONING',
+           yggLineageDbName = :lineageDb, yggSourceArchiveDbName = :sourceDb,
+           friggDaliDbName = :daliDb, harvestCron = :harvestCron,
+           updatedAt = :ts
+         WHERE tenantAlias = :alias`,
+        params,
+      );
+    }
   }, async () => {
     await friggSql('frigg-tenants',
       `DELETE FROM DaliTenantConfig WHERE tenantAlias = :alias`,

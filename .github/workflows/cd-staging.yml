@@ -352,6 +352,42 @@ jobs:
             wait_infra "http://localhost:18080/q/health" "Shuttle" || { echo "Shuttle FAILED"; exit 1; }
             wait_infra "http://localhost:15173/"        "Verdandi" || { echo "Verdandi FAILED"; exit 1; }
             echo "=== All services OK ==="
+
+            # ── Integration test pre-clean ────────────────────────────────────
+            # On merge deploys, FRIGG/YGG volumes persist. The CI test tenant
+            # 'acme-ci' may be stuck in PROVISIONING_FAILED from a prior run.
+            # Clean it up here (before integration tests) so provisioning starts
+            # fresh. Uses KC admin API + ArcadeDB direct SQL — no Chur auth needed.
+            echo "=== Integration test pre-clean: acme-ci ==="
+            set -a; source .env.prod 2>/dev/null || true; set +a
+            FRIGG_PASS_ACTUAL="${FRIGG_PASSWORD:-${ARCADEDB_ADMIN_PASSWORD:-playwithdata}}"
+            KC_TOKEN=$(curl -sf --max-time 10 \
+              -X POST "http://localhost:18180/kc/realms/master/protocol/openid-connect/token" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
+              2>/dev/null | python -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null || echo "")
+            if [ -n "$KC_TOKEN" ]; then
+              KC_ORG_ID=$(curl -sf --max-time 5 \
+                -H "Authorization: Bearer $KC_TOKEN" \
+                "http://localhost:18180/kc/admin/realms/seer/organizations?search=acme-ci" \
+                2>/dev/null | python -c 'import json,sys; orgs=json.load(sys.stdin); r=[o for o in orgs if o.get("alias")=="acme-ci"]; print(r[0]["id"] if r else "")' 2>/dev/null || echo "")
+              if [ -n "$KC_ORG_ID" ]; then
+                curl -sf -X DELETE -H "Authorization: Bearer $KC_TOKEN" \
+                  "http://localhost:18180/kc/admin/realms/seer/organizations/${KC_ORG_ID}" 2>/dev/null || true
+                echo "  KC org acme-ci deleted"
+              else
+                echo "  KC org acme-ci not found (clean)"
+              fi
+            else
+              echo "  KC admin token unavailable — skipping KC org cleanup"
+            fi
+            curl -sf --max-time 5 -X POST "http://localhost:2481/api/v1/command/frigg-tenants" \
+              -u "root:${FRIGG_PASS_ACTUAL}" -H "Content-Type: application/json" \
+              -d '{"language":"sql","command":"DELETE FROM DaliTenantConfig WHERE tenantAlias = '\''acme-ci'\''"}' \
+              2>/dev/null || true
+            echo "  FRIGG acme-ci record deleted"
+            echo "=== Pre-clean done ==="
+
             echo "Staging deploy OK — ${{ github.sha }}"
 
       # ── Smoke tests ───────────────────────────────────────────────────────────
@@ -387,6 +423,13 @@ jobs:
           key:      ${{ secrets.DEPLOY_KEY_STAGING }}
           command_timeout: 40m
           script: |
+            # Restart Chur to reset rate limiter state accumulated during smoke tests.
+            docker restart seer-studio-chur-1
+            for i in $(seq 1 15); do
+              curl -sf http://localhost:13000/health >/dev/null 2>&1 && break
+              echo "Waiting for Chur health... (${i}/15)"; sleep 3
+            done
+
             cd /opt/seer-studio
             # Minimal repo fixtures (2 SQL files per module) — stale full datasets
             # are wiped in "Ensure deploy dir is writable" before each SCP.

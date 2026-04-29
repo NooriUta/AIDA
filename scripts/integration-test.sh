@@ -221,7 +221,7 @@ for i in $(seq 1 30); do
     -w "\n%{http_code}" || echo -e "\n000")
   STATUS_CODE=$(echo "$STATUS_RESP" | tail -1)
   STATUS_BODY=$(echo "$STATUS_RESP" | head -1)
-  TENANT_STATUS=$(echo "$STATUS_BODY" | grep -oE '"status":"[^"]*"' | head -1 | grep -oE '[A-Z]+' || echo "")
+  TENANT_STATUS=$(echo "$STATUS_BODY" | grep -oP '"status":"\K[^"]+' || echo "unknown")
   if [ "$STATUS_CODE" = "200" ] && echo "$STATUS_BODY" | grep -q '"ACTIVE"'; then
     ok "Tenant ACTIVE после ${i}×5s"
     TENANT_ACTIVE=1
