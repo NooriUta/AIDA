@@ -78,7 +78,8 @@
   "ws": {
     "open":       "connected",
     "connecting": "connecting",
-    "closed":     "disconnected"
+    "closed":     "disconnected",
+    "error":      "connection error"
   },
   "commandPalette": { "title": "Command Palette" },
   "metrics": {
@@ -126,7 +127,9 @@
     "pause":     "Pause",
     "paused":    "PAUSED",
     "resume":    "Resume",
-    "events":    "events"
+    "events":          "events",
+    "emptyHint":       "Waiting for events…",
+    "emptyHintDetail": "Events appear here when services emit them: login, parse run, Shuttle query, source create/delete, slow render, etc."
   },
   "services": {
     "title":        "Services",
