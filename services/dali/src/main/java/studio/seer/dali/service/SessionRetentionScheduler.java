@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.dali.config.DaliConfig;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -16,6 +17,10 @@ import java.time.temporal.ChronoUnit;
  *
  * <p>Safe in multi-instance deployments: each instance runs its own purge; the
  * DELETE is idempotent so concurrent purges produce no side-effects.
+ *
+ * <p>DMT-07: when {@code dali.jobrunr.worker-only=true} the cron fires but
+ * immediately returns without purging — the designated scheduler pod handles
+ * retention. Worker-only replicas skip this to avoid redundant FRIGG load.
  *
  * <p>Configure via env:
  * <pre>
@@ -30,14 +35,29 @@ public class SessionRetentionScheduler {
     @ConfigProperty(name = "dali.session.retention-days", defaultValue = "30")
     int retentionDays;
 
-    @Inject
-    SessionService sessionService;
+    @Inject SessionService sessionService;
+    @Inject DaliConfig config;
 
     /** Runs daily at 03:00. Cron format: second minute hour day month weekday */
     @Scheduled(cron = "0 0 3 * * ?")
-    void purgeExpiredSessions() {
+    void purgeExpiredSessionsCron() {
+        tryPurgeExpiredSessions();
+    }
+
+    /**
+     * Purges expired sessions unless this node is in worker-only mode.
+     *
+     * @return {@code true} if purge ran, {@code false} if skipped (DMT-07 guard).
+     *         Package-private for unit testing.
+     */
+    boolean tryPurgeExpiredSessions() {
+        if (config.jobrunr().workerOnly()) {
+            log.debug("SessionRetentionScheduler: worker-only mode — skipping purge (DMT-07)");
+            return false;
+        }
         Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
         log.info("SessionRetention: purging sessions older than {} days (cutoff={})", retentionDays, cutoff);
         sessionService.purgeExpired(cutoff);
+        return true;
     }
 }
