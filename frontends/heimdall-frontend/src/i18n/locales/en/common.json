@@ -40,11 +40,12 @@
     "password": "Password",
     "signingIn": "Signing in…",
     "error": {
-      "invalid":   "Invalid username or password.",
-      "required":  "This field is required",
-      "server":    "Server error. Please try again.",
-      "network":   "Cannot connect to server. Check your network.",
-      "rateLimit": "Too many login attempts. Try again in 15 minutes."
+      "invalid":       "Invalid username or password.",
+      "required":      "This field is required",
+      "server":        "Server error. Please try again.",
+      "network":       "Cannot connect to server. Check your network.",
+      "rateLimit":     "Too many login attempts. Try again in 15 minutes.",
+      "accountLocked": "Your account is locked. Please contact your administrator."
     }
   },
   "theme":   { "dark": "Dark",    "light": "Light" },
@@ -336,7 +337,7 @@
       "errSelectFile":    "Select a file to upload",
       "errSourceRequired": "Source path is required",
       "errAnotherActive": "Another session is active — wait for it to finish",
-      "err413": "File is too large. Maximum upload size is 200 MB."
+      "err413":           "File is too large. Maximum upload size is 200 MB."
     },
     "sessions": {
       "panelTitle":       "Sessions",
