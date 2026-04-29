@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
 import { useLoomStore } from '../../stores/loomStore';
+import { useHeimdallEmitter } from '../useHeimdallEmitter';
 import { SCOPE_FILTER_TYPES } from '../../utils/transformGraph';
 import type { LoomNode } from '../../types/graph';
 import type { ContextMenuState } from '../../components/canvas/NodeContextMenu';
-import { useHeimdallEmitter } from '../useHeimdallEmitter';
 
 interface UseNodeInteractionsReturn {
   onNodeClick:        (e: React.MouseEvent, node: LoomNode) => void;
@@ -30,10 +30,11 @@ export function useNodeInteractions(
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     selectNode(node.id, node.data);
-    // EV-09: emit LOOM_NODE_SELECTED for observability
     emitHeimdall('LOOM_NODE_SELECTED', 'INFO', {
-      node_id:   node.id,
-      node_type: node.data.nodeType ?? node.type ?? 'unknown',
+      nodeId:    node.id,
+      nodeType:  node.data.nodeType ?? '',
+      nodeLabel: node.data.label   ?? '',
+      viewLevel,
     });
 
     if (viewLevel === 'L1') {

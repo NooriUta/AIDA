@@ -8,8 +8,14 @@ import { LAYOUT } from '../../utils/constants';
 import { applyL1Layout }             from '../../utils/layoutL1';
 import { edgeTypeClass }             from '../../utils/displayPipeline';
 import { LOD_COMPACT_ZOOM }          from '../../components/canvas/ZoomLevelContext';
+import { useHeimdallEmitter }        from '../useHeimdallEmitter';
 import type { LoomNode, LoomEdge }   from '../../types/graph';
 import type { ColumnInfo }           from '../../types/domain';
+
+/** Emit LOOM_VIEW_SLOW when ELK layout takes longer than this. */
+const SLOW_LAYOUT_MS   = 2_000;
+/** Also flag layouts for graphs above this node count (even if fast). */
+const LARGE_GRAPH_NODES = 1_500;
 
 interface Graph {
   nodes: LoomNode[];
@@ -70,6 +76,13 @@ export function useLoomLayout(
   // Track previous activeId to detect filter switches (id1 → id2) and skip viewport movement
   const prevActiveIdRef = useRef<string | null>(null);
 
+  // EV-09: stable ref to emitter — allows the layout effect to call the latest
+  // version without adding emit to its deps (which would re-trigger layout on
+  // tenant changes).
+  const { emit: emitHeimdall } = useHeimdallEmitter();
+  const emitRef = useRef(emitHeimdall);
+  useEffect(() => { emitRef.current = emitHeimdall; }, [emitHeimdall]);
+
   const {
     viewLevel,
     expandedDbs,
@@ -123,8 +136,10 @@ export function useLoomLayout(
     setLayouting(true);
     setLayoutError(false);
 
-    const nodeCount  = displayGraph.nodes.length;
-    const forceELK   = forceELKCount > 0;
+    const nodeCount    = displayGraph.nodes.length;
+    const edgeCount    = displayGraph.edges.length;
+    const forceELK     = forceELKCount > 0;
+    const layoutStart  = Date.now();
 
     applyELKLayout(displayGraph.nodes, displayGraph.edges, { forceELK })
       .then(({ nodes: layoutedNodes, isGrid, isDense }) => {
@@ -141,6 +156,26 @@ export function useLoomLayout(
             ? `Граф содержит ${nodeCount} узлов — layout упрощён.`
             : null,
         );
+
+        // EV-09: LOOM_VIEW_SLOW — fire when layout is slow or graph is large
+        const layoutDurationMs = Date.now() - layoutStart;
+        const isSlow   = layoutDurationMs > SLOW_LAYOUT_MS;
+        const isLarge  = nodeCount > LARGE_GRAPH_NODES;
+        if (isSlow || isLarge) {
+          emitRef.current(
+            'LOOM_VIEW_SLOW',
+            isSlow ? 'WARN' : 'INFO',
+            {
+              nodeCount,
+              edgeCount,
+              viewLevel,
+              isGrid,
+              isDense,
+            },
+            undefined,
+            layoutDurationMs,
+          );
+        }
       })
       .catch((err) => {
         console.error('[LOOM] ELK layout failed', err);

@@ -37,9 +37,11 @@ class EventBatchValidationTest {
         resource = new EventResource();
 
         // Inject no-op stubs so no CDI/Quarkus container is needed
-        setField(resource, "ringBuffer",     new NoOpRingBuffer());
+        setField(resource, "ringBuffer",       new NoOpRingBuffer());
         setField(resource, "metricsCollector", new NoOpMetricsCollector());
-        setField(resource, "tenantMetrics",  new NoOpTenantMetrics());
+        setField(resource, "tenantMetrics",    new NoOpTenantMetrics());
+        // UA-03: UxAggregator added in Sprint 6 — inject real instance (no external deps)
+        setField(resource, "uxAggregator",     new studio.seer.heimdall.analytics.UxAggregator());
     }
 
     // ── requiresTenantTag() helper ────────────────────────────────────────────
@@ -90,10 +92,17 @@ class EventBatchValidationTest {
 
     @Test
     void requiresTenantTag_unknownSource_stillRequiresTag() {
-        // Any other sourceComponent (verdandi, chur, etc.) must still carry tenantAlias.
+        // verdandi and unknown sources must still carry tenantAlias.
         assertThat(EventResource.requiresTenantTag("LOOM_NODE_SELECTED", "verdandi")).isTrue();
-        assertThat(EventResource.requiresTenantTag("AUTH_LOGIN",         "chur")).isTrue();
         assertThat(EventResource.requiresTenantTag("SOME_EVENT",         "test-source")).isTrue();
+    }
+
+    @Test
+    void requiresTenantTag_churSource_doesNotRequireTag() {
+        // EV-BUG-01 extension: chur auth events (AUTH_LOGIN_SUCCESS, AUTH_LOGOUT, etc.)
+        // have no tenantAlias at emission time — exempt by sourceComponent.
+        assertThat(EventResource.requiresTenantTag("AUTH_LOGIN_SUCCESS", "chur")).isFalse();
+        assertThat(EventResource.requiresTenantTag("AUTH_LOGOUT",        "chur")).isFalse();
     }
 
     @Test

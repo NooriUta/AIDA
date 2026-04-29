@@ -26,8 +26,9 @@ function EventRow({
   selected: boolean;
   onClick:  () => void;
 }) {
-  const comp   = (event.sourceComponent ?? '').toLowerCase();
-  const rowCls = [
+  const comp     = (event.sourceComponent ?? '').toLowerCase();
+  const tenant   = event.payload?.['tenantAlias'] as string | undefined;
+  const rowCls   = [
     'event-row-grid',
     event.level === 'ERROR' ? 'evt-row-error' : event.level === 'WARN' ? 'evt-row-warn' : '',
     selected ? 'evt-row-selected' : '',
@@ -39,6 +40,7 @@ function EventRow({
       <span><span className={`comp comp-${comp}`}>{event.sourceComponent}</span></span>
       <span className="evt-type">{EVENT_LABELS[event.eventType] ?? event.eventType}</span>
       <span><span className={`badge ${levelClass(event.level)}`}>{event.level}</span></span>
+      <span className="evt-tenant">{tenant ?? '—'}</span>
       <span className="evt-dur">{event.durationMs > 0 ? `${event.durationMs}ms` : '—'}</span>
       <span className="evt-payload">{formatPayload(event)}</span>
     </div>
@@ -165,6 +167,7 @@ export function EventLog({ events, filter, maxHeight, height, connected }: Event
         <span>{t('eventLog.component')}</span>
         <span>{t('eventLog.eventType')}</span>
         <span>{t('eventLog.level')}</span>
+        <span>{t('eventLog.tenant')}</span>
         <span>{t('eventLog.duration')}</span>
         <span>{t('eventLog.payload')}</span>
       </div>

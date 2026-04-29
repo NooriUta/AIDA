@@ -155,41 +155,64 @@ public class HeimdallEmitter {
                 "error", error != null ? error : "unknown")));
     }
 
-    // ── EV-02: YGG write events ───────────────────────────────────────────────
+    // ── Layer 3: YGG write events (EV-02 / EV-03 / EV-05 / EV-06) ───────────
 
     /**
-     * EV-02: Emitted by ParseJob after a successful write to YGG (non-preview only).
-     * Correlates with {@link #sessionCompleted} but focuses on the persistence tier.
+     * EV-02: Emitted when Hound successfully writes a session's graph to YGG.
+     * Fired once per session after all files are written (non-preview only).
      */
     public void yggWriteCompleted(String sessionId, int vertices, int edges, long durationMs) {
-        emit(build("hound", EventType.YGG_WRITE_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
-                "session_id",       sessionId,
-                "vertices_written", vertices,
-                "edges_written",    edges,
-                "duration_ms",      durationMs)));
+        emit(build("hound", EventType.YGG_WRITE_COMPLETED, EventLevel.INFO, sessionId, durationMs,
+                Map.of("verticesWritten", vertices, "edgesWritten", edges)));
     }
 
     /**
-     * EV-02: Emitted by ParseJob when a non-preview write to YGG fails.
-     * Level ERROR — triggers HEIMDALL alert threshold.
+     * EV-02: Emitted when one or more YGG writes fail after all retries are exhausted.
+     * In batch mode: fired if any file permanently failed (others may have succeeded).
      */
-    public void yggWriteFailed(String sessionId, String errorCode, long durationMs) {
-        emit(build("hound", EventType.YGG_WRITE_FAILED, EventLevel.ERROR, sessionId, durationMs, Map.of(
-                "session_id", sessionId,
-                "error_code", errorCode != null ? errorCode : "unknown",
-                "retries",    0)));
+    public void yggWriteFailed(String sessionId, String error) {
+        emit(build("hound", EventType.YGG_WRITE_FAILED, EventLevel.ERROR, sessionId, 0,
+                Map.of("error", error != null ? error : "unknown")));
     }
 
-    // ── EV-03: YGG clear ─────────────────────────────────────────────────────
-
     /**
-     * EV-03: Emitted by ParseJob after {@code clearBeforeWrite} truncation completes.
-     * Payload carries duration; vertex/edge counts are best-effort (not available from Hound API).
+     * EV-03: Emitted after ParseJob truncates the lineage graph before a new parse
+     * ({@code clearBeforeWrite=true}).
      */
     public void yggClearCompleted(String sessionId, long durationMs) {
-        emit(build("dali", EventType.YGG_CLEAR_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
-                "session_id",  sessionId,
-                "duration_ms", durationMs)));
+        emit(build("dali", EventType.YGG_CLEAR_COMPLETED, EventLevel.INFO, sessionId, durationMs,
+                Map.of("durationMs", durationMs)));
+    }
+
+    /**
+     * EV-05: Emitted when ArcadeDB (YGG) is unreachable — connection refused / timed out.
+     * Level ERROR: indicates infrastructure problem, not a parse issue.
+     */
+    public void dbConnectionError(String sessionId, String db, String error) {
+        emit(build("dali", EventType.DB_CONNECTION_ERROR, EventLevel.ERROR, sessionId, 0,
+                Map.of("db", db != null ? db : "ygg",
+                       "error", error != null ? error : "unknown")));
+    }
+
+    /**
+     * EV-06: Emitted when an admin creates a new JDBC harvest source.
+     * {@code sourceId} may be blank for transient (pre-persist) creates — always non-null.
+     */
+    public void sourceCreated(String tenantAlias, String sourceId, String dialect) {
+        emit(build("dali", EventType.SOURCE_CREATED, EventLevel.INFO, null, 0,
+                Map.of("sourceId",    sourceId != null ? sourceId : "",
+                       "dialect",     dialect  != null ? dialect  : "",
+                       "tenantAlias", tenantAlias != null ? tenantAlias : "")));
+    }
+
+    /**
+     * EV-06: Emitted when an admin deletes a JDBC harvest source.
+     */
+    public void sourceDeleted(String tenantAlias, String sourceId, String dialect) {
+        emit(build("dali", EventType.SOURCE_DELETED, EventLevel.INFO, null, 0,
+                Map.of("sourceId",    sourceId != null ? sourceId : "",
+                       "dialect",     dialect  != null ? dialect  : "",
+                       "tenantAlias", tenantAlias != null ? tenantAlias : "")));
     }
 
     // ── Internal builder ──────────────────────────────────────────────────────

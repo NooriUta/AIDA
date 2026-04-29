@@ -6,8 +6,8 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.jobrunr.scheduling.JobScheduler;
-import studio.seer.dali.job.HarvestJob;
+import org.jobrunr.scheduling.JobRequestScheduler;
+import studio.seer.dali.job.HarvestJobRequest;
 import studio.seer.dali.service.CancelResult;
 import studio.seer.dali.service.SessionService;
 import studio.seer.dali.storage.SessionRepository;
@@ -35,10 +35,10 @@ import java.util.UUID;
 @Consumes(MediaType.APPLICATION_JSON)
 public class SessionResource {
 
-    @Inject SessionService          sessionService;
-    @Inject SessionRepository       sessionRepository;
-    @Inject Instance<JobScheduler>  jobScheduler;
-    @Inject TenantContext           tenantCtx;
+    @Inject SessionService                sessionService;
+    @Inject SessionRepository             sessionRepository;
+    @Inject Instance<JobRequestScheduler> jobRequestScheduler;
+    @Inject TenantContext                 tenantCtx;
 
     @GET
     public Response list(
@@ -142,15 +142,24 @@ public class SessionResource {
     @Consumes(MediaType.WILDCARD)
     public Response harvest(
             @HeaderParam("X-Seer-Tenant-Alias") @DefaultValue("default") String tenantAlias) { // MTN-04-EXEMPT: BC default for single-tenant mode
-        if (!jobScheduler.isResolvable()) {
+        if (!jobRequestScheduler.isResolvable()) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                    .entity("{\"error\":\"JobScheduler not available — Dali may still be starting\"}")
+                    .entity("{\"error\":\"JobRequestScheduler not available — Dali may still be starting\"}")
                     .build();
         }
         String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default"; // MTN-04-EXEMPT: single-tenant BC fallback
         String harvestId = "harvest-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId, effectiveTenant));
+        scheduleHarvestJob(harvestId, effectiveTenant);
         return Response.accepted(Map.of("harvestId", harvestId, "tenantAlias", effectiveTenant, "status", "enqueued")).build();
+    }
+
+    /**
+     * DMT-ASM-FIX: enqueues a {@link studio.seer.dali.job.HarvestJob} via
+     * {@link JobRequestScheduler} to bypass JobRunr's ASM bytecode analyser.
+     * See {@link studio.seer.dali.job.ParseJobRequest} for the root-cause explanation.
+     */
+    private void scheduleHarvestJob(String harvestId, String tenantAlias) {
+        jobRequestScheduler.get().enqueue(new HarvestJobRequest(harvestId, tenantAlias));
     }
 
     @GET

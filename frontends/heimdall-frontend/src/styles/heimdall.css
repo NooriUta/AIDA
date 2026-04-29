@@ -87,11 +87,11 @@ textarea:focus-visible {
 .badge-suc     { background: color-mix(in srgb, var(--suc)    14%, transparent); color: var(--suc);    border-color: color-mix(in srgb, var(--suc)    30%, transparent); }
 .badge-neutral { background: var(--bg3); color: var(--t2); border-color: var(--bd); }
 
-/* ── EventLog 6-column grid ──────────────────────────────────────────────────── */
+/* ── EventLog 7-column grid (Time | Component | EventType | Level | Tenant | Duration | Payload) ── */
 .event-grid-head,
 .event-row-grid {
   display: grid;
-  grid-template-columns: 88px 82px 190px 52px 56px 1fr;
+  grid-template-columns: 88px 82px 190px 52px 72px 56px 1fr;
   gap: 8px;
   align-items: center;
 }
@@ -118,6 +118,7 @@ textarea:focus-visible {
 
 .evt-ts      { font-family: var(--mono); color: var(--t3); font-size: 11px; }
 .evt-type    { font-family: var(--mono); font-size: 11px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.evt-tenant  { font-family: var(--mono); font-size: 11px; color: var(--acc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .evt-dur     { font-family: var(--mono); font-size: 11px; color: var(--t3); text-align: right; }
 .evt-payload { font-family: var(--mono); font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .evt-row-error .evt-type { color: var(--danger); }
@@ -341,18 +342,20 @@ input[type=range] { accent-color: var(--acc); flex: 1; height: 4px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .jr-stats   { grid-template-columns: repeat(2, 1fr); }
 
-  /* HX-03 — EventLog 3-col grid on mobile (timestamp | level | type) */
+  /* HX-03 — EventLog 3-col grid on mobile (Time | Component | Level) */
   .event-grid-head,
   .event-row-grid {
     grid-template-columns: 72px 48px 1fr;
   }
-  /* Hide columns 3 (component), 5 (duration), 6 (payload) */
+  /* Hide cols 3 (EventType), 5 (Tenant), 6 (Duration), 7 (Payload) */
   .event-grid-head > *:nth-child(3),
   .event-row-grid  > *:nth-child(3),
   .event-grid-head > *:nth-child(5),
   .event-row-grid  > *:nth-child(5),
   .event-grid-head > *:nth-child(6),
-  .event-row-grid  > *:nth-child(6) { display: none; }
+  .event-row-grid  > *:nth-child(6),
+  .event-grid-head > *:nth-child(7),
+  .event-row-grid  > *:nth-child(7) { display: none; }
 
   /* HX-03 — EventStream filter bar: stack vertically */
   .event-filter-bar { flex-direction: column; align-items: stretch; }

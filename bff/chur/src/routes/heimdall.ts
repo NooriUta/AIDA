@@ -47,15 +47,12 @@ function connectUpstreamWs(path: string): Promise<WebSocket> {
  */
 export const heimdallRoutes: FastifyPluginAsync = async (app) => {
 
-  // ── POST /heimdall/events — frontend event proxy → HEIMDALL (EV-09) ─────────
-  // Authenticated users (not admin-only) can emit observability events from the
-  // browser. Server adds session context; rate-limiting is handled by HEIMDALL.
+  // ── POST /heimdall/events — frontend event proxy → HEIMDALL (EV-09 Sprint 5) ─
   app.post(
     '/heimdall/events',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const body = request.body as Record<string, unknown>;
-      // Enforce sourceComponent to match the authenticated frontend
       const event = {
         ...body,
         sourceComponent: body.sourceComponent ?? 'verdandi',
@@ -67,10 +64,24 @@ export const heimdallRoutes: FastifyPluginAsync = async (app) => {
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify(event),
         });
-      } catch {
-        // fire-and-forget semantics — HEIMDALL down must not fail the frontend
-      }
+      } catch { /* fire-and-forget */ }
       return reply.status(202).send({});
+    },
+  );
+
+  // ── GET /heimdall/analytics/ux — UX analytics summary (UA-04) ────────────
+  app.get(
+    '/heimdall/analytics/ux',
+    { preHandler: [app.authenticate, requireAdmin] },
+    async (request, reply) => {
+      try {
+        const res  = await heimdallFetch('/analytics/ux', {
+          headers: { 'X-Seer-Role': request.user.role },
+        });
+        return reply.status(res.status).send(await res.json());
+      } catch {
+        return reply.status(503).send({ error: 'HEIMDALL_UNREACHABLE' });
+      }
     },
   );
 

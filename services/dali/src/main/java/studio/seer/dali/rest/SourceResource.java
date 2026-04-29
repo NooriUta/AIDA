@@ -12,7 +12,6 @@ import studio.seer.dali.heimdall.HeimdallEmitter;
 import studio.seer.dali.rest.SourceDTO.SchemaFilter;
 import studio.seer.dali.security.JdbcUrlValidator;
 import studio.seer.dali.storage.SourceRepository;
-import studio.seer.shared.EventType;
 import studio.seer.tenantrouting.TenantContext;
 
 import java.sql.Connection;
@@ -42,7 +41,7 @@ public class SourceResource {
     @Inject SourceRepository  repository;
     @Inject JdbcUrlValidator  jdbcUrlValidator;
     @Inject TenantContext     tenantCtx;
-    @Inject HeimdallEmitter   emitter;
+    @Inject HeimdallEmitter   heimdall;
 
     @GET
     public Response list() {
@@ -59,10 +58,7 @@ public class SourceResource {
         SourceDTO created = repository.create(
             tenantCtx.tenantAlias(), body.name(), body.dialect(), body.jdbcUrl(),
             body.username(), body.password(), body.schemaFilter());
-        // EV-06: source created
-        emitter.info(EventType.SOURCE_CREATED, null, Map.of(
-                "source_id", created.id(),
-                "dialect",   created.dialect() != null ? created.dialect() : ""));
+        heimdall.sourceCreated(tenantCtx.tenantAlias(), created.id(), created.dialect()); // EV-06
         return Response.status(Response.Status.CREATED).entity(created).build();
     }
 
@@ -87,17 +83,14 @@ public class SourceResource {
     @Path("/{id}")
     public Response delete(@PathParam("id") String id) {
         String alias = tenantCtx.tenantAlias();
-        var found = repository.findById(alias, id);
-        if (found.isEmpty()) {
+        var existing = repository.findById(alias, id);
+        if (existing.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND)
                     .entity("{\"error\":\"source not found\"}").build();
         }
-        String dialect = found.get().dialect() != null ? found.get().dialect() : "";
+        String dialect = existing.get().dialect();
         repository.delete(alias, id);
-        // EV-06: source deleted
-        emitter.info(EventType.SOURCE_DELETED, null, Map.of(
-                "source_id", id,
-                "dialect",   dialect));
+        heimdall.sourceDeleted(alias, id, dialect); // EV-06
         return Response.noContent().build();
     }
 

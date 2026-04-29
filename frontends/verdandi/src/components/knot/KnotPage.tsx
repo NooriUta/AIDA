@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useMemo, useCallback } from 'react';
+import { memo, useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Header } from '../layout/Header';
@@ -10,6 +10,7 @@ import { KnotAtoms } from './KnotAtoms';
 import { KnotSource } from './KnotSource';
 import { KnotRecord } from './KnotRecord';
 import { useKnotSessions, useKnotReport } from '../../services/hooks';
+import { useHeimdallEmitter } from '../../hooks/useHeimdallEmitter';
 import type { KnotSession } from '../../services/lineage';
 
 type TabId = 'summary' | 'structure' | 'routines' | 'statements' | 'atoms' | 'source';
@@ -29,6 +30,8 @@ export const KnotPage = memo(() => {
   const [sessionSearch, setSessionSearch] = useState(urlPkg);
   const [dialectFilter, setDialectFilter] = useState<string | null>(null);
 
+  const { emit: emitHeimdall } = useHeimdallEmitter();
+
   const { data: sessions, isLoading: sessionsLoading, isError: sessionsError } = useKnotSessions();
   const { data: report, isLoading: reportLoading, isError: reportError } = useKnotReport(selectedId);
 
@@ -45,6 +48,11 @@ export const KnotPage = memo(() => {
       );
       if (match) {
         setSelectedId(match.sessionId);
+        // UA-02: KNOT_SESSION_OPENED event
+        emitHeimdall('KNOT_SESSION_OPENED', 'INFO', {
+          knot_id:   match.sessionId,
+          knot_type: match.dialect,
+        }, match.sessionId);
         // If a stmt was passed → switch to Statements tab after session loads
         if (urlStmt) setActiveTab('statements');
         // Clear URL params so they don't interfere on manual navigation
@@ -82,6 +90,32 @@ export const KnotPage = memo(() => {
   }, [sessions, sessionSearch, dialectFilter]);
 
   const clearSearch = useCallback(() => setSessionSearch(''), []);
+
+  // UA-02: LOOM_SEARCH_USED — debounced 500 ms, only when query is non-empty
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!sessionSearch.trim()) return;
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      emitHeimdall('LOOM_SEARCH_USED', 'INFO', {
+        query_length:   sessionSearch.trim().length,
+        results_count:  filteredSessions.length,
+      });
+    }, 500);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionSearch]);
+
+  // UA-02: KNOT_TAB_VIEWED on tab switch
+  const handleTabChange = useCallback((tabId: TabId) => {
+    setActiveTab(tabId);
+    emitHeimdall('KNOT_TAB_VIEWED', 'INFO', {
+      knot_id:  selectedId ?? 'unknown',
+      tab_name: tabId,
+    }, selectedId ?? undefined);
+  }, [selectedId, emitHeimdall]);
 
   const tabCounts = useMemo(() => {
     if (!report) return {};
@@ -303,7 +337,7 @@ export const KnotPage = memo(() => {
               {TABS.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   style={{
                     padding: '0 14px',
                     height: 36,
