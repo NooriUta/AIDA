@@ -369,6 +369,46 @@ jobs:
               echo "=== init-arcadedb.sh FAILED (non-fatal on upgrade) ==="
             }
 
+            # ── YGG + FRIGG warm-up probe ─────────────────────────────────────
+            # ArcadeDB lists databases on disk (/api/v1/databases) before opening them.
+            # init-arcadedb.sh skips creation when a DB name appears in the list, but
+            # the DB may still be unavailable (not opened, WAL replay, or corrupted).
+            # Probing with SELECT 1 forces ArcadeDB to open each database.
+            # On staging, corrupted databases are auto-recreated (no prod data here).
+            echo "=== YGG/FRIGG database warm-up probe ==="
+            probe_or_recreate() {
+              local base_url="$1" pass="$2" db="$3" recreate_ok="$4"
+              local ok=0
+              for i in $(seq 1 18); do
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+                  -u "root:${pass}" -X POST "${base_url}/api/v1/command/${db}" \
+                  -H "Content-Type: application/json" \
+                  -d '{"language":"sql","command":"SELECT 1"}' 2>/dev/null || echo "000")
+                if [ "$CODE" = "200" ]; then
+                  echo "  [${db}] warm — OK (attempt ${i})"; ok=1; break
+                fi
+                echo "  [${db}] probe ${i}/18 HTTP ${CODE}..."; sleep 5
+              done
+              if [ "$ok" = "0" ] && [ "$recreate_ok" = "1" ]; then
+                echo "  [${db}] WARN: not available after 90s — dropping and recreating"
+                curl -sf --max-time 10 -u "root:${pass}" \
+                  -X DELETE "${base_url}/api/v1/drop/${db}" 2>/dev/null || true
+                sleep 2
+                curl -sf --max-time 10 -u "root:${pass}" \
+                  -X POST "${base_url}/api/v1/create/${db}" 2>/dev/null && \
+                  echo "  [${db}] recreated" || echo "  [${db}] ERROR: recreate failed"
+              elif [ "$ok" = "0" ]; then
+                echo "  [${db}] ERROR: not available after 90s"
+              fi
+            }
+            # YGG key databases (staging: recreate on failure — no persistent data)
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_default"     "1"
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_src_default" "1"
+            # FRIGG key databases (staging: recreate on failure)
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-tenants"  "1"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-sessions" "1"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali"           "1"
+
             # ── Health checks ─────────────────────────────────────────────────
             echo "=== Waiting for services ==="
             wait_infra "http://localhost:13000/health"   "Chur"             || { echo "Chur FAILED";             exit 1; }
