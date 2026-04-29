@@ -1,7 +1,6 @@
 /**
  * UA-06: Active users widget — distinct session count in the 24-hour window.
  */
-import React from 'react';
 
 interface Props {
   activeSessionCount:  number;

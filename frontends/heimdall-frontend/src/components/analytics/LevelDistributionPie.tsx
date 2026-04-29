@@ -2,7 +2,6 @@
  * UA-06: Level distribution widget — INFO/WARN/ERROR event breakdown.
  * Simple three-bar display matching the HEIMDALL badge color scheme.
  */
-import React from 'react';
 import type { LevelDistribution } from '../../api/analytics';
 
 interface Props {
