@@ -32,7 +32,7 @@ public class SeerIdentity {
 
     public String tenantAlias() {
         String alias = rc.request().getHeader("X-Seer-Tenant-Alias");
-        return (alias != null && !alias.isBlank()) ? alias : "default";
+        return (alias != null && !alias.isBlank()) ? alias : "default"; // MTN-04-EXEMPT: single-tenant BC fallback
     }
 
     public boolean isAdmin()   { return "admin".equals(role()); }

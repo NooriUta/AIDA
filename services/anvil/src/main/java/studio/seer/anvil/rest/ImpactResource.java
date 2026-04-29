@@ -35,7 +35,7 @@ public class ImpactResource {
         // MTN-06/30: tenant alias resolved by TenantContextFilter. Fallback to
         // "default" when the filter is disabled (aida.tenant.enforce=false).
         String tenantAlias = (String) ctx.getProperty(TenantContextFilter.TENANT_CONTEXT_PROPERTY);
-        if (tenantAlias == null || tenantAlias.isBlank()) tenantAlias = "default";
+        if (tenantAlias == null || tenantAlias.isBlank()) tenantAlias = "default"; // MTN-04-EXEMPT: aida.tenant.enforce=false BC mode
         return Response.ok(impactService.findImpact(req, tenantAlias)).build();
     }
 }

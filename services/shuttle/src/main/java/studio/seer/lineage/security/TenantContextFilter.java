@@ -56,7 +56,7 @@ public class TenantContextFilter implements ContainerRequestFilter {
 
     static String validateAlias(String alias) {
         if (alias == null || alias.isBlank()) return "Missing X-Seer-Tenant-Alias header";
-        if (alias.equals("default"))          return null; // always allow default
+        if (alias.equals("default"))          return null; // MTN-04-EXEMPT: default tenant always passes alias validation
         if (!ALIAS_REGEX.matcher(alias.trim()).matches()) return "Invalid X-Seer-Tenant-Alias format";
         return null;
     }

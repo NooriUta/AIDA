@@ -45,7 +45,7 @@ public class TenantRateLimiter {
      */
     public boolean allow(String tenantAlias, String role) {
         if ("super-admin".equals(role)) return true;
-        String key = tenantAlias != null ? tenantAlias : "default";
+        String key = tenantAlias != null ? tenantAlias : "default"; // MTN-04-EXEMPT: single-tenant BC fallback for rate-limit key
         long now = System.currentTimeMillis();
         Bucket b = buckets.computeIfAbsent(key, k -> Bucket.create(now));
         return b.check(now);

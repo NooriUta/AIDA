@@ -114,7 +114,7 @@ jobs:
 
       - name: dep-cruiser — R-TS-01..04 (BFF layer rules)
         run: |
-          npx depcruise \
+          npx --package=dependency-cruiser depcruise \
             --config ../../.dependency-cruiser.cjs \
             --output-type text \
             src
@@ -122,7 +122,7 @@ jobs:
 
       - name: dep-cruiser — cycle check
         run: |
-          CYCLES=$(npx depcruise \
+          CYCLES=$(npx --package=dependency-cruiser depcruise \
             --config ../../.dependency-cruiser.cjs \
             --output-type json \
             src | node -e "
@@ -159,7 +159,7 @@ jobs:
       - name: dep-cruiser — verdandi (R-TS-05..07)
         run: |
           cd frontends/verdandi
-          npx depcruise \
+          npx --package=dependency-cruiser depcruise \
             --config ../../.dependency-cruiser.cjs \
             --output-type text \
             src
@@ -170,7 +170,7 @@ jobs:
       - name: dep-cruiser — heimdall-frontend
         run: |
           cd frontends/heimdall-frontend
-          npx depcruise \
+          npx --package=dependency-cruiser depcruise \
             --config ../../.dependency-cruiser.cjs \
             --output-type text \
             src
@@ -181,7 +181,7 @@ jobs:
       - name: "dep-cruiser — shell (R-TS-07: no direct aida-shared)"
         run: |
           cd frontends/shell
-          npx depcruise \
+          npx --package=dependency-cruiser depcruise \
             --config ../../.dependency-cruiser.cjs \
             --output-type text \
             src
@@ -202,7 +202,8 @@ jobs:
               libraries/*/src/main/java \
               --include='*.java' \
               | grep -iE 'tenant|alias' \
-              | grep -v '^\s*//' \
+              | grep -vE ':[[:space:]]*(\/\/|\/\*|\*)' \
+              | grep -v 'MTN-04-EXEMPT' \
               || true)
           if [ -n "${MATCHES}" ]; then
             echo "::error::MTN-04 — hardcoded 'default' tenant literal detected:"

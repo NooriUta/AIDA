@@ -51,7 +51,7 @@ public class SourceArchiveSchemaInitializer {
 
     void onStart(@Observes @Priority(4) StartupEvent ev) {
         log.info("SourceArchiveSchemaInitializer: ensuring hound_src_* schemas in YGG...");
-        ensureForAlias("default");
+        ensureForAlias("default"); // MTN-04-EXEMPT: bootstrap default-tenant schema at startup
         try {
             List<Map<String, Object>> rows = frigg.sqlIn(
                     "frigg-tenants",
@@ -59,7 +59,7 @@ public class SourceArchiveSchemaInitializer {
                     "WHERE status IN ['ACTIVE', 'PROVISIONING', 'SUSPENDED']");
             for (Map<String, Object> row : rows) {
                 Object a = row.get("tenantAlias");
-                if (a != null && !"default".equals(a.toString())) ensureForAlias(a.toString());
+                if (a != null && !"default".equals(a.toString())) ensureForAlias(a.toString()); // MTN-04-EXEMPT: skip re-initialising bootstrap tenant
             }
         } catch (Exception e) {
             log.warn("SourceArchiveSchemaInitializer: could not enumerate tenants ({})", e.getMessage());

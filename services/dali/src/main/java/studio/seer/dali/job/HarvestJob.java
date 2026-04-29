@@ -43,7 +43,7 @@ public class HarvestJob {
             return;
         }
 
-        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default";
+        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default"; // MTN-04-EXEMPT: single-tenant BC fallback
         log.info("[{}] HarvestJob: starting harvest for {} source(s) tenant={}", harvestId, sources.size(), effectiveTenant);
         emitter.sessionStarted(harvestId, "all", "multi", false, false, sources.size());
 

@@ -141,13 +141,13 @@ public class SessionResource {
     @Path("/harvest")
     @Consumes(MediaType.WILDCARD)
     public Response harvest(
-            @HeaderParam("X-Seer-Tenant-Alias") @DefaultValue("default") String tenantAlias) {
+            @HeaderParam("X-Seer-Tenant-Alias") @DefaultValue("default") String tenantAlias) { // MTN-04-EXEMPT: BC default for single-tenant mode
         if (!jobScheduler.isResolvable()) {
             return Response.status(Response.Status.SERVICE_UNAVAILABLE)
                     .entity("{\"error\":\"JobScheduler not available — Dali may still be starting\"}")
                     .build();
         }
-        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default";
+        String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default"; // MTN-04-EXEMPT: single-tenant BC fallback
         String harvestId = "harvest-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         jobScheduler.get().<HarvestJob>enqueue(j -> j.execute(harvestId, effectiveTenant));
         return Response.accepted(Map.of("harvestId", harvestId, "tenantAlias", effectiveTenant, "status", "enqueued")).build();

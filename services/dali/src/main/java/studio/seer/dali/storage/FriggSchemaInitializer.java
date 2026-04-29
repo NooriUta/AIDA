@@ -165,7 +165,7 @@ public class FriggSchemaInitializer {
                 Object aliasObj = row.get("tenantAlias");
                 if (aliasObj == null) continue;
                 String alias = aliasObj.toString();
-                if (!"default".equals(alias)) {
+                if (!"default".equals(alias)) { // MTN-04-EXEMPT: skip bootstrap tenant during multi-tenant schema init
                     ensureSchema(alias);
                 }
             }

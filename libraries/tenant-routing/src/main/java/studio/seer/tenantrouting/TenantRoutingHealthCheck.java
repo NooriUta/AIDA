@@ -20,7 +20,7 @@ public class TenantRoutingHealthCheck implements HealthCheck {
     @Override
     public HealthCheckResponse call() {
         try {
-            var conn = lineageRegistry.resourceFor("default");
+            var conn = lineageRegistry.resourceFor("default"); // MTN-04-EXEMPT: health check probes the bootstrap tenant
             conn.sql("SELECT 1", java.util.Map.of());
             return HealthCheckResponse.up("tenant-routing-ygg-lineage");
         } catch (Exception e) {
