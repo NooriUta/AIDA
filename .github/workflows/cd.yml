@@ -267,11 +267,40 @@ jobs:
             sudo bash -c "sed 's|\${DOMAIN}|'"${DOMAIN}"'|g; s|\${HEIMDALL_CIDR}|'"${CIDR}"'|g' ${CONF} \
               > /etc/nginx/sites-available/aida"
             sudo ln -sf /etc/nginx/sites-available/aida /etc/nginx/sites-enabled/aida
-            # Renew cert if certbot available (idempotent — skips if not due yet)
+            # Webroot for ACME http-01 challenge (nginx.conf serves /.well-known/acme-challenge/)
+            sudo mkdir -p /var/www/certbot
+            # First: reload nginx so the ACME challenge location is active for certbot --webroot.
+            # nginx -t may fail if cert is missing — use || true here; final reload below is fatal.
+            if sudo nginx -t 2>/dev/null; then sudo systemctl reload nginx; fi
+            # Ensure cert covers all required SANs (${DOMAIN}, seer.${DOMAIN}, heimdall.${DOMAIN}).
+            # Cloud-init only issues cert for ${DOMAIN} alone — expand when SANs are missing.
             if command -v certbot >/dev/null 2>&1; then
-              sudo certbot renew --quiet --deploy-hook "systemctl reload nginx" || true
+              CERT_FILE="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+              NEED_EXPAND=0
+              if [ -f "${CERT_FILE}" ]; then
+                SAN=$(sudo openssl x509 -in "${CERT_FILE}" -noout -ext subjectAltName 2>/dev/null || echo "")
+                for d in "seer.${DOMAIN}" "heimdall.${DOMAIN}"; do
+                  echo "${SAN}" | grep -qF "${d}" || NEED_EXPAND=1
+                done
+              else
+                NEED_EXPAND=1
+              fi
+              if [ "${NEED_EXPAND}" = "1" ]; then
+                echo "=== Expanding cert to cover all required domains ==="
+                sudo certbot certonly --webroot -w /var/www/certbot \
+                  -d "${DOMAIN}" -d "seer.${DOMAIN}" -d "heimdall.${DOMAIN}" \
+                  --non-interactive --agree-tos \
+                  --email "admin@${DOMAIN}" \
+                  --expand \
+                  && echo "Cert expanded OK" \
+                  || echo "WARNING: certbot expand failed — check /var/log/letsencrypt/letsencrypt.log"
+              else
+                # All SANs present — renew if within 30 days of expiry (idempotent)
+                sudo certbot renew --quiet \
+                  --deploy-hook "systemctl reload nginx" || true
+              fi
             fi
-            # Reload nginx if config test passes (works regardless of cert path)
+            # Final reload with (possibly) newly issued/expanded cert
             if sudo nginx -t 2>/dev/null; then
               sudo systemctl reload nginx
               echo "Nginx reloaded OK"

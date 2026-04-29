@@ -164,11 +164,12 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable aida-compose
 
-  # TLS certificate — attempt non-interactive certbot
-  # Note: succeeds only after DNS A record propagates to this VM's IP.
+  # TLS certificate — SAN cert covering root + subdomains.
+  # Note: succeeds only after DNS A records propagate to this VM's IP.
   # If DNS is not ready yet, this will fail gracefully; run manually later.
   - |
-    certbot --nginx -d ${domain} \
+    certbot --nginx \
+      -d ${domain} -d seer.${domain} -d heimdall.${domain} \
       --non-interactive --agree-tos \
       -m admin@${domain} || \
       echo "[certbot] DNS not ready — run manually after DNS propagation"
@@ -176,6 +177,6 @@ runcmd:
 final_message: |
   AIDA VM bootstrap complete.
   Manual steps remaining:
-    1. If certbot failed: ssh ubuntu@<ip> 'sudo certbot --nginx -d ${domain} --non-interactive --agree-tos -m admin@${domain}'
+    1. If certbot failed: ssh ubuntu@<ip> 'sudo certbot --nginx -d ${domain} -d seer.${domain} -d heimdall.${domain} --non-interactive --agree-tos -m admin@${domain}'
     2. Ensure Lockbox is filled (run set-github-secrets.sh output command)
     3. Merge PR: sprint/dali-file-upload-apr16 → master  →  CD auto-deploys
