@@ -15,7 +15,8 @@ import { sharedPrefsStore }   from '../../stores/sharedPrefsStore';
 // ── Navigation data ────────────────────────────────────────────────────────────
 type SectionId = 'BIFROST' | 'DALI' | 'SAGA' | 'FENRIR';
 
-interface SubTab { id: string; labelKey: string; route: string }
+/** Minimum role tier required to display this subtab. undefined = any authenticated user. */
+interface SubTab { id: string; labelKey: string; route: string; minRole?: 'admin' | 'local-admin' }
 interface Section { id: SectionId; descKey: string; route: string; subTabs: SubTab[]; horizon?: string }
 
 const SECTIONS: Section[] = [
@@ -43,9 +44,9 @@ const SECTIONS: Section[] = [
   {
     id: 'FENRIR', descKey: 'nav.adminDesc', route: '/admin/tenants',
     subTabs: [
-      { id: 'Tenants',   labelKey: 'nav.tenants',   route: '/admin/tenants' },
-      { id: 'Users',     labelKey: 'nav.users',     route: '/users'         },
-      { id: 'Analytics', labelKey: 'nav.analytics', route: '/analytics'     },
+      { id: 'Tenants',   labelKey: 'nav.tenants',   route: '/admin/tenants', minRole: 'admin'       },
+      { id: 'Users',     labelKey: 'nav.users',     route: '/users',         minRole: 'local-admin' },
+      { id: 'Analytics', labelKey: 'nav.analytics', route: '/analytics',     minRole: 'admin'       },
     ],
   },
 ];
@@ -381,7 +382,7 @@ export const HeimdallHeader = memo(() => {
 
   useHotkeys([{ key: 'k', ctrl: true, action: () => setCmdOpen(v => !v), global: true }]);
 
-  const { canManageUsers } = useTenantContext();
+  const { canManageUsers, isAdmin } = useTenantContext();
 
   // React Router basename ('/heimdall' in standalone, provided by Shell in MF
    // mode) already prepends the prefix, so pass absolute app-internal routes.
@@ -390,10 +391,19 @@ export const HeimdallHeader = memo(() => {
     [navigate],
   );
 
-  // Only show FENRIR section when user can manage users
-  const visibleSections = SECTIONS.filter(
-    sec => sec.id !== 'FENRIR' || canManageUsers,
-  );
+  // Show FENRIR section when user can manage users (local-admin+).
+  // Filter subtabs by minRole: 'admin' tabs hidden for local-admin/tenant-owner.
+  const visibleSections = SECTIONS
+    .filter(sec => sec.id !== 'FENRIR' || canManageUsers)
+    .map(sec => ({
+      ...sec,
+      subTabs: sec.subTabs.filter(tab => {
+        if (tab.minRole === 'admin')       return isAdmin;
+        if (tab.minRole === 'local-admin') return canManageUsers;
+        return true;
+      }),
+    }))
+    .filter(sec => sec.subTabs.length > 0);
 
   // Active section/subtab derived from pathname
   const activeSectionId: SectionId =
