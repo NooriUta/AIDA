@@ -1,0 +1,238 @@
+name: QG-ARCH
+
+# QG-ARCH enforcement — runs ArchUnit (Java) + semgrep + dependency-cruiser on
+# every PR to master / release, and on workflow_dispatch for manual runs.
+#
+# Source of truth: docs/current/quality-gates/QG-ARCH-enforcement.md
+# Target: archRules.enforced ≥ 20/27 for prodMtReady.
+
+on:
+  pull_request:
+    branches: [master, release]
+  push:
+    branches: [master, release]
+  workflow_dispatch:
+
+concurrency:
+  group: arch-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ── Java ArchUnit — all services + libraries ──────────────────────────────────
+  archunit:
+    name: ArchUnit — all Java services
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - run: chmod +x gradlew
+
+      # Run architecture tests across every module that has them.
+      # Failures are blocking: a violated ArchRule is a merge blocker.
+      - name: ArchUnit — tenant-routing library
+        run: ./gradlew :libraries:tenant-routing:test
+              --tests '*ArchitectureTest'
+              --no-daemon --build-cache
+
+      - name: ArchUnit — SHUTTLE
+        run: ./gradlew :services:shuttle:test
+              --tests '*ArchitectureTest,*TenantQueryGateTest,*TenantQualityGateTest'
+              --no-daemon --build-cache
+
+      - name: ArchUnit — DALI
+        run: ./gradlew :services:dali:test
+              --tests '*ArchitectureTest'
+              --no-daemon --build-cache
+        # FRIGG not needed for pure ArchUnit rules (no ArcadeDB calls)
+
+      - name: ArchUnit — ANVIL
+        run: ./gradlew :services:anvil:test
+              --tests '*ArchitectureTest'
+              --no-daemon --build-cache
+        continue-on-error: false
+
+      - name: ArchUnit — HEIMDALL backend
+        run: ./gradlew :services:heimdall-backend:test
+              --tests '*ArchitectureTest'
+              --no-daemon --build-cache
+        continue-on-error: false
+
+      # Upload ArchUnit store / violation reports as CI artefact
+      - name: Upload ArchUnit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archunit-reports
+          path: |
+            **/build/reports/tests/
+            **/src/test/resources/archunit_store/
+          retention-days: 30
+
+  # ── Semgrep — cross-language static analysis ─────────────────────────────────
+  semgrep:
+    name: Semgrep — .semgrep.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: .semgrep.yml
+          # Errors (severity: ERROR) fail the job; WARNINGs are reported only.
+          generateSarif: true
+          auditOn: push
+
+      - name: Upload SARIF results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+        continue-on-error: true   # SARIF upload is best-effort; don't fail on it
+
+  # ── dependency-cruiser — BFF ──────────────────────────────────────────────────
+  depcruise-chur:
+    name: dep-cruiser — bff/chur
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: bff/chur
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: bff/chur/package-lock.json
+
+      - run: npm ci
+
+      - name: dep-cruiser — R-TS-01..04 (BFF layer rules)
+        run: |
+          npx depcruise \
+            --config ../../.dependency-cruiser.cjs \
+            --output-type text \
+            src
+        # Non-zero exit = violation = job fails = PR blocked
+
+      - name: dep-cruiser — cycle check
+        run: |
+          CYCLES=$(npx depcruise \
+            --config ../../.dependency-cruiser.cjs \
+            --output-type json \
+            src | node -e "
+              const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              const cycles = (d.modules || [])
+                .flatMap(m => m.dependencies || [])
+                .filter(dep => dep.circular);
+              console.log(cycles.length);
+            ")
+          echo "Circular deps found: ${CYCLES}"
+          if [ "${CYCLES}" -gt "0" ]; then
+            echo "::warning::${CYCLES} circular dependency(ies) detected in bff/chur"
+          fi
+
+  # ── dependency-cruiser — frontends ───────────────────────────────────────────
+  depcruise-frontends:
+    name: dep-cruiser — frontends
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          # Use verdandi lock as representative; actual installs run per-frontend
+          cache-dependency-path: frontends/verdandi/package-lock.json
+
+      - name: Install verdandi
+        run: cd frontends/verdandi && npm ci
+
+      - name: dep-cruiser — verdandi (R-TS-05..07)
+        run: |
+          cd frontends/verdandi
+          npx depcruise \
+            --config ../../.dependency-cruiser.cjs \
+            --output-type text \
+            src
+
+      - name: Install heimdall-frontend
+        run: cd frontends/heimdall-frontend && npm ci
+
+      - name: dep-cruiser — heimdall-frontend
+        run: |
+          cd frontends/heimdall-frontend
+          npx depcruise \
+            --config ../../.dependency-cruiser.cjs \
+            --output-type text \
+            src
+
+      - name: Install shell
+        run: cd frontends/shell && npm ci
+
+      - name: dep-cruiser — shell (R-TS-07: no direct aida-shared)
+        run: |
+          cd frontends/shell
+          npx depcruise \
+            --config ../../.dependency-cruiser.cjs \
+            --output-type text \
+            src
+
+  # ── Pre-commit grep guard (fast path — no containers needed) ─────────────────
+  grep-guards:
+    name: grep — MTN-04 hardcode guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded default tenant in Java sources
+        run: |
+          MATCHES=$(grep -rn '"default"' \
+              services/*/src/main/java \
+              libraries/*/src/main/java \
+              --include='*.java' \
+              | grep -iE 'tenant|alias' \
+              | grep -v '^\s*//' \
+              || true)
+          if [ -n "${MATCHES}" ]; then
+            echo "::error::MTN-04 — hardcoded 'default' tenant literal detected:"
+            echo "${MATCHES}"
+            exit 1
+          fi
+          echo "✅ No hardcoded default tenant literals found"
+
+      - name: Check for hardcoded default tenant in TypeScript sources
+        run: |
+          MATCHES=$(grep -rn '"default"\|'"'"'default'"'" \
+              bff/chur/src frontends/*/src \
+              --include='*.ts' --include='*.tsx' \
+              | grep -iE 'tenant|alias' \
+              | grep -v '^\s*//' \
+              | grep -v '\.spec\.\|\.test\.' \
+              || true)
+          if [ -n "${MATCHES}" ]; then
+            echo "::warning::Possible hardcoded default tenant in TS (manual review needed):"
+            echo "${MATCHES}"
+          fi

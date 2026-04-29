@@ -1,0 +1,205 @@
+rules:
+
+  # ── R-SEM-01: No hardcoded "default" tenant alias (MTN-04 BLOCKER) ────────────
+
+  - id: no-default-tenant-literal-java
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "default"
+          - pattern: return "default"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(tenant|alias|db|schema).*
+    message: "MTN-04 — hardcoded 'default' tenant fallback is forbidden. Use requireTenantAlias()."
+    severity: ERROR
+    languages: [java]
+    paths:
+      include:
+        - "services/*/src/main/java/**"
+        - "libraries/*/src/main/java/**"
+
+  - id: no-default-tenant-literal-ts
+    pattern-either:
+      - pattern: tenantAlias = "default"
+      - pattern: const tenantAlias = "default"
+      - pattern: let tenantAlias = "default"
+    message: "MTN-04 — hardcoded 'default' tenant fallback is forbidden."
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include:
+        - "bff/chur/src/**"
+        - "frontends/*/src/**"
+
+  # ── R-SEM-02: Plaintext secrets/passwords in source code ────────────────────
+
+  - id: no-hardcoded-secret
+    pattern-regex: (?i)(password|passwd|api_?key|apikey|secret_?key|private_?key)\s*[:=]\s*["'][^"'$\{]{10,}["']
+    message: "Hardcoded credential detected — use environment variable or secret provider."
+    severity: ERROR
+    paths:
+      exclude:
+        - "**/test/**"
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "**/fixture*"
+
+  # ── R-SEM-03: SQL string concatenation (injection risk) ──────────────────────
+
+  - id: sql-string-concat-java
+    pattern-either:
+      - pattern: $STMT.executeQuery($A + $B)
+      - pattern: $STMT.execute($A + $B)
+      - pattern: $STMT.executeUpdate($A + $B)
+    message: "SQL injection risk — use PreparedStatement with parameters, not string concatenation."
+    severity: ERROR
+    languages: [java]
+    paths:
+      include:
+        - "services/*/src/main/java/**"
+
+  - id: sql-string-concat-ts
+    patterns:
+      - pattern: |
+          `... ${$X} ...`
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(input|param|user|req|body|query|filter).*
+    message: "Potential SQL injection — use parameterised queries (:param style) not template literals."
+    severity: WARNING
+    languages: [typescript]
+    paths:
+      include:
+        - "bff/chur/src/**"
+        - "services/*/src/main/**"
+
+  # ── R-SEM-04: Uncontrolled URL fetch — SSRF (MTN-43) ────────────────────────
+
+  - id: ssrf-unvalidated-fetch-ts
+    patterns:
+      - pattern: fetch($URL)
+      - pattern-not-inside: |
+          jdbcUrlValidator.validate($URL);
+          ...
+          fetch($URL)
+      - pattern-not-inside: |
+          if (...$URL...) { ... }
+          fetch($URL)
+    message: "MTN-43 — fetch() with an unvalidated external URL is an SSRF risk. Use JdbcUrlValidator or URL allowlist."
+    severity: WARNING
+    languages: [typescript]
+    paths:
+      include:
+        - "bff/chur/src/**"
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+
+  # ── R-SEM-05: console.log in production code ────────────────────────────────
+
+  - id: no-console-log-production
+    pattern: console.log(...)
+    message: "Use logger (pino/fastify.log) instead of console.log in production code."
+    severity: WARNING
+    languages: [typescript]
+    paths:
+      include:
+        - "bff/chur/src/**"
+        - "frontends/*/src/**"
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "**/dev*"
+        - "**/vite.config*"
+
+  # ── R-SEM-06: Missing @Valid on List<T> request body ────────────────────────
+
+  - id: missing-valid-on-list-body
+    patterns:
+      - pattern: |
+          @POST
+          public $RET $M(List<$T> $PARAM) { ... }
+      - pattern-not: |
+          @POST
+          public $RET $M(@Valid List<$T> $PARAM) { ... }
+    message: "@Valid missing on List<T> body — individual elements will NOT be validated by JAX-RS Bean Validation."
+    severity: ERROR
+    languages: [java]
+    paths:
+      include:
+        - "services/*/src/main/java/**/resource/**"
+
+  # ── R-SEM-07: Raw System.getenv() outside config layer ──────────────────────
+
+  - id: no-raw-system-getenv-java
+    pattern: System.getenv(...)
+    message: "R-ARCH-07 — use @ConfigProperty instead of System.getenv(); config must flow through typed config layer."
+    severity: ERROR
+    languages: [java]
+    paths:
+      include:
+        - "services/*/src/main/java/**"
+        - "libraries/*/src/main/java/**"
+      exclude:
+        - "**/test/**"
+        - "**/*Config*.java"
+        - "**/*Bootstrap*.java"
+
+  # ── R-SEM-08: Missing Optional.isPresent() check before .get() ──────────────
+
+  - id: optional-get-without-ispresent
+    patterns:
+      - pattern: $OPT.get()
+      - pattern-not-inside: |
+          if ($OPT.isPresent()) {
+            ...
+            $OPT.get()
+            ...
+          }
+      - pattern-not-inside: |
+          $OPT.orElseThrow(...)
+    message: "Calling Optional.get() without isPresent() check — use orElseThrow() or ifPresent()."
+    severity: WARNING
+    languages: [java]
+    paths:
+      include:
+        - "services/*/src/main/java/**"
+        - "libraries/*/src/main/java/**"
+      exclude:
+        - "**/test/**"
+
+  # ── R-SEM-09: Catch(Exception) swallowing (async safety) ────────────────────
+
+  - id: catch-exception-swallow-java
+    patterns:
+      - pattern: |
+          try { ... } catch (Exception $E) { }
+    message: "Empty catch(Exception) — log the exception or rethrow. Silent swallowing hides bugs."
+    severity: WARNING
+    languages: [java]
+    paths:
+      include:
+        - "services/*/src/main/java/**"
+      exclude:
+        - "**/test/**"
+
+  # ── R-SEM-10: Parallel fetch without Promise.all (seq-await anti-pattern) ───
+
+  - id: sequential-await-in-loop
+    patterns:
+      - pattern: |
+          for (...) {
+            ...
+            await $FN(...)
+            ...
+          }
+    message: "Sequential await inside a loop is O(n×latency). Use Promise.all() for parallel fetches."
+    severity: WARNING
+    languages: [typescript]
+    paths:
+      include:
+        - "bff/chur/src/**"
+        - "frontends/*/src/**"
+      exclude:
+        - "**/*.test.*"
+        - "**/*.spec.*"
