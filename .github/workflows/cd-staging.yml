@@ -331,27 +331,22 @@ jobs:
             wait_infra "http://localhost:18180/kc/realms/seer" "KC(seer)" 60 || exit 1
 
             # ── Version assertions (warn-only on staging) ─────────────────────
+            # docker inspect reads the image tag directly — ArcadeDB /api/v1/server
+            # and KC realm endpoint don't expose a parseable version in these releases.
             echo "=== Version assertions ==="
-            check_arcade_ver() {
-              local url="$1" pass="$2" expected="$3" label="$4"
-              local ver
-              ver=$(curl -sf --max-time 10 -u "root:${pass}" "${url}/api/v1/server" 2>/dev/null \
-                | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo "?")
-              if echo "${ver}" | grep -qF "${expected}"; then
-                echo "  [${label}] OK — ${ver}"
+            check_image_ver() {
+              local container="$1" expected="$2" label="$3"
+              local image
+              image=$(docker inspect "${container}" --format='{{.Config.Image}}' 2>/dev/null || echo "?")
+              if echo "${image}" | grep -qF "${expected}"; then
+                echo "  [${label}] OK — ${image}"
               else
-                echo "  [${label}] WARN: expected ${expected}, got: ${ver} — check image pin in docker-compose.prod.yml"
+                echo "  [${label}] WARN: expected ${expected}, got: ${image} — check image pin in docker-compose.prod.yml"
               fi
             }
-            check_arcade_ver "http://localhost:2481" "${FRIGG_PASSWORD}"          "26.4.2" "FRIGG"
-            check_arcade_ver "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "26.4.2" "YGG"
-            KC_VER=$(curl -sf --max-time 10 "http://localhost:18180/kc/realms/seer" 2>/dev/null \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("keycloak-version","?"))' 2>/dev/null || echo "?")
-            if echo "${KC_VER}" | grep -qF "26.6"; then
-              echo "  [KC] OK — ${KC_VER}"
-            else
-              echo "  [KC] WARN: expected 26.6.x, got: ${KC_VER} — check image pin in docker-compose.prod.yml"
-            fi
+            check_image_ver "seer-studio-frigg-1"    "26.4.2" "FRIGG"
+            check_image_ver "Ygg-1"                  "26.4.2" "YGG"
+            check_image_ver "seer-studio-keycloak-1" "26.6.1" "KC"
 
             # ── DB bootstrap ──────────────────────────────────────────────────
             echo "=== Running init-arcadedb.sh ==="
