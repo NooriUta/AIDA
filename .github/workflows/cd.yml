@@ -513,6 +513,8 @@ jobs:
             probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "frigg-tenants"     || exit 1
             probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "frigg-sessions"    || exit 1
             probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "dali"              || exit 1
+            probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "dali_default"      || exit 1
+            probe_db "http://localhost:2481" "${FRIGG_PASSWORD}"          "heimdall"          || exit 1
 
             # Health checks (reuse wait_infra; Chur/Shuttle/Verdandi need no auth)
             echo "Waiting for services..."

@@ -408,6 +408,8 @@ jobs:
             probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-tenants"  "1"
             probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-sessions" "1"
             probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali"           "1"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali_default"   "1"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "heimdall"       "1"
 
             # ── Health checks ─────────────────────────────────────────────────
             echo "=== Waiting for services ==="
