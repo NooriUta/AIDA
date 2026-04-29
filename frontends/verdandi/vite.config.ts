@@ -132,6 +132,13 @@ export default defineConfig({
         target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
+      // SD-03: EventStreamPanel WebSocket proxy → Chur → HEIMDALL backend.
+      // Chur authenticates the session cookie and forwards to /ws/events.
+      '/heimdall/ws': {
+        target:       process.env.CHUR_URL ?? 'http://localhost:3000',
+        ws:           true,
+        changeOrigin: true,
+      },
     },
   },
 });
