@@ -66,6 +66,63 @@ class EventBatchValidationTest {
         assertThat(EventResource.requiresTenantTag(null)).isFalse();
     }
 
+    // ── EV-BUG-01: internal background components exempt from HTA-14 ──────────
+
+    /** EV-BUG-01: hound events have no CDI tenant scope — exempt from tenant tag. */
+    @Test
+    void requiresTenantTag_houndSource_doesNotRequireTag() {
+        assertThat(EventResource.requiresTenantTag("FILE_PARSING_STARTED", "hound")).isFalse();
+        assertThat(EventResource.requiresTenantTag("FILE_PARSING_COMPLETED", "hound")).isFalse();
+        assertThat(EventResource.requiresTenantTag("PARSE_ERROR", "hound")).isFalse();
+    }
+
+    @Test
+    void requiresTenantTag_daliSource_doesNotRequireTag() {
+        assertThat(EventResource.requiresTenantTag("SESSION_STARTED",   "dali")).isFalse();
+        assertThat(EventResource.requiresTenantTag("SESSION_COMPLETED", "dali")).isFalse();
+        assertThat(EventResource.requiresTenantTag("SESSION_FAILED",    "dali")).isFalse();
+    }
+
+    @Test
+    void requiresTenantTag_shuttleSource_doesNotRequireTag() {
+        assertThat(EventResource.requiresTenantTag("CYPHER_QUERY_SLOW", "shuttle")).isFalse();
+    }
+
+    @Test
+    void requiresTenantTag_unknownSource_stillRequiresTag() {
+        // Any other sourceComponent (verdandi, chur, etc.) must still carry tenantAlias.
+        assertThat(EventResource.requiresTenantTag("LOOM_NODE_SELECTED", "verdandi")).isTrue();
+        assertThat(EventResource.requiresTenantTag("AUTH_LOGIN",         "chur")).isTrue();
+        assertThat(EventResource.requiresTenantTag("SOME_EVENT",         "test-source")).isTrue();
+    }
+
+    @Test
+    void ingestBatch_houndEventsWithoutTenantTag_accepted() {
+        // EV-BUG-01: hound events must NOT be rejected by HTA-14
+        List<HeimdallEvent> batch = List.of(
+                houndEvent("FILE_PARSING_STARTED"),
+                houndEvent("ATOM_EXTRACTED"),
+                houndEvent("FILE_PARSING_COMPLETED")
+        );
+
+        Response r = resource.ingestBatch(batch);
+
+        assertThat(r.getStatus()).isEqualTo(202);
+    }
+
+    @Test
+    void ingestBatch_daliEventsWithoutTenantTag_accepted() {
+        // EV-BUG-01: dali events must NOT be rejected by HTA-14
+        List<HeimdallEvent> batch = List.of(
+                daliEvent("SESSION_STARTED"),
+                daliEvent("SESSION_COMPLETED")
+        );
+
+        Response r = resource.ingestBatch(batch);
+
+        assertThat(r.getStatus()).isEqualTo(202);
+    }
+
     // ── hasTenantTag() helper ─────────────────────────────────────────────────
 
     @Test
@@ -198,6 +255,18 @@ class EventBatchValidationTest {
         return new HeimdallEvent(
                 System.currentTimeMillis(), "test-source", type,
                 EventLevel.INFO, null, null, null, 0, payload);
+    }
+
+    private static HeimdallEvent houndEvent(String type) {
+        return new HeimdallEvent(
+                System.currentTimeMillis(), "hound", type,
+                EventLevel.INFO, "session-1", null, null, 0, Map.of("file", "test.sql"));
+    }
+
+    private static HeimdallEvent daliEvent(String type) {
+        return new HeimdallEvent(
+                System.currentTimeMillis(), "dali", type,
+                EventLevel.INFO, "session-1", null, null, 0, Map.of("source", "s3://bucket/test.sql"));
     }
 
     private static HeimdallEvent eventWithNullSource(String type) {
