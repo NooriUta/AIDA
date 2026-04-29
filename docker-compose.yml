@@ -90,6 +90,8 @@ services:
       FRIGG_PASSWORD:        ${FRIGG_ROOT_PASSWORD:-playwithdata}
       # SHUTTLE — backend layer
       LINEAGE_API_URL:       http://shuttle:8080
+      # DALI — backend layer (harvest trigger, parse sessions)
+      DALI_URL:              http://dali:9090
       # HEIMDALL — backend layer
       HEIMDALL_URL:          http://heimdall-backend:9093
       # KC Admin API
