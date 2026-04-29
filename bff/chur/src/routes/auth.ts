@@ -73,7 +73,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       String(req.headers['origin'] ?? ''),
     ].join(' ');
 
-    if (sources.includes(':5174') || /heimdall/i.test(sources)) {
+    // :5174 = vite dev / container-internal; :25174 = docker host-mapped port
+    if (sources.includes(':5174') || sources.includes(':25174') || /heimdall/i.test(sources)) {
       return heimdallClient;
     }
     return config.keycloakClientId;

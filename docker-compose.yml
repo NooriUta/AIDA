@@ -63,7 +63,10 @@ services:
       KEYCLOAK_REALM:        seer
       KEYCLOAK_CLIENT_ID:    aida-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-aida-bff-secret-dev}
-      # Per-host theme: when X-Forwarded-Host indicates heimdall (port 5174),
+      # Explicit redirect_uri for Auth Code flow — prevents chur from using the
+      # nginx proxy host (e.g. :25174) instead of chur's own port (:13000).
+      KC_REDIRECT_URI:       ${KC_REDIRECT_URI:-http://localhost:13000/auth/callback}
+      # Per-host theme: when X-Forwarded-Host indicates heimdall (port 5174 or 25174),
       # chur uses this client_id which has loginTheme=heimdall in KC.
       KEYCLOAK_CLIENT_ID_HEIMDALL:     ${KEYCLOAK_CLIENT_ID_HEIMDALL:-aida-bff-heimdall}
       KEYCLOAK_CLIENT_SECRET_HEIMDALL: ${KEYCLOAK_CLIENT_SECRET_HEIMDALL:-aida-bff-heimdall-secret-dev}
