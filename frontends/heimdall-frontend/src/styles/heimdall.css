@@ -317,6 +317,17 @@ input[type=range] { accent-color: var(--acc); flex: 1; height: 4px; }
   background: var(--bg3);
 }
 
+/* ── Dropdown list items (HX-01: CSS hover replaces onMouseEnter/Leave) ───── */
+/* Use className="hh-dd-item" on dropdown list <button> elements.              */
+/* Active items set inline background; non-active items get hover via CSS.     */
+.hh-dd-item {
+  transition: background 0.1s;
+  cursor: pointer;
+}
+.hh-dd-item:hover:not(:disabled) {
+  background: var(--bg3) !important;
+}
+
 /* ── Responsive breakpoints ─────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   /* Utility: hide non-essential chrome on phones */

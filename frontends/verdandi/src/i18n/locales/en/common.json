@@ -603,6 +603,25 @@
     "collapse":  "Collapse panel"
   },
 
+  "eventStream": {
+    "title":       "Event Stream",
+    "show":        "Show event stream",
+    "hide":        "Hide event stream",
+    "clear":       "Clear events",
+    "close":       "Close",
+    "events":      "events",
+    "highlighted": "highlighted",
+    "connecting":  "Connecting to event stream…",
+    "empty":       "No events",
+    "col": {
+      "time":      "Time",
+      "component": "Component",
+      "event":     "Event",
+      "level":     "Level",
+      "duration":  "Duration"
+    }
+  },
+
   "profile": {
     "title": "Profile settings",
     "close": "Close",

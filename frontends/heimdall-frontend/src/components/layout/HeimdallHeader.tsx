@@ -88,13 +88,13 @@ function LanguageSwitcher() {
         }}>
           {(['en', 'ru'] as const).map(lang => (
             <button key={lang} onClick={() => { void i18n.changeLanguage(lang); setOpen(false); }}
+              className="hh-dd-item"
               style={{
                 display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left',
-                background: current === lang ? 'var(--bg3)' : 'transparent', border: 'none',
+                background: current === lang ? 'var(--bg3)' : undefined,
+                border: 'none',
                 color: current === lang ? 'var(--t1)' : 'var(--t2)', fontSize: '12px', cursor: 'pointer',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = current === lang ? 'var(--bg3)' : 'transparent'; }}
             >{t(`language.${lang}`)}</button>
           ))}
         </div>
@@ -133,13 +133,13 @@ function PaletteDropdown() {
             {t('palette.title').toUpperCase()}
           </div>
           {PALETTES.map(p => (
-            <button key={p.id} onClick={() => pick(p.id)} style={{
-              display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px',
-              background: palette === p.id ? 'color-mix(in srgb, var(--acc) 10%, transparent)' : 'transparent',
-              border: 'none', color: palette === p.id ? 'var(--acc)' : 'var(--t2)', fontSize: '12px', cursor: 'pointer', textAlign: 'left',
-            }}
-              onMouseEnter={e => { if (palette !== p.id) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-              onMouseLeave={e => { if (palette !== p.id) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            <button key={p.id} onClick={() => pick(p.id)}
+              className="hh-dd-item"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 12px',
+                background: palette === p.id ? 'color-mix(in srgb, var(--acc) 10%, transparent)' : undefined,
+                border: 'none', color: palette === p.id ? 'var(--acc)' : 'var(--t2)', fontSize: '12px', cursor: 'pointer', textAlign: 'left',
+              }}
             >
               <div style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, background: palette === p.id ? 'var(--acc)' : 'transparent' }} />
               {t(p.key)}
@@ -367,11 +367,9 @@ export const HeimdallHeader = memo(() => {
   const metrics      = useDashboardStore(s => s.metrics);
   const isMobile     = useIsMobile();
 
-  // Mobile: two-step picker state
-  const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
-  const [subPickerOpen,     setSubPickerOpen]     = useState(false);
-  const sectionPickerRef = useRef<HTMLDivElement>(null);
-  const subPickerRef     = useRef<HTMLDivElement>(null);
+  // Mobile: one-step combined nav picker (HX-01)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
 
   // Desktop: logo dropdown state (section switcher — Studio-style)
   const [seerMenuOpen, setSeerMenuOpen] = useState(false);
@@ -423,13 +421,6 @@ export const HeimdallHeader = memo(() => {
 
   const initials = user ? user.username.slice(0, 2).toUpperCase() : '??';
 
-  // Navigate to a section (mobile section picker)
-  const pickSection = (sec: Section) => {
-    if (sec.horizon) return;
-    go(sec.subTabs[0]?.route ?? sec.route);
-    setSectionPickerOpen(false);
-  };
-
   // Desktop: pick a section from logo dropdown
   const pickDesktopSection = (sec: Section) => {
     if (sec.horizon) return;
@@ -448,79 +439,30 @@ export const HeimdallHeader = memo(() => {
 
         {isMobile ? (
           /* ══════════════════════════════════════════════════════
-             MOBILE LAYOUT
-             Step 1: HEIMÐALLR▾ → section picker (full names)
-             Step 2: X.▾ → sub-page picker + current page label
+             MOBILE LAYOUT (HX-01: 1-step nav)
+             Single button: "B. Dashboard▾" opens combined dropdown:
+               • sub-tabs of active section (top)
+               • divider
+               • other sections (bottom, section-switching)
              ══════════════════════════════════════════════════════ */
           <>
-            {/* Step 1 — section picker */}
+            {/* Combined 1-step nav picker */}
             <div
-              ref={sectionPickerRef}
+              ref={mobileNavRef}
               style={{ position: 'relative', flexShrink: 0 }}
-              onBlur={e => { if (!sectionPickerRef.current?.contains(e.relatedTarget as Node)) setSectionPickerOpen(false); }}
+              onBlur={e => {
+                if (!mobileNavRef.current?.contains(e.relatedTarget as Node))
+                  setMobileNavOpen(false);
+              }}
             >
               <button
-                onClick={() => { setSectionPickerOpen(v => !v); setSubPickerOpen(false); }}
+                onClick={() => setMobileNavOpen(v => !v)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '4px',
-                  padding: '4px 6px',
-                  background: sectionPickerOpen ? 'var(--bg2)' : 'transparent',
+                  padding: '4px 8px',
+                  background: mobileNavOpen ? 'var(--bg2)' : 'transparent',
                   border: '1px solid',
-                  borderColor: sectionPickerOpen ? 'var(--bd)' : 'transparent',
-                  borderRadius: 'var(--seer-radius-md)', cursor: 'pointer',
-                  transition: 'background 0.12s, border-color 0.12s',
-                }}
-              >
-                <span style={{
-                  fontFamily: 'var(--font-display)', fontSize: '12px',
-                  letterSpacing: '0.08em', color: 'var(--aida-app-heimdall)',
-                  textTransform: 'uppercase',
-                }}>
-                  HEIMÐALLR
-                </span>
-                <ChevronDown size={10} style={{
-                  color: 'var(--t3)',
-                  transform: sectionPickerOpen ? 'rotate(180deg)' : 'rotate(0)',
-                  transition: 'transform 0.15s',
-                }} />
-              </button>
-
-              {sectionPickerOpen && (
-                <DropdownMenu>
-                  <DropdownHeader label="HEIMÐALLR" />
-                  {visibleSections.map(sec => (
-                    <DropdownItem
-                      key={sec.id}
-                      label={sec.id}
-                      active={sec.id === activeSectionId}
-                      disabled={!!sec.horizon}
-                      horizon={sec.horizon}
-                      onClick={() => pickSection(sec)}
-                    />
-                  ))}
-                </DropdownMenu>
-              )}
-            </div>
-
-            <HDivider />
-
-            {/* Step 2 — section-letter dropdown (sub-pages of active section) */}
-            <div
-              ref={subPickerRef}
-              style={{ position: 'relative', flexShrink: 0 }}
-              onBlur={e => { if (!subPickerRef.current?.contains(e.relatedTarget as Node)) setSubPickerOpen(false); }}
-            >
-              <button
-                onClick={() => {
-                  if (activeSection.subTabs.length > 1) setSubPickerOpen(v => !v);
-                }}
-                title={activeSectionId}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '3px',
-                  padding: '4px 6px',
-                  background: subPickerOpen ? 'var(--bg2)' : 'transparent',
-                  border: '1px solid',
-                  borderColor: subPickerOpen ? 'var(--bd)' : 'transparent',
+                  borderColor: mobileNavOpen ? 'var(--bd)' : 'transparent',
                   borderRadius: 'var(--seer-radius-md)', cursor: 'pointer',
                   transition: 'background 0.12s, border-color 0.12s',
                 }}
@@ -528,37 +470,57 @@ export const HeimdallHeader = memo(() => {
                 <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--acc)' }}>
                   {activeSectionId[0]}.
                 </span>
-                {activeSection.subTabs.length > 1 && (
-                  <ChevronDown size={9} style={{
-                    color: 'var(--t3)',
-                    transform: subPickerOpen ? 'rotate(180deg)' : 'rotate(0)',
-                    transition: 'transform 0.15s',
-                  }} />
-                )}
+                <span style={{
+                  fontSize: '11px', fontWeight: 500, color: 'var(--t2)',
+                  maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {activeSubTab ? t(activeSubTab.labelKey) : activeSubId}
+                </span>
+                <ChevronDown size={9} style={{
+                  color: 'var(--t3)',
+                  transform: mobileNavOpen ? 'rotate(180deg)' : 'rotate(0)',
+                  transition: 'transform 0.15s',
+                }} />
               </button>
 
-              {subPickerOpen && activeSection.subTabs.length > 1 && (
+              {mobileNavOpen && (
                 <DropdownMenu>
+                  {/* Sub-tabs of active section */}
                   <DropdownHeader label={activeSectionId} />
                   {activeSection.subTabs.map(sub => (
                     <DropdownItem
                       key={sub.id}
                       label={t(sub.labelKey).toUpperCase()}
                       active={sub.id === activeSubId}
-                      onClick={() => { go(sub.route); setSubPickerOpen(false); }}
+                      onClick={() => { go(sub.route); setMobileNavOpen(false); }}
                     />
                   ))}
+
+                  {/* Divider + other sections for switching */}
+                  {visibleSections.filter(s => s.id !== activeSectionId).length > 0 && (
+                    <>
+                      <div style={{ height: '1px', background: 'var(--bd)', margin: '4px 0' }} />
+                      {visibleSections
+                        .filter(s => s.id !== activeSectionId)
+                        .map(sec => (
+                          <DropdownItem
+                            key={sec.id}
+                            label={sec.id}
+                            disabled={!!sec.horizon}
+                            horizon={sec.horizon}
+                            onClick={() => {
+                              if (!sec.horizon) {
+                                go(sec.subTabs[0]?.route ?? sec.route);
+                                setMobileNavOpen(false);
+                              }
+                            }}
+                          />
+                        ))}
+                    </>
+                  )}
                 </DropdownMenu>
               )}
             </div>
-
-            {/* Current sub-page name */}
-            <span style={{
-              fontSize: '12px', fontWeight: 600, letterSpacing: '0.06em',
-              color: 'var(--t1)', whiteSpace: 'nowrap',
-            }}>
-              {activeSubTab ? t(activeSubTab.labelKey).toUpperCase() : activeSubId.toUpperCase()}
-            </span>
 
             {(user?.role === 'admin' || user?.role === 'super-admin') && (
               <TenantPickerButton />
