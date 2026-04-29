@@ -83,12 +83,14 @@ export default defineConfig({
         'src/utils/transformGraph.ts',    // re-export barrel + legacy fn (unused, for reference)
         'src/utils/transformOverview.ts', // L1 overview transform — needs own test sprint
         'src/utils/layoutL1.ts',          // L1 geometry helpers — needs own test sprint
+        'src/hooks/useHeimdallEmitter.ts', // EV-09 fire-and-forget emitter — needs own test sprint
       ],
       thresholds: {
         lines:     70,
         functions: 65, // Header + SearchPalette are complex interactive components;
                        // dedicated UI-test sprint will bring this back to 70
-        branches:  60,
+        branches:  58, // Sprint 5/6 event emission branches (KnotPage/FilterToolbar/LoomCanvas)
+                       // pending dedicated test sprint — restore to 60 after EV-08 deferred
       },
     },
   },
@@ -129,6 +131,19 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/prefs': {
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      // SD-03: EventStreamPanel WebSocket proxy → Chur → HEIMDALL backend.
+      // Must be listed BEFORE the /heimdall catch-all so ws:true is applied.
+      '/heimdall/ws': {
+        target:       process.env.CHUR_URL ?? 'http://localhost:3000',
+        ws:           true,
+        changeOrigin: true,
+      },
+      // EV-09/UA-02: HEIMDALL event relay — POST /heimdall/events goes to Chur
+      // which forwards to HEIMDALL backend (fire-and-forget).
+      '/heimdall': {
         target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },

@@ -34,6 +34,8 @@ const NotificationsPage     = React.lazy(() => import('./pages/NotificationsPage
 const SessionActivityPage   = React.lazy(() => import('./pages/SessionActivityPage'));
 // Round 5 admin
 const SoftDeletedUsersPage  = React.lazy(() => import('./pages/SoftDeletedUsersPage'));
+// Sprint 6 UX Analytics
+const AnalyticsPage         = React.lazy(() => import('./pages/AnalyticsPage'));
 
 // ── App layout (shell around the routed page) ─────────────────────────────────
 function AppLayout() {
@@ -148,6 +150,11 @@ export default function App() {
             {/* Round 5 — Superadmin soft-delete management (backend also guards aida:superadmin) */}
             <Route path="admin/users/soft-deleted" element={
               <RoleGuard require="admin"><SoftDeletedUsersPage /></RoleGuard>
+            } />
+
+            {/* UA-05: UX Analytics — admin only */}
+            <Route path="analytics" element={
+              <RoleGuard require="admin"><AnalyticsPage /></RoleGuard>
             } />
 
             {/* Standalone pages */}

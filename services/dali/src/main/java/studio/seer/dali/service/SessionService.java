@@ -8,11 +8,11 @@ import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jobrunr.scheduling.JobScheduler;
+import org.jobrunr.scheduling.JobRequestScheduler;
+import studio.seer.dali.job.ParseJobRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.heimdall.HeimdallEmitter;
-import studio.seer.dali.job.ParseJob;
 import studio.seer.dali.storage.FriggSchemaInitializer;
 import studio.seer.dali.storage.SessionRepository;
 import studio.seer.shared.FileResult;
@@ -36,7 +36,7 @@ public class SessionService {
 
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
-    @Inject Instance<JobScheduler>   jobScheduler;
+    @Inject Instance<JobRequestScheduler> jobRequestScheduler;
     @Inject SessionRepository        repository;
     @Inject HeimdallEmitter          emitter;
     @Inject FriggSchemaInitializer   schemaInitializer;
@@ -153,11 +153,10 @@ public class SessionService {
         persist(session);
         emitter.jobEnqueued(sessionId, input.source(), input.dialect());
         try {
-            org.jobrunr.jobs.JobId jrJobId =
-                jobScheduler.get().<ParseJob>enqueue(j -> j.execute(sessionId, input));
+            org.jobrunr.jobs.JobId jrJobId = scheduleParseJob(sessionId, input);
             jobRunrIdMap.put(sessionId, UUID.fromString(jrJobId.toString()));
         } catch (Exception e) {
-            log.error("Failed to enqueue job for session {}: {}", sessionId, e.getMessage());
+            log.error("Failed to enqueue job for session {}: {}", sessionId, e.getMessage(), e);
             throw new IllegalStateException(
                 "Job scheduling unavailable (JobRunr did not initialise — check startup logs): " + e.getMessage(), e);
         }
@@ -340,7 +339,7 @@ public class SessionService {
         UUID jrId = jobRunrIdMap.remove(sessionId);
         if (jrId != null) {
             try {
-                jobScheduler.get().delete(jrId);
+                jobRequestScheduler.get().delete(jrId);
                 log.info("[cancelSession] JobRunr job {} deleted for session {}", jrId, sessionId);
             } catch (Exception e) {
                 log.warn("[cancelSession] JobRunr delete failed for session {} (job {}): {}",
@@ -372,6 +371,23 @@ public class SessionService {
     }
 
     // ── Internal ───────────────────────────────────────────────────────────────
+
+    /**
+     * DMT-ASM-FIX: enqueues a {@link ParseJob} via {@link JobRequestScheduler}
+     * to bypass JobRunr's ASM bytecode analyser.
+     *
+     * <p>The original lambda approach ({@code j -> j.execute(sessionId, input)}) caused
+     * JobRunr to throw "Can not find variable 4 in stack" because Quarkus CDI
+     * transformation shifts local variable slots in the capturing method, making the
+     * virtual-stack tracker unable to locate the captured variables at the expected slot.
+     *
+     * <p>{@link JobRequestScheduler#enqueue(org.jobrunr.jobs.lambdas.JobRequest)} avoids
+     * all lambda analysis: it serialises the {@link ParseJobRequest} object as the single
+     * job parameter and calls {@link ParseJob#run(ParseJobRequest)} on the worker side.
+     */
+    private org.jobrunr.jobs.JobId scheduleParseJob(String sessionId, ParseSessionInput input) {
+        return jobRequestScheduler.get().enqueue(new ParseJobRequest(sessionId, input));
+    }
 
     private static List<VertexTypeStat> toVertexTypeStats(java.util.Map<String, int[]> map) {
         if (map == null || map.isEmpty()) return List.of();

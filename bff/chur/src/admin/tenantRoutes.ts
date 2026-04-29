@@ -27,6 +27,7 @@ import {
   setUserRole,
   setUserEnabled,
   listOrgMembers,
+  listAllOrganizations,
   inviteUserToOrg,
   removeOrgMember,
 } from '../keycloakAdmin';
@@ -119,7 +120,14 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
         catch { return null; }
       };
 
-      const enriched: Array<Row & { atomsCount: number|null; sourcesCount: number|null; membersCount: number|null }> = [];
+      // TUX-03 / MTN-26: fetch all KC orgs once → build orgId→name map for displayName + drift
+      const kcOrgs = await listAllOrganizations().catch(() => []);
+      const kcOrgMap = new Map(kcOrgs.map(o => [o.id, o.name]));
+
+      const enriched: Array<Row & {
+        atomsCount: number|null; sourcesCount: number|null; membersCount: number|null;
+        displayName?: string; drift?: boolean;
+      }> = [];
       for (let i = 0; i < rows.length; i += CONCURRENCY) {
         const slice = rows.slice(i, i + CONCURRENCY);
         const part = await Promise.all(slice.map(async r => {
@@ -128,7 +136,17 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
             r.friggDaliDbName  ? countFriggDali(r.friggDaliDbName) : Promise.resolve(null),
             countMembers(r.keycloakOrgId),
           ]);
-          return { ...r, atomsCount, sourcesCount, membersCount };
+          // displayName: KC org name if orgId is known and found in KC
+          const displayName = r.keycloakOrgId ? kcOrgMap.get(r.keycloakOrgId) : undefined;
+          // drift (MTN-26): ACTIVE/SUSPENDED tenant has orgId in FRIGG but KC org is gone,
+          // OR is ACTIVE but has no orgId at all (provisioning completed without KC org).
+          // Exclude PROVISIONING/PROVISIONING_FAILED/ARCHIVED/PURGED — expected to be incomplete.
+          const isLiveStatus = r.status === 'ACTIVE' || r.status === 'SUSPENDED';
+          const drift = isLiveStatus && (
+            (r.keycloakOrgId != null && !kcOrgMap.has(r.keycloakOrgId))
+            || r.keycloakOrgId == null
+          );
+          return { ...r, atomsCount, sourcesCount, membersCount, displayName, drift };
         }));
         enriched.push(...part);
       }

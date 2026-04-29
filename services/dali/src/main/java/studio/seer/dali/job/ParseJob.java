@@ -21,6 +21,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jobrunr.jobs.annotations.Job;
+import org.jobrunr.jobs.lambdas.JobRequestHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import studio.seer.dali.heimdall.HeimdallEmitter;
@@ -61,7 +62,7 @@ import java.util.stream.Stream;
  */
 @Unremovable
 @ApplicationScoped
-public class ParseJob {
+public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
     private static final Logger log = LoggerFactory.getLogger(ParseJob.class);
 
@@ -84,6 +85,17 @@ public class ParseJob {
     // Optional — absent when HEIMDALL_URL env var is not set (e.g. CI, local dev without Heimdall).
     // SmallRye Config treats empty string "" as null; Optional maps null → empty without throwing.
     @ConfigProperty(name = "heimdall.url") Optional<String> heimdallUrl;
+
+    /**
+     * DMT-ASM-FIX: entry point used by {@link org.jobrunr.scheduling.JobRequestScheduler}.
+     * Delegates immediately to {@link #execute(String, ParseSessionInput)}.
+     * This method is called by JobRunr on the worker side when the job was enqueued
+     * via {@link ParseJobRequest} — no ASM lambda analysis occurs in that path.
+     */
+    @Override
+    public void run(ParseJobRequest req) throws Exception {
+        execute(req.sessionId(), req.input());
+    }
 
     @Job(name = "Parse SQL files", retries = 3)
     public void execute(String sessionId, ParseSessionInput input) {
@@ -122,8 +134,11 @@ public class ParseJob {
             // Only the lineage graph hound_{tenant} is truncated here.
             if (!input.preview() && input.clearBeforeWrite()) {
                 log.info("[{}] clearBeforeWrite=true — truncating YGG lineage (hound_src untouched)...", sessionId);
+                long clearStart = System.currentTimeMillis();
                 houndParser.cleanAll(config);
-                log.info("[{}] YGG truncated", sessionId);
+                long clearMs = System.currentTimeMillis() - clearStart;
+                emitter.yggClearCompleted(sessionId, clearMs);  // EV-03
+                log.info("[{}] YGG truncated in {}ms", sessionId, clearMs);
             }
 
             // JDBC source: harvest from database via SKADI, then parse in-memory
@@ -144,6 +159,10 @@ public class ParseJob {
 
         } catch (Exception e) {
             log.error("[{}] ParseJob failed: {}", sessionId, e.getMessage(), e);
+            // EV-05: detect ArcadeDB connectivity failures separately from parse errors
+            if (isArcadeConnectionError(e)) {
+                emitter.dbConnectionError(sessionId, "ygg", buildErrorMessage(e));
+            }
             String errorMsg = buildErrorMessage(e);
             sessionService.failSession(sessionId, errorMsg);
             emitter.sessionFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs);
@@ -186,7 +205,8 @@ public class ParseJob {
         sessionService.startSession(sessionId, false, 1);
         long fileStart = System.currentTimeMillis();
 
-        HoundEventListener listener = buildListener(sessionId, config);
+        String sourceRoot = file.getParent() != null ? file.getParent().toString() : null;
+        HoundEventListener listener = buildListener(sessionId, config, input.tenantAlias(), sourceRoot);
         ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
                 ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
                 : houndParser.parse(file, config, listener);
@@ -195,6 +215,11 @@ public class ParseJob {
         sessionService.completeSession(sessionId, result, List.of(fr));
         emitter.sessionCompleted(sessionId, result.atomCount(), result.resolutionRate(),
                 result.durationMs(), 1);
+
+        // EV-02: report YGG write outcome
+        if (!input.preview()) {
+            emitter.yggWriteCompleted(sessionId, result.vertexCount(), result.edgeCount(), result.durationMs());
+        }
 
         if (!input.preview()) {
             String sqlText = readSilently(file);
@@ -265,7 +290,8 @@ public class ParseJob {
                 sessionId, sources.size(), config.dialect());
         sessionService.startSession(sessionId, true, sources.size());
 
-        HoundEventListener listener = buildListener(sessionId, config);
+        // JDBC sources have no filesystem root; tenantAlias already resolved above.
+        HoundEventListener listener = buildListener(sessionId, config, tenantAlias, null);
         List<ParseResult> parseResults = houndParser.parseSources(sources, config, listener);
 
         // 6 — aggregate and complete session
@@ -279,6 +305,11 @@ public class ParseJob {
         sessionService.completeSession(sessionId, merged, fileResults);
         emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
+
+        // EV-02: report YGG write outcome for JDBC source
+        if (!input.preview()) {
+            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
+        }
 
         if (!input.preview()) {
             long stop = System.currentTimeMillis();
@@ -322,9 +353,10 @@ public class ParseJob {
         // Parse file-by-file so we can update progress after each one.
         // Per-file retry absorbs transient ArcadeDB MVCC conflicts without aborting the entire
         // batch — a single file failure no longer cascades into a full session retry (JobRunr).
+        String batchRoot = dir.toString();
         for (Path file : files) {
             long   fileStart = System.currentTimeMillis();
-            FileResult fr = parseFileWithRetry(sessionId, file, config, input);
+            FileResult fr = parseFileWithRetry(sessionId, file, config, input, batchRoot);
             fileResults.add(fr);
             sessionService.recordFileComplete(sessionId, fr);
             if (fr.success()) {
@@ -348,6 +380,16 @@ public class ParseJob {
         emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
 
+        // EV-02: report YGG write outcome for batch
+        if (!input.preview()) {
+            long failedCount = fileResults.stream().filter(fr -> !fr.success()).count();
+            if (failedCount > 0) {
+                emitter.yggWriteFailed(sessionId,
+                        failedCount + " of " + fileResults.size() + " file(s) failed after " + FILE_MAX_RETRIES + " retries");
+            }
+            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
+        }
+
         if (!input.preview()) {
             int successCount = (int) fileResults.stream().filter(FileResult::success).count();
             int errorCount   = (int) fileResults.stream().filter(f -> !f.errors().isEmpty()).count();
@@ -368,11 +410,11 @@ public class ParseJob {
      * result, but processing continues for the remaining files.
      */
     private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config,
-                                          ParseSessionInput input) {
+                                          ParseSessionInput input, String sourceRoot) {
         Exception lastEx = null;
         for (int attempt = 1; attempt <= FILE_MAX_RETRIES; attempt++) {
             try {
-                HoundEventListener listener = buildListener(sessionId, config);
+                HoundEventListener listener = buildListener(sessionId, config, input.tenantAlias(), sourceRoot);
                 ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
                         ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
                         : houndParser.parse(file, config, listener);
@@ -421,12 +463,24 @@ public class ParseJob {
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    /** Builds the effective listener: DaliHoundListener (persistence) + HoundHeimdallListener
-     *  (observability) via CompositeListener. Falls back to NoOp if HEIMDALL_URL is not set. */
-    private HoundEventListener buildListener(String sessionId, HoundConfig config) {
+    /**
+     * Builds the effective listener: DaliHoundListener (persistence) +
+     * HoundHeimdallListener (observability) via CompositeListener.
+     * Falls back to NoOp if HEIMDALL_URL is not set.
+     *
+     * @param sessionId   active parse session id
+     * @param config      hound configuration
+     * @param tenantAlias tenant alias — injected into every hound event payload so the
+     *                    HEIMDALL EventLog Tenant column is populated for hound events.
+     *                    Nullable (e.g. preview mode has no tenant).
+     * @param sourceRoot  absolute root directory (or null for JDBC/single-file) used
+     *                    to compute relative file paths in hound events.
+     */
+    private HoundEventListener buildListener(String sessionId, HoundConfig config,
+                                              String tenantAlias, String sourceRoot) {
         HoundEventListener heimdall = heimdallUrl
                 .filter(url -> !url.isBlank())
-                .<HoundEventListener>map(HoundHeimdallListener::new)
+                .<HoundEventListener>map(url -> new HoundHeimdallListener(url, sessionId, tenantAlias, sourceRoot))
                 .orElse(NoOpHoundEventListener.INSTANCE);
         return new CompositeListener(
                 new DaliHoundListener(sessionId, config.dialect(), emitter),
@@ -535,6 +589,33 @@ public class ParseJob {
             log.warn("[SourceArchive] could not read file content for archiving: {}", e.getMessage());
             return "";
         }
+    }
+
+    /**
+     * EV-05: Returns {@code true} when the exception chain indicates an ArcadeDB TCP
+     * connection failure (refused, timed-out, unreachable) rather than a parse/logic error.
+     * Used to emit {@link studio.seer.shared.EventType#DB_CONNECTION_ERROR} separately from
+     * generic session failures.
+     */
+    private static boolean isArcadeConnectionError(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof java.net.ConnectException) return true;
+            String msg = cur.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase();
+                if (lower.contains("connection refused")   ||
+                    lower.contains("connect timed out")    ||
+                    lower.contains("failed to connect")    ||
+                    lower.contains("no route to host")     ||
+                    lower.contains("connection reset")     ||
+                    lower.contains("unreachable")) {
+                    return true;
+                }
+            }
+            cur = cur.getCause();
+        }
+        return false;
     }
 
     /**

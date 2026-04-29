@@ -69,6 +69,12 @@ public enum EventType {
     AUTH_LOGOUT,            // {user_id}
     RATE_LIMIT_EXCEEDED,    // {ip, endpoint, attempts}
 
+    // UA-01: KNOT / LOOM UX analytics (Sprint 6)
+    KNOT_SESSION_OPENED,    // {knot_id, knot_type, session_id}
+    KNOT_TAB_VIEWED,        // {knot_id, tab_name, session_id}
+    LOOM_SEARCH_USED,       // {query_length, results_count, session_id}
+    LOOM_FILTER_APPLIED,    // {filter_type, filter_value, session_id}
+
     // HEIMDALL internal
     DEMO_RESET,
     SNAPSHOT_SAVED,

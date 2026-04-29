@@ -4,6 +4,8 @@ package studio.seer.lineage.heimdall.model;
  * Local copy of studio.seer.shared.EventType for SHUTTLE.
  * Temporary until Docker multi-module build for SHUTTLE is implemented.
  * Keep in sync with shared/dali-models/EventType.java.
+ *
+ * Last sync: Sprint 5 Events (EV-04/EV-05 — CYPHER_QUERY_SLOW, DB_CONNECTION_ERROR).
  */
 public enum EventType {
     // Hound
@@ -20,9 +22,28 @@ public enum EventType {
 
     // ANVIL
     TRAVERSAL_STARTED, TRAVERSAL_PROGRESS, TRAVERSAL_COMPLETED,
+    QUERY_EXECUTED, QUERY_BLOCKED,
 
     // SHUTTLE
     REQUEST_RECEIVED, REQUEST_COMPLETED, SUBSCRIPTION_OPENED,
+
+    // YGG writes (Hound → YGG)
+    YGG_WRITE_COMPLETED, YGG_WRITE_FAILED, YGG_CLEAR_COMPLETED,
+
+    // SHUTTLE → YGG performance  (EV-04)
+    CYPHER_QUERY_SLOW,
+
+    // DB health (EV-05)
+    DB_CONNECTION_ERROR,
+
+    // Dali config audit
+    SOURCE_CREATED, SOURCE_DELETED,
+
+    // Verdandi / LOOM frontend
+    LOOM_NODE_SELECTED, LOOM_VIEW_LOADED, LOOM_VIEW_SLOW,
+
+    // Chur BFF auth audit
+    AUTH_LOGIN, AUTH_LOGOUT, RATE_LIMIT_EXCEEDED,
 
     // HEIMDALL internal
     DEMO_RESET, SNAPSHOT_SAVED, REPLAY_STARTED
