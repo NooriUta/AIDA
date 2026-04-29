@@ -2,7 +2,6 @@
  * UA-06: Hot-nodes widget — shows top-N nodes by LOOM click count.
  * Bar chart: node label on Y-axis, click count on X-axis.
  */
-import React from 'react';
 import type { HotNode } from '../../api/analytics';
 
 interface Props {

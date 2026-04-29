@@ -83,6 +83,7 @@ export default defineConfig({
         'src/utils/transformGraph.ts',    // re-export barrel + legacy fn (unused, for reference)
         'src/utils/transformOverview.ts', // L1 overview transform — needs own test sprint
         'src/utils/layoutL1.ts',          // L1 geometry helpers — needs own test sprint
+        'src/hooks/useHeimdallEmitter.ts', // EV-09 fire-and-forget emitter — needs own test sprint
       ],
       thresholds: {
         lines:     70,
