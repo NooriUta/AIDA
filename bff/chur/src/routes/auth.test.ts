@@ -19,6 +19,14 @@ import { exchangeCredentials, extractUserInfo } from '../keycloak';
 const mockExchange  = vi.mocked(exchangeCredentials);
 const mockExtract   = vi.mocked(extractUserInfo);
 
+// ── Mock heimdallEmit.ts — EV-08 deferred 5-C ────────────────────────────────
+vi.mock('../middleware/heimdallEmit', () => ({
+  emitToHeimdall: vi.fn(),
+}));
+
+import { emitToHeimdall } from '../middleware/heimdallEmit';
+const mockEmit = vi.mocked(emitToHeimdall);
+
 // ── Minimal Fastify app factory ──────────────────────────────────────────────
 async function buildApp() {
   const app = Fastify({ logger: false });
@@ -174,5 +182,76 @@ describe('GET /auth/me', () => {
     expect(body.username).toBe('alice');
     expect(body.role).toBe('viewer');
     expect(body.id).toBe('kc-002');
+  });
+});
+
+// ── EV-08 deferred 5-C: Heimdall emit on auth events ─────────────────────────
+
+describe('Heimdall emit on auth events', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    app = await buildApp();
+  });
+
+  it('POST /auth/login success → emits AUTH_LOGIN_SUCCESS with username and role', async () => {
+    mockExchange.mockResolvedValue({
+      access_token:  fakeAccessToken(ADMIN_CLAIMS),
+      refresh_token: 'rt-emit-01',
+      expires_in:    300,
+      token_type:    'Bearer',
+    });
+    mockExtract.mockReturnValue({ sub: 'kc-001', username: 'admin', role: 'admin', scopes: [] });
+
+    await app.inject({
+      method:  'POST',
+      url:     '/auth/login',
+      payload: { username: 'admin', password: 'pass' },
+    });
+
+    expect(mockEmit).toHaveBeenCalledWith(
+      'AUTH_LOGIN_SUCCESS',
+      'INFO',
+      expect.objectContaining({ username: 'admin', role: 'admin' }),
+      expect.any(String), // sessionId
+    );
+  });
+
+  it('POST /auth/login failure → emits AUTH_LOGIN_FAILED with reason', async () => {
+    mockExchange.mockRejectedValue(new Error('Keycloak login failed'));
+
+    await app.inject({
+      method:  'POST',
+      url:     '/auth/login',
+      payload: { username: 'admin', password: 'wrong' },
+    });
+
+    expect(mockEmit).toHaveBeenCalledWith(
+      'AUTH_LOGIN_FAILED',
+      'WARN',
+      expect.objectContaining({ username: 'admin', reason: 'invalid_credentials' }),
+    );
+  });
+
+  it('POST /auth/logout with valid session → emits AUTH_LOGOUT', async () => {
+    // Create a real session so logout can find + delete it → emitToHeimdall fires
+    const sid = await sessions.createSession(
+      'fake-access', 'fake-refresh', 3600,
+      'kc-logout-01', 'testuser', 'viewer',
+    );
+
+    await app.inject({
+      method:  'POST',
+      url:     '/auth/logout',
+      cookies: { sid },
+    });
+
+    expect(mockEmit).toHaveBeenCalledWith(
+      'AUTH_LOGOUT',
+      'INFO',
+      expect.objectContaining({ username: 'testuser' }),
+      sid,
+    );
   });
 });
