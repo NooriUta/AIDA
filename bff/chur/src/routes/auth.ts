@@ -58,6 +58,15 @@ function computeRedirectUri(req: { protocol: string; hostname: string; headers: 
   return `${proto}://${host}/auth/callback`;
 }
 
+/** Maps a Keycloak error + description to a frontend i18n key. */
+function normalizeKcError(kcError: string, desc?: string): string {
+  const d = (desc ?? kcError).toLowerCase();
+  if (d.includes('disabled') || d.includes('locked') || d.includes('заблокирован') || d.includes('отключен')) {
+    return 'auth.error.accountLocked';
+  }
+  return 'auth.error.server';
+}
+
 export const authRoutes: FastifyPluginAsync = async (app) => {
   // Pick KC client_id based on X-Forwarded-Host or Referer so each frontend
   // sees its own login theme (per-client KC `loginTheme` attribute).
@@ -120,7 +129,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       const { code, state, error, error_description } = request.query;
       if (error) {
         emitToHeimdall('AUTH_CALLBACK_ERROR', 'WARN', { error, error_description });
-        return reply.status(400).send({ error: 'KC error', detail: error_description ?? error });
+        const errorKey = normalizeKcError(error, error_description);
+        const loginBase = (process.env.POST_LOGIN_REDIRECT ?? '').replace(/\/+$/, '');
+        return reply.redirect(`${loginBase}/login?auth_error=${encodeURIComponent(errorKey)}`, 302);
       }
       if (!code || !state) return reply.status(400).send({ error: 'missing code/state' });
       const entry = consumePkce(state);
