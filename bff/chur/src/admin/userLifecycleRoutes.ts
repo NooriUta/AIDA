@@ -22,7 +22,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { requireScope } from '../middleware/requireAdmin';
 import { csrfGuard } from '../middleware/csrfGuard';
 import { emitTenantAudit } from '../middleware/auditEmit';
-import { setUserEnabled } from '../keycloakAdmin';
+import { setUserEnabled, getUser } from '../keycloakAdmin';
 import { friggUsersSql, friggUsersQuery } from '../users/FriggUsersClient';
 import { checkRetentionChange } from './retentionGuard';
 
@@ -60,6 +60,18 @@ export const userLifecycleRoutes: FastifyPluginAsync = async (app) => {
       const reason = request.body?.reason ?? 'admin_action';
       const now = Date.now();
       const retentionUntil = daysFromNow(DATA_RETENTION_DAYS);
+
+      // Guard: prevent disabling platform-level protected accounts
+      const PROTECTED_USERNAMES = ['admin', 'superadmin'];
+      try {
+        const kcUser = await getUser(userId);
+        if (PROTECTED_USERNAMES.includes(kcUser.name ?? '')) {
+          return reply.status(403).send({
+            error: 'protected_account',
+            message: `User '${kcUser.name}' is a protected platform account and cannot be disabled.`,
+          });
+        }
+      } catch { /* if getUser fails, proceed — disable will fail naturally */ }
 
       // Disable in KC
       try {

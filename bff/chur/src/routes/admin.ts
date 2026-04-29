@@ -80,11 +80,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // ── Tenants (admin+ only) ─────────────────────────────────────────────────
+  // ── Tenants (all authenticated — role-aware response) ────────────────────
+  // Admin/superadmin → all active tenants (FRIGG).
+  // Everyone else   → own KC org memberships (or own tenant alias as fallback).
+  // No scope guard here: TenantSelector calls this for every role, including
+  // viewer/editor/operator who need to know which tenant(s) they belong to.
+  // Security: viewers receive only their own org data — not the full list.
 
   app.get(
     '/admin/tenants',
-    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin')] },
+    { preHandler: [app.authenticate] },
     async (request, reply) => {
       const isSuperAdmin = request.user.scopes?.includes('aida:superadmin');
       // Cross-tenant admins (super-admin + admin) can see ALL active tenants.
