@@ -160,7 +160,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       });
       const activeTenantAlias = userInfo.tenantAlias ?? 'default';
       reply.setCookie('sid', sid, COOKIE_OPTS);
-      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role, flow: 'auth_code' }, sid);
+      emitToHeimdall('AUTH_LOGIN', 'INFO', { username: userInfo.username, role: userInfo.role, flow: 'auth_code' }, sid);
       void emitSessionEvent({
         userId:      userInfo.sub,
         sessionId:   sid,
@@ -200,6 +200,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const ip = request.ip;
       if (isRateLimited(ip)) {
+        const entry = loginAttempts.get(ip);
+        emitToHeimdall('RATE_LIMIT_EXCEEDED', 'WARN', {
+          ip,
+          endpoint: '/auth/login',
+          attempts: entry?.count ?? RATE_MAX + 1,
+        });
         return reply.status(429).send({
           error: 'Too many login attempts. Try again later.',
         });
@@ -243,7 +249,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
       const activeTenantAlias = userInfo.tenantAlias ?? 'default';
       reply.setCookie('sid', sid, COOKIE_OPTS);
-      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
+      emitToHeimdall('AUTH_LOGIN', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
       void emitSessionEvent({
         userId:     userInfo.sub,
         sessionId:  sid,

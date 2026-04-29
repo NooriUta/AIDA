@@ -122,8 +122,11 @@ public class ParseJob {
             // Only the lineage graph hound_{tenant} is truncated here.
             if (!input.preview() && input.clearBeforeWrite()) {
                 log.info("[{}] clearBeforeWrite=true — truncating YGG lineage (hound_src untouched)...", sessionId);
+                long clearStart = System.currentTimeMillis();
                 houndParser.cleanAll(config);
-                log.info("[{}] YGG truncated", sessionId);
+                long clearDuration = System.currentTimeMillis() - clearStart;
+                log.info("[{}] YGG truncated in {}ms", sessionId, clearDuration);
+                emitter.yggClearCompleted(sessionId, clearDuration); // EV-03
             }
 
             // JDBC source: harvest from database via SKADI, then parse in-memory
@@ -147,6 +150,9 @@ public class ParseJob {
             String errorMsg = buildErrorMessage(e);
             sessionService.failSession(sessionId, errorMsg);
             emitter.sessionFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs);
+            if (!input.preview()) {
+                emitter.yggWriteFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs); // EV-02
+            }
             if (!input.preview()) {
                 archiveWriter.failSession(sessionId, input, System.currentTimeMillis(), System.currentTimeMillis() - startMs);
                 archiveWriter.writeErrors(sessionId, input, null, src, List.of(errorMsg), "SESSION_ERROR");
@@ -197,6 +203,8 @@ public class ParseJob {
                 result.durationMs(), 1);
 
         if (!input.preview()) {
+            // EV-02: YGG write completed — vertices/edges from ParseResult
+            emitter.yggWriteCompleted(sessionId, result.vertexCount(), result.edgeCount(), result.durationMs());
             String sqlText = readSilently(file);
             long   stop    = System.currentTimeMillis();
             String fid     = archiveWriter.writeFile(sessionId, input, file.toString(), sqlText,
@@ -281,6 +289,8 @@ public class ParseJob {
                 merged.durationMs(), fileResults.size());
 
         if (!input.preview()) {
+            // EV-02: YGG write completed for JDBC batch
+            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
             long stop = System.currentTimeMillis();
             // Archive each SKADI source file — sql text is already in memory
             for (int i = 0; i < fetchResult.files().size() && i < fileResults.size(); i++) {
@@ -349,6 +359,8 @@ public class ParseJob {
                 merged.durationMs(), fileResults.size());
 
         if (!input.preview()) {
+            // EV-02: YGG write completed — aggregate vertex/edge counts from batch
+            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
             int successCount = (int) fileResults.stream().filter(FileResult::success).count();
             int errorCount   = (int) fileResults.stream().filter(f -> !f.errors().isEmpty()).count();
             archiveWriter.closeSession(sessionId, input, System.currentTimeMillis(),
