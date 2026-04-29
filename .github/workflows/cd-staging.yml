@@ -348,9 +348,10 @@ jobs:
 
             # ── Health checks ─────────────────────────────────────────────────
             echo "=== Waiting for services ==="
-            wait_infra "http://localhost:13000/health" "Chur"    || { echo "Chur FAILED";    exit 1; }
+            wait_infra "http://localhost:13000/health"   "Chur"    || { echo "Chur FAILED";    exit 1; }
             wait_infra "http://localhost:18080/q/health" "Shuttle" || { echo "Shuttle FAILED"; exit 1; }
-            wait_infra "http://localhost:15173/"        "Verdandi" || { echo "Verdandi FAILED"; exit 1; }
+            wait_infra "http://localhost:15173/"         "Verdandi" || { echo "Verdandi FAILED"; exit 1; }
+            wait_infra "http://localhost:19090/q/health" "Dali"    || { echo "Dali FAILED";    exit 1; }
             echo "=== All services OK ==="
 
             # ── Integration test pre-clean ────────────────────────────────────
