@@ -62,14 +62,21 @@ async function sid(role: 'admin' | 'super-admin' | 'viewer', extra: string[] = [
 }
 
 // ── Stateful FRIGG fetch stub ─────────────────────────────────────────────────
-// CAS pattern: UPDATE is call #1 (returns empty result), SELECT configVersion is
-// call #2 and must return expectedConfigVersion+1 to signal success.
-// We start configVersion at 2 so that for expectedConfigVersion=1 the check
-// `current !== expected+1` → `2 !== 2` → false → success.
-function makeFetchStub(opts: { orgId?: string; configVersion?: number; status?: string } = {}) {
-  const cv      = opts.configVersion ?? 2;   // returned on SELECT configVersion (= expected+1)
-  const orgId   = opts.orgId   ?? 'kc-org-default';
-  const status  = opts.status  ?? 'ACTIVE';
+// casUpdateTenant issues 3 DB calls per CAS operation:
+//   1. PRE-CHECK  SELECT configVersion → must return expectedConfigVersion
+//   2. UPDATE DaliTenantConfig         → (no configVersion constraint)
+//   3. POST-CHECK SELECT configVersion → must return expectedConfigVersion + 1
+//
+// The UPDATE-aware pattern: track whether an UPDATE was seen since the last
+// SELECT configVersion. PRE-CHECK and readCurrentVersion happen before any
+// UPDATE → return the stable currentVersion. POST-CHECK follows an UPDATE →
+// bump currentVersion and return the new value.
+function makeFetchStub(opts: { orgId?: string; status?: string } = {}) {
+  const orgId  = opts.orgId  ?? 'kc-org-default';
+  const status = opts.status ?? 'ACTIVE';
+
+  let currentVersion = 1;
+  let sawUpdate      = false;
 
   return vi.fn((_url: string, init?: RequestInit) => {
     const body = typeof init?.body === 'string' ? init.body : '';
@@ -83,8 +90,21 @@ function makeFetchStub(opts: { orgId?: string; configVersion?: number; status?: 
       });
     }
 
+    if (body.includes('UPDATE DaliTenantConfig')) {
+      sawUpdate = true;
+      return Promise.resolve({
+        ok: true, status: 200, text: () => Promise.resolve(''),
+        headers: { get: () => null },
+        json: () => Promise.resolve({ result: [] }),
+      });
+    }
+
     if (body.includes('SELECT configVersion')) {
-      // Post-UPDATE verify: return cv (= expected+1) to signal CAS success
+      if (sawUpdate) {
+        sawUpdate = false;
+        currentVersion++;
+      }
+      const cv = currentVersion;
       return Promise.resolve({
         ok: true, status: 200, text: () => Promise.resolve(''),
         headers: { get: () => null },
@@ -92,12 +112,12 @@ function makeFetchStub(opts: { orgId?: string; configVersion?: number; status?: 
       });
     }
 
-    // All other FRIGG commands (UPDATE, SELECT tenant, SELECT members…)
+    // All other FRIGG commands (SELECT tenant, SELECT members…)
     return Promise.resolve({
       ok: true, status: 200, text: () => Promise.resolve(''),
       headers: { get: () => null },
       json: () => Promise.resolve({
-        result: [{ tenantAlias: 'acme', status, configVersion: cv, keycloakOrgId: orgId,
+        result: [{ tenantAlias: 'acme', status, configVersion: currentVersion, keycloakOrgId: orgId,
                    featureFlags: '{"betaHarvest":true}', lastRoleChangeAt: 0 }],
       }),
     });

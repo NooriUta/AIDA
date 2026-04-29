@@ -29,18 +29,14 @@ export function ProvisionModal({ onDone, onClose }: Props) {
   const [result, setResult]           = useState<{ keycloakOrgId?: string } | null>(null);
   const [validationErr, setValidationErr] = useState<string | null>(null);
 
-  /** Real-time: alias с недопустимыми символами → ошибка до submit */
+  /** Real-time: alias с недопустимыми символами → предупреждение до submit */
   const ALIAS_RE = /^[a-z0-9-]*$/;
   const aliasHasInvalidChars = alias.trim().length > 0 && !ALIAS_RE.test(alias.trim().toLowerCase());
-  const aliasCanSubmit = !aliasHasInvalidChars && alias.trim().length >= 4;
+  const aliasCanSubmit = alias.trim().length > 0;
 
   const submit = async () => {
     const trimmed = alias.trim().toLowerCase();
     const a = trimmed.replace(/[^a-z0-9-]/g, '');
-    if (a !== trimmed) {
-      setValidationErr('Только строчные буквы, цифры и дефис (a-z, 0-9, -)');
-      return;
-    }
     if (a.length < 4) {
       setValidationErr('Alias должен быть не менее 4 символов');
       return;
@@ -124,7 +120,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               {t('tenants.provision.aliasLabel', 'Alias (a-z, 0-9, дефис)')}
             </label>
             <input
-              data-testid="input-tenant-alias"
+              data-testid="alias-input"
               className="field-input"
               style={{ width: '100%' }}
               value={alias}
@@ -154,7 +150,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               <button className="btn btn-secondary" onClick={() => { onClose(); }}>
                 {t('action.cancel', 'Отмена')}
               </button>
-              <button data-testid="btn-submit-tenant" className="btn btn-secondary"
+              <button data-testid="submit-btn" className="btn btn-secondary"
                 onClick={submit} disabled={!aliasCanSubmit}>
                 {t('tenants.provision.confirm', 'Создать')}
               </button>
