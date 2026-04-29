@@ -177,6 +177,30 @@ jobs:
               return 1
             }
 
+            probe_or_recreate() {
+              local base_url="$1" pass="$2" db="$3"
+              local ok=0
+              for i in $(seq 1 18); do
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+                  -u "root:${pass}" -X POST "${base_url}/api/v1/query/${db}" \
+                  -H "Content-Type: application/json" \
+                  -d '{"language":"sql","command":"SELECT 1","params":{}}' 2>/dev/null || echo "000")
+                if [ "$CODE" = "200" ]; then
+                  echo "  [${db}] warm — OK (attempt ${i})"; ok=1; break
+                fi
+                echo "  [${db}] probe ${i}/18 HTTP ${CODE}..."; sleep 5
+              done
+              if [ "$ok" = "0" ]; then
+                echo "  [${db}] WARN: not available after 90s — dropping and recreating"
+                curl -sf --max-time 10 -u "root:${pass}" \
+                  -X DELETE "${base_url}/api/v1/drop/${db}" 2>/dev/null || true
+                sleep 2
+                curl -sf --max-time 10 -u "root:${pass}" \
+                  -X POST "${base_url}/api/v1/create/${db}" 2>/dev/null && \
+                  echo "  [${db}] recreated" || echo "  [${db}] ERROR: recreate failed"
+              fi
+            }
+
             echo "▶ INIT: stop all services"
             docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
               down --remove-orphans 2>/dev/null || true
@@ -209,8 +233,19 @@ jobs:
             KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
             bash scripts/init-arcadedb.sh
 
+            echo "▶ INIT: DB warm-up probe"
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_default"
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_src_default"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-tenants"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-sessions"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali_default"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "heimdall"
+
             wait_for "http://localhost:13000/health"   "Chur"
             wait_for "http://localhost:18080/q/health" "Shuttle"
+            wait_for "http://localhost:19090/q/health" "Dali"
+            wait_for "http://localhost:19093/q/health" "heimdall-backend"
 
             echo "▶ INIT: smoke tests"
             DOMAIN=${{ secrets.DOMAIN_STAGING }} bash scripts/smoke-test.sh
@@ -257,6 +292,30 @@ jobs:
               return 1
             }
 
+            probe_or_recreate() {
+              local base_url="$1" pass="$2" db="$3"
+              local ok=0
+              for i in $(seq 1 18); do
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+                  -u "root:${pass}" -X POST "${base_url}/api/v1/query/${db}" \
+                  -H "Content-Type: application/json" \
+                  -d '{"language":"sql","command":"SELECT 1","params":{}}' 2>/dev/null || echo "000")
+                if [ "$CODE" = "200" ]; then
+                  echo "  [${db}] warm — OK (attempt ${i})"; ok=1; break
+                fi
+                echo "  [${db}] probe ${i}/18 HTTP ${CODE}..."; sleep 5
+              done
+              if [ "$ok" = "0" ]; then
+                echo "  [${db}] WARN: not available after 90s — dropping and recreating"
+                curl -sf --max-time 10 -u "root:${pass}" \
+                  -X DELETE "${base_url}/api/v1/drop/${db}" 2>/dev/null || true
+                sleep 2
+                curl -sf --max-time 10 -u "root:${pass}" \
+                  -X POST "${base_url}/api/v1/create/${db}" 2>/dev/null && \
+                  echo "  [${db}] recreated" || echo "  [${db}] ERROR: recreate failed"
+              fi
+            }
+
             # ── 1. Clean baseline ──────────────────────────────────────────────
             echo "▶ UPGRADE: wipe for clean N-1 baseline"
             docker compose -f docker-compose.prod.yml -f docker-compose.yc.yml \
@@ -288,8 +347,19 @@ jobs:
             KC_ADMIN_PASS="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}" \
             bash scripts/init-arcadedb.sh
 
+            echo "▶ UPGRADE: DB warm-up probe (N-1)"
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_default"
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_src_default"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-tenants"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-sessions"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali_default"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "heimdall"
+
             wait_for "http://localhost:13000/health"   "Chur"
             wait_for "http://localhost:18080/q/health" "Shuttle"
+            wait_for "http://localhost:19090/q/health" "Dali"
+            wait_for "http://localhost:19093/q/health" "heimdall-backend"
 
             # ── 3. Seed data on N-1 (optional, controlled by seed_n1 input) ───
             # Default: false — N-1 provisioning may be incompatible with current
@@ -351,8 +421,19 @@ jobs:
               bash scripts/init-arcadedb.sh
             fi
 
+            echo "▶ UPGRADE: DB warm-up probe (N)"
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_default"
+            probe_or_recreate "http://localhost:2480" "${ARCADEDB_ADMIN_PASSWORD}" "hound_src_default"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-tenants"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "frigg-sessions"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "dali_default"
+            probe_or_recreate "http://localhost:2481" "${FRIGG_PASSWORD}" "heimdall"
+
             wait_for "http://localhost:13000/health"   "Chur"
             wait_for "http://localhost:18080/q/health" "Shuttle"
+            wait_for "http://localhost:19090/q/health" "Dali"
+            wait_for "http://localhost:19093/q/health" "heimdall-backend"
 
             # ── 5. Verify data survived the upgrade ──────────────────────────
             # If seed_n1=true → verify acme-legacy (provisioned on N-1)
