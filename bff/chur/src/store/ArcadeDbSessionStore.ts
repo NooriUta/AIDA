@@ -78,20 +78,37 @@ async function ensureSchema(): Promise<void> {
 
 // ── Internal HTTP helper ──────────────────────────────────────────────────────
 
+// CAP-503: ArcadeDB returns 503 on concurrent page writes (parallel Playwright workers).
+// Exponential backoff with jitter — max 4 retries, worst-case ~400ms extra latency.
+async function withRetry<T>(fn: () => Promise<T>, retries = 4): Promise<T> {
+  let lastErr: Error | undefined;
+  for (let i = 0; i < retries; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e as Error;
+      if (!(e instanceof Error) || !e.message.includes('503')) throw e;
+      await new Promise(r => setTimeout(r, 50 * 2 ** i + Math.random() * 30));
+    }
+  }
+  throw lastErr!;
+}
+
 async function friggSql(command: string, params?: Record<string, unknown>): Promise<unknown[]> {
   const url = `${FRIGG_URL}/api/v1/command/${encodeURIComponent(FRIGG_DB)}`;
-  const res = await fetch(url, {
-    method:  'POST',
-    headers: HEADERS,
-    body:    JSON.stringify({ language: 'sql', command, params: params ?? {} }),
-    signal:  AbortSignal.timeout(5_000),
+  return withRetry(async () => {
+    const res = await fetch(url, {
+      method:  'POST',
+      headers: HEADERS,
+      body:    JSON.stringify({ language: 'sql', command, params: params ?? {} }),
+      signal:  AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`FRIGG ${res.status}: ${text}`);
+    }
+    const data = await res.json() as { result: unknown[] };
+    return data.result ?? [];
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`FRIGG ${res.status}: ${text}`);
-  }
-  const data = await res.json() as { result: unknown[] };
-  return data.result ?? [];
 }
 
 // ── Mapping ───────────────────────────────────────────────────────────────────
