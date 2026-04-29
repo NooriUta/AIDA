@@ -178,7 +178,7 @@ jobs:
       - name: Install shell
         run: cd frontends/shell && npm ci
 
-      - name: dep-cruiser — shell (R-TS-07: no direct aida-shared)
+      - name: "dep-cruiser — shell (R-TS-07: no direct aida-shared)"
         run: |
           cd frontends/shell
           npx depcruise \
