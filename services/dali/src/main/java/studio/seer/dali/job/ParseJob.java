@@ -122,8 +122,11 @@ public class ParseJob {
             // Only the lineage graph hound_{tenant} is truncated here.
             if (!input.preview() && input.clearBeforeWrite()) {
                 log.info("[{}] clearBeforeWrite=true — truncating YGG lineage (hound_src untouched)...", sessionId);
+                long clearStart = System.currentTimeMillis();
                 houndParser.cleanAll(config);
-                log.info("[{}] YGG truncated", sessionId);
+                long clearMs = System.currentTimeMillis() - clearStart;
+                emitter.yggClearCompleted(sessionId, clearMs);  // EV-03
+                log.info("[{}] YGG truncated in {}ms", sessionId, clearMs);
             }
 
             // JDBC source: harvest from database via SKADI, then parse in-memory
@@ -144,6 +147,10 @@ public class ParseJob {
 
         } catch (Exception e) {
             log.error("[{}] ParseJob failed: {}", sessionId, e.getMessage(), e);
+            // EV-05: detect ArcadeDB connectivity failures separately from parse errors
+            if (isArcadeConnectionError(e)) {
+                emitter.dbConnectionError(sessionId, "ygg", buildErrorMessage(e));
+            }
             String errorMsg = buildErrorMessage(e);
             sessionService.failSession(sessionId, errorMsg);
             emitter.sessionFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs);
@@ -196,6 +203,11 @@ public class ParseJob {
         sessionService.completeSession(sessionId, result, List.of(fr));
         emitter.sessionCompleted(sessionId, result.atomCount(), result.resolutionRate(),
                 result.durationMs(), 1);
+
+        // EV-02: report YGG write outcome
+        if (!input.preview()) {
+            emitter.yggWriteCompleted(sessionId, result.vertexCount(), result.edgeCount(), result.durationMs());
+        }
 
         if (!input.preview()) {
             String sqlText = readSilently(file);
@@ -282,6 +294,11 @@ public class ParseJob {
         emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
 
+        // EV-02: report YGG write outcome for JDBC source
+        if (!input.preview()) {
+            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
+        }
+
         if (!input.preview()) {
             long stop = System.currentTimeMillis();
             // Archive each SKADI source file — sql text is already in memory
@@ -350,6 +367,16 @@ public class ParseJob {
         sessionService.completeSession(sessionId, merged, fileResults);
         emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
+
+        // EV-02: report YGG write outcome for batch
+        if (!input.preview()) {
+            long failedCount = fileResults.stream().filter(fr -> !fr.success()).count();
+            if (failedCount > 0) {
+                emitter.yggWriteFailed(sessionId,
+                        failedCount + " of " + fileResults.size() + " file(s) failed after " + FILE_MAX_RETRIES + " retries");
+            }
+            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
+        }
 
         if (!input.preview()) {
             int successCount = (int) fileResults.stream().filter(FileResult::success).count();
@@ -550,6 +577,33 @@ public class ParseJob {
             log.warn("[SourceArchive] could not read file content for archiving: {}", e.getMessage());
             return "";
         }
+    }
+
+    /**
+     * EV-05: Returns {@code true} when the exception chain indicates an ArcadeDB TCP
+     * connection failure (refused, timed-out, unreachable) rather than a parse/logic error.
+     * Used to emit {@link studio.seer.shared.EventType#DB_CONNECTION_ERROR} separately from
+     * generic session failures.
+     */
+    private static boolean isArcadeConnectionError(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof java.net.ConnectException) return true;
+            String msg = cur.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase();
+                if (lower.contains("connection refused")   ||
+                    lower.contains("connect timed out")    ||
+                    lower.contains("failed to connect")    ||
+                    lower.contains("no route to host")     ||
+                    lower.contains("connection reset")     ||
+                    lower.contains("unreachable")) {
+                    return true;
+                }
+            }
+            cur = cur.getCause();
+        }
+        return false;
     }
 
     /**

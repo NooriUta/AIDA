@@ -25,6 +25,12 @@ public enum EventType {
     REQUEST_RECEIVED, REQUEST_COMPLETED, SUBSCRIPTION_OPENED,
     CYPHER_QUERY_SLOW,
 
+    // YGG write observability (emitted by Dali/Hound, recognised by SHUTTLE for reference)
+    YGG_WRITE_COMPLETED, YGG_WRITE_FAILED, YGG_CLEAR_COMPLETED,
+
+    // DB health
+    DB_CONNECTION_ERROR,
+
     // HEIMDALL internal
     DEMO_RESET, SNAPSHOT_SAVED, REPLAY_STARTED
 }

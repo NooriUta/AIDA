@@ -28,6 +28,12 @@ export const EVENT_LABELS: Record<string, string> = {
   LOOM_NODE_SELECTED:     'Node selected',
   LOOM_VIEW_SLOW:         'Slow render',
   CYPHER_QUERY_SLOW:      'Slow YGG query',
+  YGG_WRITE_COMPLETED:    'YGG write done',
+  YGG_WRITE_FAILED:       'YGG write failed',
+  YGG_CLEAR_COMPLETED:    'YGG cleared',
+  DB_CONNECTION_ERROR:    'DB error',
+  SOURCE_CREATED:         'Source created',
+  SOURCE_DELETED:         'Source deleted',
 };
 
 /** Fields rendered in dedicated columns — exclude from payload summary to avoid duplication. */
@@ -78,6 +84,17 @@ export function formatPayload(event: HeimdallEvent): string {
       return `${p['username'] ?? 'unknown'} · invalid credentials`;
     case 'AUTH_LOGOUT':
       return `${p['username'] ?? ''}`;
+    case 'YGG_WRITE_COMPLETED':
+      return `vertices:${p['verticesWritten'] ?? 0} edges:${p['edgesWritten'] ?? 0} ${event.durationMs}ms`;
+    case 'YGG_WRITE_FAILED':
+      return `error:${p['error'] ?? 'unknown'}`;
+    case 'YGG_CLEAR_COMPLETED':
+      return `cleared ${event.durationMs}ms`;
+    case 'DB_CONNECTION_ERROR':
+      return `db:${p['db'] ?? '?'} — ${p['error'] ?? ''}`;
+    case 'SOURCE_CREATED':
+    case 'SOURCE_DELETED':
+      return `${p['dialect'] ?? ''} id:${p['sourceId'] ?? ''}`;
     case 'LOOM_NODE_SELECTED':
       return `${p['nodeType'] ?? ''} ${p['nodeLabel'] ?? ''} @ ${p['viewLevel'] ?? ''}`;
     case 'LOOM_VIEW_SLOW': {

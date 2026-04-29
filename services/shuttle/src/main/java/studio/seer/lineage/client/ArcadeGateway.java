@@ -111,8 +111,10 @@ public class ArcadeGateway {
     /**
      * EV-04: fires CYPHER_QUERY_SLOW to HEIMDALL when {@code durationMs >= SLOW_QUERY_MS}.
      * Always fire-and-forget — never throws.
+     * Protected (not private) so that the CDI proxy overrides this method and reflection-based
+     * tests can reach the real injected {@code heimdall} via polymorphic dispatch.
      */
-    private void emitSlowIfNeeded(String database, String query, String language, long durationMs) {
+    protected void emitSlowIfNeeded(String database, String query, String language, long durationMs) {
         if (durationMs < SLOW_QUERY_MS) return;
         try {
             String truncatedSql = query.length() > MAX_QUERY_CHARS

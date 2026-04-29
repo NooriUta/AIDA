@@ -85,14 +85,15 @@ class HoundHeimdallListenerRelPathTest {
 
     /**
      * EV-09-T4: When the path has fewer than 3 components and sourceRoot is null,
-     * relPath returns whatever components are available (no padding / no error).
+     * relPath includes all available components from index 0 (Math.max(0, n-3) = 0 for n=2).
+     * e.g. "/a/b.sql" has 2 components → start=0 → "a/b.sql".
      */
     @Test
     void relPath_noSourceRoot_shorterPath_returnsAll() throws Exception {
         String result = relPath(null, "/a/b.sql");
 
-        assertEquals("b.sql", result,
-                "Expected all available components when path is shorter than 3");
+        assertEquals("a/b.sql", result,
+                "For 2-component path, start=Math.max(0,2-3)=0 so all components are included");
     }
 
     /**
