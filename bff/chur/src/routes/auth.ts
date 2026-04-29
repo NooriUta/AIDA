@@ -160,7 +160,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       });
       const activeTenantAlias = userInfo.tenantAlias ?? 'default';
       reply.setCookie('sid', sid, COOKIE_OPTS);
-      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role, flow: 'auth_code' }, sid);
+      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role, flow: 'auth_code', tenantAlias: activeTenantAlias }, sid);
       void emitSessionEvent({
         userId:      userInfo.sub,
         sessionId:   sid,
@@ -243,7 +243,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
       const activeTenantAlias = userInfo.tenantAlias ?? 'default';
       reply.setCookie('sid', sid, COOKIE_OPTS);
-      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role }, sid);
+      emitToHeimdall('AUTH_LOGIN_SUCCESS', 'INFO', { username: userInfo.username, role: userInfo.role, tenantAlias: activeTenantAlias }, sid);
       void emitSessionEvent({
         userId:     userInfo.sub,
         sessionId:  sid,
@@ -331,7 +331,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       // Invalidate refresh token in Keycloak (fire-and-forget)
       if (session) {
         keycloakLogout(session.refreshToken);
-        emitToHeimdall('AUTH_LOGOUT', 'INFO', { username: session.username }, sid);
+        emitToHeimdall('AUTH_LOGOUT', 'INFO', { username: session.username, tenantAlias: session.activeTenantAlias ?? 'default' }, sid);
         // MTN-64: emit logout event
         void emitSessionEvent({
           userId:    session.sub,
