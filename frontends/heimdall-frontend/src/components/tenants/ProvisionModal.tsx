@@ -29,8 +29,12 @@ export function ProvisionModal({ onDone, onClose }: Props) {
   const [result, setResult]           = useState<{ keycloakOrgId?: string } | null>(null);
   const [validationErr, setValidationErr] = useState<string | null>(null);
 
+  const ALIAS_RE = /^[a-z0-9-]*$/;
+  const aliasCanSubmit = alias.trim().length > 0;
+
   const submit = async () => {
-    const a = alias.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const trimmed = alias.trim().toLowerCase();
+    const a = trimmed.replace(/[^a-z0-9-]/g, '');
     if (a.length < 4) {
       setValidationErr('Alias должен быть не менее 4 символов');
       return;
@@ -96,6 +100,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label={t('tenants.provision.title', 'Создать тенант')}
+      data-testid="modal-create-tenant"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
                display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}
     >
@@ -117,13 +122,22 @@ export function ProvisionModal({ onDone, onClose }: Props) {
               className="field-input"
               style={{ width: '100%' }}
               value={alias}
-              onChange={e => { setAlias(e.target.value); setValidationErr(null); }}
+              onChange={e => {
+                setAlias(e.target.value);
+                setValidationErr(null);
+                // real-time: show error immediately for invalid chars (XSS, spaces, etc.)
+                const v = e.target.value.trim().toLowerCase();
+                if (v.length > 0 && !ALIAS_RE.test(v)) {
+                  setValidationErr('Только строчные буквы, цифры и дефис (a-z, 0-9, -)');
+                }
+              }}
               placeholder="my-tenant"
               autoFocus
               onKeyDown={e => e.key === 'Enter' && void submit()}
             />
             {validationErr && (
-              <p data-testid="validation-error" style={{ color: 'var(--danger)', fontSize: 11, marginTop: 6 }}>
+              <p data-testid="validation-error" role="alert"
+                style={{ color: 'var(--danger)', fontSize: 11, marginTop: 6 }}>
                 {validationErr}
               </p>
             )}
@@ -135,7 +149,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
                 {t('action.cancel', 'Отмена')}
               </button>
               <button data-testid="submit-btn" className="btn btn-secondary"
-                onClick={submit} disabled={!alias.trim()}>
+                onClick={submit} disabled={!aliasCanSubmit}>
                 {t('tenants.provision.confirm', 'Создать')}
               </button>
             </div>

@@ -51,7 +51,7 @@ services:
     environment:
       NODE_ENV:              ${NODE_ENV:-development}
       PORT:                  "3000"
-      CORS_ORIGIN:           "https://localhost,http://localhost:5174,http://localhost:5173,http://localhost:5175"
+      CORS_ORIGIN:           "https://localhost,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:13000,http://localhost:15173,http://localhost:25174,http://localhost:25175"
       # Keycloak — lives in stable layer, reached via aida_net
       KEYCLOAK_URL:          http://keycloak:8180/kc
       # Browser-facing KC URL for Auth Code redirects (chur is internal; KC must be reachable from browser)
@@ -74,18 +74,25 @@ services:
       ARCADEDB_DB:           ${ARCADEDB_DB:-hound}
       ARCADEDB_USER:         ${ARCADEDB_USER:-root}
       ARCADEDB_PASS:         ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      # YGG_* — provisioning.ts reads these (not ARCADEDB_*)
+      YGG_URL:               http://ygg:2480
+      YGG_USER:              ${ARCADEDB_USER:-root}
+      YGG_PASS:              ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
       # FRIGG — stable layer
       FRIGG_URL:             http://frigg:2480
       FRIGG_SESSION_DB:      frigg-sessions
       FRIGG_USER:            root
-      FRIGG_PASS:            ${FRIGG_ROOT_PASSWORD:-playwithdata}
+      FRIGG_PASSWORD:        ${FRIGG_ROOT_PASSWORD:-playwithdata}
       # SHUTTLE — backend layer
       LINEAGE_API_URL:       http://shuttle:8080
       # HEIMDALL — backend layer
       HEIMDALL_URL:          http://heimdall-backend:9093
       # KC Admin API
       KC_ADMIN_USER:         ${KC_ADMIN_USER:-admin}
-      KC_ADMIN_PASS:         ${KC_ADMIN_PASS:-admin}
+      KC_ADMIN_PASS:         ${KC_ADMIN_PASS:-sae0611!}
+      # Disable rate limiting in Docker dev/test — nginx proxying makes all
+      # requests appear from the same container IP, overwhelming per-IP buckets.
+      DISABLE_RATE_LIMIT:    "true"
     ports:
       - "13000:3000"
     # Cross-layer deps (KC, FRIGG, SHUTTLE) are not declared here —

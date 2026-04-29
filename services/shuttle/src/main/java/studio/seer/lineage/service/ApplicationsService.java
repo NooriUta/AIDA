@@ -87,7 +87,8 @@ public class ApplicationsService {
             }
             DbAcc db = dbMap.computeIfAbsent(dbKey, k -> {
                 DbAcc d = new DbAcc(dbId, dbName, dbGeoid);
-                if (appId != null) appMap.get(appId).dbs.put(dbKey, d);
+                AppAcc app = appId != null ? appMap.get(appId) : null;
+                if (app != null) app.dbs.put(dbKey, d);
                 return d;
             });
             db.schemas.add(schema);

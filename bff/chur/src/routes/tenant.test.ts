@@ -127,18 +127,19 @@ describe('DELETE /api/admin/tenants/:alias — suspend', () => {
   });
 
   it('200 — superadmin can suspend', async () => {
-    // MTN-27: CAS requires the post-update SELECT to reflect configVersion + 1.
-    // We model that by incrementing a local counter on each SELECT.
+    // MTN-27: casUpdateTenant makes 3 SELECT configVersion calls per operation:
+    // 1. readCurrentVersion (handler) → returns 1
+    // 2. casUpdateTenant pre-check    → returns 1 (must equal expected)
+    // 3. casUpdateTenant post-check   → returns 2 (expected + 1)
     let selectCount = 0;
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
       const body = init?.body ?? '';
       if (body.includes('SELECT configVersion')) {
         selectCount++;
-        // First SELECT (readCurrentVersion) → 1; second SELECT (post-CAS) → 2
         return Promise.resolve({
           ok: true, status: 200,
           text: async () => '', headers: { get: () => null },
-          json: async () => ({ result: [{ configVersion: selectCount === 1 ? 1 : 2 }] }),
+          json: async () => ({ result: [{ configVersion: selectCount <= 2 ? 1 : 2 }] }),
         });
       }
       return Promise.resolve({
@@ -416,18 +417,26 @@ describe('KC-ORG — member isolation via keycloakOrgId', () => {
 describe('Multi-tenant lifecycle isolation', () => {
   let app: App;
   beforeEach(async () => {
-    // MTN-27: CAS requires post-UPDATE SELECT to return configVersion + 1.
-    // Use a counter so each SELECT configVersion returns the next value in sequence,
-    // satisfying the CAS check for any number of lifecycle operations per test.
-    let cv = 1;
+    // MTN-27: casUpdateTenant issues 3 SELECT configVersion calls per operation:
+    //   call 1 — readCurrentVersion (handler)  → stable current
+    //   call 2 — casUpdateTenant pre-check      → stable current (must equal expected)
+    //   call 3 — casUpdateTenant post-check     → current + 1 (confirms bump)
+    // Group-of-3 tracks this across chained operations (suspend → archive → restore).
+    let callsInOp = 0;
+    let currentVersion = 1;
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: { body?: string }) => {
       const body = init?.body ?? '';
       if (body.includes('SELECT configVersion')) {
-        const ret = cv++;
+        callsInOp++;
+        if (callsInOp === 3) {
+          callsInOp = 0;
+          currentVersion++;
+        }
+        const cv = currentVersion;
         return Promise.resolve({
           ok: true, status: 200,
           text: async () => '', headers: { get: () => null },
-          json: async () => ({ result: [{ configVersion: ret }] }),
+          json: async () => ({ result: [{ configVersion: cv }] }),
         });
       }
       return Promise.resolve({

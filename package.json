@@ -4,7 +4,10 @@
   "private": true,
   "description": "AIDA monorepo — dev tooling",
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:shuttle":          "gradlew.bat :services:shuttle:quarkusDev",
+    "dev:dali":             "gradlew.bat :services:dali:quarkusDev",
+    "dev:heimdall-backend": "gradlew.bat :services:heimdall-backend:quarkusDev"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",

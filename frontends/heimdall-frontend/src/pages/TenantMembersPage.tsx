@@ -113,7 +113,7 @@ export default function TenantMembersPage() {
           message={t(
             'members.confirmRemoveMsg',
             'Remove {{name}} ({{email}}) from this tenant?',
-            { name: pendingRemove.username, email: pendingRemove.email }
+            { name: pendingRemove.name, email: pendingRemove.email }
           )}
           onConfirm={handleRemove}
           onClose={() => setPendingRemove(null)}
