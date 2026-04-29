@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
-      contents: write   # needed for git operations
+      contents: write   # needed for git tag + push in "Create and push release tag"
       actions: write    # needed for gh workflow run (trigger cd.yml)
 
     steps:

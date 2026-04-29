@@ -36,17 +36,19 @@ export interface DaliTenantConfig extends TenantSummary {
 
 export interface TenantMember {
   id: string;
-  username: string;
+  /** KC username — returned as `name` by the backend (KcUserView.name). */
+  name: string;
   email: string;
   role: string;
-  enabled: boolean;
+  /** Active state — returned as `active` by the backend (KcUserView.active). */
+  active: boolean;
 }
 
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(init?.body != null ? { 'Content-Type': 'application/json' } : {}),
       Origin: window.location.origin,
       ...(init?.headers ?? {}),
     },
@@ -130,6 +132,21 @@ export function updateTenantConfig(
   return adminFetch(`/tenants/${encodeURIComponent(alias)}`, {
     method: 'PUT',
     body:   JSON.stringify(patch),
+  });
+}
+
+/** CAS-aware config update. Uses PUT /tenants/:alias/config which requires
+ *  expectedConfigVersion and returns 409 when the stored version has been
+ *  bumped by another concurrent write (optimistic-lock). */
+export type TenantConfigCasPatch = TenantConfigPatch & { expectedConfigVersion: number };
+
+export function updateTenantConfigCAS(
+  alias: string,
+  body: TenantConfigCasPatch,
+): Promise<{ ok: boolean; configVersion: number }> {
+  return adminFetch(`/tenants/${encodeURIComponent(alias)}/config`, {
+    method: 'PUT',
+    body:   JSON.stringify(body),
   });
 }
 

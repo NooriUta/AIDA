@@ -297,6 +297,7 @@ export const SearchPalette = memo(({ open, onClose }: SearchPaletteProps) => {
           <Search size={14} style={{ color: 'var(--t3)', flexShrink: 0 }} />
           <input
             ref={inputRef}
+            data-testid="node-filter"
             value={query}
             onChange={(e) => handleInput(e.target.value)}
             placeholder={t('search.placeholder')}

@@ -71,7 +71,7 @@ jobs:
     # FRIGG (ArcadeDB) required by @QuarkusTest — DaliTest connects to :2481
     services:
       frigg:
-        image: arcadedata/arcadedb:26.3.2
+        image: arcadedata/arcadedb:26.4.2
         env:
           JAVA_OPTS: "-Darcadedb.server.rootPassword=ci_arcadedb_test_1"
         ports:
@@ -121,6 +121,8 @@ jobs:
           done
       - run: chmod +x gradlew
       - run: ./gradlew :services:dali:test --no-daemon --build-cache          # K-4
+        env:
+          FRIGG_PASSWORD: ci_arcadedb_test_1
       - run: ./gradlew :services:dali:build -x test --no-daemon --build-cache
 
   # ── BFF: Chur (Fastify + Vitest) ────────────────────────────────────────────

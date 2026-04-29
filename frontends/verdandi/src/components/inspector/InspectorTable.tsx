@@ -226,7 +226,7 @@ function DdlPanel({ ddlText }: { ddlText: string }) {
     navigator.clipboard.writeText(ddlText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch(() => {});
   }, [ddlText]);
 
   if (!ddlText) {
