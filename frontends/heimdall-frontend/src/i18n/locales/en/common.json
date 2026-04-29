@@ -30,7 +30,8 @@
     "preferences":      "Preferences",
     "notifications":    "Notifications",
     "sessionActivity":  "Session Activity",
-    "softDeletedUsers": "Soft-deleted users"
+    "softDeletedUsers": "Soft-deleted users",
+    "analytics":        "UX Analytics"
   },
   "auth": {
     "login":    "Sign in",
@@ -713,5 +714,17 @@
     "last":          "Last event",
     "noTenantData":  "No tenant activity yet.",
     "moreTenants":   "more"
+  },
+  "analytics": {
+    "lastUpdated":   "Last updated",
+    "autoRefresh":   "auto-refresh 30 s",
+    "activeUsers":   "Active Sessions",
+    "levelDist":     "Event Levels",
+    "hotNodes":      "Most-Clicked Nodes",
+    "slowRenders":   "Slow LOOM Renders",
+    "error":         "Could not load UX analytics",
+    "noData":        "No data in the current window",
+    "emptyHotNodes": "No node clicks recorded yet",
+    "emptySlowRenders": "No slow renders detected in the last 24 h"
   }
 }

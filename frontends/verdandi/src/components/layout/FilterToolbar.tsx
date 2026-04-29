@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 import { ToolbarDivider, IconLayers, ToolbarToggleButton } from '../ui/ToolbarPrimitives';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useHeimdallEmitter } from '../../hooks/useHeimdallEmitter';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEPTH_STEPS = [1, 2, 3, 5, 7, Infinity] as const;
@@ -184,6 +185,7 @@ function FilterPill({ icon, placeholder, value, options, onChange, onClear, acti
 export const FilterToolbar = memo(() => {
   const { t } = useTranslation();
   const compact = useIsMobile();
+  const { emit: emitHeimdall } = useHeimdallEmitter();
   const [row2Collapsed, setRow2Collapsed] = useState(compact);
 
   const {
@@ -233,10 +235,25 @@ export const FilterToolbar = memo(() => {
       : availableStmts
   ), [availableStmts, tableFilter]);
 
-  const handleTableChange  = useCallback((id: string) => { setTableFilter(id || null);  if (!id) requestFitView(); }, [setTableFilter, requestFitView]);
-  const handleStmtChange   = useCallback((id: string) => { setStmtFilter(id || null);   if (!id) requestFitView(); }, [setStmtFilter,  requestFitView]);
-  const handleFieldChange  = useCallback((id: string) => { setFieldFilter(id || null); },  [setFieldFilter]);
-  const handleRoutineChange = useCallback((id: string) => { setRoutineFilter(id || null); if (!id) requestFitView(); }, [setRoutineFilter, requestFitView]);
+  const handleTableChange  = useCallback((id: string) => {
+    setTableFilter(id || null);
+    if (!id) requestFitView();
+    if (id) emitHeimdall('LOOM_FILTER_APPLIED', 'INFO', { filter_type: 'table',   filter_value: id });
+  }, [setTableFilter, requestFitView, emitHeimdall]);
+  const handleStmtChange   = useCallback((id: string) => {
+    setStmtFilter(id || null);
+    if (!id) requestFitView();
+    if (id) emitHeimdall('LOOM_FILTER_APPLIED', 'INFO', { filter_type: 'stmt',    filter_value: id });
+  }, [setStmtFilter, requestFitView, emitHeimdall]);
+  const handleFieldChange  = useCallback((id: string) => {
+    setFieldFilter(id || null);
+    if (id) emitHeimdall('LOOM_FILTER_APPLIED', 'INFO', { filter_type: 'field',   filter_value: id });
+  }, [setFieldFilter, emitHeimdall]);
+  const handleRoutineChange = useCallback((id: string) => {
+    setRoutineFilter(id || null);
+    if (!id) requestFitView();
+    if (id) emitHeimdall('LOOM_FILTER_APPLIED', 'INFO', { filter_type: 'routine', filter_value: id });
+  }, [setRoutineFilter, requestFitView, emitHeimdall]);
 
   const handleDepthChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {

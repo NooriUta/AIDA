@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import studio.seer.heimdall.RingBuffer;
+import studio.seer.heimdall.analytics.UxAggregator;
 import studio.seer.heimdall.metrics.MetricsCollector;
 import studio.seer.heimdall.metrics.TenantMetricsService;
 import studio.seer.shared.HeimdallEvent;
@@ -44,6 +45,9 @@ public class EventResource {
 
     @Inject
     TenantMetricsService tenantMetrics;
+
+    @Inject
+    UxAggregator uxAggregator;
 
     /**
      * HTA-14: Enforce tenant-tagging.
@@ -96,6 +100,7 @@ public class EventResource {
         ringBuffer.push(enriched);
         metricsCollector.record(enriched);
         tenantMetrics.record(enriched);
+        uxAggregator.record(enriched);
         LOG.debugf("Ingested event: %s from %s", enriched.eventType(), enriched.sourceComponent());
         return Response.accepted().build();
     }
@@ -134,7 +139,7 @@ public class EventResource {
 
         long count = events.stream()
                 .filter(e -> !requiresTenantTag(e.eventType()) || hasTenantTag(e))
-                .peek(e -> { ringBuffer.push(e); metricsCollector.record(e); tenantMetrics.record(e); })
+                .peek(e -> { ringBuffer.push(e); metricsCollector.record(e); tenantMetrics.record(e); uxAggregator.record(e); })
                 .count();
 
         LOG.debugf("Ingested batch of %d events (skipped %d untagged)", count, rejected);

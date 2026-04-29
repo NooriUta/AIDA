@@ -37,9 +37,11 @@ class EventBatchValidationTest {
         resource = new EventResource();
 
         // Inject no-op stubs so no CDI/Quarkus container is needed
-        setField(resource, "ringBuffer",     new NoOpRingBuffer());
+        setField(resource, "ringBuffer",       new NoOpRingBuffer());
         setField(resource, "metricsCollector", new NoOpMetricsCollector());
-        setField(resource, "tenantMetrics",  new NoOpTenantMetrics());
+        setField(resource, "tenantMetrics",    new NoOpTenantMetrics());
+        // UA-03: UxAggregator added in Sprint 6 — inject real instance (no external deps)
+        setField(resource, "uxAggregator",     new studio.seer.heimdall.analytics.UxAggregator());
     }
 
     // ── requiresTenantTag() helper ────────────────────────────────────────────
