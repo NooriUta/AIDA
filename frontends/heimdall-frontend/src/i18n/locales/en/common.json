@@ -335,7 +335,8 @@
       "clearWarning":      "⚠ YGG will be cleared before write",
       "errSelectFile":    "Select a file to upload",
       "errSourceRequired": "Source path is required",
-      "errAnotherActive": "Another session is active — wait for it to finish"
+      "errAnotherActive": "Another session is active — wait for it to finish",
+      "err413": "File is too large. Maximum upload size is 200 MB."
     },
     "sessions": {
       "panelTitle":       "Sessions",
