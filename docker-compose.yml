@@ -48,6 +48,8 @@ services:
     build:
       context: ./bff/chur
       dockerfile: Dockerfile
+      args:
+        BUILDTIME: "${BUILDTIME:-}"
     environment:
       NODE_ENV:              ${NODE_ENV:-development}
       PORT:                  "3000"
