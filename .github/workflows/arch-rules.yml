@@ -45,7 +45,7 @@ jobs:
         run: ./gradlew :libraries:tenant-routing:test --tests '*ArchitectureTest' --no-daemon --build-cache
 
       - name: ArchUnit — SHUTTLE
-        run: ./gradlew :services:shuttle:test --tests '*ArchitectureTest,*TenantQueryGateTest,*TenantQualityGateTest' --no-daemon --build-cache
+        run: ./gradlew :services:shuttle:test --tests '*ArchitectureTest' --tests '*TenantQueryGateTest' --tests '*TenantQualityGateTest' --no-daemon --build-cache
 
       - name: ArchUnit — DALI
         run: ./gradlew :services:dali:test --tests '*ArchitectureTest' --no-daemon --build-cache

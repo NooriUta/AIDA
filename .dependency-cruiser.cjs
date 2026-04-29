@@ -99,8 +99,6 @@ module.exports = {
   options: {
     // ── Module resolution ────────────────────────────────────────────────────
     moduleSystems: ['es6', 'cjs'],
-    tsPreCompilationDeps: false,
-    combinedDependencies: false,
 
     // ── Include TypeScript config so aliases are resolved ────────────────────
     tsConfig: {
