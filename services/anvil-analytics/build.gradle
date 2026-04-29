@@ -1,0 +1,57 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version "${quarkusPlatformVersion}"
+    id 'jacoco'
+}
+
+group   = 'studio.seer.analytics'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    // REST + JSON
+    implementation 'io.quarkus:quarkus-rest-jackson'
+
+    // CDI
+    implementation 'io.quarkus:quarkus-arc'
+
+    // Health
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
+    // REST Client — YGG (ArcadeDB :2480)
+    implementation 'io.quarkus:quarkus-rest-client'
+    implementation 'io.quarkus:quarkus-rest-client-jackson'
+
+    // Quarkus Scheduler (cron jobs)
+    implementation 'io.quarkus:quarkus-scheduler'
+
+    // Shared models — HeimdallEvent, EventType, EventLevel
+    implementation project(':shared:dali-models')
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'org.assertj:assertj-core:3.27.3'
+    testImplementation 'io.quarkus:quarkus-jacoco'
+}
+
+compileJava.options.encoding     = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'
+
+test { finalizedBy jacocoTestReport }
+jacocoTestReport {
+    dependsOn test
+    executionData fileTree(layout.buildDirectory).include(
+        'jacoco-quarkus.exec', 'jacoco/test.exec'
+    )
+    reports {
+        xml.required  = true
+        html.required = true
+    }
+}
