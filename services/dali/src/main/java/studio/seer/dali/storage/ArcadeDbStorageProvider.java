@@ -166,7 +166,19 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
             "SELECT jobAsJson FROM `jobrunr_jobs` WHERE id = :id",
             Map.of("id", id.toString()));
         if (rows == null || rows.isEmpty()) throw new JobNotFoundException(id);
-        return jobMapper.deserializeJob((String) rows.get(0).get("jobAsJson"));
+        return deserializeJob((String) rows.get(0).get("jobAsJson"));
+    }
+
+    /** Deserializes a single job JSON with Quarkus TCCL restored so Jackson can find application classes. */
+    private Job deserializeJob(String json) {
+        ClassLoader saved = Thread.currentThread().getContextClassLoader();
+        if (saved == quarkusClassLoader) return jobMapper.deserializeJob(json);
+        try {
+            Thread.currentThread().setContextClassLoader(quarkusClassLoader);
+            return jobMapper.deserializeJob(json);
+        } finally {
+            Thread.currentThread().setContextClassLoader(saved);
+        }
     }
 
     @Override
@@ -331,16 +343,27 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
 
     private List<Job> deserializeJobs(List<Map<String, Object>> rows) {
         if (rows == null) return List.of();
-        List<Job> result = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            String json = (String) row.get("jobAsJson");
-            if (json == null) continue;
-            try {
-                result.add(jobMapper.deserializeJob(json));
-            } catch (Exception e) {
-                log.warn("JobRunr: skipping undeserializable job record: {}", e.getMessage());
+        // BUG-SS-TCCL: backgroundjob-zookeeper-pool-* threads have system CL as TCCL, not the
+        // Quarkus application CL. Jackson's TypeFactory uses TCCL to load parameter classes
+        // (e.g. ParseJobRequest). Restore quarkusClassLoader for the entire deserialization
+        // pass so Class.forName("studio.seer.dali.job.ParseJobRequest") succeeds.
+        ClassLoader saved   = Thread.currentThread().getContextClassLoader();
+        boolean     doSwap  = (saved != quarkusClassLoader);
+        if (doSwap) Thread.currentThread().setContextClassLoader(quarkusClassLoader);
+        try {
+            List<Job> result = new ArrayList<>();
+            for (Map<String, Object> row : rows) {
+                String json = (String) row.get("jobAsJson");
+                if (json == null) continue;
+                try {
+                    result.add(jobMapper.deserializeJob(json));
+                } catch (Exception e) {
+                    log.warn("JobRunr: skipping undeserializable job record: {}", e.getMessage());
+                }
             }
+            return result;
+        } finally {
+            if (doSwap) Thread.currentThread().setContextClassLoader(saved);
         }
-        return result;
     }
 }

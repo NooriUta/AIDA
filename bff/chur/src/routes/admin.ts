@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   requireScope,
+  requireAnyScope,
   requireSameTenant,
 } from '../middleware/requireAdmin';
 import {
@@ -67,7 +68,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/admin/roles',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin')] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin')] },
     async (_request, reply) => {
       try {
         const roles = await listRoles();
@@ -83,7 +84,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/admin/tenants',
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin')] },
     async (request, reply) => {
       const isSuperAdmin = request.user.scopes?.includes('aida:superadmin');
       // Cross-tenant admins (super-admin + admin) can see ALL active tenants.

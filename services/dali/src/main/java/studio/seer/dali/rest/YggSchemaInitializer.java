@@ -30,14 +30,16 @@ public class YggSchemaInitializer {
     @Inject YggGateway               ygg;   // kept for ensureDatabase() ping
 
     void onStart(@Observes @Priority(3) StartupEvent ev) {
-        // MTN-01: resolving "default" via the registry is for log context only —
-        // tolerate FRIGG being unavailable during tests / cold boot.
+        // Resolve the actual database names from the registry so we ensure the RIGHT databases
+        // (hound_default, hound_src_default) rather than the legacy config-default 'hound'.
+        // resolveDbNameQuietly tolerates FRIGG being unavailable during tests / cold boot.
         String lineageDb = resolveDbNameQuietly("default", lineageRegistry::resourceFor, "hound_default");
         String sourceDb  = resolveDbNameQuietly("default", sourceRegistry::resourceFor,  "hound_src_default");
         log.info("YggSchemaInitializer: ensuring YGG databases exist — lineage={}, source={}", lineageDb, sourceDb);
+        // Retry until the lineage DB is reachable (YGG may need a moment after its health check passes).
         boolean ready = false;
         for (int attempt = 1; attempt <= 12 && !ready; attempt++) {
-            ready = ygg.ensureDatabase();
+            ready = ygg.ensureDatabaseNamed(lineageDb);
             if (ready) {
                 log.info("YggSchemaInitializer: YGG database ready (attempt {})", attempt);
             } else {
@@ -51,6 +53,8 @@ public class YggSchemaInitializer {
         if (!ready) {
             log.warn("YggSchemaInitializer: YGG database still unavailable — parse sessions will fail");
         }
+        // Also ensure the source-archive database exists (best-effort; failure is non-fatal).
+        ygg.ensureDatabaseNamed(sourceDb);
     }
 
     private static String resolveDbNameQuietly(String alias,
