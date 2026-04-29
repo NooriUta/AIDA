@@ -112,6 +112,7 @@
     "component": "Компонент",
     "eventType": "Тип события",
     "level":     "Уровень",
+    "tenant":    "Тенант",
     "duration":  "Длит.",
     "payload":   "Payload",
     "noEvents":  "Нет событий"

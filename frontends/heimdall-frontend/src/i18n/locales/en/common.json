@@ -112,6 +112,7 @@
     "component": "Component",
     "eventType": "Event Type",
     "level":     "Level",
+    "tenant":    "Tenant",
     "duration":  "Duration",
     "payload":   "Payload",
     "noEvents":  "No events"

@@ -27,6 +27,9 @@ export const EVENT_LABELS: Record<string, string> = {
   DEMO_RESET:             'Demo reset',
 };
 
+/** Fields rendered in dedicated columns — exclude from payload summary to avoid duplication. */
+const DEDICATED_COLUMNS = new Set(['tenantAlias', 'db']);
+
 export function formatPayload(event: HeimdallEvent): string {
   const p = event.payload ?? {};
   switch (event.eventType) {
@@ -57,8 +60,15 @@ export function formatPayload(event: HeimdallEvent): string {
     case 'LLM_RESPONSE_READY':
       return `${p['tokens_in'] ?? 0}→${p['tokens_out'] ?? 0} tokens ${event.durationMs}ms`;
     case 'REQUEST_RECEIVED':
-    case 'REQUEST_COMPLETED':
-      return `${p['op'] ?? 'query'} ${event.durationMs > 0 ? `${event.durationMs}ms` : ''}`.trim();
+    case 'REQUEST_COMPLETED': {
+      // Show full call signature + db pointer. Example:
+      // [hound_acme] exploreRoutineAggregate(scope=schema-PROD) → 42 nodes, 18 edges  120ms
+      const call = p['call'] as string | undefined;
+      const db   = p['db']   as string | undefined;
+      const op   = call ?? (p['op'] as string | undefined) ?? 'query';
+      const dur  = event.durationMs > 0 ? ` ${event.durationMs}ms` : '';
+      return db ? `[${db}] ${op}${dur}` : `${op}${dur}`;
+    }
     case 'AUTH_LOGIN_SUCCESS':
       return `${p['username'] ?? ''} (${p['role'] ?? ''})`;
     case 'AUTH_LOGIN_FAILED':
@@ -66,7 +76,10 @@ export function formatPayload(event: HeimdallEvent): string {
     case 'AUTH_LOGOUT':
       return `${p['username'] ?? ''}`;
     default: {
-      const keys = Object.keys(p).slice(0, 3);
+      // Skip fields that have their own dedicated table columns (tenantAlias, db)
+      const keys = Object.keys(p)
+        .filter(k => !DEDICATED_COLUMNS.has(k))
+        .slice(0, 3);
       return keys.length
         ? keys.map(k => `${k}:${JSON.stringify(p[k])}`).join(' ')
         : '—';
