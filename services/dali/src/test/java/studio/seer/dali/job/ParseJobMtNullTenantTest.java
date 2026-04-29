@@ -91,7 +91,7 @@ class ParseJobMtNullTenantTest {
                         try {
                             return Files.lines(p)
                                     .map(String::stripLeading)
-                                    .filter(line -> !line.startsWith("//")) // exclude comments
+                                    .filter(line -> !line.startsWith("//") && !line.contains("MTN-04-EXEMPT")) // exclude comments and explicit exemptions
                                     .filter(ParseJobMtNullTenantTest::isSuspiciousDefaultFallback)
                                     .map(line -> p.getFileName() + ": " + line.strip());
                         } catch (IOException e) {

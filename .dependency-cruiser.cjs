@@ -97,9 +97,6 @@ module.exports = {
   ],
 
   options: {
-    // ── Module resolution ────────────────────────────────────────────────────
-    moduleSystems: ['es6', 'cjs'],
-
     // ── Include TypeScript config so aliases are resolved ────────────────────
     tsConfig: {
       // Each frontend/package has its own tsconfig; dep-cruiser merges them.
