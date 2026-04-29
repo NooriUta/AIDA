@@ -89,20 +89,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run semgrep
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: .semgrep.yml
-          # Errors (severity: ERROR) fail the job; WARNINGs are reported only.
-          generateSarif: true
-          auditOn: push
+      - name: Install semgrep
+        run: pip install semgrep --quiet
 
-      - name: Upload SARIF results
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: semgrep.sarif
-        continue-on-error: true   # SARIF upload is best-effort; don't fail on it
+      - name: Run semgrep
+        run: |
+          semgrep --config .semgrep.yml \
+            --error \
+            --json-output semgrep-results.json \
+            . 2>&1 | tee semgrep.log || {
+              echo "Semgrep found violations:"
+              cat semgrep.log
+              exit 1
+            }
 
   # ── dependency-cruiser — BFF ──────────────────────────────────────────────────
   depcruise-chur:

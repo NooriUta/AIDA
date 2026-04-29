@@ -136,6 +136,17 @@ jobs:
           chmod -R a+r scripts/ tests/
           chmod a+x scripts/*.sh
 
+      - name: Ensure deploy dir is ready for SCP
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER_STAGING }}
+          key:      ${{ secrets.DEPLOY_KEY_STAGING }}
+          script: |
+            sudo mkdir -p /opt/seer-studio/scripts /opt/seer-studio/tests
+            sudo rm -rf /opt/seer-studio/tests/data/
+            sudo chown -R ubuntu:ubuntu /opt/seer-studio
+
       - name: Copy scripts + compose files + test fixtures to VM
         uses: appleboy/scp-action@v0.1.7
         with:
