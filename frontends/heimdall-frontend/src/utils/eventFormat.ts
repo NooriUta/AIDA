@@ -27,6 +27,7 @@ export const EVENT_LABELS: Record<string, string> = {
   DEMO_RESET:             'Demo reset',
   LOOM_NODE_SELECTED:     'Node selected',
   LOOM_VIEW_SLOW:         'Slow render',
+  CYPHER_QUERY_SLOW:      'Slow YGG query',
 };
 
 /** Fields rendered in dedicated columns — exclude from payload summary to avoid duplication. */
@@ -83,6 +84,12 @@ export function formatPayload(event: HeimdallEvent): string {
       const nc = p['nodeCount'] ?? 0;
       const ec = p['edgeCount'] ?? 0;
       return `${nc} nodes · ${ec} edges · ${event.durationMs}ms`;
+    }
+    case 'CYPHER_QUERY_SLOW': {
+      const lang = p['language'] === 'cypher' ? 'Cypher' : 'SQL';
+      const q    = (p['query'] as string | undefined) ?? '';
+      const preview = q.length > 80 ? q.substring(0, 80) + '…' : q;
+      return `[${p['db'] ?? '?'}] ${lang} ${event.durationMs}ms — ${preview}`;
     }
     default: {
       // Skip fields that have their own dedicated table columns (tenantAlias, db)
