@@ -37,9 +37,11 @@ class EventBatchValidationTest {
         resource = new EventResource();
 
         // Inject no-op stubs so no CDI/Quarkus container is needed
-        setField(resource, "ringBuffer",     new NoOpRingBuffer());
+        setField(resource, "ringBuffer",       new NoOpRingBuffer());
         setField(resource, "metricsCollector", new NoOpMetricsCollector());
-        setField(resource, "tenantMetrics",  new NoOpTenantMetrics());
+        setField(resource, "tenantMetrics",    new NoOpTenantMetrics());
+        // UA-03: UxAggregator added in Sprint 6 — inject real instance (no external deps)
+        setField(resource, "uxAggregator",     new studio.seer.heimdall.analytics.UxAggregator());
     }
 
     // ── requiresTenantTag() helper ────────────────────────────────────────────
@@ -64,6 +66,70 @@ class EventBatchValidationTest {
     @Test
     void requiresTenantTag_nullEventType_doesNotRequireTag() {
         assertThat(EventResource.requiresTenantTag(null)).isFalse();
+    }
+
+    // ── EV-BUG-01: internal background components exempt from HTA-14 ──────────
+
+    /** EV-BUG-01: hound events have no CDI tenant scope — exempt from tenant tag. */
+    @Test
+    void requiresTenantTag_houndSource_doesNotRequireTag() {
+        assertThat(EventResource.requiresTenantTag("FILE_PARSING_STARTED", "hound")).isFalse();
+        assertThat(EventResource.requiresTenantTag("FILE_PARSING_COMPLETED", "hound")).isFalse();
+        assertThat(EventResource.requiresTenantTag("PARSE_ERROR", "hound")).isFalse();
+    }
+
+    @Test
+    void requiresTenantTag_daliSource_doesNotRequireTag() {
+        assertThat(EventResource.requiresTenantTag("SESSION_STARTED",   "dali")).isFalse();
+        assertThat(EventResource.requiresTenantTag("SESSION_COMPLETED", "dali")).isFalse();
+        assertThat(EventResource.requiresTenantTag("SESSION_FAILED",    "dali")).isFalse();
+    }
+
+    @Test
+    void requiresTenantTag_shuttleSource_doesNotRequireTag() {
+        assertThat(EventResource.requiresTenantTag("CYPHER_QUERY_SLOW", "shuttle")).isFalse();
+    }
+
+    @Test
+    void requiresTenantTag_unknownSource_stillRequiresTag() {
+        // verdandi and unknown sources must still carry tenantAlias.
+        assertThat(EventResource.requiresTenantTag("LOOM_NODE_SELECTED", "verdandi")).isTrue();
+        assertThat(EventResource.requiresTenantTag("SOME_EVENT",         "test-source")).isTrue();
+    }
+
+    @Test
+    void requiresTenantTag_churSource_doesNotRequireTag() {
+        // EV-BUG-01 extension: chur auth events (AUTH_LOGIN_SUCCESS, AUTH_LOGOUT, etc.)
+        // have no tenantAlias at emission time — exempt by sourceComponent.
+        assertThat(EventResource.requiresTenantTag("AUTH_LOGIN_SUCCESS", "chur")).isFalse();
+        assertThat(EventResource.requiresTenantTag("AUTH_LOGOUT",        "chur")).isFalse();
+    }
+
+    @Test
+    void ingestBatch_houndEventsWithoutTenantTag_accepted() {
+        // EV-BUG-01: hound events must NOT be rejected by HTA-14
+        List<HeimdallEvent> batch = List.of(
+                houndEvent("FILE_PARSING_STARTED"),
+                houndEvent("ATOM_EXTRACTED"),
+                houndEvent("FILE_PARSING_COMPLETED")
+        );
+
+        Response r = resource.ingestBatch(batch);
+
+        assertThat(r.getStatus()).isEqualTo(202);
+    }
+
+    @Test
+    void ingestBatch_daliEventsWithoutTenantTag_accepted() {
+        // EV-BUG-01: dali events must NOT be rejected by HTA-14
+        List<HeimdallEvent> batch = List.of(
+                daliEvent("SESSION_STARTED"),
+                daliEvent("SESSION_COMPLETED")
+        );
+
+        Response r = resource.ingestBatch(batch);
+
+        assertThat(r.getStatus()).isEqualTo(202);
     }
 
     // ── hasTenantTag() helper ─────────────────────────────────────────────────
@@ -198,6 +264,18 @@ class EventBatchValidationTest {
         return new HeimdallEvent(
                 System.currentTimeMillis(), "test-source", type,
                 EventLevel.INFO, null, null, null, 0, payload);
+    }
+
+    private static HeimdallEvent houndEvent(String type) {
+        return new HeimdallEvent(
+                System.currentTimeMillis(), "hound", type,
+                EventLevel.INFO, "session-1", null, null, 0, Map.of("file", "test.sql"));
+    }
+
+    private static HeimdallEvent daliEvent(String type) {
+        return new HeimdallEvent(
+                System.currentTimeMillis(), "dali", type,
+                EventLevel.INFO, "session-1", null, null, 0, Map.of("source", "s3://bucket/test.sql"));
     }
 
     private static HeimdallEvent eventWithNullSource(String type) {

@@ -221,9 +221,30 @@ export default function EventStreamPage() {
         </div>
       )}
 
-      {/* Log */}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <EventLog events={displayedEvents} filter={filter} maxHeight="100%" />
+      {/* Log / empty hint */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {displayedEvents.length === 0 && status === 'open' && (
+          <div style={{
+            padding: '12px 16px',
+            background: 'color-mix(in srgb, var(--acc) 5%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--acc) 20%, transparent)',
+            borderRadius: 'var(--seer-radius-md)',
+            fontSize: '12px',
+            color: 'var(--t2)',
+            flexShrink: 0,
+            lineHeight: '1.6',
+          }}>
+            <strong style={{ color: 'var(--t1)' }}>
+              {t('eventStream.emptyHint', 'Waiting for events…')}
+            </strong>
+            {' '}
+            {t('eventStream.emptyHintDetail',
+              'Events appear here when services emit them: login, parse run, Shuttle query, source create/delete, slow render, etc.')}
+          </div>
+        )}
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <EventLog events={displayedEvents} filter={filter} maxHeight="100%" />
+        </div>
       </div>
     </div>
   );

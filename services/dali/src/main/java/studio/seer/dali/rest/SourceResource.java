@@ -8,6 +8,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.seer.dali.heimdall.HeimdallEmitter;
 import studio.seer.dali.rest.SourceDTO.SchemaFilter;
 import studio.seer.dali.security.JdbcUrlValidator;
 import studio.seer.dali.storage.SourceRepository;
@@ -40,6 +41,7 @@ public class SourceResource {
     @Inject SourceRepository  repository;
     @Inject JdbcUrlValidator  jdbcUrlValidator;
     @Inject TenantContext     tenantCtx;
+    @Inject HeimdallEmitter   heimdall;
 
     @GET
     public Response list() {
@@ -56,6 +58,7 @@ public class SourceResource {
         SourceDTO created = repository.create(
             tenantCtx.tenantAlias(), body.name(), body.dialect(), body.jdbcUrl(),
             body.username(), body.password(), body.schemaFilter());
+        heimdall.sourceCreated(tenantCtx.tenantAlias(), created.id(), created.dialect()); // EV-06
         return Response.status(Response.Status.CREATED).entity(created).build();
     }
 
@@ -80,11 +83,14 @@ public class SourceResource {
     @Path("/{id}")
     public Response delete(@PathParam("id") String id) {
         String alias = tenantCtx.tenantAlias();
-        if (repository.findById(alias, id).isEmpty()) {
+        var existing = repository.findById(alias, id);
+        if (existing.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND)
                     .entity("{\"error\":\"source not found\"}").build();
         }
+        String dialect = existing.get().dialect();
         repository.delete(alias, id);
+        heimdall.sourceDeleted(alias, id, dialect); // EV-06
         return Response.noContent().build();
     }
 

@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.jobrunr.configuration.JobRunr;
 import org.jobrunr.configuration.JobRunrConfiguration;
+import org.jobrunr.scheduling.JobRequestScheduler;
 import org.jobrunr.scheduling.JobScheduler;
 import org.jobrunr.server.BackgroundJobServerConfiguration;
 import org.jobrunr.server.JobActivator;
@@ -70,6 +71,28 @@ public class JobRunrLifecycle {
                 "JobScheduler requested before JobRunr was initialised (StartupEvent not yet fired)");
         }
         return jobRunrResult.getJobScheduler();
+    }
+
+    /**
+     * DMT-ASM-FIX: produces a {@link JobRequestScheduler} that shares the same
+     * {@link org.jobrunr.storage.StorageProvider} as the regular {@link JobScheduler}.
+     *
+     * <p>{@link JobRequestScheduler} serialises a {@code JobRequest} object directly
+     * and never invokes JobRunr's ASM bytecode analyser — it is therefore immune to
+     * the "Can not find variable N in stack" failure that occurs when Quarkus CDI
+     * transformation shifts local variable slots in lambda impl methods.
+     *
+     * <p>All new {@link studio.seer.dali.job.ParseJob} and
+     * {@link studio.seer.dali.job.HarvestJob} enqueue calls use this scheduler.
+     */
+    @Produces
+    @Singleton
+    public JobRequestScheduler jobRequestScheduler() {
+        if (jobRunrResult == null) {
+            throw new IllegalStateException(
+                "JobRequestScheduler requested before JobRunr was initialised (StartupEvent not yet fired)");
+        }
+        return new JobRequestScheduler(arcadeDbStorageProvider);
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────

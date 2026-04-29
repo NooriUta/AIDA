@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import studio.seer.heimdall.RingBuffer;
+import studio.seer.heimdall.analytics.UxAggregator;
 import studio.seer.heimdall.metrics.MetricsCollector;
 import studio.seer.heimdall.metrics.TenantMetricsService;
 import studio.seer.shared.HeimdallEvent;
@@ -45,17 +46,42 @@ public class EventResource {
     @Inject
     TenantMetricsService tenantMetrics;
 
+    @Inject
+    UxAggregator uxAggregator;
+
     /**
      * HTA-14: Enforce tenant-tagging.
      *
-     * Every event except {@code seer.platform.*} and {@code seer.audit.*} must
-     * carry {@code tenantAlias} in its payload. Emitters that forget will see 400.
+     * Every event except the following must carry {@code tenantAlias} in its payload:
+     * <ul>
+     *   <li>{@code seer.platform.*} and {@code seer.audit.*} — system-level events</li>
+     *   <li>Events from internal background components (hound, dali, shuttle) — these
+     *       run single-tenant jobs; tenant context is captured via {@code sessionId}.
+     *       They cannot include {@code tenantAlias} without a large refactor of the
+     *       listener chain (DaliHoundListener has no CDI tenant scope).</li>
+     * </ul>
+     *
+     * EV-BUG-01 (2026-04-29): added sourceComponent exemption for internal emitters.
+     * Long-term: propagate tenantAlias through HeimdallEmitter.build() — tracked in Sprint 5.
      */
-    static boolean requiresTenantTag(String eventType) {
+    static boolean requiresTenantTag(String eventType, String sourceComponent) {
         if (eventType == null) return false;
         if (eventType.startsWith("seer.platform.")) return false;
         if (eventType.startsWith("seer.audit."))    return false;
+        // Internal background components are single-tenant per job; sessionId = tenant key.
+        if ("hound".equals(sourceComponent))   return false;
+        if ("dali".equals(sourceComponent))    return false;
+        if ("shuttle".equals(sourceComponent)) return false;
+        // Chur auth events (AUTH_LOGIN_SUCCESS, AUTH_LOGOUT, etc.) have no tenantAlias at
+        // emission time (pre-session or cross-tenant boundary). Exempt by sourceComponent.
+        if ("chur".equals(sourceComponent))    return false;
         return true;
+    }
+
+    /** @deprecated Use {@link #requiresTenantTag(String, String)} — kept for test compatibility. */
+    @Deprecated
+    static boolean requiresTenantTag(String eventType) {
+        return requiresTenantTag(eventType, null);
     }
 
     static boolean hasTenantTag(HeimdallEvent event) {
@@ -68,7 +94,7 @@ public class EventResource {
     @POST
     public Response ingest(@Valid @NotNull HeimdallEvent event) {
 
-        if (requiresTenantTag(event.eventType()) && !hasTenantTag(event)) {
+        if (requiresTenantTag(event.eventType(), event.sourceComponent()) && !hasTenantTag(event)) {
             String correlationId = event.correlationId() != null
                     ? event.correlationId() : UUID.randomUUID().toString();
             LOG.warnf("[HTA-14] rejected event %s from %s — missing tenant tag (corr=%s)",
@@ -96,6 +122,7 @@ public class EventResource {
         ringBuffer.push(enriched);
         metricsCollector.record(enriched);
         tenantMetrics.record(enriched);
+        uxAggregator.record(enriched);
         LOG.debugf("Ingested event: %s from %s", enriched.eventType(), enriched.sourceComponent());
         return Response.accepted().build();
     }
@@ -125,7 +152,7 @@ public class EventResource {
 
         // HTA-14: skip untagged events (warn, don't reject the whole batch)
         long rejected = events.stream()
-                .filter(e -> requiresTenantTag(e.eventType()) && !hasTenantTag(e))
+                .filter(e -> requiresTenantTag(e.eventType(), e.sourceComponent()) && !hasTenantTag(e))
                 .count();
         if (rejected > 0) {
             LOG.warnf("[HTA-14] batch skipped %d of %d events — missing tenant tag",
@@ -133,8 +160,8 @@ public class EventResource {
         }
 
         long count = events.stream()
-                .filter(e -> !requiresTenantTag(e.eventType()) || hasTenantTag(e))
-                .peek(e -> { ringBuffer.push(e); metricsCollector.record(e); tenantMetrics.record(e); })
+                .filter(e -> !requiresTenantTag(e.eventType(), e.sourceComponent()) || hasTenantTag(e))
+                .peek(e -> { ringBuffer.push(e); metricsCollector.record(e); tenantMetrics.record(e); uxAggregator.record(e); })
                 .count();
 
         LOG.debugf("Ingested batch of %d events (skipped %d untagged)", count, rejected);

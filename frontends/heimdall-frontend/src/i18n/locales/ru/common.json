@@ -30,7 +30,8 @@
     "preferences":      "Настройки",
     "notifications":    "Уведомления",
     "sessionActivity":  "Активность сессий",
-    "softDeletedUsers": "Soft-deleted пользователи"
+    "softDeletedUsers": "Soft-deleted пользователи",
+    "analytics":        "UX Аналитика"
   },
   "auth": {
     "login":    "Войти",
@@ -77,7 +78,8 @@
   "ws": {
     "open":       "подключён",
     "connecting": "подключение",
-    "closed":     "отключён"
+    "closed":     "отключён",
+    "error":      "ошибка соединения"
   },
   "commandPalette": { "title": "Командная палитра" },
   "metrics": {
@@ -110,6 +112,7 @@
     "component": "Компонент",
     "eventType": "Тип события",
     "level":     "Уровень",
+    "tenant":    "Тенант",
     "duration":  "Длит.",
     "payload":   "Payload",
     "noEvents":  "Нет событий"
@@ -125,7 +128,9 @@
     "pause":     "Пауза",
     "paused":    "НА ПАУЗЕ",
     "resume":    "Возобновить",
-    "events":    "событий"
+    "events":          "событий",
+    "emptyHint":       "Ожидание событий…",
+    "emptyHintDetail": "События появятся здесь когда сервисы начнут их генерировать: вход, запуск парсинга, Shuttle-запрос, создание/удаление источника, медленный рендер и т.д."
   },
   "services": {
     "title":        "Сервисы",
@@ -729,5 +734,17 @@
     "last":          "Последнее событие",
     "noTenantData":  "Активности тенантов пока нет.",
     "moreTenants":   "ещё"
+  },
+  "analytics": {
+    "lastUpdated":      "Обновлено",
+    "autoRefresh":      "авто-обновление 30 с",
+    "activeUsers":      "Активные сессии",
+    "levelDist":        "Уровни событий",
+    "hotNodes":         "Самые кликаемые узлы",
+    "slowRenders":      "Медленные рендеры LOOM",
+    "error":            "Не удалось загрузить UX-аналитику",
+    "noData":           "Нет данных в текущем окне",
+    "emptyHotNodes":    "Кликов по узлам пока нет",
+    "emptySlowRenders": "Медленных рендеров за последние 24 ч не обнаружено"
   }
 }

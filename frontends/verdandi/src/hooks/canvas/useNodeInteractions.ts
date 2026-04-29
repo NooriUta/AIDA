@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useLoomStore } from '../../stores/loomStore';
+import { useHeimdallEmitter } from '../useHeimdallEmitter';
 import { SCOPE_FILTER_TYPES } from '../../utils/transformGraph';
 import type { LoomNode } from '../../types/graph';
 import type { ContextMenuState } from '../../components/canvas/NodeContextMenu';
@@ -25,8 +26,16 @@ export function useNodeInteractions(
     setFieldFilter,
   } = useLoomStore();
 
+  const { emit: emitHeimdall } = useHeimdallEmitter();
+
   const onNodeClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     selectNode(node.id, node.data);
+    emitHeimdall('LOOM_NODE_SELECTED', 'INFO', {
+      nodeId:    node.id,
+      nodeType:  node.data.nodeType ?? '',
+      nodeLabel: node.data.label   ?? '',
+      viewLevel,
+    });
 
     if (viewLevel === 'L1') {
       if (node.type === 'databaseNode') {
@@ -56,7 +65,7 @@ export function useNodeInteractions(
       const f = useLoomStore.getState().filter;
       setFieldFilter(f.fieldFilter === node.data.label ? null : node.data.label);
     }
-  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema, setFieldFilter, drillDown, jumpTo, setTableFilter]);
+  }, [selectNode, viewLevel, setL1HierarchyDb, setL1HierarchySchema, setFieldFilter, drillDown, jumpTo, setTableFilter, emitHeimdall]);
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: LoomNode) => {
     if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {
