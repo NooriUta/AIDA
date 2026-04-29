@@ -27,14 +27,15 @@ interface UseHeimdallEmitterReturn {
 }
 
 export function useHeimdallEmitter(): UseHeimdallEmitterReturn {
-  const tenantAlias = useAuthStore(s => s.activeTenantAlias);
+  const tenantAlias = useAuthStore(s => s.user?.activeTenantAlias);
 
   const emit = useCallback<EmitFn>(
     (eventType, level, payload, sessionId) => {
       // Enrich payload with active tenant so events are filterable in HEIMDALL.
-      const enrichedPayload: Record<string, unknown> = tenantAlias
-        ? { tenantAlias, ...payload }
-        : payload;
+      // Fall back to 'default' so HTA-14 never rejects verdandi events
+      // (verdandi is not exempt by sourceComponent — it must carry tenantAlias).
+      const effectiveTenant = tenantAlias ?? 'default';
+      const enrichedPayload: Record<string, unknown> = { tenantAlias: effectiveTenant, ...payload };
       const body = JSON.stringify({
         timestamp:       Date.now(),
         sourceComponent: 'verdandi',
