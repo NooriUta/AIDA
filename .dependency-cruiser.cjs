@@ -104,9 +104,6 @@ module.exports = {
       fileName: 'tsconfig.json',
     },
 
-    // ── File extensions to follow ─────────────────────────────────────────────
-    extensions: ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts'],
-
     // ── Exclude node_modules internals and test files ─────────────────────────
     exclude: {
       path: [
