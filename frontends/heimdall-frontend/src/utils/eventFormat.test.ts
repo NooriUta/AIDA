@@ -21,8 +21,8 @@ describe('EVENT_LABELS', () => {
   it('maps REQUEST_RECEIVED', () => {
     expect(EVENT_LABELS['REQUEST_RECEIVED']).toBe('GraphQL request');
   });
-  it('maps AUTH_LOGIN_SUCCESS', () => {
-    expect(EVENT_LABELS['AUTH_LOGIN_SUCCESS']).toBe('Login');
+  it('maps AUTH_LOGIN', () => {
+    expect(EVENT_LABELS['AUTH_LOGIN']).toBe('Login');
   });
   it('maps AUTH_LOGIN_FAILED', () => {
     expect(EVENT_LABELS['AUTH_LOGIN_FAILED']).toBe('Login failed');
@@ -33,9 +33,9 @@ describe('EVENT_LABELS', () => {
 });
 
 describe('formatPayload', () => {
-  it('AUTH_LOGIN_SUCCESS → username (role)', () => {
+  it('AUTH_LOGIN → username (role)', () => {
     const e = mkEvent({
-      eventType: 'AUTH_LOGIN_SUCCESS',
+      eventType: 'AUTH_LOGIN',
       payload:   { username: 'alice', role: 'admin' },
     });
     expect(formatPayload(e)).toBe('alice (admin)');
