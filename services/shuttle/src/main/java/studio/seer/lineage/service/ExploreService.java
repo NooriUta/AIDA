@@ -389,7 +389,10 @@ public class ExploreService {
         Object v = row.get(key);
         if (v == null) return "";
         // labels()[0] returns a List<String> in ArcadeDB Cypher — unwrap first element
-        if (v instanceof java.util.List<?> list) return list.isEmpty() ? "" : list.get(0).toString();
+        if (v instanceof java.util.List<?> list) {
+            Object first = list.isEmpty() ? null : list.get(0);
+            return first != null ? first.toString() : "";
+        }
         return v.toString();
     }
 

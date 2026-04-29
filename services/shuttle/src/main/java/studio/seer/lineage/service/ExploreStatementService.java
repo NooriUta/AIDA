@@ -652,7 +652,10 @@ public class ExploreStatementService {
     private static String str(Map<String, Object> row, String key) {
         Object v = row.get(key);
         if (v == null) return "";
-        if (v instanceof java.util.List<?> list) return list.isEmpty() ? "" : list.get(0).toString();
+        if (v instanceof java.util.List<?> list) {
+            Object first = list.isEmpty() ? null : list.get(0);
+            return first != null ? first.toString() : "";
+        }
         return v.toString();
     }
 }

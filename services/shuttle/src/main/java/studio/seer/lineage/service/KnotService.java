@@ -472,10 +472,8 @@ public class KnotService {
             String geoid      = str(r, "geoid");
             String stmtTypeDb = str(r, "stmtType");
             int    lineStartDb = num(r, "lineStart");
-            List<KnotSourceRef> sources = srcByStmt.containsKey(id)
-                ? new ArrayList<>(srcByStmt.get(id).values()) : List.of();
-            List<KnotSourceRef> targets = tgtByStmt.containsKey(id)
-                ? new ArrayList<>(tgtByStmt.get(id).values()) : List.of();
+            List<KnotSourceRef> sources = new ArrayList<>(srcByStmt.getOrDefault(id, Map.of()).values());
+            List<KnotSourceRef> targets = new ArrayList<>(tgtByStmt.getOrDefault(id, Map.of()).values());
             byId.put(id, new KnotStatement(
                 id, geoid,
                 !stmtTypeDb.isEmpty() ? stmtTypeDb : parseStmtType(geoid),

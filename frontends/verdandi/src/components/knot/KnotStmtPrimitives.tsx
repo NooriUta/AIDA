@@ -173,7 +173,7 @@ export function SqlBlock({ sql }: { sql: string }) {
     navigator.clipboard.writeText(sql).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch(() => {});
   }, [sql]);
 
   return (

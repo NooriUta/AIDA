@@ -607,7 +607,7 @@ function SqlPanel({ data, stmtGeoid }: { data: DaliNodeData; stmtGeoid: string }
     navigator.clipboard.writeText(sqlText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch(() => {});
   }, [sqlText]);
 
   if (sqlText) {
