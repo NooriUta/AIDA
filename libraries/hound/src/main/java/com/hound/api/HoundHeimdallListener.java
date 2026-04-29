@@ -46,16 +46,49 @@ public class HoundHeimdallListener implements HoundEventListener {
     /** URL of the HEIMDALL events endpoint, e.g. {@code http://localhost:9093}. */
     private final String heimdallBase;
 
+    /** SessionId of the active parse session — propagated to every event. */
+    private final String sessionId;
+
+    /**
+     * Tenant alias for the active parse job — injected into every event payload
+     * so the HEIMDALL EventLog can show the Tenant column for hound events.
+     */
+    private final String tenantAlias;
+
+    /**
+     * Source root directory (absolute). When set, file events report paths
+     * relative to this root (e.g. {@code ERP_CORE/DWH/pkg.sql}) instead of
+     * just the filename. Null-safe: falls back to last-3-components heuristic.
+     */
+    private final String sourceRoot;
+
     /**
      * Per-file last-emitted atom count. Used for throttle logic.
      * Key = file path, value = atom count at last HEIMDALL emission.
      */
     private final ConcurrentHashMap<String, Integer> lastEmitted = new ConcurrentHashMap<>();
 
+    /** Legacy constructor — no session / tenant context (CLI / standalone use). */
     public HoundHeimdallListener(String heimdallBase) {
+        this(heimdallBase, null, null, null);
+    }
+
+    /**
+     * Full constructor used by Dali's {@code ParseJob}.
+     *
+     * @param heimdallBase  base URL of the HEIMDALL backend
+     * @param sessionId     active parse session id (nullable)
+     * @param tenantAlias   tenant alias for this job (nullable — skipped if blank)
+     * @param sourceRoot    absolute source root path for relative-path display (nullable)
+     */
+    public HoundHeimdallListener(String heimdallBase, String sessionId,
+                                  String tenantAlias, String sourceRoot) {
         this.heimdallBase = heimdallBase.endsWith("/")
                 ? heimdallBase.substring(0, heimdallBase.length() - 1)
                 : heimdallBase;
+        this.sessionId   = sessionId;
+        this.tenantAlias = tenantAlias;
+        this.sourceRoot  = sourceRoot;
     }
 
     // ── Factory ───────────────────────────────────────────────────────────────
@@ -75,8 +108,8 @@ public class HoundHeimdallListener implements HoundEventListener {
 
     @Override
     public void onFileParseStarted(String file, String dialect) {
-        send("FILE_PARSING_STARTED", "INFO", null, 0, Map.of(
-                "file",    basename(file),
+        send("FILE_PARSING_STARTED", "INFO", 0, Map.of(
+                "file",    relPath(file),
                 "dialect", dialect));
     }
 
@@ -85,8 +118,8 @@ public class HoundHeimdallListener implements HoundEventListener {
         int prev = lastEmitted.getOrDefault(file, 0);
         if (atomCount - prev >= ATOM_THROTTLE) {
             lastEmitted.put(file, atomCount);
-            send("ATOM_EXTRACTED", "INFO", null, 0, Map.of(
-                    "file",      basename(file),
+            send("ATOM_EXTRACTED", "INFO", 0, Map.of(
+                    "file",      relPath(file),
                     "atomCount", atomCount));
         }
     }
@@ -95,8 +128,8 @@ public class HoundHeimdallListener implements HoundEventListener {
     public void onFileParseCompleted(String file, ParseResult result) {
         lastEmitted.remove(file);
 
-        send("FILE_PARSING_COMPLETED", "INFO", null, result.durationMs(), Map.of(
-                "file",           basename(file),
+        send("FILE_PARSING_COMPLETED", "INFO", result.durationMs(), Map.of(
+                "file",           relPath(file),
                 "atomCount",      result.atomCount(),
                 "vertexCount",    result.vertexCount(),
                 "edgeCount",      result.edgeCount(),
@@ -104,8 +137,8 @@ public class HoundHeimdallListener implements HoundEventListener {
                 "durationMs",     result.durationMs()));
 
         if (result.atomCount() > 0) {
-            send("RESOLUTION_COMPLETED", "INFO", null, result.durationMs(), Map.of(
-                    "file",           basename(file),
+            send("RESOLUTION_COMPLETED", "INFO", result.durationMs(), Map.of(
+                    "file",           relPath(file),
                     "atomCount",      result.atomCount(),
                     "resolutionRate", result.resolutionRate()));
         }
@@ -113,8 +146,8 @@ public class HoundHeimdallListener implements HoundEventListener {
 
     @Override
     public void onParseError(String file, int line, int charPos, String msg) {
-        send("PARSE_ERROR", "WARN", null, 0, Map.of(
-                "file", basename(file),
+        send("PARSE_ERROR", "WARN", 0, Map.of(
+                "file", relPath(file),
                 "line", line,
                 "col",  charPos,
                 "msg",  truncate(msg, 300)));
@@ -123,27 +156,33 @@ public class HoundHeimdallListener implements HoundEventListener {
     @Override
     public void onError(String file, Throwable error) {
         lastEmitted.remove(file);
-        send("FILE_PARSING_FAILED", "ERROR", null, 0, Map.of(
-                "file",  basename(file),
-                "error", error != null ? truncate(error.getMessage(), 200) : "unknown"));
+        send("FILE_PARSING_FAILED", "ERROR", 0, Map.of(
+                "file",  relPath(file),
+                "error", error != null ? truncate(error.getMessage(), 400) : "unknown"));
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
 
     private void send(String eventType, String level,
-                      String sessionId, long durationMs,
+                      long durationMs,
                       Map<String, Object> payload) {
         try {
+            // Enrich payload with tenantAlias so the HEIMDALL EventLog Tenant column is populated.
+            Map<String, Object> enrichedPayload = new java.util.LinkedHashMap<>(payload);
+            if (tenantAlias != null && !tenantAlias.isBlank()) {
+                enrichedPayload.putIfAbsent("tenantAlias", tenantAlias);
+            }
+
             Map<String, Object> body = new java.util.LinkedHashMap<>();
             body.put("timestamp",       System.currentTimeMillis());
             body.put("sourceComponent", "hound");
             body.put("eventType",       eventType);
             body.put("level",           level);
-            body.put("sessionId",       sessionId);
+            body.put("sessionId",       sessionId);  // propagated from ParseJob
             body.put("userId",          null);
             body.put("correlationId",   null);
             body.put("durationMs",      durationMs);
-            body.put("payload",         payload);
+            body.put("payload",         enrichedPayload);
 
             String json = JSON.writeValueAsString(body);
 
@@ -165,10 +204,37 @@ public class HoundHeimdallListener implements HoundEventListener {
         }
     }
 
-    /** Returns the last path component of the file path. */
-    private static String basename(String file) {
+    /**
+     * Returns a human-readable file path for HEIMDALL events.
+     *
+     * <ul>
+     *   <li>If {@code sourceRoot} is set: returns the path relative to the source root
+     *       using forward slashes (e.g. {@code ERP_CORE/DWH/PKG_ETL.sql}).
+     *   <li>Otherwise: returns the last 3 path components joined by {@code /}
+     *       (e.g. {@code DWH/PKG_ETL.sql} when only 2 are available).
+     * </ul>
+     */
+    private String relPath(String file) {
+        if (file == null) return "";
         try {
-            return Paths.get(file).getFileName().toString();
+            Path p = Paths.get(file);
+            if (sourceRoot != null && !sourceRoot.isBlank()) {
+                Path root = Paths.get(sourceRoot);
+                // relativize() throws if p is not under root — fall through on error
+                try {
+                    Path rel = root.relativize(p);
+                    return rel.toString().replace('\\', '/');
+                } catch (Exception ignored) { /* fall through */ }
+            }
+            // Heuristic: show up to the last 3 components
+            int n = p.getNameCount();
+            int start = Math.max(0, n - 3);
+            StringBuilder sb = new StringBuilder();
+            for (int i = start; i < n; i++) {
+                if (i > start) sb.append('/');
+                sb.append(p.getName(i).toString());
+            }
+            return sb.toString();
         } catch (Exception e) {
             return file;
         }

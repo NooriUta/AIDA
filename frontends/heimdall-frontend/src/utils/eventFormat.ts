@@ -25,6 +25,8 @@ export const EVENT_LABELS: Record<string, string> = {
   AUTH_LOGIN_FAILED:      'Login failed',
   AUTH_LOGOUT:            'Logout',
   DEMO_RESET:             'Demo reset',
+  LOOM_NODE_SELECTED:     'Node selected',
+  LOOM_VIEW_SLOW:         'Slow render',
 };
 
 /** Fields rendered in dedicated columns — exclude from payload summary to avoid duplication. */
@@ -75,6 +77,13 @@ export function formatPayload(event: HeimdallEvent): string {
       return `${p['username'] ?? 'unknown'} · invalid credentials`;
     case 'AUTH_LOGOUT':
       return `${p['username'] ?? ''}`;
+    case 'LOOM_NODE_SELECTED':
+      return `${p['nodeType'] ?? ''} ${p['nodeLabel'] ?? ''} @ ${p['viewLevel'] ?? ''}`;
+    case 'LOOM_VIEW_SLOW': {
+      const nc = p['nodeCount'] ?? 0;
+      const ec = p['edgeCount'] ?? 0;
+      return `${nc} nodes · ${ec} edges · ${event.durationMs}ms`;
+    }
     default: {
       // Skip fields that have their own dedicated table columns (tenantAlias, db)
       const keys = Object.keys(p)

@@ -19,6 +19,7 @@ interface EmitFn {
     level: EventLevel,
     payload: Record<string, unknown>,
     sessionId?: string,
+    durationMs?: number,
   ): void;
 }
 
@@ -30,7 +31,7 @@ export function useHeimdallEmitter(): UseHeimdallEmitterReturn {
   const tenantAlias = useAuthStore(s => s.user?.activeTenantAlias);
 
   const emit = useCallback<EmitFn>(
-    (eventType, level, payload, sessionId) => {
+    (eventType, level, payload, sessionId, durationMs) => {
       // Enrich payload with active tenant so events are filterable in HEIMDALL.
       // Fall back to 'default' so HTA-14 never rejects verdandi events
       // (verdandi is not exempt by sourceComponent — it must carry tenantAlias).
@@ -42,8 +43,9 @@ export function useHeimdallEmitter(): UseHeimdallEmitterReturn {
         eventType,
         level,
         sessionId:       sessionId ?? null,
+        userId:          null,
         correlationId:   null,
-        durationMs:      0,
+        durationMs:      durationMs ?? 0,
         payload:         enrichedPayload,
       });
       // fire-and-forget — do not await, do not surface errors to UI

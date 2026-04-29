@@ -186,7 +186,8 @@ public class ParseJob {
         sessionService.startSession(sessionId, false, 1);
         long fileStart = System.currentTimeMillis();
 
-        HoundEventListener listener = buildListener(sessionId, config);
+        String sourceRoot = file.getParent() != null ? file.getParent().toString() : null;
+        HoundEventListener listener = buildListener(sessionId, config, input.tenantAlias(), sourceRoot);
         ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
                 ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
                 : houndParser.parse(file, config, listener);
@@ -265,7 +266,8 @@ public class ParseJob {
                 sessionId, sources.size(), config.dialect());
         sessionService.startSession(sessionId, true, sources.size());
 
-        HoundEventListener listener = buildListener(sessionId, config);
+        // JDBC sources have no filesystem root; tenantAlias already resolved above.
+        HoundEventListener listener = buildListener(sessionId, config, tenantAlias, null);
         List<ParseResult> parseResults = houndParser.parseSources(sources, config, listener);
 
         // 6 — aggregate and complete session
@@ -322,9 +324,10 @@ public class ParseJob {
         // Parse file-by-file so we can update progress after each one.
         // Per-file retry absorbs transient ArcadeDB MVCC conflicts without aborting the entire
         // batch — a single file failure no longer cascades into a full session retry (JobRunr).
+        String batchRoot = dir.toString();
         for (Path file : files) {
             long   fileStart = System.currentTimeMillis();
-            FileResult fr = parseFileWithRetry(sessionId, file, config, input);
+            FileResult fr = parseFileWithRetry(sessionId, file, config, input, batchRoot);
             fileResults.add(fr);
             sessionService.recordFileComplete(sessionId, fr);
             if (fr.success()) {
@@ -368,11 +371,11 @@ public class ParseJob {
      * result, but processing continues for the remaining files.
      */
     private FileResult parseFileWithRetry(String sessionId, Path file, HoundConfig config,
-                                          ParseSessionInput input) {
+                                          ParseSessionInput input, String sourceRoot) {
         Exception lastEx = null;
         for (int attempt = 1; attempt <= FILE_MAX_RETRIES; attempt++) {
             try {
-                HoundEventListener listener = buildListener(sessionId, config);
+                HoundEventListener listener = buildListener(sessionId, config, input.tenantAlias(), sourceRoot);
                 ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
                         ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
                         : houndParser.parse(file, config, listener);
@@ -421,12 +424,24 @@ public class ParseJob {
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    /** Builds the effective listener: DaliHoundListener (persistence) + HoundHeimdallListener
-     *  (observability) via CompositeListener. Falls back to NoOp if HEIMDALL_URL is not set. */
-    private HoundEventListener buildListener(String sessionId, HoundConfig config) {
+    /**
+     * Builds the effective listener: DaliHoundListener (persistence) +
+     * HoundHeimdallListener (observability) via CompositeListener.
+     * Falls back to NoOp if HEIMDALL_URL is not set.
+     *
+     * @param sessionId   active parse session id
+     * @param config      hound configuration
+     * @param tenantAlias tenant alias — injected into every hound event payload so the
+     *                    HEIMDALL EventLog Tenant column is populated for hound events.
+     *                    Nullable (e.g. preview mode has no tenant).
+     * @param sourceRoot  absolute root directory (or null for JDBC/single-file) used
+     *                    to compute relative file paths in hound events.
+     */
+    private HoundEventListener buildListener(String sessionId, HoundConfig config,
+                                              String tenantAlias, String sourceRoot) {
         HoundEventListener heimdall = heimdallUrl
                 .filter(url -> !url.isBlank())
-                .<HoundEventListener>map(HoundHeimdallListener::new)
+                .<HoundEventListener>map(url -> new HoundHeimdallListener(url, sessionId, tenantAlias, sourceRoot))
                 .orElse(NoOpHoundEventListener.INSTANCE);
         return new CompositeListener(
                 new DaliHoundListener(sessionId, config.dialect(), emitter),
