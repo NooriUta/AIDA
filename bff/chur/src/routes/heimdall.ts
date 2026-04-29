@@ -47,6 +47,33 @@ function connectUpstreamWs(path: string): Promise<WebSocket> {
  */
 export const heimdallRoutes: FastifyPluginAsync = async (app) => {
 
+  // ── POST /heimdall/events — frontend event proxy → HEIMDALL (EV-09) ─────────
+  // Authenticated users (not admin-only) can emit observability events from the
+  // browser. Server adds session context; rate-limiting is handled by HEIMDALL.
+  app.post(
+    '/heimdall/events',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const body = request.body as Record<string, unknown>;
+      // Enforce sourceComponent to match the authenticated frontend
+      const event = {
+        ...body,
+        sourceComponent: body.sourceComponent ?? 'verdandi',
+        timestamp:       body.timestamp ?? Date.now(),
+      };
+      try {
+        await heimdallFetch('/events', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(event),
+        });
+      } catch {
+        // fire-and-forget semantics — HEIMDALL down must not fail the frontend
+      }
+      return reply.status(202).send({});
+    },
+  );
+
   // ── GET /heimdall/health — unauthenticated health probe ───────────────────
   app.get('/heimdall/health', async (_req, reply) => {
     try {

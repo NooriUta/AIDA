@@ -64,6 +64,10 @@ textarea:focus-visible {
 .comp-shuttle { color: var(--wrn);    background: color-mix(in srgb, var(--wrn)    10%, transparent); border-color: color-mix(in srgb, var(--wrn)    25%, transparent); }
 .comp-chur    { color: var(--t2);     background: color-mix(in srgb, var(--t2)     10%, transparent); border-color: color-mix(in srgb, var(--t2)     25%, transparent); }
 .comp-heimdall{ color: var(--inf);    background: color-mix(in srgb, var(--inf)    10%, transparent); border-color: color-mix(in srgb, var(--inf)    25%, transparent); }
+/* EV-07: Infrastructure components */
+.comp-ygg     { color: #c0823a;       background: color-mix(in srgb, #c0823a       10%, transparent); border-color: color-mix(in srgb, #c0823a       25%, transparent); }
+.comp-frigg   { color: #6ea84e;       background: color-mix(in srgb, #6ea84e       10%, transparent); border-color: color-mix(in srgb, #6ea84e       25%, transparent); }
+.comp-verdandi{ color: #9b72cf;       background: color-mix(in srgb, #9b72cf       10%, transparent); border-color: color-mix(in srgb, #9b72cf       25%, transparent); }
 
 /* ── Status / level badges ───────────────────────────────────────────────────── */
 .badge {

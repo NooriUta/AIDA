@@ -155,6 +155,43 @@ public class HeimdallEmitter {
                 "error", error != null ? error : "unknown")));
     }
 
+    // ── EV-02: YGG write events ───────────────────────────────────────────────
+
+    /**
+     * EV-02: Emitted by ParseJob after a successful write to YGG (non-preview only).
+     * Correlates with {@link #sessionCompleted} but focuses on the persistence tier.
+     */
+    public void yggWriteCompleted(String sessionId, int vertices, int edges, long durationMs) {
+        emit(build("hound", EventType.YGG_WRITE_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
+                "session_id",       sessionId,
+                "vertices_written", vertices,
+                "edges_written",    edges,
+                "duration_ms",      durationMs)));
+    }
+
+    /**
+     * EV-02: Emitted by ParseJob when a non-preview write to YGG fails.
+     * Level ERROR — triggers HEIMDALL alert threshold.
+     */
+    public void yggWriteFailed(String sessionId, String errorCode, long durationMs) {
+        emit(build("hound", EventType.YGG_WRITE_FAILED, EventLevel.ERROR, sessionId, durationMs, Map.of(
+                "session_id", sessionId,
+                "error_code", errorCode != null ? errorCode : "unknown",
+                "retries",    0)));
+    }
+
+    // ── EV-03: YGG clear ─────────────────────────────────────────────────────
+
+    /**
+     * EV-03: Emitted by ParseJob after {@code clearBeforeWrite} truncation completes.
+     * Payload carries duration; vertex/edge counts are best-effort (not available from Hound API).
+     */
+    public void yggClearCompleted(String sessionId, long durationMs) {
+        emit(build("dali", EventType.YGG_CLEAR_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
+                "session_id",  sessionId,
+                "duration_ms", durationMs)));
+    }
+
     // ── Internal builder ──────────────────────────────────────────────────────
 
     private static HeimdallEvent build(String sourceComponent, EventType type, EventLevel level,
