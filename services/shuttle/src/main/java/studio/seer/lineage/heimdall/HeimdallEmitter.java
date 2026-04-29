@@ -8,6 +8,7 @@ import studio.seer.lineage.heimdall.model.EventLevel;
 import studio.seer.lineage.heimdall.model.EventType;
 import studio.seer.lineage.heimdall.model.HeimdallEvent;
 import studio.seer.lineage.security.SeerIdentity;
+import studio.seer.tenantrouting.YggLineageRegistry;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,40 +24,54 @@ import java.util.Map;
  * Key guarantee: errors on either path are logged at WARN and never propagated.
  * HEIMDALL being down must NOT affect SHUTTLE operation.
  *
- * tenantAlias is automatically added to each event payload from SeerIdentity
- * (the X-Seer-Tenant-Alias header forwarded by Chur). Events emitted outside
- * a request scope (e.g. background jobs) will get null — that's fine since
- * shuttle is exempt from HTA-14 tenant-tag enforcement.
+ * Automatic payload enrichment per request context:
+ *   tenantAlias — from X-Seer-Tenant-Alias (SeerIdentity)
+ *   db          — ArcadeDB database name for this tenant (e.g. "hound_acme")
+ *
+ * Outside a request scope (background jobs) enrichment is silently skipped;
+ * shuttle events are HTA-14-exempt so the missing tenantAlias is fine.
  */
 @ApplicationScoped
 public class HeimdallEmitter {
 
     private static final Logger LOG = Logger.getLogger(HeimdallEmitter.class);
 
-    @Inject @RestClient HeimdallClient  client;
-    @Inject             HeimdallEventBus eventBus;
-    @Inject             SeerIdentity     identity;
+    @Inject @RestClient HeimdallClient    client;
+    @Inject             HeimdallEventBus  eventBus;
+    @Inject             SeerIdentity      identity;
+    @Inject             YggLineageRegistry lineageRegistry;
 
     /**
      * Emit a single event asynchronously. Non-blocking, errors swallowed at WARN.
-     * tenantAlias is injected from the current request context automatically.
+     * tenantAlias + db are injected from the current request context automatically.
      */
     public void emit(EventType type, EventLevel level,
                      String sessionId, String correlationId,
                      long durationMs, Map<String, Object> payload) {
 
-        // Enrich payload with tenantAlias from the current request context.
-        // Guard against null payload from callers that pass Map.of(...) — Map.of is immutable.
+        // Enrich payload with tenant context from the current request.
+        // Map.of(...) is immutable, so we always copy into a mutable map first.
         Map<String, Object> enriched = payload != null ? new HashMap<>(payload) : new HashMap<>();
         try {
             String tenant = identity.tenantAlias();
             if (tenant != null && !tenant.isBlank()) {
                 enriched.putIfAbsent("tenantAlias", tenant);
+                // Resolve the actual ArcadeDB database name for this tenant
+                // (e.g. "hound_acme", "hound_default") so operators can identify
+                // which DB a slow query hit without looking up the registry manually.
+                try {
+                    String db = lineageRegistry.resourceFor(tenant).databaseName();
+                    if (db != null && !db.isBlank()) {
+                        enriched.putIfAbsent("db", db);
+                    }
+                } catch (Exception dbEx) {
+                    LOG.tracef("db enrichment skipped (registry miss for '%s'): %s", tenant, dbEx.getMessage());
+                }
             }
         } catch (Exception ex) {
             // SeerIdentity is @RequestScoped — outside a request (e.g. background jobs)
-            // this proxy call throws. Silently skip tenant enrichment in that case.
-            LOG.tracef("tenantAlias enrichment skipped (no request context): %s", ex.getMessage());
+            // this proxy call throws. Silently skip enrichment in that case.
+            LOG.tracef("tenant/db enrichment skipped (no request context): %s", ex.getMessage());
         }
 
         var event = new HeimdallEvent(
