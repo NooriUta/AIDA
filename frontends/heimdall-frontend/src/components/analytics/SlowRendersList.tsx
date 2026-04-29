@@ -3,7 +3,6 @@
  * Empty state when no renders exceeded the threshold.
  * "Navigate" button calls navigateTo with the sessionId (opens KNOT in Verdandi).
  */
-import React from 'react';
 import type { SlowRender } from '../../api/analytics';
 
 interface Props {
