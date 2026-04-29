@@ -12,6 +12,10 @@ export interface TenantSummary {
   membersCount?: number | null;
   atomsCount?: number | null;
   sourcesCount?: number | null;
+  /** KC Organization display name (human-readable, from KC org `name` field). TUX-01 */
+  displayName?: string;
+  /** True when FRIGG DaliTenantConfig and KC Organization are out of sync. MTN-26 / TUX-01 */
+  drift?: boolean;
 }
 
 export interface DaliTenantConfig extends TenantSummary {

@@ -566,6 +566,10 @@
     "confirmArchiveMsg":    "Archiving \"{{alias}}\" exports all databases to S3 and drops them. Irreversible without Restore.",
     "confirmExtendTitle":   "Confirm extend retention",
     "confirmExtendMsg":     "Extend retention for \"{{alias}}\" to {{date}} (+{{days}} days)?",
+    "detail": {
+      "displayName":  "KC display name",
+      "driftBadge":   "KC / FRIGG config out of sync"
+    },
     "hints": {
       "alias":                 "Unique tenant alias; used in DB names and scope claim",
       "status":                "Lifecycle: ACTIVE → SUSPENDED → ARCHIVED → PURGED",
