@@ -32,7 +32,7 @@ vi.mock('../users/FriggUsersClient', () => ({
 
 // Bypass CSRF origin check in test (no browser Origin header in inject())
 vi.mock('../middleware/csrfGuard', () => ({
-  csrfGuard: vi.fn((_req: unknown, _reply: unknown, done: () => void) => done()),
+  csrfGuard: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { getUserVertex, upsertUserVertex } from '../users/FriggUserRepository';
@@ -52,8 +52,7 @@ function resetMocks() {
   vi.resetAllMocks();
   mockQuery.mockResolvedValue([]);
   mockSql.mockResolvedValue([]);
-  // csrfGuard must call done() — without it Fastify preHandler hangs and tests timeout
-  mockCsrf.mockImplementation((_req: unknown, _reply: unknown, done: () => void) => done());
+  mockCsrf.mockResolvedValue(undefined);
 }
 
 // ── App factory ───────────────────────────────────────────────────────────────

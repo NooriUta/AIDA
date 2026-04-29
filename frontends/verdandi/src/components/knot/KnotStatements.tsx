@@ -5,15 +5,15 @@ import { ToolbarSelect } from '../ui/ToolbarPrimitives';
 import { useKnotSnippet } from '../../services/hooks';
 import type { LookupMaps, FlatRow } from './knotStmtHelpers';
 import {
-  TYPE_BADGE, typeFromGeoid, lineFromGeoid,
+  typeFromGeoid, lineFromGeoid,
   flattenAll, flattenChildren, shortName, truncGeoid,
 } from './knotStmtHelpers';
 import { StmtTableRow } from './KnotStmtTableRow';
 import {
-  sectionHeaderStyle, pTblTdStyle,
+  pTblTdStyle,
   atomColor, atomStatusBg, atomStatusColor, atomDisplayText,
   SectionHeader, CollapsibleSectionHeader, InfoRow, PTblTh,
-  AtomFlag, AtomStat, AtomsBreakdown, SqlBlock,
+  AtomFlag, AtomsBreakdown, SqlBlock,
 } from './KnotStmtPrimitives';
 
 interface Props {

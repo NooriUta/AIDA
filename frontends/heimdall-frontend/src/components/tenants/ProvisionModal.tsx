@@ -29,9 +29,7 @@ export function ProvisionModal({ onDone, onClose }: Props) {
   const [result, setResult]           = useState<{ keycloakOrgId?: string } | null>(null);
   const [validationErr, setValidationErr] = useState<string | null>(null);
 
-  /** Real-time: alias с недопустимыми символами → предупреждение до submit */
   const ALIAS_RE = /^[a-z0-9-]*$/;
-  const aliasHasInvalidChars = alias.trim().length > 0 && !ALIAS_RE.test(alias.trim().toLowerCase());
   const aliasCanSubmit = alias.trim().length > 0;
 
   const submit = async () => {

@@ -640,6 +640,33 @@ public class KnotService {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
+     * Parse line number from atom_id tilde-encoding: last ~-segment before optional ':'.
+     * "CODE_FIELD~78:0" → 78, "SOME~45:3~152:7" → 152, no-tilde or empty → 0.
+     */
+    static int atomLine(String atomId) {
+        if (atomId == null || atomId.isEmpty() || !atomId.contains("~")) return 0;
+        String seg = atomId.substring(atomId.lastIndexOf('~') + 1);
+        if (seg.isEmpty()) return 0;
+        int colon = seg.indexOf(':');
+        String part = colon >= 0 ? seg.substring(0, colon) : seg;
+        try { return Integer.parseInt(part); }
+        catch (NumberFormatException ignored) { return 0; }
+    }
+
+    /**
+     * Parse column position from atom_id tilde-encoding: last ~-segment after ':'.
+     * "CODE_FIELD~78:0" → 0, "SOME~152:7" → 7, no-colon → 0.
+     */
+    static int atomPos(String atomId) {
+        if (atomId == null || atomId.isEmpty() || !atomId.contains("~")) return 0;
+        String seg = atomId.substring(atomId.lastIndexOf('~') + 1);
+        int colon = seg.indexOf(':');
+        if (colon < 0) return 0;
+        try { return Integer.parseInt(seg.substring(colon + 1)); }
+        catch (NumberFormatException ignored) { return 0; }
+    }
+
+    /**
      * Parse stmt type from geoid: "SCHEMA.PKG:RTYPE:RNAME:STMT_TYPE:LINE"
      * Returns part[3] (e.g. "INSERT", "SELECT").
      */
