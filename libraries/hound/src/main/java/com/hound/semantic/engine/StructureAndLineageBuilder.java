@@ -43,6 +43,9 @@ public class StructureAndLineageBuilder {
      */
     private final Map<String, ConstraintInfo> constraints = new LinkedHashMap<>();
 
+    /** HND-02: PL/SQL TYPE IS RECORD / TABLE OF templates. Key = type geoid. */
+    private final Map<String, PlTypeInfo> plTypes = new LinkedHashMap<>();
+
     // STAB-2: диагностический логгер (null = prod-режим, no-op)
     private ResolutionLogger resolutionLogger;
 
@@ -406,6 +409,37 @@ public class StructureAndLineageBuilder {
     public Map<String, Object> getPackages() { return packages; }
 
 
+    // ═══════ PlType registry (HND-02) ═══════
+
+    /**
+     * Registers a PL/SQL TYPE template (RECORD or COLLECTION).
+     * Idempotent — a second registration with the same geoid is ignored.
+     */
+    public void registerPlType(PlTypeInfo pt) {
+        if (pt != null) plTypes.putIfAbsent(pt.getGeoid(), pt);
+    }
+
+    public PlTypeInfo getPlType(String geoid) {
+        return geoid != null ? plTypes.get(geoid) : null;
+    }
+
+    /** Resolves a type by name within the given scope (package or routine geoid). */
+    public PlTypeInfo resolvePlTypeByName(String typeName, String scopeGeoid) {
+        if (typeName == null) return null;
+        String upper = typeName.toUpperCase();
+        // Prefer scope-local first
+        if (scopeGeoid != null) {
+            PlTypeInfo pt = plTypes.get(scopeGeoid + ":TYPE:" + upper);
+            if (pt != null) return pt;
+        }
+        // Fall back to any scope with that type name
+        return plTypes.values().stream()
+                .filter(pt -> upper.equals(pt.getName()))
+                .findFirst().orElse(null);
+    }
+
+    public Map<String, PlTypeInfo> getPlTypes() { return plTypes; }
+
     // ═══════ Lineage ═══════
 
     public void addLineageEdge(String source, String target, String type, String statementGeoid) {
@@ -421,7 +455,8 @@ public class StructureAndLineageBuilder {
     public Structure getStructure() {
         return new Structure(databases, schemas, packages, tables, columns, routines, statements, records,
                 Collections.unmodifiableSet(ddlTableGeoids),
-                Collections.unmodifiableMap(constraints));
+                Collections.unmodifiableMap(constraints),
+                Collections.unmodifiableMap(plTypes));
     }
 
     // ═══════ Schemas / Databases ═══════

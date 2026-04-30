@@ -925,9 +925,10 @@ class RemoteWriter {
             RecordInfo rec = e.getValue();
             String fieldsJson = String.join(",", rec.getFields());
             rcmd("INSERT INTO DaliRecord SET session_id=?, record_geoid=?, record_name=?, " +
-                    "routine_geoid=?, source_stmt_geoid=?, fields=?",
+                    "routine_geoid=?, source_stmt_geoid=?, fields=?, pl_type_geoid=?",
                 sid, rec.getGeoid(), rec.getVarName(),
-                rec.getRoutineGeoid(), rec.getSourceStatementGeoid(), fieldsJson);
+                rec.getRoutineGeoid(), rec.getSourceStatementGeoid(), fieldsJson,
+                rec.getPlTypeGeoid());
             // DaliRecordField — one vertex per named field (dedup across batch)
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
@@ -936,6 +937,26 @@ class RemoteWriter {
                         "field_order=?, record_geoid=?, data_type=?, ordinal_position=?, source_column_geoid=?",
                     sid, fieldGeoid, fi.name(), fi.ordinalPosition(), rec.getGeoid(),
                     fi.dataType(), fi.ordinalPosition(), fi.sourceColumnGeoid());
+            }
+        }
+
+        // ── DaliPlType + DaliPlTypeField (HND-05) ──
+        Set<String> insertedPlFieldGeoids = new HashSet<>();
+        for (var e : str.getPlTypes().entrySet()) {
+            com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            rcmd("INSERT INTO DaliPlType SET session_id=?, type_geoid=?, type_name=?, kind=?, " +
+                    "element_type_geoid=?, scope_geoid=?, declared_at_line=?",
+                sid, pt.getGeoid(), pt.getName(), pt.getKind().name(),
+                pt.getElementTypeGeoid(), pt.getScopeGeoid(),
+                pt.getDeclaredAtLine() > 0 ? pt.getDeclaredAtLine() : null);
+            if (pt.isRecord()) {
+                for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
+                    String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
+                    if (!insertedPlFieldGeoids.add(fGeoid)) continue;
+                    rcmd("INSERT INTO DaliPlTypeField SET session_id=?, field_geoid=?, type_geoid=?, " +
+                            "field_name=?, field_type=?, position=?",
+                        sid, fGeoid, pt.getGeoid(), pf.name(), pf.dataType(), pf.position());
+                }
             }
         }
 

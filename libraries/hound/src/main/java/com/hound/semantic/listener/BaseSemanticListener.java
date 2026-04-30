@@ -627,6 +627,11 @@ public abstract class BaseSemanticListener {
      * @param varName  variable name
      * @param tableRef raw table reference (e.g. "ORDERS" or "HR.ORDERS") without the %ROWTYPE suffix
      */
+    /** HND-04: Called for variables declared with a PL/SQL user-defined COLLECTION type. */
+    public void onPlTypeVariable(String varName, String typeName) {
+        engine.onPlTypeVariable(varName, typeName);
+    }
+
     public void onRowtypeVariable(String varName, String tableRef) {
         engine.onRowtypeVariable(varName, tableRef);
     }

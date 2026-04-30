@@ -271,8 +271,14 @@ public class HoundParserImpl implements HoundParser {
         timer.stop("resolve");
 
         long parseWalkResolveMs = timer.ms("parse") + timer.ms("walk") + timer.ms("resolve");
+        // Use caller-supplied session ID (e.g. Dali UUID) when provided via extra map,
+        // otherwise fall back to timestamp-counter for backward-compat batch runs.
+        String explicitSid = config.extra().get("hound.session.id");
+        String sid = (explicitSid != null && !explicitSid.isBlank())
+                ? explicitSid
+                : "session-" + sessionSeq.getAndIncrement();
         SemanticResult result = engine.getResult(
-                "session-" + sessionSeq.getAndIncrement(),
+                sid,
                 file.toString(),
                 config.dialect(),
                 parseWalkResolveMs
@@ -545,8 +551,12 @@ public class HoundParserImpl implements HoundParser {
         timer.stop("resolve");
 
         long parseWalkResolveMs = timer.ms("parse") + timer.ms("walk") + timer.ms("resolve");
+        String explicitSidText = config.extra().get("hound.session.id");
+        String sidText = (explicitSidText != null && !explicitSidText.isBlank())
+                ? explicitSidText
+                : "session-" + sessionSeq.getAndIncrement();
         SemanticResult result = engine.getResult(
-                "session-" + sessionSeq.getAndIncrement(),
+                sidText,
                 sourceName,
                 config.dialect(),
                 parseWalkResolveMs

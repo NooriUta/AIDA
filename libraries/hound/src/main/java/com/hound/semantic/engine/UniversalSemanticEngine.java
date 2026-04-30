@@ -637,6 +637,56 @@ public class UniversalSemanticEngine {
         logger.debug("KI-ROWTYPE-1: registered {} → table {}", rec.getGeoid(), tableGeoid);
     }
 
+    /**
+     * HND-04: Handles a variable declared with a PL/SQL user-defined COLLECTION type
+     * (e.g. {@code l_tab t_journal_stg_tab}).
+     *
+     * <p>Resolves the collection's element RECORD type, creates a DaliRecord for the
+     * variable, and propagates the RECORD's field definitions into it.  The
+     * {@link com.hound.semantic.model.RecordInfo#setPlTypeGeoid} back-reference is set
+     * so that RemoteWriter can emit the INSTANTIATES_TYPE edge.
+     *
+     * @param varName  variable name (e.g. "L_TAB")
+     * @param typeName raw type name as it appears in source (e.g. "t_journal_stg_tab")
+     */
+    public void onPlTypeVariable(String varName, String typeName) {
+        String routine = scopeManager.currentRoutine();
+        if (routine == null || varName == null || varName.isBlank()) return;
+
+        // Also register as ordinary variable for scope resolution
+        RoutineInfo ri = builder.getRoutines().get(routine);
+        if (ri != null) ri.addTypedVariable(varName, typeName);
+
+        // Resolve the collection type (try routine scope first, then fall back to any match)
+        com.hound.semantic.model.PlTypeInfo collType =
+                builder.resolvePlTypeByName(typeName, routine);
+        if (collType == null || !collType.isCollection()) return;
+
+        // Resolve the element record type
+        String elemName = collType.getElementTypeName();
+        if (elemName == null) return;
+        com.hound.semantic.model.PlTypeInfo recType =
+                builder.resolvePlTypeByName(elemName, collType.getScopeGeoid());
+        if (recType == null || !recType.isRecord()) return;
+
+        // Link element type geoid on collection (deferred — may have been null at registration)
+        if (collType.getElementTypeGeoid() == null) {
+            collType.setElementTypeGeoid(recType.getGeoid());
+        }
+
+        // Materialise a DaliRecord for the variable with the RECORD's field definitions
+        RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine);
+        if (rec == null) return;
+        rec.setPlTypeGeoid(collType.getGeoid());
+
+        int pos = 1;
+        for (com.hound.semantic.model.PlTypeFieldInfo f : recType.getFields()) {
+            rec.addField(f.name(), f.dataType(), pos++, null);
+        }
+        logger.debug("HND-04: materialised {} → {} fields from {}",
+                varName, recType.getFields().size(), recType.getName());
+    }
+
     public void onRoutineReturnType(String returnType) {
         String routine = scopeManager.currentRoutine();
         if (routine != null) {

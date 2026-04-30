@@ -181,6 +181,22 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
     // ── Config builder ─────────────────────────────────────────────────────────
 
+    /**
+     * Returns a copy of {@code base} with the Dali session UUID injected via the
+     * {@code extra} map under key {@code "hound.session.id"}.  HoundParserImpl reads
+     * this key in {@code analyzeFile} so that every Ygg vertex gets the same
+     * {@code session_id} as the Dali job — enabling correlated queries.
+     */
+    private static HoundConfig configWithSessionId(HoundConfig base, String sessionId) {
+        java.util.Map<String, String> merged = new java.util.HashMap<>(base.extra());
+        merged.put("hound.session.id", sessionId);
+        return new HoundConfig(
+                base.dialect(), base.targetSchema(), base.writeMode(),
+                base.arcadeUrl(), base.arcadeDbName(), base.arcadeUser(), base.arcadePassword(),
+                base.workerThreads(), base.strictResolution(), base.batchSize(),
+                merged);
+    }
+
     private HoundConfig buildConfig(ParseSessionInput input) {
         if (input.preview()) {
             return HoundConfig.defaultDisabled(input.dialect());
@@ -205,11 +221,13 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
         sessionService.startSession(sessionId, false, 1);
         long fileStart = System.currentTimeMillis();
 
+        // Propagate Dali session UUID into Hound so Ygg vertices carry the same session_id.
+        HoundConfig configWithSid = configWithSessionId(config, sessionId);
         String sourceRoot = file.getParent() != null ? file.getParent().toString() : null;
-        HoundEventListener listener = buildListener(sessionId, config, input.tenantAlias(), sourceRoot);
+        HoundEventListener listener = buildListener(sessionId, configWithSid, input.tenantAlias(), sourceRoot);
         ParseResult result = (input.dbName() != null && !input.dbName().isBlank())
-                ? houndParser.parse(file, config, input.dbName(), input.appName(), listener)
-                : houndParser.parse(file, config, listener);
+                ? houndParser.parse(file, configWithSid, input.dbName(), input.appName(), listener)
+                : houndParser.parse(file, configWithSid, listener);
 
         FileResult fr = toFileResult(result);
         sessionService.completeSession(sessionId, result, List.of(fr));
@@ -348,6 +366,9 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
         log.info("[{}] Batch parse: {} files in {}", sessionId, files.size(), dir);
         sessionService.startSession(sessionId, true, files.size());
 
+        // Propagate Dali session UUID into Hound so Ygg vertices carry the same session_id.
+        HoundConfig configWithSid = configWithSessionId(config, sessionId);
+
         List<FileResult> fileResults = new ArrayList<>();
 
         // Parse file-by-file so we can update progress after each one.
@@ -356,7 +377,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
         String batchRoot = dir.toString();
         for (Path file : files) {
             long   fileStart = System.currentTimeMillis();
-            FileResult fr = parseFileWithRetry(sessionId, file, config, input, batchRoot);
+            FileResult fr = parseFileWithRetry(sessionId, file, configWithSid, input, batchRoot);
             fileResults.add(fr);
             sessionService.recordFileComplete(sessionId, fr);
             if (fr.success()) {

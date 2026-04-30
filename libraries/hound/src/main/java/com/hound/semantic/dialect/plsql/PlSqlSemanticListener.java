@@ -130,7 +130,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             String tableRef = varType.substring(0, varType.length() - "%ROWTYPE".length());
             base.onRowtypeVariable(varName, tableRef);
         } else {
-            base.onRoutineVariable(varName, varType);
+            // HND-04: detect PL/SQL collection type → materialise DaliRecord from PlTypeInfo
+            String resolvedType = BaseSemanticListener.cleanIdentifier(varType);
+            if (resolvedType != null && base.engine.getBuilder()
+                    .resolvePlTypeByName(resolvedType, base.currentRoutine()) != null) {
+                base.onPlTypeVariable(varName, resolvedType);
+            } else {
+                base.onRoutineVariable(varName, varType);
+            }
         }
     }
 
@@ -247,6 +254,59 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     @Override
     public void exitCreate_package_body(PlSqlParser.Create_package_bodyContext ctx) {
         base.setPackage(null);
+    }
+
+    // =========================================================================
+    // PL/SQL TYPE IS RECORD / TABLE OF  (HND-03)
+    // =========================================================================
+
+    @Override
+    public void exitType_declaration(PlSqlParser.Type_declarationContext ctx) {
+        if (ctx == null || ctx.identifier() == null) return;
+        String typeName = BaseSemanticListener.cleanIdentifier(ctx.identifier().getText());
+        if (typeName == null || typeName.isBlank()) return;
+
+        // Scope: routine takes priority over package
+        String scopeGeoid = base.currentRoutine() != null
+                ? base.currentRoutine()
+                : base.currentPackage();
+        if (scopeGeoid == null) return;
+
+        var builder = base.engine.getBuilder();
+
+        if (ctx.record_type_def() != null) {
+            // TYPE t_rec IS RECORD (field1 TYPE1, field2 TYPE2, ...)
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.RECORD, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            var fieldSpecs = ctx.record_type_def().field_spec();
+            logger.debug("HND-03 RECORD={} scope={} fieldSpecs={}", typeName, scopeGeoid,
+                    fieldSpecs == null ? "null" : fieldSpecs.size());
+            if (fieldSpecs != null) {
+                for (int i = 0; i < fieldSpecs.size(); i++) {
+                    var fs = fieldSpecs.get(i);
+                    logger.debug("HND-03  fs[{}] colName={} raw={}", i,
+                            fs.column_name() == null ? "NULL" : fs.column_name().getText(),
+                            fs.getText());
+                    if (fs.column_name() == null) continue;
+                    String fieldName = BaseSemanticListener.cleanIdentifier(fs.column_name().getText());
+                    String fieldType = fs.type_spec() != null ? fs.type_spec().getText() : null;
+                    pt.addField(fieldName, fieldType, i + 1);
+                }
+            }
+            builder.registerPlType(pt);
+
+        } else if (ctx.table_type_def() != null) {
+            // TYPE t_tab IS TABLE OF t_rec INDEX BY PLS_INTEGER
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.COLLECTION, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            var ts = ctx.table_type_def().type_spec();
+            if (ts != null) {
+                pt.setElementTypeName(ts.getText());
+            }
+            builder.registerPlType(pt);
+        }
     }
 
     // =========================================================================

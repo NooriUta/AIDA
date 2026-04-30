@@ -3,6 +3,9 @@ package com.hound.storage;
 
 import com.hound.semantic.model.*;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -20,6 +23,8 @@ import java.util.*;
  * </ol>
  */
 public class JsonlBatchBuilder {
+
+    private static final Logger log = LoggerFactory.getLogger(JsonlBatchBuilder.class);
 
     private final StringBuilder vertices = new StringBuilder(64 * 1024);
     private final StringBuilder edges    = new StringBuilder(32 * 1024);
@@ -476,7 +481,8 @@ public class JsonlBatchBuilder {
                     "record_name", rec.getVarName(),
                     "routine_geoid", rec.getRoutineGeoid(),
                     "source_stmt_geoid", rec.getSourceStatementGeoid(),
-                    "fields", String.join(",", rec.getFields())
+                    "fields", String.join(",", rec.getFields()),
+                    "pl_type_geoid", rec.getPlTypeGeoid()  // HND-05: back-ref to PlTypeInfo template
             ));
         }
 
@@ -496,9 +502,48 @@ public class JsonlBatchBuilder {
                             "field_name",        fi.name(),
                             "field_order",       fi.ordinalPosition(),
                             "record_geoid",      rec.getGeoid(),
-                            "data_type",         fi.dataType(),          // null-ok: nullable for untyped collections
+                            "data_type",         fi.dataType(),
                             "ordinal_position",  fi.ordinalPosition(),
-                            "source_column_geoid", fi.sourceColumnGeoid() // null-ok: populated for %ROWTYPE fields only
+                            "source_column_geoid", fi.sourceColumnGeoid()
+                    ));
+                }
+            }
+        }
+
+        // 9e. DaliPlType (HND-05: PL/SQL TYPE IS RECORD / TABLE OF templates)
+        log.debug("HND-05 [9e] sid={} plTypes.size={}", sid, str.getPlTypes().size());
+        for (var e : str.getPlTypes().entrySet()) {
+            com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            log.debug("HND-05 [9e] writing DaliPlType geoid={} kind={} fields={}",
+                    pt.getGeoid(), pt.getKind(), pt.getFields().size());
+            b.appendVertex("DaliPlType", pt.getGeoid(), mapOf(
+                    "session_id",          sid,
+                    "type_geoid",          pt.getGeoid(),
+                    "type_name",           pt.getName(),
+                    "kind",                pt.getKind().name(),
+                    "element_type_geoid",  pt.getElementTypeGeoid(),
+                    "scope_geoid",         pt.getScopeGeoid(),
+                    "declared_at_line",    pt.getDeclaredAtLine() > 0 ? pt.getDeclaredAtLine() : null
+            ));
+        }
+
+        // 9f. DaliPlTypeField (HND-05: fields of RECORD-kind DaliPlType)
+        {
+            Set<String> insertedPlFieldGeoids = new HashSet<>();
+            for (var e : str.getPlTypes().entrySet()) {
+                com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+                if (!pt.isRecord()) continue;
+                log.debug("HND-05 [9f] RECORD={} fields.size={}", pt.getName(), pt.getFields().size());
+                for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
+                    String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
+                    if (!insertedPlFieldGeoids.add(fGeoid)) continue;
+                    b.appendVertex("DaliPlTypeField", fGeoid, mapOf(
+                            "session_id",  sid,
+                            "field_geoid", fGeoid,
+                            "type_geoid",  pt.getGeoid(),
+                            "field_name",  pf.name(),
+                            "field_type",  pf.dataType(),
+                            "position",    pf.position()
                     ));
                 }
             }
@@ -698,6 +743,20 @@ public class JsonlBatchBuilder {
                 if (usesRecord)
                     b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
             }
+            // DaliRecord → INSTANTIATES_TYPE → DaliPlType (HND-05)
+            if (rec.getPlTypeGeoid() != null)
+                b.appendEdge("INSTANTIATES_TYPE", recGeoid, rec.getPlTypeGeoid(), sidProps);
+        }
+
+        // HND-05: DaliPlType edges
+        for (var e : str.getPlTypes().entrySet()) {
+            com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            // DaliPackage/Routine → DECLARES_TYPE → DaliPlType
+            if (pt.getScopeGeoid() != null)
+                b.appendEdge("DECLARES_TYPE", pt.getScopeGeoid(), pt.getGeoid(), sidProps);
+            // DaliPlType(COLLECTION) → OF_TYPE → DaliPlType(RECORD)
+            if (pt.isCollection() && pt.getElementTypeGeoid() != null)
+                b.appendEdge("OF_TYPE", pt.getGeoid(), pt.getElementTypeGeoid(), sidProps);
         }
 
         // Structural: RETURNS_INTO (KI-RETURN-1: mirrors RemoteWriter.java:1372-1389)
@@ -1169,8 +1228,42 @@ public class JsonlBatchBuilder {
                     "record_name", rec.getVarName(),
                     "routine_geoid", rec.getRoutineGeoid(),
                     "source_stmt_geoid", rec.getSourceStatementGeoid(),
-                    "fields", String.join(",", rec.getFields())
+                    "fields", String.join(",", rec.getFields()),
+                    "pl_type_geoid", rec.getPlTypeGeoid()  // HND-05
             ));
+        }
+
+        // 7d. DaliPlType + DaliPlTypeField (HND-05)
+        for (var e : str.getPlTypes().entrySet()) {
+            com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            b.appendVertex("DaliPlType", pt.getGeoid(), mapOf(
+                    "session_id",         sid,
+                    "type_geoid",         pt.getGeoid(),
+                    "type_name",          pt.getName(),
+                    "kind",               pt.getKind().name(),
+                    "element_type_geoid", pt.getElementTypeGeoid(),
+                    "scope_geoid",        pt.getScopeGeoid(),
+                    "declared_at_line",   pt.getDeclaredAtLine() > 0 ? pt.getDeclaredAtLine() : null
+            ));
+        }
+        {
+            Set<String> seenPlFields = new HashSet<>();
+            for (var e : str.getPlTypes().entrySet()) {
+                com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+                if (!pt.isRecord()) continue;
+                for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
+                    String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
+                    if (!seenPlFields.add(fGeoid)) continue;
+                    b.appendVertex("DaliPlTypeField", fGeoid, mapOf(
+                            "session_id",  sid,
+                            "field_geoid", fGeoid,
+                            "type_geoid",  pt.getGeoid(),
+                            "field_name",  pf.name(),
+                            "field_type",  pf.dataType(),
+                            "position",    pf.position()
+                    ));
+                }
+            }
         }
 
         // 8. DaliAtom — skip "routine" containers (same atoms as statement containers, duplicate view)

@@ -137,4 +137,17 @@ public record HoundConfig(
                 arcadeDbName, arcadeUser, arcadePassword,
                 threads, strictResolution, batchSize, extra);
     }
+
+    /**
+     * Return a copy with an additional key/value in the {@link #extra} map.
+     * Use {@code "hound.session.id"} to propagate a Dali session UUID into Ygg
+     * so that {@code DaliSession.session_id} matches the Dali job UUID.
+     */
+    public HoundConfig withExtra(String key, String value) {
+        Map<String, String> merged = new HashMap<>(extra);
+        merged.put(key, value);
+        return new HoundConfig(dialect, targetSchema, writeMode, arcadeUrl,
+                arcadeDbName, arcadeUser, arcadePassword,
+                workerThreads, strictResolution, batchSize, merged);
+    }
 }

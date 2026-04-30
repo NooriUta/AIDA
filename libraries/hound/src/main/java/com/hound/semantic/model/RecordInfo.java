@@ -38,6 +38,8 @@ public class RecordInfo {
     private final List<FieldInfo> fieldInfos = new ArrayList<>();
     /** Geoid cursor-SELECT стейтмента, из которого BULK COLLECT заполняет эту запись */
     private String sourceStatementGeoid;
+    /** HND-02: geoid of the PlTypeInfo template this record was instantiated from (nullable) */
+    private String plTypeGeoid;
 
     public RecordInfo(String geoid, String varName, String routineGeoid) {
         this.geoid = geoid;
@@ -65,12 +67,15 @@ public class RecordInfo {
         this.sourceStatementGeoid = stmtGeoid;
     }
 
+    public void setPlTypeGeoid(String geoid) { this.plTypeGeoid = geoid; }
+
     // ── Getters ─────────────────────────────────────────────────────────────
 
     public String getGeoid()               { return geoid; }
     public String getVarName()             { return varName; }
     public String getRoutineGeoid()        { return routineGeoid; }
     public String getSourceStatementGeoid(){ return sourceStatementGeoid; }
+    public String getPlTypeGeoid()         { return plTypeGeoid; }
 
     /** Returns ordered field names (backward compat). */
     public List<String> getFields() {
