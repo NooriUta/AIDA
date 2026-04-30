@@ -8,7 +8,20 @@ import { useAuthStore } from '../../stores/authStore';
 export function LoginPage() {
   const { t }  = useTranslation();
   const navigate = useNavigate();
-  const { error, isAuthenticated } = useAuthStore();
+  const { error, isAuthenticated, setError } = useAuthStore();
+
+  // Read ?auth_error= set by BFF on KC callback error (e.g. account locked)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const e = params.get('auth_error');
+    if (e) {
+      setError(e);
+      params.delete('auth_error');
+      const qs = params.size ? '?' + params.toString() : '';
+      window.history.replaceState({}, '', window.location.pathname + qs);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Pick random slogan once per mount
   const sloganRef = useRef('');

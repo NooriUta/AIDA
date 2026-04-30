@@ -63,6 +63,8 @@ export default defineConfig({
           '/databases': { target: churTarget, changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
           '/team-docs': { target: churTarget, changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
           '/docs':      { target: churTarget, changeOrigin: true, rewrite: (p: string) => `/heimdall${p}` },
+          // UX Analytics — UA-04/05 (proxied to chur at same path)
+          '/heimdall/analytics': { target: churTarget, changeOrigin: true },
           // WebSocket event stream
           '/heimdall/ws': { target: churTarget.replace('http', 'ws'), changeOrigin: true, ws: true },
           '/dali/api':    { target: process.env.DALI_PROXY_TARGET ?? 'http://127.0.0.1:9090', changeOrigin: true, rewrite: (p: string) => p.replace(/^\/dali/, '') },

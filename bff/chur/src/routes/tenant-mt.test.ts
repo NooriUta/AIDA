@@ -23,15 +23,17 @@ vi.mock('../admin/provisioning', () => ({
 }));
 
 vi.mock('../keycloakAdmin', () => ({
-  listUsers:        vi.fn().mockResolvedValue([]),
-  inviteUser:       vi.fn().mockResolvedValue(undefined),
-  setUserRole:      vi.fn().mockResolvedValue(undefined),
-  setUserEnabled:   vi.fn().mockResolvedValue(undefined),
-  listOrgMembers:   vi.fn().mockResolvedValue([
+  listUsers:              vi.fn().mockResolvedValue([]),
+  inviteUser:             vi.fn().mockResolvedValue(undefined),
+  setUserRole:            vi.fn().mockResolvedValue(undefined),
+  setUserEnabled:         vi.fn().mockResolvedValue(undefined),
+  listOrgMembers:         vi.fn().mockResolvedValue([
     { id: 'u1', username: 'alice', email: 'alice@acme.io', role: 'viewer' },
   ]),
-  inviteUserToOrg:  vi.fn().mockResolvedValue(undefined),
-  removeOrgMember:  vi.fn().mockResolvedValue(undefined),
+  inviteUserToOrg:        vi.fn().mockResolvedValue(undefined),
+  removeOrgMember:        vi.fn().mockResolvedValue(undefined),
+  // MTN: tenant picker open to all roles — returns empty → fallback to own alias
+  getUserOrganizations:   vi.fn().mockResolvedValue([]),
 }));
 
 // ── CSRF header ───────────────────────────────────────────────────────────────
@@ -626,13 +628,14 @@ describe('SEC — RBAC scope enforcement', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it('SEC-01 · 403 — local-admin cannot GET tenant list (requires aida:admin)', async () => {
+  it('SEC-01 · 200 — local-admin gets own tenant (tenant picker open to all roles)', async () => {
     const cookie = await sidForTenant('acme');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants',
       cookies: { sid: cookie },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json())).toBe(true);
   });
 
   it('SEC-01 · 403 — local-admin cannot GET feature-flags (requires aida:admin)', async () => {
@@ -753,13 +756,14 @@ describe('SEC — RBAC scope enforcement', () => {
   });
 
   // SEC-05: viewer (seer:read only) blocked everywhere
-  it('SEC-05 · 403 — viewer cannot GET tenant list', async () => {
+  it('SEC-05 · 200 — viewer gets own tenant (tenant picker open to all roles)', async () => {
     const cookie = await sid('viewer');
     const res = await app.inject({
       method: 'GET', url: '/api/admin/tenants',
       cookies: { sid: cookie },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json())).toBe(true);
   });
 
   it('SEC-05 · 403 — viewer cannot trigger harvest', async () => {

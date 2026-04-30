@@ -5,6 +5,11 @@ COPY package*.json ./
 RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
+# Cache-bust: include a timestamp in the src copy layer label so Docker
+# always recompiles when source changes (Windows Docker Desktop doesn't
+# always detect mtime changes across the Windows/Linux boundary).
+ARG BUILDTIME=unknown
+LABEL buildtime="${BUILDTIME}"
 RUN npm run build
 
 FROM node:24-alpine AS runner
