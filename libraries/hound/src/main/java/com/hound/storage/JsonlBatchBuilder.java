@@ -757,6 +757,13 @@ public class JsonlBatchBuilder {
             // DaliPlType(COLLECTION) → OF_TYPE → DaliPlType(RECORD)
             if (pt.isCollection() && pt.getElementTypeGeoid() != null)
                 b.appendEdge("OF_TYPE", pt.getGeoid(), pt.getElementTypeGeoid(), sidProps);
+            // DaliPlType(RECORD) → HAS_RECORD_FIELD → DaliPlTypeField
+            if (pt.isRecord()) {
+                for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
+                    String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
+                    b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
+                }
+            }
         }
 
         // Structural: RETURNS_INTO (KI-RETURN-1: mirrors RemoteWriter.java:1372-1389)
