@@ -14,6 +14,7 @@ interface AuthStore {
   logout:            () => void;
   checkSession:      () => Promise<void>;
   clearError:        () => void;
+  setError:          (msg: string | null) => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -67,6 +68,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       clearError: () => set({ error: null }),
+      setError:   (msg) => set({ error: msg }),
     }),
     {
       name:       'heimdall-auth',

@@ -297,7 +297,7 @@ function pickHighestRole(roles: string[]): UserRole {
 //      Destructive ops are gated on aida:superadmin alone.
 const ROLE_AIDA_SCOPES: Record<string, string[]> = {
   'super-admin':  ['seer:read', 'seer:write', 'aida:harvest', 'aida:audit', 'aida:admin', 'aida:superadmin'],
-  'admin':        ['seer:read', 'seer:write', 'aida:harvest', 'aida:audit', 'aida:admin'],
+  'admin':        ['seer:read', 'seer:write', 'aida:harvest', 'aida:audit', 'aida:admin', 'aida:tenant:admin'],
   'local-admin':  ['seer:read', 'seer:write', 'aida:harvest', 'aida:tenant:admin'],
   'tenant-owner': ['seer:read', 'seer:write', 'aida:harvest', 'aida:tenant:admin', 'aida:tenant:owner'],
   'operator':     ['seer:read', 'aida:harvest'],

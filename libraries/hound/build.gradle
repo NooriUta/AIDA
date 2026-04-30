@@ -5,6 +5,7 @@ plugins {
     id 'java-library'
     id 'application'
     id 'idea'
+    id 'jacoco'
 }
 
 group = 'com.hound'
@@ -261,7 +262,25 @@ task diagnostic(type: JavaExec) {
 
 // ==================== TESTS ====================
 
+jacocoTestReport {
+    dependsOn test
+    reports {
+        html.required = true
+        xml.required  = true
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, excludes: [
+                'com/hound/parser/base/grammars/**',   // ANTLR generated
+                'com/hound/HoundApplication*',
+                'com/hound/HoundMain*',
+            ])
+        }))
+    }
+}
+
 test {
+    finalizedBy jacocoTestReport
     useJUnitPlatform()
     maxHeapSize = '2g'
     // AtomQualityProbeTest reads from external corpus dirs — manual probe, not CI

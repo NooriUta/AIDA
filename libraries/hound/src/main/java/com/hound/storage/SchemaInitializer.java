@@ -4,10 +4,13 @@ package com.hound.storage;
 // STATUS: embedded ArcadeDB branch DISABLED as of ArcadeDB 26.x upgrade (chore/arcadedb-26-no-embedded).
 // EmbeddedWriter.java and ensureSchema(Database) were removed — arcadedb-network client only.
 //
-// TODO(arcadedb-embed): restore when ArcadeDB 26 embedded engine API stabilises.
-// When restoring, also add G6/G8/DaliRecordField types to ensureSchema():
+// NOTE(arcadedb-embed): re-enabling embedded mode is BLOCKED on upstream — ArcadeDB pins
+// antlr4=4.9.1 (Gremlin compat, ArcadeData/arcadedb#3235) while our hound grammars need 4.13.2.
+// Re-evaluate after July 2026 once ArcadeDB 27.x with ANTLR ≥ 4.13 lands.
+// When that becomes possible, restore G6/G8/DaliRecordField types in ensureSchema():
 //   edges: BULK_COLLECTS_INTO, RECORD_USED_IN, HAS_RECORD_FIELD, FIELD_MAPS_TO
 //   vertex: DaliRecord, DaliRecordField
+// NOT tech-debt: external blocker, no in-repo action available.
 
 /**
  * Creates the ArcadeDB schema for all Dali vertex/edge/document types.

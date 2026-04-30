@@ -1,8 +1,10 @@
 // File: src/main/java/com/hound/storage/ArcadeDBSemanticWriter.java
 package com.hound.storage;
 
-// TODO(arcadedb-embed): EMBEDDED mode removed during 26.x upgrade.
-// Restore EmbeddedWriter + Mode.EMBEDDED after engine API stabilises.
+// NOTE(arcadedb-embed): EMBEDDED mode is intentionally DISABLED until ArcadeDB ≥ 27.x ships with
+// ANTLR ≥ 4.13.x. Upstream pins antlr4=4.9.1 (Gremlin/TinkerPop compat — ArcadeData/arcadedb#3235),
+// which conflicts with our hound grammars compiled under 4.13.2. Re-evaluate after July 2026.
+// NOT tech-debt: external blocker, no in-repo action available.
 
 import com.arcadedb.remote.RemoteDatabase;
 import com.hound.metrics.PipelineTimer;

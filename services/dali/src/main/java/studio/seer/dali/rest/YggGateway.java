@@ -42,22 +42,34 @@ public class YggGateway {
      *         {@code false} if creation failed (auth error, network issue, etc.)
      */
     public boolean ensureDatabase() {
-        FriggCommand cmd = new FriggCommand(null, "create database " + db, null);
+        return ensureDatabaseNamed(db);
+    }
+
+    /**
+     * Creates a named YGG database if it doesn't already exist.
+     * Used by {@link studio.seer.dali.rest.YggSchemaInitializer} to ensure the correct
+     * lineage/source-archive databases ({@code hound_default}, {@code hound_src_default})
+     * exist, rather than always checking the config-default {@code hound} database.
+     *
+     * @return {@code true} if the database exists or was created; {@code false} on error.
+     */
+    public boolean ensureDatabaseNamed(String dbName) {
+        FriggCommand cmd = new FriggCommand(null, "create database " + dbName, null);
         try {
             client.serverCommand(basicAuth(), cmd).await().atMost(TIMEOUT);
-            log.info("[YGG] database '{}' created", db);
+            log.info("[YGG] database '{}' created", dbName);
             return true;
         } catch (WebApplicationException e) {
             int status = e.getResponse().getStatus();
             if (status == 500 || status == 400) {
                 // ArcadeDB returns 500 or 400 when the database already exists — treat as success
-                log.info("[YGG] database '{}' already exists (HTTP {})", db, status);
+                log.info("[YGG] database '{}' already exists (HTTP {})", dbName, status);
                 return true;
             }
-            log.warn("[YGG] ensureDatabase failed — HTTP {}: {}", status, e.getMessage());
+            log.warn("[YGG] ensureDatabaseNamed({}) failed — HTTP {}: {}", dbName, status, e.getMessage());
             return false;
         } catch (Exception e) {
-            log.warn("[YGG] ensureDatabase failed (connection issue?): {}", e.getMessage());
+            log.warn("[YGG] ensureDatabaseNamed({}) failed (connection issue?): {}", dbName, e.getMessage());
             return false;
         }
     }

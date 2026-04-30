@@ -19,7 +19,7 @@ class AnvilCacheTest {
 
     @BeforeEach
     void clear() {
-        cache.invalidateDb("");  // full wipe between tests
+        cache.asMap().clear();  // true full wipe — invalidateDb("") only removes keys ending in ":"
     }
 
     @Test

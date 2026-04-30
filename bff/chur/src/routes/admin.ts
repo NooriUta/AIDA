@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   requireScope,
+  requireAnyScope,
   requireSameTenant,
 } from '../middleware/requireAdmin';
 import {
@@ -67,7 +68,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/admin/roles',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin')] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin')] },
     async (_request, reply) => {
       try {
         const roles = await listRoles();
@@ -79,7 +80,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // ── Tenants (admin+ only) ─────────────────────────────────────────────────
+  // ── Tenants (all authenticated — role-aware response) ────────────────────
+  // Admin/superadmin → all active tenants (FRIGG).
+  // Everyone else   → own KC org memberships (or own tenant alias as fallback).
+  // No scope guard here: TenantSelector calls this for every role, including
+  // viewer/editor/operator who need to know which tenant(s) they belong to.
+  // Security: viewers receive only their own org data — not the full list.
 
   app.get(
     '/admin/tenants',
@@ -117,7 +123,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/admin/tenants/:tenantId/users',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (_request, reply) => {
       try {
         const users = await listUsers();
@@ -131,7 +137,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/admin/tenants/:tenantId/users/invite',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (request, reply) => {
       const body = request.body as { email: string; name?: string; role: string };
       // Guard: local-admin cannot assign elevated roles
@@ -152,7 +158,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.put(
     '/admin/tenants/:tenantId/users/:userId/role',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       const { role } = request.body as { role: string };
@@ -174,7 +180,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.put(
     '/admin/tenants/:tenantId/users/:userId/disable',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       const { enabled } = request.body as { enabled?: boolean };
@@ -194,7 +200,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/admin/tenants/:tenantId/users/:userId/profile',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       try {
@@ -213,7 +219,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.put(
     '/admin/tenants/:tenantId/users/:userId/profile',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       const body = request.body as { title?: string; dept?: string; phone?: string };
@@ -244,7 +250,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/admin/tenants/:tenantId/users/:userId/prefs',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       try {
@@ -259,7 +265,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.put(
     '/admin/tenants/:tenantId/users/:userId/prefs',
-    { preHandler: [app.authenticate, requireScope('aida:tenant:admin'), requireSameTenant()] },
+    { preHandler: [app.authenticate, requireAnyScope('aida:admin', 'aida:superadmin', 'aida:tenant:admin'), requireSameTenant()] },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       try {
