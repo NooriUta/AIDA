@@ -59,6 +59,8 @@ export function ParseForm({ onSessionCreated, tenantAlias }: ParseFormProps) {
       const msg = (err as Error).message ?? 'request failed';
       if (msg.includes('clearBeforeWrite') || msg.includes('active')) {
         setError(t('dali.form.errAnotherActive'));
+      } else if (msg.includes('HTTP 413') || msg.includes('size exceeds') || msg.includes('too large')) {
+        setError(t('dali.form.err413'));
       } else {
         setError(msg);
       }

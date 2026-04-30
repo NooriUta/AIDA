@@ -53,6 +53,11 @@ public class AnvilCache {
         return cache.estimatedSize();
     }
 
+    /** Expose underlying map — for tests that need a true full wipe via {@code asMap().clear()}. */
+    public java.util.concurrent.ConcurrentMap<String, ImpactResult> asMap() {
+        return cache.asMap();
+    }
+
     /**
      * MTN-30: build a cache key scoped by tenantAlias. Call sites must pass the
      * tenantAlias resolved by {@code TenantContextFilter} (never derive it from

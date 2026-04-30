@@ -29,9 +29,11 @@ vi.mock('../keycloakAdmin', () => ({
   setUserRole:     vi.fn().mockResolvedValue(undefined),
   setUserEnabled:  vi.fn().mockResolvedValue(undefined),
   // KC-ORG-04 wire
-  listOrgMembers:   vi.fn().mockResolvedValue([]),
-  inviteUserToOrg:  vi.fn().mockResolvedValue(undefined),
-  removeOrgMember:  vi.fn().mockResolvedValue(undefined),
+  listOrgMembers:         vi.fn().mockResolvedValue([]),
+  inviteUserToOrg:        vi.fn().mockResolvedValue(undefined),
+  removeOrgMember:        vi.fn().mockResolvedValue(undefined),
+  // MTN: tenant picker open to all roles — returns empty → fallback to own alias
+  getUserOrganizations:   vi.fn().mockResolvedValue([]),
 }));
 
 // Stub FRIGG HTTP calls
@@ -77,10 +79,11 @@ describe('GET /api/admin/tenants', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('403 — viewer without aida:admin', async () => {
+  it('200 — viewer without aida:admin gets own tenant (tenant picker open to all roles)', async () => {
     const sid = await makeSid(['seer:read']);
     const res = await app.inject({ method: 'GET', url: '/api/admin/tenants', cookies: { sid } });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json())).toBe(true);
   });
 
   it('200 — admin with aida:admin', async () => {

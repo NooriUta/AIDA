@@ -1,7 +1,9 @@
 /**
  * CAP-06/07/08/09: Tenant lifecycle, member management, and reconnect endpoints.
  *
- * All routes under /api/admin/tenants/:alias require aida:superadmin or aida:admin.
+ * GET /api/admin/tenants — role-aware: admin/superadmin sees full FRIGG list;
+ * all other roles receive their own KC org memberships (for TenantSelector).
+ * All mutating routes (/api/admin/tenants/:alias) require aida:superadmin or aida:admin.
  * Member-management routes require aida:tenant:admin + same-tenant check.
  */
 import type { FastifyPluginAsync } from 'fastify';
@@ -28,6 +30,7 @@ import {
   setUserEnabled,
   listOrgMembers,
   listAllOrganizations,
+  getUserOrganizations,
   inviteUserToOrg,
   removeOrgMember,
 } from '../keycloakAdmin';
@@ -66,14 +69,28 @@ async function getTenantConfig(alias: string): Promise<Record<string, unknown> |
 export const tenantRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET /api/admin/tenants[?withStats=true] ─────────────────────────────────
-  // Base columns are cheap (single FRIGG query). withStats=true adds per-tenant
-  // counts (members from KC, atoms from YGG, sources from FRIGG dali_{alias}).
-  // Bounded concurrency of 5 keeps KC/YGG/FRIGG pressure flat even for many
-  // tenants. On per-tenant fetch failure the count is returned as `null`
-  // (FE shows "—") so one bad tenant never breaks the whole table.
+  // Role-aware response:
+  //   admin / superadmin  → full tenant list from FRIGG (with optional stats).
+  //   all other roles     → own KC org memberships only (TenantSelector support).
+  //
+  // No scope guard in preHandler: TenantSelector calls this endpoint for every
+  // role, including viewer/editor/operator.  The route handler enforces the
+  // privilege split instead, so non-admin users only ever see their own data.
   app.get<{ Querystring: { withStats?: string } }>('/api/admin/tenants',
-    { preHandler: [app.authenticate, requireScope('aida:admin'), adminRateLimit] },
+    { preHandler: [app.authenticate, adminRateLimit] },
     async (request, reply) => {
+      // Non-admin: return own tenant(s) only — no access to full FRIGG list.
+      const isAdmin = request.user.scopes?.includes('aida:admin')
+                   || request.user.scopes?.includes('aida:superadmin');
+      if (!isAdmin) {
+        const orgs = await getUserOrganizations(request.user.sub).catch(() => []);
+        if (orgs.length > 0) {
+          return reply.send(orgs.map(o => ({ tenantAlias: o.alias, status: 'ACTIVE', configVersion: 0 })));
+        }
+        // Fallback: own active tenant alias
+        const alias = request.user.activeTenantAlias ?? 'default';
+        return reply.send([{ tenantAlias: alias, status: 'ACTIVE', configVersion: 0 }]);
+      }
       type Row = {
         tenantAlias: string; status: string; configVersion: number;
         keycloakOrgId?: string;

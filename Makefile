@@ -116,6 +116,14 @@ restart: ## ← MOST COMMON: rebuild app from scratch and restart  (use after No
 	$(APP) build --no-cache
 	$(APP) up -d
 
+chur-rebuild: ## Rebuild + redeploy chur only (fast — recompiles TS, keeps npm cache)
+	@echo "[make] Compiling TypeScript locally..."
+	cd bff/chur && npx tsc --project tsconfig.json
+	@echo "[make] Copying compiled dist into running container..."
+	docker cp bff/chur/dist/. aida-root-chur-1:/app/dist/
+	docker restart aida-root-chur-1
+	@echo "[make] chur restarted with fresh dist ✓"
+
 all-up: ## Start all layers in order: stable → backend → app
 	$(STABLE) up -d
 	@echo "[make] Waiting for FRIGG, Ygg, Keycloak..."
