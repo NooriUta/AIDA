@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo, useCallback } from 'react';
+import { memo, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { KnotStatement, KnotSnippet, KnotAtom, KnotOutputColumn, KnotAffectedColumn } from '../../services/lineage';
 import { ToolbarSelect } from '../ui/ToolbarPrimitives';

@@ -105,7 +105,7 @@ describe('GET /admin/tenants/:tenantId/users', () => {
     const sid = await makeSid('viewer', ['seer:read']);
     const res = await app.inject({ method: 'GET', url: '/admin/tenants/default/users', cookies: { sid } });
     expect(res.statusCode).toBe(403);
-    expect(res.json().missing).toContain('aida:tenant:admin');
+    expect(res.json().requiredAnyOf).toContain('aida:tenant:admin');
   });
 
   it('200 — local-admin with aida:tenant:admin scope', async () => {
