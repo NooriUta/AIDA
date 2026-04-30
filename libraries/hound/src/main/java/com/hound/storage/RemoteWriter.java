@@ -949,7 +949,7 @@ class RemoteWriter {
                 sid, pt.getGeoid(), pt.getName(), pt.getKind().name(),
                 pt.getElementTypeGeoid(), pt.getScopeGeoid(),
                 pt.getDeclaredAtLine() > 0 ? pt.getDeclaredAtLine() : null);
-            if (pt.isRecord()) {
+            if (pt.hasFields()) { // RECORD and OBJECT both carry named fields
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
                     if (!insertedPlFieldGeoids.add(fGeoid)) continue;

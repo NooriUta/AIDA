@@ -106,6 +106,10 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE DECLARES_TYPE IF NOT EXISTS",
                 "CREATE EDGE TYPE OF_TYPE IF NOT EXISTS",
                 "CREATE EDGE TYPE INSTANTIATES_TYPE IF NOT EXISTS",
+                // HND-13: REF CURSOR → return type (DaliTable or %ROWTYPE resolved table)
+                "CREATE EDGE TYPE CURSOR_RETURNS IF NOT EXISTS",
+                // HND-15: CAST(MULTISET(SELECT...) AS t_list) → DaliPlType
+                "CREATE EDGE TYPE MULTISET_INTO IF NOT EXISTS",
                 // KI-005: UNIQUE and CHECK constraint vertex + edge types
                 "CREATE VERTEX TYPE DaliUniqueConstraint IF NOT EXISTS EXTENDS DaliConstraint",
                 "CREATE VERTEX TYPE DaliCheckConstraint IF NOT EXISTS EXTENDS DaliConstraint",

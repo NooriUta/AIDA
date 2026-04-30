@@ -17,7 +17,7 @@ import java.util.List;
  */
 public class PlTypeInfo {
 
-    public enum Kind { RECORD, COLLECTION }
+    public enum Kind { RECORD, COLLECTION, VARRAY, OBJECT, REF_CURSOR }
 
     private final String name;           // type name upper-case, e.g. "T_JOURNAL_STG_REC"
     private final Kind   kind;
@@ -72,6 +72,13 @@ public class PlTypeInfo {
         return Collections.unmodifiableList(fields);
     }
 
-    public boolean isRecord()     { return kind == Kind.RECORD; }
-    public boolean isCollection() { return kind == Kind.COLLECTION; }
+    public boolean isRecord()      { return kind == Kind.RECORD; }
+    public boolean isCollection()  { return kind == Kind.COLLECTION; }
+    public boolean isVarray()      { return kind == Kind.VARRAY; }
+    public boolean isObject()      { return kind == Kind.OBJECT; }
+    public boolean isRefCursor()   { return kind == Kind.REF_CURSOR; }
+    /** True for types that carry named field definitions (RECORD and OBJECT). */
+    public boolean hasFields()     { return kind == Kind.RECORD || kind == Kind.OBJECT; }
+    /** True for types that carry an element type (COLLECTION and VARRAY). */
+    public boolean hasElementType(){ return kind == Kind.COLLECTION || kind == Kind.VARRAY; }
 }

@@ -432,10 +432,31 @@ public class StructureAndLineageBuilder {
             PlTypeInfo pt = plTypes.get(scopeGeoid + ":TYPE:" + upper);
             if (pt != null) return pt;
         }
-        // Fall back to any scope with that type name
+        // HND-08C: schema-qualified lookup — "CRM.T_PRICE_BREAK" → scope="CRM", name="T_PRICE_BREAK"
+        if (upper.contains(".")) {
+            int dot = upper.lastIndexOf('.');
+            String schemaPrefix = upper.substring(0, dot);
+            String bareType    = upper.substring(dot + 1);
+            PlTypeInfo pt = plTypes.get(schemaPrefix + ":TYPE:" + bareType);
+            if (pt != null) return pt;
+        }
+        // Fall back to any scope with that type name (bare name match)
         return plTypes.values().stream()
-                .filter(pt -> upper.equals(pt.getName()))
+                .filter(pt -> upper.equals(pt.getName())
+                        || (upper.contains(".") && upper.endsWith("." + pt.getName())))
                 .findFirst().orElse(null);
+    }
+
+    /**
+     * HND-14: Injects virtual columns from a PlTypeInfo(RECORD/OBJECT) into a synthetic table geoid.
+     * Used when TABLE(function()) creates a virtual relation backed by a PIPELINED return type.
+     */
+    public void injectColumnsFromPlType(String tableGeoid, PlTypeInfo recordType) {
+        if (tableGeoid == null || recordType == null) return;
+        int pos = 1;
+        for (com.hound.semantic.model.PlTypeFieldInfo f : recordType.getFields()) {
+            addColumnWithOrdinal(tableGeoid, f.name(), null, null, pos++, f.dataType());
+        }
     }
 
     public Map<String, PlTypeInfo> getPlTypes() { return plTypes; }

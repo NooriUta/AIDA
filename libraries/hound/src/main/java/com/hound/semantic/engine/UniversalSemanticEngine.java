@@ -657,34 +657,48 @@ public class UniversalSemanticEngine {
         RoutineInfo ri = builder.getRoutines().get(routine);
         if (ri != null) ri.addTypedVariable(varName, typeName);
 
-        // Resolve the collection type (try routine scope first, then fall back to any match)
+        // Resolve the PL type (try routine scope first, then schema-qualified / bare-name fallback)
         com.hound.semantic.model.PlTypeInfo collType =
                 builder.resolvePlTypeByName(typeName, routine);
-        if (collType == null || !collType.isCollection()) return;
+        if (collType == null) return;
 
-        // Resolve the element record type
-        String elemName = collType.getElementTypeName();
-        if (elemName == null) return;
-        com.hound.semantic.model.PlTypeInfo recType =
-                builder.resolvePlTypeByName(elemName, collType.getScopeGeoid());
-        if (recType == null || !recType.isRecord()) return;
+        if (collType.isCollection() || collType.isVarray()) {
+            // COLLECTION / VARRAY: materialise DaliRecord from element (RECORD or OBJECT) type
+            String elemName = collType.getElementTypeName();
+            if (elemName == null) return;
+            com.hound.semantic.model.PlTypeInfo recType =
+                    builder.resolvePlTypeByName(elemName, collType.getScopeGeoid());
+            if (recType == null || !recType.hasFields()) return;
 
-        // Link element type geoid on collection (deferred — may have been null at registration)
-        if (collType.getElementTypeGeoid() == null) {
-            collType.setElementTypeGeoid(recType.getGeoid());
+            // Link element type geoid on collection (deferred — may have been null at registration)
+            if (collType.getElementTypeGeoid() == null) {
+                collType.setElementTypeGeoid(recType.getGeoid());
+            }
+
+            RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine);
+            if (rec == null) return;
+            rec.setPlTypeGeoid(collType.getGeoid());
+            int pos = 1;
+            for (com.hound.semantic.model.PlTypeFieldInfo f : recType.getFields()) {
+                rec.addField(f.name(), f.dataType(), pos++, null);
+            }
+            logger.debug("HND-04: materialised {} → {} fields from {}",
+                    varName, recType.getFields().size(), recType.getName());
+
+        } else if (collType.isObject()) {
+            // HND-08: OBJECT variable — materialise DaliRecord directly from OBJECT fields
+            RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine);
+            if (rec == null) return;
+            rec.setPlTypeGeoid(collType.getGeoid());
+            int pos = 1;
+            for (com.hound.semantic.model.PlTypeFieldInfo f : collType.getFields()) {
+                rec.addField(f.name(), f.dataType(), pos++, null);
+            }
+            logger.debug("HND-08: materialised OBJECT {} → {} fields from {}",
+                    varName, collType.getFields().size(), collType.getName());
+
         }
-
-        // Materialise a DaliRecord for the variable with the RECORD's field definitions
-        RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine);
-        if (rec == null) return;
-        rec.setPlTypeGeoid(collType.getGeoid());
-
-        int pos = 1;
-        for (com.hound.semantic.model.PlTypeFieldInfo f : recType.getFields()) {
-            rec.addField(f.name(), f.dataType(), pos++, null);
-        }
-        logger.debug("HND-04: materialised {} → {} fields from {}",
-                varName, recType.getFields().size(), recType.getName());
+        // VARRAY scalar / REF_CURSOR: just leave as typed variable (already registered above)
     }
 
     public void onRoutineReturnType(String returnType) {

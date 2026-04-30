@@ -89,6 +89,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (ctx.type_spec() != null) {
             base.onRoutineReturnType(ctx.type_spec().getText());
         }
+        // HND-09: capture PIPELINED flag from the function declaration keyword
+        if (!ctx.PIPELINED().isEmpty()) {
+            String rGeoid = base.currentRoutine();
+            if (rGeoid != null) {
+                var ri = base.engine.getBuilder().getRoutines().get(rGeoid);
+                if (ri != null) ri.setPipelined(true);
+            }
+        }
     }
 
     @Override
@@ -110,6 +118,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         extractParameters(ctx.parameter());
         if (ctx.type_spec() != null) {
             base.onRoutineReturnType(ctx.type_spec().getText());
+        }
+        // HND-09: capture PIPELINED flag from the function declaration keyword
+        if (!ctx.PIPELINED().isEmpty()) {
+            String rGeoid = base.currentRoutine();
+            if (rGeoid != null) {
+                var ri = base.engine.getBuilder().getRoutines().get(rGeoid);
+                if (ri != null) ri.setPipelined(true);
+            }
         }
     }
 
@@ -305,6 +321,98 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             if (ts != null) {
                 pt.setElementTypeName(ts.getText());
             }
+            builder.registerPlType(pt);
+
+        } else if (ctx.varray_type_def() != null) {
+            // HND-12: TYPE t_arr IS VARRAY(N) OF element_type
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.VARRAY, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            var ts = ctx.varray_type_def().type_spec();
+            if (ts != null) {
+                pt.setElementTypeName(ts.getText());
+            }
+            builder.registerPlType(pt);
+
+        } else if (ctx.ref_cursor_type_def() != null) {
+            // HND-13: TYPE t_cur IS REF CURSOR [RETURN type_spec]
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.REF_CURSOR, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            var rc = ctx.ref_cursor_type_def();
+            if (rc.type_spec() != null) {
+                // strong cursor: RETURN tbl%ROWTYPE or record type
+                pt.setElementTypeName(rc.type_spec().getText());
+            }
+            builder.registerPlType(pt);
+        }
+    }
+
+    // HND-08: CREATE TYPE schema.T_OBJ AS OBJECT (...) / TABLE OF / VARRAY
+    @Override
+    public void enterCreate_type(PlSqlParser.Create_typeContext ctx) {
+        if (ctx == null || ctx.type_definition() == null) return;
+        PlSqlParser.Type_definitionContext typeDef = ctx.type_definition();
+        if (typeDef.type_name() == null) return;
+
+        // Extract possibly schema-qualified type name: CRM.T_PRICE_BREAK → schema=CRM, name=T_PRICE_BREAK
+        var idExprs = typeDef.type_name().id_expression();
+        if (idExprs == null || idExprs.isEmpty()) return;
+        String schema;
+        String typeName;
+        if (idExprs.size() >= 2) {
+            schema   = BaseSemanticListener.cleanIdentifier(idExprs.get(idExprs.size() - 2).getText());
+            typeName = BaseSemanticListener.cleanIdentifier(idExprs.get(idExprs.size() - 1).getText());
+        } else {
+            schema   = base.currentSchema() != null ? base.currentSchema() : "_GLOBAL_";
+            typeName = BaseSemanticListener.cleanIdentifier(idExprs.get(0).getText());
+        }
+        if (typeName == null || typeName.isBlank()) return;
+        // scopeGeoid for schema-level types uses the schema name as a bare key
+        String scopeGeoid = (schema != null && !schema.isBlank()) ? schema : "_GLOBAL_";
+
+        PlSqlParser.Object_type_defContext objDef =
+                typeDef.object_type_def() != null ? typeDef.object_type_def() : null;
+        if (objDef == null || objDef.object_as_part() == null) return;
+
+        var asPart = objDef.object_as_part();
+        var builder = base.engine.getBuilder();
+
+        if (asPart.OBJECT() != null) {
+            // CREATE TYPE x AS OBJECT (field1 type1, ...)
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.OBJECT, scopeGeoid);
+            int pos = 1;
+            for (var member : objDef.object_member_spec()) {
+                // Alt 1: identifier() + type_spec() → attribute definition
+                if (member.identifier() != null && member.type_spec() != null) {
+                    String fieldName = BaseSemanticListener.cleanIdentifier(member.identifier().getText());
+                    String fieldType = member.type_spec().getText();
+                    pt.addField(fieldName, fieldType, pos++);
+                }
+                // Alt 2: element_spec() → method / subprogram — skip for lineage
+            }
+            logger.debug("HND-08 OBJECT={} scope={} fields={}", typeName, scopeGeoid, pt.getFields().size());
+            builder.registerPlType(pt);
+
+        } else if (asPart.nested_table_type_def() != null) {
+            // CREATE TYPE x AS TABLE OF elem_type — schema-level COLLECTION
+            String elemTypeName = asPart.nested_table_type_def().type_spec() != null
+                    ? asPart.nested_table_type_def().type_spec().getText() : null;
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.COLLECTION, scopeGeoid);
+            if (elemTypeName != null) pt.setElementTypeName(elemTypeName);
+            logger.debug("HND-08 COLLECTION={} scope={} elemType={}", typeName, scopeGeoid, elemTypeName);
+            builder.registerPlType(pt);
+
+        } else if (asPart.varray_type_def() != null) {
+            // HND-12: CREATE TYPE x AS VARRAY(N) OF elem_type — schema-level VARRAY
+            String elemTypeName = asPart.varray_type_def().type_spec() != null
+                    ? asPart.varray_type_def().type_spec().getText() : null;
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.VARRAY, scopeGeoid);
+            if (elemTypeName != null) pt.setElementTypeName(elemTypeName);
+            logger.debug("HND-12 VARRAY={} scope={} elemType={}", typeName, scopeGeoid, elemTypeName);
             builder.registerPlType(pt);
         }
     }

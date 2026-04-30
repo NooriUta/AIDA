@@ -527,12 +527,12 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 9f. DaliPlTypeField (HND-05: fields of RECORD-kind DaliPlType)
+        // 9f. DaliPlTypeField (HND-05: fields of RECORD/OBJECT-kind DaliPlType)
         {
             Set<String> insertedPlFieldGeoids = new HashSet<>();
             for (var e : str.getPlTypes().entrySet()) {
                 com.hound.semantic.model.PlTypeInfo pt = e.getValue();
-                if (!pt.isRecord()) continue;
+                if (!pt.hasFields()) continue; // skip COLLECTION, VARRAY, REF_CURSOR
                 log.debug("HND-05 [9f] RECORD={} fields.size={}", pt.getName(), pt.getFields().size());
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
@@ -754,11 +754,11 @@ public class JsonlBatchBuilder {
             // DaliPackage/Routine → DECLARES_TYPE → DaliPlType
             if (pt.getScopeGeoid() != null)
                 b.appendEdge("DECLARES_TYPE", pt.getScopeGeoid(), pt.getGeoid(), sidProps);
-            // DaliPlType(COLLECTION) → OF_TYPE → DaliPlType(RECORD)
-            if (pt.isCollection() && pt.getElementTypeGeoid() != null)
+            // DaliPlType(COLLECTION/VARRAY) → OF_TYPE → DaliPlType element type
+            if (pt.hasElementType() && pt.getElementTypeGeoid() != null)
                 b.appendEdge("OF_TYPE", pt.getGeoid(), pt.getElementTypeGeoid(), sidProps);
-            // DaliPlType(RECORD) → HAS_RECORD_FIELD → DaliPlTypeField
-            if (pt.isRecord()) {
+            // DaliPlType(RECORD/OBJECT) → HAS_RECORD_FIELD → DaliPlTypeField
+            if (pt.hasFields()) {
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
                     b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
@@ -1257,7 +1257,7 @@ public class JsonlBatchBuilder {
             Set<String> seenPlFields = new HashSet<>();
             for (var e : str.getPlTypes().entrySet()) {
                 com.hound.semantic.model.PlTypeInfo pt = e.getValue();
-                if (!pt.isRecord()) continue;
+                if (!pt.hasFields()) continue; // skip COLLECTION, VARRAY, REF_CURSOR
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
                     if (!seenPlFields.add(fGeoid)) continue;
