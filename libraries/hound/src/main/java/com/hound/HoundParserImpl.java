@@ -3,7 +3,7 @@ package com.hound;
 
 import com.hound.api.*;
 import com.hound.metrics.PipelineTimer;
-import com.hound.parser.PlSqlErrorCollector;
+import com.hound.parser.AntlrErrorCollector;
 import com.hound.semantic.model.AtomInfo;
 import com.hound.parser.base.grammars.sql.clickhouse.ClickHouseLexer;
 import com.hound.parser.base.grammars.sql.clickhouse.ClickHouseParser;
@@ -452,8 +452,8 @@ public class HoundParserImpl implements HoundParser {
                                               PipelineTimer timer) {
         return switch (dialect.toLowerCase()) {
             case "plsql" -> {
-                PlSqlErrorCollector errorCollector =
-                        new PlSqlErrorCollector(filePath, eventListener);
+                AntlrErrorCollector errorCollector =
+                        new AntlrErrorCollector(filePath, eventListener);
 
                 // KI-CONDCOMP-1: strip $IF/$ELSIF/$ELSE/$END directives before lexing
                 String preprocessed = new ConditionalCompilationPreprocessor().expand(sql);
@@ -484,36 +484,62 @@ public class HoundParserImpl implements HoundParser {
                 yield new ParseOutcome(errorCollector.getErrors(), errorCollector.getGrammarLimitations());
             }
             case "postgresql" -> {
+                AntlrErrorCollector pgCollector =
+                        new AntlrErrorCollector(filePath, eventListener);
+
                 timer.start("parse");
                 PostgreSQLLexer pgLexer = new PostgreSQLLexer(CharStreams.fromString(sql));
+                pgLexer.removeErrorListeners();
+                pgLexer.addErrorListener(pgCollector);
+
                 CommonTokenStream pgTokens = new CommonTokenStream(pgLexer);
                 PostgreSQLParser pgParser = new PostgreSQLParser(pgTokens);
                 pgParser.removeErrorListeners();
+                pgParser.addErrorListener(pgCollector);
+
                 PostgreSQLParser.RootContext pgTree = pgParser.root();
                 timer.stop("parse");
                 timer.count("tokens", pgTokens.getNumberOfOnChannelTokens());
+
+                if (pgCollector.hasErrors()) {
+                    logger.warn("[ANTLR4] {} syntax error(s) in: {}",
+                            pgCollector.getErrors().size(), basename(filePath));
+                }
 
                 timer.start("walk");
                 ParseTreeWalker.DEFAULT.walk((PostgreSQLSemanticListener) listener, pgTree);
                 timer.stop("walk");
 
-                yield new ParseOutcome(List.of(), List.of());
+                yield new ParseOutcome(pgCollector.getErrors(), pgCollector.getGrammarLimitations());
             }
             case "clickhouse" -> {
+                AntlrErrorCollector chCollector =
+                        new AntlrErrorCollector(filePath, eventListener);
+
                 timer.start("parse");
                 ClickHouseLexer chLexer = new ClickHouseLexer(CharStreams.fromString(sql));
+                chLexer.removeErrorListeners();
+                chLexer.addErrorListener(chCollector);
+
                 CommonTokenStream chTokens = new CommonTokenStream(chLexer);
                 ClickHouseParser chParser = new ClickHouseParser(chTokens);
                 chParser.removeErrorListeners();
+                chParser.addErrorListener(chCollector);
+
                 ClickHouseParser.ClickhouseFileContext chTree = chParser.clickhouseFile();
                 timer.stop("parse");
                 timer.count("tokens", chTokens.getNumberOfOnChannelTokens());
+
+                if (chCollector.hasErrors()) {
+                    logger.warn("[ANTLR4] {} syntax error(s) in: {}",
+                            chCollector.getErrors().size(), basename(filePath));
+                }
 
                 timer.start("walk");
                 ParseTreeWalker.DEFAULT.walk((ClickHouseSemanticListener) listener, chTree);
                 timer.stop("walk");
 
-                yield new ParseOutcome(List.of(), List.of());
+                yield new ParseOutcome(chCollector.getErrors(), chCollector.getGrammarLimitations());
             }
             default -> throw new IllegalArgumentException("Parser not implemented: " + dialect);
         };
