@@ -6787,6 +6787,9 @@ string_function
     | TO_DATE '(' (table_element | standard_function | expression) (
         DEFAULT concatenation ON CONVERSION ERROR
     )? (',' quoted_string (',' quoted_string)?)? ')'
+    | TO_TIMESTAMP '(' (table_element | standard_function | expression) (
+        DEFAULT concatenation ON CONVERSION ERROR
+    )? (',' quoted_string (',' quoted_string)?)? ')'
     ;
 
 standard_function

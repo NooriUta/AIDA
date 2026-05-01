@@ -13133,6 +13133,18 @@ public class PlSqlParserBaseListener implements PlSqlParserListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterDatetime_literal(PlSqlParser.Datetime_literalContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitDatetime_literal(PlSqlParser.Datetime_literalContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterNumeric_function_wrapper(PlSqlParser.Numeric_function_wrapperContext ctx) { }
 	/**
 	 * {@inheritDoc}

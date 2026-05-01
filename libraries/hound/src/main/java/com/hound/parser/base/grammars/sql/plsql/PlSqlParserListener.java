@@ -10944,6 +10944,16 @@ public interface PlSqlParserListener extends ParseTreeListener {
 	 */
 	void exitLiteral(PlSqlParser.LiteralContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link PlSqlParser#datetime_literal}.
+	 * @param ctx the parse tree
+	 */
+	void enterDatetime_literal(PlSqlParser.Datetime_literalContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link PlSqlParser#datetime_literal}.
+	 * @param ctx the parse tree
+	 */
+	void exitDatetime_literal(PlSqlParser.Datetime_literalContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link PlSqlParser#numeric_function_wrapper}.
 	 * @param ctx the parse tree
 	 */
