@@ -2,6 +2,8 @@ package com.hound.semantic;
 
 import com.hound.semantic.engine.UniversalSemanticEngine;
 import com.hound.semantic.dialect.plsql.PlSqlSemanticListener;
+import com.hound.semantic.model.ColumnInfo;
+import com.hound.semantic.model.LineageEdge;
 import com.hound.semantic.model.PlTypeInfo;
 import com.hound.semantic.model.RecordInfo;
 import com.hound.semantic.model.RoutineInfo;
@@ -9,18 +11,23 @@ import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * TC-HOUND-PT-06..09 (HND-11)
+ * TC-HOUND-PT-06..15 (HND-11, HND-14, HND-15)
  *
  * Verifies HND-08..10: schema-level CREATE TYPE AS OBJECT, TABLE OF (COLLECTION),
  * PIPELINED function flag capture, and PIPE ROW atom emission.
+ * Verifies HND-14: TABLE(func()) column injection from PIPELINED return type.
+ * Verifies HND-15: CAST(COLLECT/MULTISET) edge emission.
  */
+@Tag("plsql_parse")
 class PlTypeObjectPipelinedTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -279,5 +286,102 @@ class PlTypeObjectPipelinedTest {
                 "DaliRecord must have plTypeGeoid linking to DaliPlType (INSTANTIATES_TYPE)");
         assertTrue(pipeRecord.getPlTypeGeoid().toUpperCase().contains("T_LINE_REC"),
                 "plTypeGeoid must reference T_LINE_REC");
+    }
+
+    // ── TC-HOUND-PT-13: TABLE(func()) — columns injected from PIPELINED return type ─────
+
+    private static final String TABLE_FUNC_CONSUMER = """
+            CREATE OR REPLACE TYPE TESTSCHEMA.T_LINE_REC AS OBJECT (
+                item_id    NUMBER(10),
+                qty        NUMBER(12,3),
+                unit_price NUMBER(18,4)
+            );
+            /
+            CREATE OR REPLACE TYPE TESTSCHEMA.T_LINE_LIST AS TABLE OF TESTSCHEMA.T_LINE_REC;
+            /
+            CREATE OR REPLACE PACKAGE BODY PKG_PIPE_TEST AS
+                FUNCTION GET_LINES(p_id IN NUMBER) RETURN TESTSCHEMA.T_LINE_LIST PIPELINED IS
+                BEGIN NULL; END GET_LINES;
+            END PKG_PIPE_TEST;
+            /
+            CREATE OR REPLACE PACKAGE BODY PKG_CONSUMER AS
+                PROCEDURE USE_LINES(p_id IN NUMBER) IS
+                    v_id NUMBER;
+                BEGIN
+                    SELECT t.item_id INTO v_id
+                    FROM TABLE(PKG_PIPE_TEST.GET_LINES(p_id)) t
+                    WHERE ROWNUM = 1;
+                END USE_LINES;
+            END PKG_CONSUMER;
+            """;
+
+    @Test
+    void tc13_tableFunction_injectsColumnsFromPipelinedReturn() {
+        var engine = parse(TABLE_FUNC_CONSUMER);
+        Map<String, ColumnInfo> cols = engine.getBuilder().getColumns();
+
+        boolean hasItemId = cols.containsKey("FUNC_TABLE__PKG_PIPE_TEST__GET_LINES.ITEM_ID");
+        boolean hasQty    = cols.containsKey("FUNC_TABLE__PKG_PIPE_TEST__GET_LINES.QTY");
+        boolean hasPrice  = cols.containsKey("FUNC_TABLE__PKG_PIPE_TEST__GET_LINES.UNIT_PRICE");
+
+        assertTrue(hasItemId, "ITEM_ID must be injected into FUNC_TABLE__ from PIPELINED return type");
+        assertTrue(hasQty,    "QTY must be injected");
+        assertTrue(hasPrice,  "UNIT_PRICE must be injected");
+    }
+
+    // ── TC-HOUND-PT-14: CAST(COLLECT(col) AS type) → RETURNS_INTO edge ──────────────────
+
+    private static final String CAST_COLLECT_SQL = """
+            CREATE OR REPLACE TYPE T_PRICE_LIST AS TABLE OF NUMBER;
+            /
+            CREATE OR REPLACE PACKAGE BODY PKG_CAST_TEST AS
+                FUNCTION GET_PRICES RETURN T_PRICE_LIST IS
+                    v_result T_PRICE_LIST;
+                BEGIN
+                    SELECT CAST(COLLECT(item_price) AS T_PRICE_LIST)
+                    INTO v_result
+                    FROM ORDER_ITEMS;
+                    RETURN v_result;
+                END GET_PRICES;
+            END PKG_CAST_TEST;
+            """;
+
+    @Test
+    void tc14_castCollect_emitsReturnsIntoEdge() {
+        var engine = parse(CAST_COLLECT_SQL);
+        List<LineageEdge> edges = engine.getBuilder().getLineageEdges();
+
+        boolean hasEdge = edges.stream()
+                .anyMatch(e -> "RETURNS_INTO".equals(e.relationType())
+                            || "COLLECTS_INTO".equals(e.relationType()));
+        assertTrue(hasEdge, "CAST(COLLECT(col) AS type) must emit RETURNS_INTO or COLLECTS_INTO edge");
+    }
+
+    // ── TC-HOUND-PT-15: CAST(MULTISET(SELECT...) AS type) → MULTISET_INTO edge ──────────
+
+    private static final String CAST_MULTISET_SQL = """
+            CREATE OR REPLACE TYPE T_REC AS OBJECT (col1 VARCHAR2(100), col2 NUMBER(10));
+            /
+            CREATE OR REPLACE TYPE T_REC_LIST AS TABLE OF T_REC;
+            /
+            CREATE OR REPLACE PACKAGE BODY PKG_MULTISET_TEST AS
+                PROCEDURE PROC_A IS
+                    v_list T_REC_LIST;
+                BEGIN
+                    SELECT CAST(MULTISET(SELECT col1, col2 FROM source_table) AS T_REC_LIST)
+                    INTO v_list
+                    FROM DUAL;
+                END PROC_A;
+            END PKG_MULTISET_TEST;
+            """;
+
+    @Test
+    void tc15_castMultiset_emitsMultisetIntoEdge() {
+        var engine = parse(CAST_MULTISET_SQL);
+        List<LineageEdge> edges = engine.getBuilder().getLineageEdges();
+
+        boolean hasMultisetInto = edges.stream()
+                .anyMatch(e -> "MULTISET_INTO".equals(e.relationType()));
+        assertTrue(hasMultisetInto, "CAST(MULTISET(SELECT...) AS type) must emit MULTISET_INTO edge");
     }
 }
