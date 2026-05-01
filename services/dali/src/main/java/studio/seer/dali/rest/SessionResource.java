@@ -134,6 +134,92 @@ public class SessionResource {
     }
 
     /**
+     * Restarts a FAILED or CANCELLED session — re-enqueues a fresh parse with the
+     * same input parameters (dialect, source, clearBeforeWrite, dbName, tenantAlias).
+     * Returns the new session record (with a new id). The original session record
+     * is left untouched as audit trail.
+     *
+     * <pre>
+     * 202 Accepted  — new session enqueued, body = new Session
+     * 403 Forbidden — original session belongs to different tenant
+     * 404 Not Found — original session not found
+     * 409 Conflict  — original session is not in a restartable state (still running / queued)
+     * </pre>
+     *
+     * <p><b>Limitations:</b> JDBC harvest sessions cannot be restarted via this
+     * endpoint — credentials/schema-include are not preserved in the Session record.
+     * Use the harvest endpoint or the source UI to retrigger JDBC sources.
+     */
+    @POST
+    @Path("/{id}/restart")
+    @Consumes(MediaType.WILDCARD)
+    public Response restart(@PathParam("id") String id) {
+        String callerAlias = tenantCtx.tenantAlias();
+
+        // Look up original — tenant-scoped first, then global (for superadmin / cross-tenant FORBIDDEN).
+        java.util.Optional<Session> opt = sessionService.findForTenant(id, callerAlias);
+        if (opt.isEmpty() && tenantCtx.isSuperadmin()) {
+            opt = sessionService.find(id);
+        }
+        if (opt.isEmpty()) {
+            // 404 unless session exists for someone else — then 403.
+            if (sessionService.find(id).isPresent()) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(Map.of("status", "FORBIDDEN", "id", id))
+                        .build();
+            }
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("status", "NOT_FOUND", "id", id))
+                    .build();
+        }
+        Session original = opt.get();
+
+        // Only restart terminal-failed states. Don't restart already-running or queued ones.
+        switch (original.status()) {
+            case FAILED:
+            case CANCELLED:
+                break;
+            default:
+                return Response.status(Response.Status.CONFLICT)
+                        .entity(Map.of("status", "NOT_RESTARTABLE",
+                                "currentStatus", original.status().name(),
+                                "id", id))
+                        .build();
+        }
+
+        // Reject JDBC sources — Session does not preserve credentials.
+        if (original.source() != null && original.source().startsWith("jdbc:")) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("status", "JDBC_NOT_SUPPORTED",
+                            "message", "JDBC harvest sessions cannot be restarted via this endpoint — use POST /api/sessions/harvest",
+                            "id", id))
+                    .build();
+        }
+
+        ParseSessionInput input = new ParseSessionInput(
+                original.dialect(),
+                original.source(),
+                /* preview */          false,
+                /* clearBeforeWrite */  original.clearBeforeWrite(),
+                /* preserveDirectives */ false,
+                /* username */          null,
+                /* password */          null,
+                /* schemaInclude */     null,
+                original.dbName(),
+                /* appName */           null,
+                original.tenantAlias()
+        );
+        try {
+            Session enqueued = sessionService.enqueue(input);
+            return Response.accepted(enqueued).build();
+        } catch (IllegalStateException e) {
+            return Response.status(Response.Status.CONFLICT)
+                    .entity(Map.of("status", "ENQUEUE_FAILED", "message", e.getMessage(), "id", id))
+                    .build();
+        }
+    }
+
+    /**
      * Trigger a JDBC harvest for a specific tenant (used by Heimdall cron and admin UI).
      * Tenant alias comes from the X-Seer-Tenant-Alias header set by Chur, defaulting to "default".
      */
