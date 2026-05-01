@@ -649,7 +649,7 @@ public class UniversalSemanticEngine {
      * @param varName  variable name (e.g. "L_TAB")
      * @param typeName raw type name as it appears in source (e.g. "t_journal_stg_tab")
      */
-    public void onPlTypeVariable(String varName, String typeName) {
+    public void onPlTypeVariable(String varName, String typeName, int line) {
         String routine = scopeManager.currentRoutine();
         if (routine == null || varName == null || varName.isBlank()) return;
 
@@ -663,7 +663,9 @@ public class UniversalSemanticEngine {
         if (collType == null) return;
 
         if (collType.isCollection() || collType.isVarray()) {
-            // COLLECTION / VARRAY: materialise DaliRecord from element (RECORD or OBJECT) type
+            // COLLECTION / VARRAY: materialise as DaliTable (virtual) — not DaliRecord.
+            // A COLLECTION variable represents a set of rows; individual-row access
+            // (loop variable) creates a separate DaliRecord at the FOR-loop site.
             String elemName = collType.getElementTypeName();
             if (elemName == null) return;
             com.hound.semantic.model.PlTypeInfo recType =
@@ -675,19 +677,17 @@ public class UniversalSemanticEngine {
                 collType.setElementTypeGeoid(recType.getGeoid());
             }
 
-            RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine);
-            if (rec == null) return;
-            rec.setPlTypeGeoid(collType.getGeoid());
-            int pos = 1;
-            for (com.hound.semantic.model.PlTypeFieldInfo f : recType.getFields()) {
-                rec.addField(f.name(), f.dataType(), pos++, null);
-            }
-            logger.debug("HND-04: materialised {} → {} fields from {}",
-                    varName, recType.getFields().size(), recType.getName());
+            TableInfo vtable =
+                    builder.ensureVirtualTable(varName.toUpperCase(), routine, line);
+            if (vtable == null) return;
+            vtable.setPlTypeGeoid(collType.getGeoid());
+            builder.injectColumnsFromPlType(vtable.geoid(), recType);
+            logger.debug("HND-04: materialised COLLECTION {} as VirtualTable {} → {} cols from {}",
+                    varName, vtable.geoid(), recType.getFields().size(), recType.getName());
 
         } else if (collType.isObject()) {
             // HND-08: OBJECT variable — materialise DaliRecord directly from OBJECT fields
-            RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine);
+            RecordInfo rec = builder.ensureRecord(varName.toUpperCase(), routine, line);
             if (rec == null) return;
             rec.setPlTypeGeoid(collType.getGeoid());
             int pos = 1;
@@ -699,6 +699,11 @@ public class UniversalSemanticEngine {
 
         }
         // VARRAY scalar / REF_CURSOR: just leave as typed variable (already registered above)
+    }
+
+    /** Backward-compatible overload — delegates to onPlTypeVariable(varName, typeName, 0). */
+    public void onPlTypeVariable(String varName, String typeName) {
+        onPlTypeVariable(varName, typeName, 0);
     }
 
     public void onRoutineReturnType(String returnType) {

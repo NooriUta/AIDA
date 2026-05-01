@@ -476,7 +476,13 @@ class FactFinancePackageTest {
         assertTrue(vtables >= 1,
                 "Expected ≥ 1 VTABLE materialised from BULK COLLECT cursor variables; got " + vtables);
 
-        // At least one must have plTypeGeoid set (linked to T_*_STG_TAB)
+        // VTABLEs come from cursor BULK COLLECT INTO v_buffer where v_buffer
+        // is a strong-typed PL/SQL collection (t_invoice_stg_tab etc.) — engine
+        // materialises one VTABLE per LOAD_FACT_* procedure cursor.
+        assertTrue(vtables >= 3,
+                "Expected ≥ 3 VTABLE entries (one per LOAD_FACT_* procedure cursor); got " + vtables);
+
+        // At least one must have plTypeGeoid set (back-ref to T_*_STG_TAB)
         long withPlTypeRef = structure.getTables().values().stream()
                 .filter(t -> "VTABLE".equals(t.tableType()) && t.getPlTypeGeoid() != null)
                 .count();

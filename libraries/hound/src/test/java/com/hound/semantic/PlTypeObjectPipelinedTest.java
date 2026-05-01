@@ -247,4 +247,37 @@ class PlTypeObjectPipelinedTest {
         assertEquals(PlTypeInfo.Kind.REF_CURSOR, pt.getKind());
         assertNull(pt.getElementTypeName(), "weak cursor has no return type");
     }
+
+    // ── TC-HOUND-PT-12: PIPE ROW constructor → DaliRecord + DaliRecordField ───
+
+    @Test
+    void tc12_pipeRowObjectConstructor_createsRecordWithFields() {
+        // PIPELINED_FUNC fixture already contains:
+        //   PIPE ROW (TESTSCHEMA.T_LINE_REC(item_id => r.item_id, qty => r.qty, unit_price => r.unit_price))
+        var engine = parse(PIPELINED_FUNC);
+        Map<String, RecordInfo> records = engine.getBuilder().getRecords();
+
+        // A DaliRecord should be materialised with the synthetic name TESTSCHEMA:TYPE:T_LINE_REC:PIPE_ROW_OUT
+        RecordInfo pipeRecord = records.values().stream()
+                .filter(r -> r.getVarName().toUpperCase().startsWith("TESTSCHEMA:TYPE:T_LINE_REC:PIPE_ROW_OUT"))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(pipeRecord, "PIPE ROW constructor must materialise DaliRecord TESTSCHEMA:TYPE:T_LINE_REC:PIPE_ROW_OUT");
+        assertEquals(3, pipeRecord.getFields().size(),
+                "DaliRecord from T_LINE_REC(OBJECT) must carry 3 fields: item_id, qty, unit_price");
+
+        // Fields should match the OBJECT attribute names (getFields() returns List<String>)
+        var fieldNames = pipeRecord.getFields().stream()
+                .map(String::toUpperCase)
+                .toList();
+        assertTrue(fieldNames.contains("ITEM_ID"),    "field ITEM_ID expected");
+        assertTrue(fieldNames.contains("QTY"),        "field QTY expected");
+        assertTrue(fieldNames.contains("UNIT_PRICE"), "field UNIT_PRICE expected");
+
+        // The record should link to the PlTypeInfo via plTypeGeoid
+        assertNotNull(pipeRecord.getPlTypeGeoid(),
+                "DaliRecord must have plTypeGeoid linking to DaliPlType (INSTANTIATES_TYPE)");
+        assertTrue(pipeRecord.getPlTypeGeoid().toUpperCase().contains("T_LINE_REC"),
+                "plTypeGeoid must reference T_LINE_REC");
+    }
 }

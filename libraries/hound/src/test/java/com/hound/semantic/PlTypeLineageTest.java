@@ -3,7 +3,7 @@ package com.hound.semantic;
 import com.hound.semantic.engine.UniversalSemanticEngine;
 import com.hound.semantic.dialect.plsql.PlSqlSemanticListener;
 import com.hound.semantic.model.PlTypeInfo;
-import com.hound.semantic.model.RecordInfo;
+import com.hound.semantic.model.TableInfo;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
 import org.antlr.v4.runtime.*;
@@ -111,24 +111,31 @@ class PlTypeLineageTest {
                 "T_TAB element type name must be T_REC");
     }
 
-    // ── TC-HOUND-PT-03: l_tab variable → DaliRecord with propagated fields ───
+    // ── TC-HOUND-PT-03: l_tab variable → DaliTable(VTABLE) with injected columns ───
+    //   COLLECTION variable is a set of rows → virtual table, not a record.
 
     @Test
-    void collectionVariable_materialisesRecordWithFields() {
+    void collectionVariable_materialisesVirtualTableWithColumns() {
         var result = parse(TYPE_RECORD_AND_COLLECTION).getResult();
-        Map<String, RecordInfo> records = result.getStructure().getRecords();
+        var structure = result.getStructure();
+        Map<String, TableInfo> tables = structure.getTables();
 
-        RecordInfo lTab = records.values().stream()
-                .filter(r -> "L_TAB".equals(r.getVarName()))
+        TableInfo lTab = tables.values().stream()
+                .filter(t -> "VTABLE".equals(t.tableType()) && "L_TAB".equals(t.tableName()))
                 .findFirst().orElse(null);
 
-        assertNotNull(lTab, "RecordInfo for L_TAB must be present. Keys: " + records.keySet());
-        assertEquals(2, lTab.getFieldInfos().size(),
-                "L_TAB must have 2 fields propagated from T_REC. Got: " + lTab.getFieldInfos());
+        assertNotNull(lTab, "DaliTable(VTABLE) for L_TAB must be present. Tables: " + tables.keySet());
         assertNotNull(lTab.getPlTypeGeoid(),
-                "L_TAB must have plTypeGeoid set (back-ref to T_TAB)");
+                "L_TAB vtable must have plTypeGeoid set (back-ref to T_TAB)");
         assertTrue(lTab.getPlTypeGeoid().contains("T_TAB"),
                 "plTypeGeoid must reference T_TAB, got: " + lTab.getPlTypeGeoid());
+
+        // Columns injected from T_REC fields
+        long vtableCols = structure.getColumns().values().stream()
+                .filter(c -> lTab.geoid().equals(c.getTableGeoid()))
+                .count();
+        assertEquals(2, vtableCols,
+                "L_TAB vtable must have 2 columns from T_REC. Cols: " + structure.getColumns().keySet());
     }
 
     // ── TC-HOUND-PT-04: BULK COLLECT + FORALL → records + statements present ─
@@ -149,15 +156,18 @@ class PlTypeLineageTest {
         assertEquals(2, recType.getFields().size(),
                 "T_JOURNAL_REC must have 2 fields");
 
-        // Intermediate variable materialised
-        RecordInfo lJournal = structure.getRecords().values().stream()
-                .filter(r -> "L_JOURNAL_TAB".equals(r.getVarName()))
+        // COLLECTION variable materialised as DaliTable(VTABLE)
+        TableInfo lJournal = structure.getTables().values().stream()
+                .filter(t -> "VTABLE".equals(t.tableType()) && "L_JOURNAL_TAB".equals(t.tableName()))
                 .findFirst().orElse(null);
-        assertNotNull(lJournal, "RecordInfo for L_JOURNAL_TAB must be present");
-        assertEquals(2, lJournal.getFieldInfos().size(),
-                "L_JOURNAL_TAB must have 2 fields from T_JOURNAL_REC");
+        assertNotNull(lJournal, "DaliTable(VTABLE) for L_JOURNAL_TAB must be present");
         assertNotNull(lJournal.getPlTypeGeoid(),
-                "L_JOURNAL_TAB must have plTypeGeoid set");
+                "L_JOURNAL_TAB vtable must have plTypeGeoid set");
+        long vtableCols = structure.getColumns().values().stream()
+                .filter(c -> lJournal.geoid().equals(c.getTableGeoid()))
+                .count();
+        assertEquals(2, vtableCols,
+                "L_JOURNAL_TAB vtable must have 2 columns from T_JOURNAL_REC");
 
         // Statements parsed (SELECT + INSERT)
         assertFalse(structure.getStatements().isEmpty(),

@@ -79,6 +79,7 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE ATOM_REF_COLUMN IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_REF_STMT IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_REF_OUTPUT_COL IF NOT EXISTS",
+                "CREATE EDGE TYPE ATOM_REF_PLTYPE_FIELD IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_PRODUCES IF NOT EXISTS",
                 // Edge types — data flow / lineage
                 "CREATE EDGE TYPE DATA_FLOW IF NOT EXISTS",
@@ -150,6 +151,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliTable.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliTable.dblink IF NOT EXISTS STRING",        // KI-DBLINK-1
+                "CREATE PROPERTY DaliTable.pl_type_geoid IF NOT EXISTS STRING",  // HND-04: VTABLE → DaliPlType
                 // DaliColumn
                 "CREATE PROPERTY DaliColumn.db_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.column_geoid IF NOT EXISTS STRING",

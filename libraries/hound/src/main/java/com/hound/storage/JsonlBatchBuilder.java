@@ -249,7 +249,8 @@ public class JsonlBatchBuilder {
                     "schema_geoid", t.schemaGeoid(),
                     "table_type", effectiveType,
                     "column_count", t.columnCount(),
-                    "data_source", tblDs
+                    "data_source", tblDs,
+                    "pl_type_geoid", t.getPlTypeGeoid()  // HND-04: set for VTABLE entries
             ));
         }
 
@@ -494,7 +495,7 @@ public class JsonlBatchBuilder {
             for (var e : str.getRecords().entrySet()) {
                 RecordInfo rec = e.getValue();
                 for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
-                    String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+                    String fieldGeoid = rec.getGeoid() + ":" + fi.name();
                     if (!insertedFieldGeoids.add(fieldGeoid)) continue; // dedup
                     b.appendVertex("DaliRecordField", fieldGeoid, mapOf(
                             "session_id",        sid,
@@ -514,6 +515,10 @@ public class JsonlBatchBuilder {
         log.debug("HND-05 [9e] sid={} plTypes.size={}", sid, str.getPlTypes().size());
         for (var e : str.getPlTypes().entrySet()) {
             com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            if (b.canonicalRids.containsKey(pt.getGeoid())) {
+                b.recordDuplicate("DaliPlType"); // pre-inserted canonically by RemoteWriter
+                continue;
+            }
             log.debug("HND-05 [9e] writing DaliPlType geoid={} kind={} fields={}",
                     pt.getGeoid(), pt.getKind(), pt.getFields().size());
             b.appendVertex("DaliPlType", pt.getGeoid(), mapOf(
@@ -535,8 +540,12 @@ public class JsonlBatchBuilder {
                 if (!pt.hasFields()) continue; // skip COLLECTION, VARRAY, REF_CURSOR
                 log.debug("HND-05 [9f] RECORD={} fields.size={}", pt.getName(), pt.getFields().size());
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
-                    String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
+                    String fGeoid = pt.getGeoid() + ":" + pf.name();
                     if (!insertedPlFieldGeoids.add(fGeoid)) continue;
+                    if (b.canonicalRids.containsKey(fGeoid)) {
+                        b.recordDuplicate("DaliPlTypeField"); // pre-inserted canonically
+                        continue;
+                    }
                     b.appendVertex("DaliPlTypeField", fGeoid, mapOf(
                             "session_id",  sid,
                             "field_geoid", fGeoid,
@@ -732,7 +741,7 @@ public class JsonlBatchBuilder {
                 b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
             // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (mirrors RemoteWriter.java:1448-1453)
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
-                String fieldGeoid = recGeoid + ":FIELD:" + fi.name();
+                String fieldGeoid = recGeoid + ":" + fi.name();
                 b.appendEdge("HAS_RECORD_FIELD", recGeoid, fieldGeoid, sidProps);
             }
             // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT)
@@ -748,6 +757,13 @@ public class JsonlBatchBuilder {
                 b.appendEdge("INSTANTIATES_TYPE", recGeoid, rec.getPlTypeGeoid(), sidProps);
         }
 
+        // HND-04: DaliTable(VTABLE) → INSTANTIATES_TYPE → DaliPlType(COLLECTION)
+        for (var e : str.getTables().entrySet()) {
+            com.hound.semantic.model.TableInfo vt = e.getValue();
+            if ("VTABLE".equals(vt.tableType()) && vt.getPlTypeGeoid() != null)
+                b.appendEdge("INSTANTIATES_TYPE", e.getKey(), vt.getPlTypeGeoid(), sidProps);
+        }
+
         // HND-05: DaliPlType edges
         for (var e : str.getPlTypes().entrySet()) {
             com.hound.semantic.model.PlTypeInfo pt = e.getValue();
@@ -760,7 +776,7 @@ public class JsonlBatchBuilder {
             // DaliPlType(RECORD/OBJECT) → HAS_RECORD_FIELD → DaliPlTypeField
             if (pt.hasFields()) {
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
-                    String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
+                    String fGeoid = pt.getGeoid() + ":" + pf.name();
                     b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
                 }
             }
@@ -1240,9 +1256,29 @@ public class JsonlBatchBuilder {
             ));
         }
 
-        // 7d. DaliPlType + DaliPlTypeField (HND-05)
+        // 7c-vt. DaliTable(VTABLE) — session-specific virtual tables from COLLECTION variables (HND-04)
+        for (var e : str.getTables().entrySet()) {
+            TableInfo t = e.getValue();
+            if (!"VTABLE".equals(t.tableType())) continue;
+            b.appendVertex("DaliTable", e.getKey(), mapOf(
+                    "session_id",    sid,
+                    "table_geoid",   e.getKey(),
+                    "table_name",    t.tableName(),
+                    "schema_geoid",  t.schemaGeoid(),
+                    "table_type",    "VTABLE",
+                    "column_count",  t.columnCount(),
+                    "data_source",   "virtual",
+                    "pl_type_geoid", t.getPlTypeGeoid()
+            ));
+        }
+
+        // 7d. DaliPlType + DaliPlTypeField (HND-05) — skipped when canonical (pre-inserted by RemoteWriter)
         for (var e : str.getPlTypes().entrySet()) {
             com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            if (b.canonicalRids.containsKey(pt.getGeoid())) {
+                b.recordDuplicate("DaliPlType");
+                continue;
+            }
             b.appendVertex("DaliPlType", pt.getGeoid(), mapOf(
                     "session_id",         sid,
                     "type_geoid",         pt.getGeoid(),
@@ -1259,8 +1295,12 @@ public class JsonlBatchBuilder {
                 com.hound.semantic.model.PlTypeInfo pt = e.getValue();
                 if (!pt.hasFields()) continue; // skip COLLECTION, VARRAY, REF_CURSOR
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
-                    String fGeoid = pt.getGeoid() + ":FIELD:" + pf.name();
+                    String fGeoid = pt.getGeoid() + ":" + pf.name();
                     if (!seenPlFields.add(fGeoid)) continue;
+                    if (b.canonicalRids.containsKey(fGeoid)) {
+                        b.recordDuplicate("DaliPlTypeField");
+                        continue;
+                    }
                     b.appendVertex("DaliPlTypeField", fGeoid, mapOf(
                             "session_id",  sid,
                             "field_geoid", fGeoid,
@@ -1268,6 +1308,28 @@ public class JsonlBatchBuilder {
                             "field_name",  pf.name(),
                             "field_type",  pf.dataType(),
                             "position",    pf.position()
+                    ));
+                }
+            }
+        }
+
+        // 7e. DaliRecordField (G6: record fields — mirrors section "9" in 3-arg overload)
+        {
+            Set<String> seenRecFields = new HashSet<>();
+            for (var e : str.getRecords().entrySet()) {
+                RecordInfo rec = e.getValue();
+                for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
+                    String fieldGeoid = rec.getGeoid() + ":" + fi.name();
+                    if (!seenRecFields.add(fieldGeoid)) continue;
+                    b.appendVertex("DaliRecordField", fieldGeoid, mapOf(
+                            "session_id",          sid,
+                            "field_geoid",         fieldGeoid,
+                            "field_name",          fi.name(),
+                            "field_order",         fi.ordinalPosition(),
+                            "record_geoid",        rec.getGeoid(),
+                            "data_type",           fi.dataType(),
+                            "ordinal_position",    fi.ordinalPosition(),
+                            "source_column_geoid", fi.sourceColumnGeoid()
                     ));
                 }
             }
@@ -1422,18 +1484,48 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // BULK_COLLECTS_INTO, RECORD_USED_IN (G6: DaliRecord edges)
+        // BULK_COLLECTS_INTO, HAS_RECORD_FIELD, RECORD_USED_IN, INSTANTIATES_TYPE (G6: DaliRecord edges)
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recGeoid = rec.getGeoid();
             if (rec.getSourceStatementGeoid() != null)
                 b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
+            for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
+                String fieldGeoid = recGeoid + ":" + fi.name();
+                b.appendEdge("HAS_RECORD_FIELD", recGeoid, fieldGeoid, sidProps);
+            }
             for (var stmtEntry : str.getStatements().entrySet()) {
                 if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
                 boolean usesRecord = stmtEntry.getValue().getAffectedColumns().stream().anyMatch(
                         ac -> rec.getVarName().equals(ac.get("dataset_alias")));
                 if (usesRecord)
                     b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
+            }
+            if (rec.getPlTypeGeoid() != null)
+                b.appendEdge("INSTANTIATES_TYPE", recGeoid, rec.getPlTypeGeoid(), sidProps);
+        }
+
+        // HND-04: DaliTable(VTABLE) → INSTANTIATES_TYPE → DaliPlType(COLLECTION)
+        for (var e : str.getTables().entrySet()) {
+            com.hound.semantic.model.TableInfo vt = e.getValue();
+            if ("VTABLE".equals(vt.tableType()) && vt.getPlTypeGeoid() != null)
+                b.appendEdge("INSTANTIATES_TYPE", e.getKey(), vt.getPlTypeGeoid(), sidProps);
+        }
+
+        // HND-05: DaliPlType edges (DECLARES_TYPE, OF_TYPE, HAS_RECORD_FIELD)
+        // PlType/PlTypeField in canonicalRids → resolveEndpoint() returns actual @rids
+        // Package scope geoids in vertexIds → resolveEndpoint() returns batch temp IDs
+        for (var e : str.getPlTypes().entrySet()) {
+            com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            if (pt.getScopeGeoid() != null)
+                b.appendEdge("DECLARES_TYPE", pt.getScopeGeoid(), pt.getGeoid(), sidProps);
+            if (pt.hasElementType() && pt.getElementTypeGeoid() != null)
+                b.appendEdge("OF_TYPE", pt.getGeoid(), pt.getElementTypeGeoid(), sidProps);
+            if (pt.hasFields()) {
+                for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
+                    String fGeoid = pt.getGeoid() + ":" + pf.name();
+                    b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
+                }
             }
         }
 

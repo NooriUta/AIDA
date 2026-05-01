@@ -301,14 +301,15 @@ public class StructureAndLineageBuilder {
 
     /**
      * Registers a PL/SQL collection variable populated via BULK COLLECT INTO.
-     * Geoid formula: routineGeoid + ":RECORD:" + varNameUpper
+     * Geoid formula: routineGeoid + ":RECORD:" + varNameUpper[:LINE]
      * Idempotent — returns existing RecordInfo if already registered.
      */
-    public RecordInfo ensureRecord(String varName, String routineGeoid) {
+    public RecordInfo ensureRecord(String varName, String routineGeoid, int line) {
         if (varName == null) return null;
         String upperVar = varName.toUpperCase();
         String rg = routineGeoid != null ? routineGeoid : "";
-        String geoid = (rg.isBlank() ? "RECORD" : rg) + ":RECORD:" + upperVar;
+        String base = (rg.isBlank() ? "RECORD" : rg) + ":RECORD:" + upperVar;
+        String geoid = line > 0 ? base + ":" + line : base;
         boolean[] isNew = {false};
         RecordInfo rec = records.computeIfAbsent(geoid, k -> {
             logger.debug("New record registered: {} [{}]", upperVar, geoid);
@@ -322,7 +323,28 @@ public class StructureAndLineageBuilder {
         return rec;
     }
 
+    /** Backward-compatible overload — delegates to ensureRecord(varName, routineGeoid, 0). */
+    public RecordInfo ensureRecord(String varName, String routineGeoid) {
+        return ensureRecord(varName, routineGeoid, 0);
+    }
+
     public Map<String, RecordInfo> getRecords() { return records; }
+
+    /**
+     * HND-04: Creates (or returns existing) a virtual-table entry in the tables map for a
+     * COLLECTION/VARRAY variable.  Geoid format: {@code routineGeoid:VTABLE:VAR_NAME:LINE}.
+     */
+    public TableInfo ensureVirtualTable(String varName, String routineGeoid, int line) {
+        if (varName == null) return null;
+        String upper = varName.toUpperCase();
+        String rg    = routineGeoid != null ? routineGeoid : "";
+        String base  = (rg.isBlank() ? "VTABLE" : rg) + ":VTABLE:" + upper;
+        String geoid = line > 0 ? base + ":" + line : base;
+        return tables.computeIfAbsent(geoid, k -> {
+            logger.debug("New virtual table registered: {} [{}]", upper, geoid);
+            return new TableInfo(geoid, upper, routineGeoid, "VTABLE");
+        });
+    }
 
     // ═══════ Routines ═══════
 
@@ -416,23 +438,49 @@ public class StructureAndLineageBuilder {
      * Idempotent — a second registration with the same geoid is ignored.
      */
     public void registerPlType(PlTypeInfo pt) {
-        if (pt != null) plTypes.putIfAbsent(pt.getGeoid(), pt);
+        if (pt == null) return;
+        plTypes.putIfAbsent(pt.getGeoid(), pt);
+        // After any new type is added, sweep all unresolved COLLECTION/VARRAY types
+        // so OF_TYPE edges are emitted even when no variable of the collection type is declared.
+        plTypes.values().forEach(this::tryResolveElementTypeGeoid);
+    }
+
+    /**
+     * Resolves elementTypeGeoid for a COLLECTION/VARRAY type eagerly.
+     * Called at registration time and again after every new type is added.
+     */
+    private void tryResolveElementTypeGeoid(PlTypeInfo pt) {
+        if (pt.getElementTypeName() == null || pt.getElementTypeGeoid() != null) return;
+        if (!pt.isCollection() && !pt.isVarray()) return;
+        PlTypeInfo elem = resolvePlTypeByName(pt.getElementTypeName(), pt.getScopeGeoid());
+        if (elem != null) {
+            pt.setElementTypeGeoid(elem.getGeoid());
+            logger.debug("Resolved elementTypeGeoid {} → {}", pt.getGeoid(), elem.getGeoid());
+        }
     }
 
     public PlTypeInfo getPlType(String geoid) {
         return geoid != null ? plTypes.get(geoid) : null;
     }
 
-    /** Resolves a type by name within the given scope (package or routine geoid). */
+    /**
+     * Resolves a PL/SQL type by name using a smallest-to-largest scope chain:
+     *   routine-local → package → schema
+     *
+     * Resolution order:
+     *   1. Schema-qualified name ("CRM.T_PRICE_BREAK") — direct geoid lookup.
+     *   2. Walk the scope chain from the given scopeGeoid up to the root:
+     *      each step strips one ":KEYWORD:NAME" segment, moving from routine → package → schema.
+     *   3. Schema-level fallback: scan types whose scopeGeoid has no ':' (bare schema name).
+     *
+     * This means a type declared locally in a procedure shadows a same-named type in the
+     * enclosing package, which in turn shadows a schema-level type — standard PL/SQL visibility.
+     */
     public PlTypeInfo resolvePlTypeByName(String typeName, String scopeGeoid) {
         if (typeName == null) return null;
         String upper = typeName.toUpperCase();
-        // Prefer scope-local first
-        if (scopeGeoid != null) {
-            PlTypeInfo pt = plTypes.get(scopeGeoid + ":TYPE:" + upper);
-            if (pt != null) return pt;
-        }
-        // HND-08C: schema-qualified lookup — "CRM.T_PRICE_BREAK" → scope="CRM", name="T_PRICE_BREAK"
+
+        // 1. Schema-qualified: "CRM.T_PRICE_BREAK" → lookup at schema scope directly
         if (upper.contains(".")) {
             int dot = upper.lastIndexOf('.');
             String schemaPrefix = upper.substring(0, dot);
@@ -440,11 +488,38 @@ public class StructureAndLineageBuilder {
             PlTypeInfo pt = plTypes.get(schemaPrefix + ":TYPE:" + bareType);
             if (pt != null) return pt;
         }
-        // Fall back to any scope with that type name (bare name match)
+
+        // 2. Scope chain: routine → package → (schema handled in step 3)
+        String scope = scopeGeoid;
+        while (scope != null && !scope.isBlank()) {
+            PlTypeInfo pt = plTypes.get(scope + ":TYPE:" + upper);
+            if (pt != null) return pt;
+            scope = parentScopeGeoid(scope);
+        }
+
+        // 3. Schema-level fallback: types whose scopeGeoid is a bare name (no ':')
+        //    — "TESTSCHEMA", "_GLOBAL_", etc.  Returns null if ambiguous rather than guessing.
         return plTypes.values().stream()
-                .filter(pt -> upper.equals(pt.getName())
-                        || (upper.contains(".") && upper.endsWith("." + pt.getName())))
+                .filter(pt -> !pt.getScopeGeoid().contains(":")
+                        && (upper.equals(pt.getName())
+                            || (upper.contains(".") && upper.endsWith("." + pt.getName()))))
                 .findFirst().orElse(null);
+    }
+
+    /**
+     * Strips the last ":KEYWORD:NAME" segment from a scope geoid to move one level up.
+     * Examples:
+     *   "PKG:PROCEDURE:PROC_A"            → "PKG"
+     *   "PKG:PROCEDURE:PROC_A:FUNCTION:F" → "PKG:PROCEDURE:PROC_A"
+     *   "PKG"  (single-word)              → null  (already at top)
+     */
+    private static String parentScopeGeoid(String scopeGeoid) {
+        if (scopeGeoid == null) return null;
+        int last = scopeGeoid.lastIndexOf(':');
+        if (last <= 0) return null;          // single-word scope — no parent
+        int prev = scopeGeoid.lastIndexOf(':', last - 1);
+        if (prev <= 0) return null;          // two-segment "A:B" — no useful parent to climb to
+        return scopeGeoid.substring(0, prev);
     }
 
     /**
