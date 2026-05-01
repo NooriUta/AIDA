@@ -1066,12 +1066,12 @@ class RemoteWriter {
                     a.put("warning", AtomInfo.STATUS_UNBOUND);
                 }
 
-                rcmd("INSERT INTO DaliAtom SET session_id=?, statement_geoid=?, atom_id=?, atom_text=?, " +
+                rcmd("INSERT INTO DaliAtom SET session_id=?, statement_geoid=?, atom_id=?, atom_text=?, atom_geoid=?, " +
                         "atom_context=?, parent_context=?, position=?, sposition=?, " +
                         "is_complex=?, is_column_reference=?, is_function_call=?, is_constant=?, " +
                         "is_routine_param=?, is_routine_var=?, table_name=?, column_name=?, " +
                         "table_geoid=?, status=?, warning=?, merge_clause=?, output_column_sequence=?, nested_atoms_count=?",
-                    sid, stmtGeoid, atomId, at.getKey(),
+                    sid, stmtGeoid, atomId, a.get("atom_text"), at.getKey(),
                     a.get("atom_context"), a.get("parent_context"), a.get("position"), a.get("sposition"),
                     a.get("is_complex"), a.get("is_column_reference"), a.get("is_function_call"),
                     a.get("is_constant"), a.get("is_routine_param"), a.get("is_routine_var"),
