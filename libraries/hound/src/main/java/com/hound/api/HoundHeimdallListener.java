@@ -147,7 +147,7 @@ public class HoundHeimdallListener implements HoundEventListener {
 
     @Override
     public void onParseError(String file, int line, int charPos, String msg) {
-        send("PARSE_ERROR", "WARN", 0, Map.of(
+        send("PARSE_ERROR", "ERROR", 0, Map.of(
                 "file", relPath(file),
                 "line", line,
                 "col",  charPos,
@@ -156,7 +156,7 @@ public class HoundHeimdallListener implements HoundEventListener {
 
     @Override
     public void onParseWarning(String file, int line, int charPos, String msg) {
-        send("PARSE_WARNING", "INFO", 0, Map.of(
+        send("PARSE_WARNING", "WARN", 0, Map.of(
                 "file", relPath(file),
                 "line", line,
                 "col",  charPos,

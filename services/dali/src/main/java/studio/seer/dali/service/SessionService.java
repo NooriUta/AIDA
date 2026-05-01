@@ -151,7 +151,7 @@ public class SessionService {
                 tenantAlias);
         sessions.put(sessionId, session);
         persist(session);
-        emitter.jobEnqueued(sessionId, input.source(), input.dialect());
+        emitter.jobEnqueued(sessionId, tenantAlias, input.source(), input.dialect());
         try {
             org.jobrunr.jobs.JobId jrJobId = scheduleParseJob(sessionId, input);
             jobRunrIdMap.put(sessionId, UUID.fromString(jrJobId.toString()));
@@ -360,7 +360,7 @@ public class SessionService {
         Session cancelled = sessions.get(sessionId);
         if (cancelled != null) persist(cancelled);
 
-        emitter.sessionCancelled(sessionId);
+        emitter.sessionCancelled(sessionId, tenantAlias);
         log.info("[cancelSession] Session {} marked CANCELLED (tenant={})", sessionId, tenantAlias);
         return new CancelResult("CANCELLING", "Session marked CANCELLED; JobRunr deletion requested");
     }

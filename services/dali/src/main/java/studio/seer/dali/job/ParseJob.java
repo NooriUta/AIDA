@@ -127,7 +127,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
             HoundConfig config = buildConfig(input);
             log.info("[ParseJob] sid={} preview={} writeMode={} clear={}",
                     sessionId, input.preview(), config.writeMode(), input.clearBeforeWrite());
-            emitter.sessionStarted(sessionId, src, input.dialect(), input.preview(),
+            emitter.sessionStarted(sessionId, input.tenantAlias(), src, input.dialect(), input.preview(),
                     input.clearBeforeWrite(), config.workerThreads());
 
             // hound_src is a permanent archive — clearBeforeWrite NEVER clears it.
@@ -137,7 +137,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
                 long clearStart = System.currentTimeMillis();
                 houndParser.cleanAll(config);
                 long clearMs = System.currentTimeMillis() - clearStart;
-                emitter.yggClearCompleted(sessionId, clearMs);  // EV-03
+                emitter.yggClearCompleted(sessionId, input.tenantAlias(), clearMs);  // EV-03
                 log.info("[{}] YGG truncated in {}ms", sessionId, clearMs);
             }
 
@@ -161,11 +161,11 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
             log.error("[{}] ParseJob failed: {}", sessionId, e.getMessage(), e);
             // EV-05: detect ArcadeDB connectivity failures separately from parse errors
             if (isArcadeConnectionError(e)) {
-                emitter.dbConnectionError(sessionId, "ygg", buildErrorMessage(e));
+                emitter.dbConnectionError(sessionId, input.tenantAlias(), "ygg", buildErrorMessage(e));
             }
             String errorMsg = buildErrorMessage(e);
             sessionService.failSession(sessionId, errorMsg);
-            emitter.sessionFailed(sessionId, errorMsg, System.currentTimeMillis() - startMs);
+            emitter.sessionFailed(sessionId, input.tenantAlias(), errorMsg, System.currentTimeMillis() - startMs);
             if (!input.preview()) {
                 archiveWriter.failSession(sessionId, input, System.currentTimeMillis(), System.currentTimeMillis() - startMs);
                 archiveWriter.writeErrors(sessionId, input, null, src, List.of(errorMsg), "SESSION_ERROR");
@@ -231,7 +231,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
         FileResult fr = toFileResult(result);
         sessionService.completeSession(sessionId, result, List.of(fr));
-        emitter.sessionCompleted(sessionId, result.atomCount(), result.resolutionRate(),
+        emitter.sessionCompleted(sessionId, input.tenantAlias(), result.atomCount(), result.resolutionRate(),
                 result.durationMs(), 1);
 
         // EV-02: report YGG write outcome
@@ -321,7 +321,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
         ParseResult merged = merge(jdbcUrl, fileResults);
         sessionService.completeSession(sessionId, merged, fileResults);
-        emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
+        emitter.sessionCompleted(sessionId, tenantAlias, merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
 
         // EV-02: report YGG write outcome for JDBC source
@@ -398,7 +398,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
         ParseResult merged = merge(input.source(), fileResults);
         sessionService.completeSession(sessionId, merged, fileResults);
-        emitter.sessionCompleted(sessionId, merged.atomCount(), merged.resolutionRate(),
+        emitter.sessionCompleted(sessionId, input.tenantAlias(), merged.atomCount(), merged.resolutionRate(),
                 merged.durationMs(), fileResults.size());
 
         // EV-02: report YGG write outcome for batch
