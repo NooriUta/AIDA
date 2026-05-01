@@ -25,7 +25,7 @@ class DaliHoundListenerTest {
     @BeforeEach
     void setUp() {
         emitter  = mock(HeimdallEmitter.class);
-        listener = new DaliHoundListener("sess-001", "plsql", emitter);
+        listener = new DaliHoundListener("sess-001", "plsql", "acme", emitter);
     }
 
     // ── onFileParseStarted ────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ class DaliHoundListenerTest {
     void onFileParseStarted_delegatesToFileParsingStarted() {
         listener.onFileParseStarted("/sql/ORDERS.sql", "plsql");
 
-        verify(emitter).fileParsingStarted("sess-001", "/sql/ORDERS.sql", "plsql");
+        verify(emitter).fileParsingStarted("sess-001", "acme", "/sql/ORDERS.sql", "plsql");
         verifyNoMoreInteractions(emitter);
     }
 
@@ -57,7 +57,7 @@ class DaliHoundListenerTest {
 
         listener.onFileParseCompleted("/sql/PKG_ETL.sql", result);
 
-        verify(emitter).atomExtracted("sess-001", "/sql/PKG_ETL.sql", 120);
+        verify(emitter).atomExtracted("sess-001", "acme", "/sql/PKG_ETL.sql", 120);
         verifyNoMoreInteractions(emitter);
     }
 
@@ -67,7 +67,7 @@ class DaliHoundListenerTest {
 
         listener.onFileParseCompleted("/sql/empty.sql", result);
 
-        verify(emitter).atomExtracted("sess-001", "/sql/empty.sql", 0);
+        verify(emitter).atomExtracted("sess-001", "acme", "/sql/empty.sql", 0);
     }
 
     // ── onParseError ──────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ class DaliHoundListenerTest {
         listener.onParseError("/path/to/ORDERS.sql", 42, 7, "mismatched input");
 
         // emitter receives only the filename, not the full path (Paths.get(...).getFileName())
-        verify(emitter).parseError("sess-001", "ORDERS.sql", 42, 7, "mismatched input");
+        verify(emitter).parseError("sess-001", "acme", "ORDERS.sql", 42, 7, "mismatched input");
         verifyNoMoreInteractions(emitter);
     }
 
@@ -85,7 +85,7 @@ class DaliHoundListenerTest {
     void onParseError_flatFileName_passedThrough() {
         listener.onParseError("PACKAGE.sql", 1, 0, "no viable alternative");
 
-        verify(emitter).parseError("sess-001", "PACKAGE.sql", 1, 0, "no viable alternative");
+        verify(emitter).parseError("sess-001", "acme", "PACKAGE.sql", 1, 0, "no viable alternative");
     }
 
     // ── onParseWarning ────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ class DaliHoundListenerTest {
     void onParseWarning_delegatesToParseWarning() {
         listener.onParseWarning("/data/PROCS.sql", 100, 3, "rule mismatch");
 
-        verify(emitter).parseWarning("sess-001", "PROCS.sql", 100, 3, "rule mismatch");
+        verify(emitter).parseWarning("sess-001", "acme", "PROCS.sql", 100, 3, "rule mismatch");
         verifyNoMoreInteractions(emitter);
     }
 
@@ -106,7 +106,7 @@ class DaliHoundListenerTest {
 
         listener.onError("/sql/HUGE.sql", cause);
 
-        verify(emitter).fileParsingFailed("sess-001", "/sql/HUGE.sql", "stack overflow in grammar");
+        verify(emitter).fileParsingFailed("sess-001", "acme", "/sql/HUGE.sql", "stack overflow in grammar");
         verifyNoMoreInteractions(emitter);
     }
 
@@ -118,7 +118,7 @@ class DaliHoundListenerTest {
 
         listener.onError("/sql/BUGGY.sql", npe);
 
-        verify(emitter).fileParsingFailed("sess-001", "/sql/BUGGY.sql", null);
+        verify(emitter).fileParsingFailed("sess-001", "acme", "/sql/BUGGY.sql", null);
     }
 
     // ── helper ────────────────────────────────────────────────────────────────

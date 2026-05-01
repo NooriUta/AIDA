@@ -12,7 +12,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * ANTLR4 {@link org.antlr.v4.runtime.ANTLRErrorListener} for the PL/SQL grammar.
+ * Generic ANTLR4 {@link org.antlr.v4.runtime.ANTLRErrorListener} for any Hound grammar
+ * (PL/SQL, PostgreSQL, ClickHouse).
  *
  * <p>Classifies every ANTLR4 syntax event into two buckets:
  * <ul>
@@ -22,16 +23,16 @@ import java.util.List;
  *       These go into {@code ParseResult.errors()} and cause {@code isSuccess() = false}.
  *   <li><b>grammarLimitations</b> — recoverable ANTLR4 events (the parser continued):
  *       {@code extraneous input}, {@code missing <token>}, {@code mismatched input}.
- *       These typically mean a valid Oracle construct not fully covered by the grammar.
+ *       These typically mean a valid SQL construct not fully covered by the grammar.
  *       They go into {@code ParseResult.warnings()} and do NOT affect {@code isSuccess()}.
  * </ul>
  *
  * <p>All items are also logged (errors at WARN, grammar limitations at DEBUG) and forwarded
  * to the supplied {@link HoundEventListener} ({@code onParseError} / {@code onParseWarning}).
  */
-public class PlSqlErrorCollector extends BaseErrorListener {
+public class AntlrErrorCollector extends BaseErrorListener {
 
-    private static final Logger log = LoggerFactory.getLogger(PlSqlErrorCollector.class);
+    private static final Logger log = LoggerFactory.getLogger(AntlrErrorCollector.class);
 
     /** Maximum number of errors/warnings collected per file (to avoid log spam). */
     private static final int MAX_ERRORS   = 50;
@@ -85,7 +86,7 @@ public class PlSqlErrorCollector extends BaseErrorListener {
     private final List<String>       errors             = new ArrayList<>();
     private final List<String>       grammarLimitations = new ArrayList<>();
 
-    public PlSqlErrorCollector(String file, HoundEventListener listener) {
+    public AntlrErrorCollector(String file, HoundEventListener listener) {
         this.file     = file;
         this.listener = listener;
     }
@@ -106,7 +107,7 @@ public class PlSqlErrorCollector extends BaseErrorListener {
             try {
                 listener.onParseWarning(file, line, charPositionInLine, msg);
             } catch (Exception ex) {
-                log.debug("[PlSqlErrorCollector] onParseWarning callback failed: {}", ex.getMessage());
+                log.debug("[AntlrErrorCollector] onParseWarning callback failed: {}", ex.getMessage());
             }
         } else {
             if (errors.size() >= MAX_ERRORS) return;
@@ -115,7 +116,7 @@ public class PlSqlErrorCollector extends BaseErrorListener {
             try {
                 listener.onParseError(file, line, charPositionInLine, msg);
             } catch (Exception ex) {
-                log.debug("[PlSqlErrorCollector] onParseError callback failed: {}", ex.getMessage());
+                log.debug("[AntlrErrorCollector] onParseError callback failed: {}", ex.getMessage());
             }
         }
     }

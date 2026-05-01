@@ -15,7 +15,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Verifies that {@link PlSqlErrorCollector} surfaces ANTLR4 parse errors
+ * Verifies that {@link AntlrErrorCollector} surfaces ANTLR4 parse errors
  * through {@link HoundEventListener#onParseError} and into {@link ParseResult#errors()}.
  *
  * <p>Fixtures live in {@code src/test/resources/plsql/errors/}.
