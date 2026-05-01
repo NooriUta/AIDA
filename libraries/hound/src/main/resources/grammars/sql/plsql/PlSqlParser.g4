@@ -1655,8 +1655,7 @@ index_partitioning_clause
     ;
 
 index_partitioning_values_list
-    : literal (',' literal)*
-    | TIMESTAMP literal (',' TIMESTAMP literal)*
+    : (literal | datetime_literal) (',' (literal | datetime_literal))*
     ;
 
 local_partitioned_index
@@ -1824,7 +1823,7 @@ drop_index_partition
     ;
 
 split_index_partition
-    : SPLIT PARTITION partition_name_old AT '(' literal (',' literal)* ')' (
+    : SPLIT PARTITION partition_name_old AT '(' (literal | datetime_literal) (',' (literal | datetime_literal))* ')' (
         INTO '(' index_partition_description ',' index_partition_description ')'
     )? parallel_clause?
     ;
@@ -2216,12 +2215,12 @@ into_clause1
 //Making assumption on partition ad subpartition key value clauses
 partition_key_value
     : literal
-    | TIMESTAMP quoted_string
+    | datetime_literal
     ;
 
 subpartition_key_value
     : literal
-    | TIMESTAMP quoted_string
+    | datetime_literal
     ;
 
 //https://docs.oracle.com/cd/E11882_01/server.112/e41084/statements_4006.htm#SQLRF01106
@@ -3769,12 +3768,11 @@ range_values_clause
     ;
 
 range_values_list
-    : literal (',' literal)*
-    | TIMESTAMP literal (',' TIMESTAMP literal)*
+    : (literal | datetime_literal) (',' (literal | datetime_literal))*
     ;
 
 list_values_clause
-    : VALUES '(' (literal (',' literal)* | TIMESTAMP literal (',' TIMESTAMP literal)* | DEFAULT) ')'
+    : VALUES '(' ((literal | datetime_literal) (',' (literal | datetime_literal))* | DEFAULT) ')'
     ;
 
 table_partition_description
@@ -5053,7 +5051,7 @@ modify_table_partition
 
 split_table_partition
     : SPLIT partition_extended_names (
-        AT '(' literal (',' literal)* ')' INTO '(' range_partition_desc (',' range_partition_desc)* ')'
+        AT '(' (literal | datetime_literal) (',' (literal | datetime_literal))* ')' INTO '(' range_partition_desc (',' range_partition_desc)* ')'
         | INTO '(' (
             range_partition_desc (',' range_partition_desc)*
             | list_partition_desc (',' list_partition_desc)*
@@ -6925,6 +6923,11 @@ literal
     | numeric
     | numeric_negative
     | MAXVALUE
+    ;
+
+datetime_literal
+    : DATE CHAR_STRING
+    | TIMESTAMP CHAR_STRING
     ;
 
 numeric_function_wrapper
