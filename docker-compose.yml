@@ -147,28 +147,7 @@ services:
       retries: 3
       start_period: 20s
 
-  # ── Shell (Module Federation host — AIDA Platform entrypoint) ────────────
-  shell:
-    build:
-      context: .
-      dockerfile: frontends/shell/Dockerfile
-    ports:
-      - "25175:5175"
-    environment:
-      VITE_VERDANDI_URL:  http://localhost:15173/remoteEntry.js
-      VITE_HEIMDALL_URL:  http://localhost:25174/remoteEntry.js
-    depends_on:
-      chur:
-        condition: service_started
-      verdandi:
-        condition: service_started
-      heimdall-frontend:
-        condition: service_started
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5175/ || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+  # Shell removed 2026-05-01 — replaced by independent SPAs on subdomains
+  # (seer.* → Verdandi, heimdall.* → Heimdall-frontend). See SPRINT_REMOVE_MODULE_FEDERATION.
 
 volumes: {}
