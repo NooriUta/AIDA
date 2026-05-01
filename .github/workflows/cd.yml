@@ -571,8 +571,30 @@ jobs:
 
             echo "Deploy OK — ${{ env.RELEASE_TAG }} (${{ github.sha }})"
 
+      # ── Sync master to release HEAD (master = prod) ───────────────────────────
+      # Policy: master IS the production branch. After successful prod deploy,
+      # fast-forward master to current release HEAD so master always reflects
+      # what's actually running in prod. Tag is then created on master HEAD.
+      # Only fires on workflow_dispatch from cd-release.yml.
+      - name: Fast-forward master to release (prod-verified)
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Fetch current master to verify FF is possible
+          git fetch origin master
+          # Check master is ancestor of current HEAD (release)
+          if git merge-base --is-ancestor origin/master HEAD; then
+            git push origin HEAD:master
+            echo "✅ master fast-forwarded to ${{ github.sha }}"
+          else
+            echo "::warning::master is not an ancestor of release HEAD — manual reconciliation needed"
+            echo "  master: $(git rev-parse origin/master)"
+            echo "  release: ${{ github.sha }}"
+          fi
+
       # ── Create git tag after successful prod deploy ───────────────────────────
-      # Tag is created HERE (after prod verified), not in cd-release.yml.
+      # Tag is created HERE (after prod verified + master synced), not in cd-release.yml.
       # Only when triggered via workflow_dispatch from cd-release.yml (inputs.tag set).
       # For push:tags trigger (manual/legacy), tag already exists — skip.
       - name: Create and push release tag (prod-verified)
