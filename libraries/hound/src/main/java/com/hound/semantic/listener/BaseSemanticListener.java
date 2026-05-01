@@ -627,6 +627,15 @@ public abstract class BaseSemanticListener {
      * @param varName  variable name
      * @param tableRef raw table reference (e.g. "ORDERS" or "HR.ORDERS") without the %ROWTYPE suffix
      */
+    /** HND-04: Called for variables declared with a PL/SQL user-defined COLLECTION type. */
+    public void onPlTypeVariable(String varName, String typeName) {
+        engine.onPlTypeVariable(varName, typeName);
+    }
+
+    public void onPlTypeVariable(String varName, String typeName, int line) {
+        engine.onPlTypeVariable(varName, typeName, line);
+    }
+
     public void onRowtypeVariable(String varName, String tableRef) {
         engine.onRowtypeVariable(varName, tableRef);
     }
@@ -1071,7 +1080,7 @@ public abstract class BaseSemanticListener {
         String targetGeoid = switch (kind) {
             case "RECORD_FIELD" -> {
                 String[] parts = varName.split("\\.", 2);
-                yield routineGeoid + ":RECORD:" + parts[0] + ":FIELD:" + parts[1];
+                yield routineGeoid + ":RECORD:" + parts[0] + ":" + parts[1];
             }
             case "PARAMETER" -> routineGeoid + ":PARAM:" + varName;
             case "RECORD"    -> routineGeoid + ":RECORD:" + varName;

@@ -445,6 +445,59 @@ class RemoteWriter {
                 Collections.unmodifiableSet(newColumnGeoids));
     }
 
+    /**
+     * HND-v2: Pre-inserts DaliPlType + DaliPlTypeField as canonical session-specific vertices
+     * before the NDJSON batch. Calling this before {@link JsonlBatchBuilder#buildFromResult}
+     * and merging the returned map into canonicalRids ensures:
+     * <ol>
+     *   <li>Idempotency: re-submitting the same session does not cause DuplicatedKeyException.
+     *   <li>Edge resolution: appendEdge() finds PlType/PlTypeField geoids in canonicalRids
+     *       and uses actual @rids, which is required when the vertex is not in the batch payload.
+     * </ol>
+     *
+     * @return geoid → actual DB @rid for all DaliPlType and DaliPlTypeField vertices of this session.
+     */
+    private Map<String, String> preInsertPlTypes(String sid, Structure str) {
+        if (str.getPlTypes() == null || str.getPlTypes().isEmpty()) return Map.of();
+
+        for (var e : str.getPlTypes().entrySet()) {
+            PlTypeInfo pt = e.getValue();
+            try {
+                rcmd("INSERT INTO DaliPlType SET session_id=?, type_geoid=?, type_name=?, kind=?, element_type_geoid=?, scope_geoid=?",
+                        sid, pt.getGeoid(), pt.getName(), pt.getKind().name(),
+                        pt.getElementTypeGeoid(), pt.getScopeGeoid());
+            } catch (RuntimeException ex) {
+                String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                if (!msg.contains("DuplicatedKeyException") && !msg.contains("Found duplicate key")
+                        && !msg.contains("Duplicated key")) throw ex;
+                logger.debug("[pltype] DaliPlType '{}' already exists (sid={}) — skipping insert", pt.getGeoid(), sid);
+            }
+        }
+
+        for (var e : str.getPlTypes().entrySet()) {
+            PlTypeInfo pt = e.getValue();
+            if (!pt.hasFields()) continue;
+            for (PlTypeFieldInfo pf : pt.getFields()) {
+                String fGeoid = pt.getGeoid() + ":" + pf.name();
+                try {
+                    rcmd("INSERT INTO DaliPlTypeField SET session_id=?, field_geoid=?, type_geoid=?, field_name=?, field_type=?, position=?",
+                            sid, fGeoid, pt.getGeoid(), pf.name(), pf.dataType(), pf.position());
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "";
+                    if (!msg.contains("DuplicatedKeyException") && !msg.contains("Found duplicate key")
+                            && !msg.contains("Duplicated key")) throw ex;
+                    logger.debug("[pltype] DaliPlTypeField '{}' already exists — skipping insert", fGeoid);
+                }
+            }
+        }
+
+        Map<String, String> rids = new LinkedHashMap<>();
+        rids.putAll(buildRidMap("DaliPlType",      "type_geoid",  sid));
+        rids.putAll(buildRidMap("DaliPlTypeField", "field_geoid", sid));
+        logger.debug("[pltype] preInsertPlTypes: {} rids for sid={}", rids.size(), sid);
+        return rids;
+    }
+
     private Map<String, String> buildOcByOrderMap(String sid) {
         Map<String, String> map = new HashMap<>();
         try {
@@ -925,17 +978,38 @@ class RemoteWriter {
             RecordInfo rec = e.getValue();
             String fieldsJson = String.join(",", rec.getFields());
             rcmd("INSERT INTO DaliRecord SET session_id=?, record_geoid=?, record_name=?, " +
-                    "routine_geoid=?, source_stmt_geoid=?, fields=?",
+                    "routine_geoid=?, source_stmt_geoid=?, fields=?, pl_type_geoid=?",
                 sid, rec.getGeoid(), rec.getVarName(),
-                rec.getRoutineGeoid(), rec.getSourceStatementGeoid(), fieldsJson);
+                rec.getRoutineGeoid(), rec.getSourceStatementGeoid(), fieldsJson,
+                rec.getPlTypeGeoid());
             // DaliRecordField — one vertex per named field (dedup across batch)
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
-                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+                String fieldGeoid = rec.getGeoid() + ":" + fi.name();
                 if (!insertedFieldGeoids.add(fieldGeoid)) continue; // already inserted
                 rcmd("INSERT INTO DaliRecordField SET session_id=?, field_geoid=?, field_name=?, " +
                         "field_order=?, record_geoid=?, data_type=?, ordinal_position=?, source_column_geoid=?",
                     sid, fieldGeoid, fi.name(), fi.ordinalPosition(), rec.getGeoid(),
                     fi.dataType(), fi.ordinalPosition(), fi.sourceColumnGeoid());
+            }
+        }
+
+        // ── DaliPlType + DaliPlTypeField (HND-05) ──
+        Set<String> insertedPlFieldGeoids = new HashSet<>();
+        for (var e : str.getPlTypes().entrySet()) {
+            com.hound.semantic.model.PlTypeInfo pt = e.getValue();
+            rcmd("INSERT INTO DaliPlType SET session_id=?, type_geoid=?, type_name=?, kind=?, " +
+                    "element_type_geoid=?, scope_geoid=?, declared_at_line=?",
+                sid, pt.getGeoid(), pt.getName(), pt.getKind().name(),
+                pt.getElementTypeGeoid(), pt.getScopeGeoid(),
+                pt.getDeclaredAtLine() > 0 ? pt.getDeclaredAtLine() : null);
+            if (pt.hasFields()) { // RECORD and OBJECT both carry named fields
+                for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
+                    String fGeoid = pt.getGeoid() + ":" + pf.name();
+                    if (!insertedPlFieldGeoids.add(fGeoid)) continue;
+                    rcmd("INSERT INTO DaliPlTypeField SET session_id=?, field_geoid=?, type_geoid=?, " +
+                            "field_name=?, field_type=?, position=?",
+                        sid, fGeoid, pt.getGeoid(), pf.name(), pf.dataType(), pf.position());
+                }
             }
         }
 
@@ -1380,7 +1454,7 @@ class RemoteWriter {
             String recRid = rid.records.get(e.getKey());
             if (recRid == null) continue;
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
-                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fi.name();
+                String fieldGeoid = rec.getGeoid() + ":" + fi.name();
                 String rfRid = rid.recordFields.get(fieldGeoid);
                 if (rfRid != null) edgeByRid("HAS_RECORD_FIELD", recRid, rfRid, sid);
             }
@@ -1464,7 +1538,7 @@ class RemoteWriter {
                 edgeByRid("BULK_COLLECTS_INTO", srcStmtRid, recRid, sid);
             // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (one per named field)
             for (String fieldName : rec.getFields()) {
-                String fieldGeoid = rec.getGeoid() + ":FIELD:" + fieldName;
+                String fieldGeoid = rec.getGeoid() + ":" + fieldName;
                 String fieldRid = rid.recordFields.get(fieldGeoid);
                 if (fieldRid != null)
                     edgeByRid("HAS_RECORD_FIELD", recRid, fieldRid, sid);
@@ -1687,14 +1761,19 @@ class RemoteWriter {
                 }
             }
 
+            // HND-v2: Pre-insert DaliPlType + DaliPlTypeField as canonical vertices (before batch)
+            Map<String, String> plTypeRids = preInsertPlTypes(sid, str);
+
             // Phase 4: Build batch for session-specific objects (DaliStatement, DaliAtom,
             // DaliOutputColumn, DaliAffectedColumn, etc.) and send.
             // NOTE (B2): rid.ocByOrder and rid.affCols were built at Phase 2 BEFORE the batch
             // inserts DaliOutputColumn/DaliAffectedColumn, so they are empty in the pool path.
             // Any post-batch code that needs ocByOrder/affCols must call buildOcByOrderMap(sid)
             // and buildAffColMap(sid) separately after client.send().
+            Map<String, String> schemasWithPlTypes = new HashMap<>(rid.schemas);
+            schemasWithPlTypes.putAll(plTypeRids);
             builder = JsonlBatchBuilder.buildFromResult(sid, result,
-                    rid.tables, rid.columns, rid.schemas);
+                    rid.tables, rid.columns, schemasWithPlTypes);
 
             // Register canonical type stats (DaliDatabase/Schema/Table/Column are outside the batch
             // in pool mode; we know new vs duplicate from the rcmd phase above).
@@ -1711,6 +1790,19 @@ class RemoteWriter {
             for (String geoid : str.getColumns().keySet()) {
                 if (newColumnGeoids.contains(geoid)) builder.recordInserted("DaliColumn");
                 else builder.recordDuplicate("DaliColumn");
+            }
+            // DaliPlType / DaliPlTypeField canonical stats
+            for (String geoid : str.getPlTypes().keySet()) {
+                if (plTypeRids.containsKey(geoid)) builder.recordInserted("DaliPlType");
+                else builder.recordDuplicate("DaliPlType");
+            }
+            for (var pe : str.getPlTypes().entrySet()) {
+                if (!pe.getValue().hasFields()) continue;
+                for (PlTypeFieldInfo pf : pe.getValue().getFields()) {
+                    String fg = pe.getValue().getGeoid() + ":" + pf.name();
+                    if (plTypeRids.containsKey(fg)) builder.recordInserted("DaliPlTypeField");
+                    else builder.recordDuplicate("DaliPlTypeField");
+                }
             }
 
         } else {
@@ -1749,8 +1841,17 @@ class RemoteWriter {
                 }
             }
 
+            // HND-v2: Pre-insert DaliPlType + DaliPlTypeField as canonical vertices (ad-hoc path)
+            Map<String, String> plTypeRids = preInsertPlTypes(sid, str);
+            Map<String, String> allAdHocRids;
+            if (plTypeRids.isEmpty()) {
+                allAdHocRids = adHoc.rids();
+            } else {
+                allAdHocRids = new HashMap<>(adHoc.rids());
+                allAdHocRids.putAll(plTypeRids);
+            }
             builder = JsonlBatchBuilder.buildFromResult(sid, result,
-                    adHoc.rids().isEmpty() ? null : adHoc.rids());
+                    allAdHocRids.isEmpty() ? null : allAdHocRids);
 
             // Register canonical type stats (pre-inserted outside the batch).
             for (String geoid : str.getSchemas().keySet()) {
@@ -1764,6 +1865,18 @@ class RemoteWriter {
             for (String geoid : str.getColumns().keySet()) {
                 if (adHoc.newColumnGeoids().contains(geoid)) builder.recordInserted("DaliColumn");
                 else builder.recordDuplicate("DaliColumn");
+            }
+            for (String geoid : str.getPlTypes().keySet()) {
+                if (plTypeRids.containsKey(geoid)) builder.recordInserted("DaliPlType");
+                else builder.recordDuplicate("DaliPlType");
+            }
+            for (var pe : str.getPlTypes().entrySet()) {
+                if (!pe.getValue().hasFields()) continue;
+                for (PlTypeFieldInfo pf : pe.getValue().getFields()) {
+                    String fg = pe.getValue().getGeoid() + ":" + pf.name();
+                    if (plTypeRids.containsKey(fg)) builder.recordInserted("DaliPlTypeField");
+                    else builder.recordDuplicate("DaliPlTypeField");
+                }
             }
         }
 

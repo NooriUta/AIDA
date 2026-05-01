@@ -394,4 +394,63 @@ public class KnotService {
         return new KnotSession(sessionId, sessionId, sessionId, "plsql", "", 0,
             0,0,0,0,0,0,0, 0,0,0,0,0,0,0, 0,0,0,0,0, 0,0,0,0);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HND-07: PL/SQL TYPE templates
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * HND-07: Returns all DaliPlType templates visible in a lineage session.
+     * For RECORD kinds the associated DaliPlTypeField records are joined in-process.
+     */
+    public Uni<List<KnotPlType>> plTypes(String sessionId) {
+        String sqlTypes =
+            "SELECT type_geoid, type_name, kind, element_type_geoid, scope_geoid, declared_at_line " +
+            "FROM DaliPlType WHERE session_id = :sid ORDER BY type_name";
+        String sqlFields =
+            "SELECT field_geoid, field_name, field_type, position " +
+            "FROM DaliPlTypeField WHERE session_id = :sid ORDER BY type_geoid, position";
+
+        Map<String, Object> params = Map.of("sid", sessionId);
+
+        return Uni.combine().all().unis(
+                arcade.sqlIn(lineageDb(), sqlTypes,  params).onFailure().recoverWithItem(List.of()),
+                arcade.sqlIn(lineageDb(), sqlFields, params).onFailure().recoverWithItem(List.of())
+        ).asTuple().map(t -> {
+            List<Map<String, Object>> typeRows  = t.getItem1();
+            List<Map<String, Object>> fieldRows = t.getItem2();
+
+            // Group fields by type_geoid
+            Map<String, List<KnotPlTypeField>> fieldsByType = new LinkedHashMap<>();
+            for (var fr : fieldRows) {
+                String tg = strRow(fr, "type_geoid");
+                if (tg == null) continue;
+                fieldsByType.computeIfAbsent(tg, k -> new ArrayList<>()).add(new KnotPlTypeField(
+                        strRow(fr, "field_geoid"),
+                        strRow(fr, "field_name"),
+                        strRow(fr, "field_type"),
+                        intRow(fr,  "position")));
+            }
+
+            return typeRows.stream().map(row -> new KnotPlType(
+                    strRow(row, "type_geoid"),
+                    strRow(row, "type_name"),
+                    strRow(row, "kind"),
+                    strRow(row, "element_type_geoid"),
+                    strRow(row, "scope_geoid"),
+                    intRow(row,  "declared_at_line"),
+                    fieldsByType.getOrDefault(strRow(row, "type_geoid"), List.of())
+            )).toList();
+        });
+    }
+
+    private static String strRow(Map<String, Object> row, String key) {
+        Object v = row.get(key);
+        return v instanceof String s ? s : (v != null ? v.toString() : null);
+    }
+
+    private static int intRow(Map<String, Object> row, String key) {
+        Object v = row.get(key);
+        return v instanceof Number n ? n.intValue() : 0;
+    }
 }
