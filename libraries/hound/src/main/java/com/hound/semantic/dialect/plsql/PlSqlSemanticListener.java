@@ -1028,6 +1028,8 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             base.setCurrentTableAlias(tableAlias);
             base.setSubqueryAlias(tableAlias);
             base.subqueryAliasStack().add(tableAlias != null ? tableAlias : "");
+            // HND-14: inject virtual columns from PIPELINED return type into synthetic table
+            injectColumnsFromPipelinedFunc(collectionName, ctx);
             return;
         }
 
@@ -2226,6 +2228,46 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         // Skip if candidate is a plain SQL keyword (not a type/function name)
         if (SQL_BUILTIN_FUNCTIONS.contains(candidate)) return null;
         return candidate;
+    }
+
+    /**
+     * HND-14: After TABLE(pkg.func()) creates a synthetic table geoid, resolve the
+     * PIPELINED function's return COLLECTION → element RECORD/OBJECT type, then inject
+     * its fields as virtual columns so downstream atom references resolve correctly.
+     */
+    private void injectColumnsFromPipelinedFunc(String syntheticTableGeoid,
+                                                PlSqlParser.Table_ref_auxContext ctx) {
+        var internal = ctx.table_ref_aux_internal();
+        if (!(internal instanceof PlSqlParser.Table_ref_aux_internal_oneContext one)) return;
+        var dml = one.dml_table_expression_clause();
+        if (dml == null || dml.table_collection_expression() == null) return;
+        var tce = dml.table_collection_expression();
+        if (tce.expression() == null) return;
+
+        String rawFuncName = extractFunctionNameFromText(extract(tce.expression()));
+        if (rawFuncName == null) return;
+
+        // Match routine by bare name (strip optional package prefix)
+        String bareName = rawFuncName.contains(".")
+                ? rawFuncName.substring(rawFuncName.lastIndexOf('.') + 1)
+                : rawFuncName;
+        com.hound.semantic.model.RoutineInfo ri =
+                base.engine.getBuilder().getRoutines().values().stream()
+                        .filter(r -> r.getName().equalsIgnoreCase(bareName))
+                        .findFirst().orElse(null);
+        if (ri == null || ri.getReturnType() == null) return;
+
+        com.hound.semantic.model.PlTypeInfo collType =
+                base.engine.getBuilder().resolvePlTypeByName(ri.getReturnType(), null);
+        if (collType == null || !collType.isCollection()) return;
+
+        com.hound.semantic.model.PlTypeInfo elemType =
+                base.engine.getBuilder().resolvePlTypeByName(collType.getElementTypeName(), null);
+        if (elemType != null && (elemType.isRecord() || elemType.isObject())) {
+            base.engine.getBuilder().injectColumnsFromPlType(syntheticTableGeoid, elemType);
+            logger.debug("HND-14: injected {} cols from {} into {}",
+                    elemType.getFields().size(), elemType.getName(), syntheticTableGeoid);
+        }
     }
 
     /**
