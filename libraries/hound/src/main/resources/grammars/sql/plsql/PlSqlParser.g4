@@ -6159,10 +6159,10 @@ subquery_operation_part
     ;
 
 query_block
-    : SELECT (DISTINCT | UNIQUE | ALL)? selected_list into_clause? from_clause? where_clause? (
-        hierarchical_query_clause
-        | group_by_clause
-    )* model_clause? order_by_clause? offset_clause? fetch_clause?
+    : SELECT (DISTINCT | UNIQUE | ALL)? selected_list into_clause? from_clause? where_clause?
+      hierarchical_query_clause?
+      group_by_clause?
+      model_clause? order_by_clause? offset_clause? fetch_clause?
     ;
 
 selected_list

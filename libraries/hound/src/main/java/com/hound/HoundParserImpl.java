@@ -252,9 +252,10 @@ public class HoundParserImpl implements HoundParser {
             return new AnalysisResult(file, null, new PipelineTimer(), List.of(), List.of());
         }
 
-        // Strip SQL*Plus directives before handing to ANTLR4.
-        // Lines are replaced with blanks to preserve original line numbers in error messages.
-        String sql = stripSqlPlusDirectives(rawSql, file.toString());
+        // SQL*Plus directives (SET, PROMPT, WHENEVER, SHOW, CLEAR, START, EXIT, TIMING)
+        // are handled by the grammar's sql_plus_command rule (PlSqlParser.g4:7174).
+        // Pass raw SQL — ANTLR's error recovery handles unknown commands gracefully.
+        String sql = rawSql;
 
         long lineCount = sql.lines().count();
         PipelineTimer timer = new PipelineTimer();
@@ -533,9 +534,7 @@ public class HoundParserImpl implements HoundParser {
             return new AnalysisResult(null, null, new PipelineTimer(), List.of(), List.of());
         }
 
-        String sql = "plsql".equalsIgnoreCase(config.dialect())
-                ? stripSqlPlusDirectives(rawSql, sourceName)
-                : rawSql;
+        String sql = rawSql;
 
         long lineCount = sql.lines().count();
         PipelineTimer timer = new PipelineTimer();
@@ -587,73 +586,6 @@ public class HoundParserImpl implements HoundParser {
     // ─── Helpers ──────────────────────────────────────────────────
 
     private static int mapSize(Map<?, ?> m) { return m != null ? m.size() : 0; }
-
-    /**
-     * Strips SQL*Plus client directives from Oracle scripts before ANTLR4 parsing.
-     *
-     * <p>Directives are <em>replaced with blank lines</em> (not removed) so that
-     * ANTLR4 error messages report the correct original line numbers.
-     *
-     * <p>Recognised prefixes (case-insensitive):
-     * {@code SET}, {@code PROMPT}, {@code WHENEVER}, {@code SPOOL}, {@code SHOW},
-     * {@code COLUMN}, {@code TTITLE}, {@code BTITLE}, {@code REM[ARK]},
-     * {@code DEFINE}, {@code UNDEFINE}, {@code EXECUTE}, {@code HOST},
-     * {@code @@}, {@code @} (file include).
-     */
-    public static String stripSqlPlusDirectives(String sql, String filePath) {
-        // split("\n") (without -1) drops trailing empty tokens, preserving line count parity.
-        // We re-append the original trailing newline if present so the caller sees the same EOF.
-        boolean trailingNewline = sql.endsWith("\n");
-        String[] lines = sql.split("\n");
-        StringBuilder sb = new StringBuilder(sql.length());
-        int stripped = 0;
-        for (String line : lines) {
-            String trimmed = line.stripLeading();
-            if (isSqlPlusDirective(trimmed)) {
-                stripped++;
-                sb.append('\n');
-            } else {
-                sb.append(line).append('\n');
-            }
-        }
-        if (stripped > 0) {
-            logger.debug("[SQLPlus-strip] {} — removed {} directive line(s)",
-                    basename(filePath), stripped);
-        }
-        // Remove the trailing '\n' we added for the last line, unless the original had one
-        if (!trailingNewline && sb.length() > 0 && sb.charAt(sb.length() - 1) == '\n') {
-            sb.deleteCharAt(sb.length() - 1);
-        }
-        return sb.toString();
-    }
-
-    private static boolean isSqlPlusDirective(String trimmedLine) {
-        if (trimmedLine.isEmpty()) return false;
-        String upper = trimmedLine.toUpperCase();
-        // @@ and @ file includes
-        if (upper.startsWith("@@") || upper.startsWith("@ ") || upper.equals("@")) return true;
-        // keyword check: word must match exactly or be followed by space/tab
-        for (String kw : SQLPLUS_KEYWORDS) {
-            if (upper.equals(kw) || upper.startsWith(kw + " ") || upper.startsWith(kw + "\t")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** SQL*Plus keywords whose lines should be stripped before ANTLR4 parsing. */
-    private static final String[] SQLPLUS_KEYWORDS = {
-        "SET", "PROMPT", "WHENEVER", "SPOOL", "SHOW",
-        "COLUMN", "COL",
-        "TTITLE", "BTITLE", "REPHEADER", "REPFOOTER",
-        "BREAK", "COMPUTE", "CLEAR",
-        "REM", "REMARK",
-        "DEFINE", "UNDEFINE",
-        "EXECUTE", "EXEC",
-        "HOST",
-        "PAUSE", "ACCEPT", "VARIABLE",
-        "CONNECT", "DISCONNECT",
-    };
 
     private static String basename(String path) {
         if (path == null) return "";
