@@ -159,17 +159,7 @@ services:
           memory: 64M
     logging: *default_logging
 
-  # ── Shell ───────────────────────────────────────────────────────────────────
-  shell:
-    image: cr.yandex/${YC_REGISTRY_ID}/shell:${IMAGE_TAG:-latest}
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 128M
-        reservations:
-          memory: 64M
-    logging: *default_logging
+  # Shell removed 2026-05-01 — replaced by independent SPAs.
 
   # ── FRIGG (ArcadeDB state store) ───────────────────────────────────────────
   frigg:
