@@ -68,8 +68,10 @@ class PostgresExamplesCorpusTest {
 
     @BeforeAll
     void parseCorpusOnce() throws Exception {
+        // Files copied to test classpath under sql/postgresql/ via build.gradle
+        // processTestResources (main resources exclude grammars/** to keep JAR small).
         for (String file : PG_HEAVY_FIXTURES) {
-            results.put(file, parseSingle("grammars/sql/postgresql/examples/" + file));
+            results.put(file, parseSingle("sql/postgresql/" + file));
         }
     }
 

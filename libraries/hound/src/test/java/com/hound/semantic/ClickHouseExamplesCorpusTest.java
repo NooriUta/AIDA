@@ -59,8 +59,10 @@ class ClickHouseExamplesCorpusTest {
 
     @BeforeAll
     void parseCorpusOnce() throws Exception {
+        // Files copied to test classpath under sql/clickhouse/ via build.gradle
+        // processTestResources (main resources exclude grammars/** to keep JAR small).
         for (String file : CH_EXAMPLES) {
-            results.put(file, parseSingle("grammars/sql/clickhouse/examples/" + file));
+            results.put(file, parseSingle("sql/clickhouse/" + file));
         }
     }
 
