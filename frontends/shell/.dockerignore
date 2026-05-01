@@ -1,9 +1,0 @@
-node_modules/
-dist/
-.env*
-!.env.example
-*.log
-*.key
-*.pem
-*.p12
-*.pfx

@@ -110,9 +110,6 @@ jobs:
           - service: heimdall-frontend
             context: .
             dockerfile: ./frontends/heimdall-frontend/Dockerfile
-          - service: shell
-            context: .
-            dockerfile: ./frontends/shell/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -136,7 +133,6 @@ jobs:
           push: true
           build-args: |
             ${{ matrix.build_args }}
-            ${{ matrix.service == 'shell' && format('DOMAIN={0}', secrets.DOMAIN) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,scope=${{ matrix.service }},mode=max
           tags: |
@@ -154,7 +150,7 @@ jobs:
       packages: read
     strategy:
       matrix:
-        service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend, shell]
+        service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend]
     steps:
       - name: Set release tag and lowercase owner
         run: |
@@ -364,7 +360,7 @@ jobs:
             export REPO=cr.yandex/${YC_REGISTRY_ID}
 
             # Pull new images from YCR
-            for svc in verdandi chur shuttle dali heimdall-backend heimdall-frontend shell; do
+            for svc in verdandi chur shuttle dali heimdall-backend heimdall-frontend; do
               docker pull ${REPO}/${svc}:${IMAGE_TAG}
               docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
             done
