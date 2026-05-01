@@ -60,6 +60,8 @@ public class FriggSchemaInitializer {
     private static final String[][] INDEXED_PROPERTIES = {
         { "jobrunr_jobs",           "id",              "STRING"   },
         { "jobrunr_jobs",           "state",           "STRING"   },
+        { "jobrunr_jobs",           "scheduledAt",     "DATETIME" },   // SCHEDULED-poll uses `scheduledAt < cutoff`
+        { "jobrunr_jobs",           "updatedAt",       "DATETIME" },   // PROCESSING-orphan poll uses `updatedAt < cutoff`
         { "jobrunr_recurring_jobs", "id",              "STRING"   },
         { "jobrunr_servers",        "id",              "STRING"   },
         { "jobrunr_servers",        "lastHeartbeat",   "LONG"     },
@@ -292,6 +294,8 @@ public class FriggSchemaInitializer {
     private void createIndexesIn(String database) {
         createIndexIn(database, "jobrunr_jobs",           "id",            true);
         createIndexIn(database, "jobrunr_jobs",           "state",         false);
+        createIndexIn(database, "jobrunr_jobs",           "scheduledAt",   false);
+        createIndexIn(database, "jobrunr_jobs",           "updatedAt",     false);
         createIndexIn(database, "jobrunr_recurring_jobs", "id",            true);
         createIndexIn(database, "jobrunr_servers",        "id",            true);
         createIndexIn(database, "jobrunr_servers",        "lastHeartbeat", false);
