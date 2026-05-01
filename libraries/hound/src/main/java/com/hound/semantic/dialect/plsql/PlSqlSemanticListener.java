@@ -1458,6 +1458,51 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         logger.debug("G8 FETCH BULK COLLECT: {} → cursor stmt {}", varName, cursorSelectGeoid);
     }
 
+    // =========================================================================
+    // HND-15: CAST(MULTISET(SELECT...) AS t_list) and CAST(COLLECT(col) AS t_list)
+    // =========================================================================
+
+    @Override
+    public void enterOther_function(PlSqlParser.Other_functionContext ctx) {
+        if (ctx == null) return;
+
+        // HND-15b: CAST(MULTISET(SELECT...) AS t_list) → emit MULTISET_INTO edge
+        if (ctx.CAST() != null && ctx.MULTISET() != null && ctx.type_spec() != null) {
+            String stmtGeoid = base.engine.getScopeManager().currentStatement();
+            if (stmtGeoid != null) {
+                String typeName = BaseSemanticListener.cleanIdentifier(ctx.type_spec().getText());
+                com.hound.semantic.model.PlTypeInfo pt =
+                        base.engine.getBuilder().resolvePlTypeByName(typeName, null);
+                String targetGeoid = pt != null ? pt.getGeoid() : typeName;
+                base.engine.getBuilder().addLineageEdge(stmtGeoid, targetGeoid, "MULTISET_INTO", stmtGeoid);
+                logger.debug("HND-15b MULTISET_INTO {} → {}", stmtGeoid, targetGeoid);
+            }
+            return;
+        }
+
+        // HND-15a: COLLECT inside CAST(...AS t_list) → emit RETURNS_INTO edge
+        // Typed: COLLECT token present in this ctx; walk parent chain for enclosing CAST other_function
+        if (ctx.COLLECT() != null) {
+            org.antlr.v4.runtime.RuleContext ancestor = ctx.parent;
+            while (ancestor != null) {
+                if (ancestor instanceof PlSqlParser.Other_functionContext castCtx
+                        && castCtx.CAST() != null && castCtx.type_spec() != null) {
+                    String stmtGeoid = base.engine.getScopeManager().currentStatement();
+                    if (stmtGeoid != null) {
+                        String typeName = BaseSemanticListener.cleanIdentifier(castCtx.type_spec().getText());
+                        com.hound.semantic.model.PlTypeInfo pt =
+                                base.engine.getBuilder().resolvePlTypeByName(typeName, null);
+                        String targetGeoid = pt != null ? pt.getGeoid() : typeName;
+                        base.engine.getBuilder().addLineageEdge(stmtGeoid, targetGeoid, "RETURNS_INTO", stmtGeoid);
+                        logger.debug("HND-15a RETURNS_INTO {} → {}", stmtGeoid, targetGeoid);
+                    }
+                    break;
+                }
+                ancestor = ancestor.parent;
+            }
+        }
+    }
+
     @Override
     public void enterOver_clause_keyword(PlSqlParser.Over_clause_keywordContext ctx) { base.onAnalyticEnter(); }
 
