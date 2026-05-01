@@ -175,16 +175,7 @@ jobs:
             --output-type text \
             src
 
-      - name: Install shell
-        run: cd frontends/shell && npm ci
-
-      - name: "dep-cruiser — shell (R-TS-07: no direct aida-shared)"
-        run: |
-          cd frontends/shell
-          npx --package=dependency-cruiser depcruise \
-            --config ../../.dependency-cruiser.cjs \
-            --output-type text \
-            src
+      # Shell dep-cruiser job removed 2026-05-01 — frontends/shell/ deleted.
 
   # ── Pre-commit grep guard (fast path — no containers needed) ─────────────────
   grep-guards:
