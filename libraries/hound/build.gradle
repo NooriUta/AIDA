@@ -70,6 +70,21 @@ sourceSets {
     }
 }
 
+// Copy ANTLR4 grammars-v4 example fixtures into test classpath under
+// sql/postgresql/ and sql/clickhouse/ — keeps PG/CH examples available
+// for *ExamplesCorpusTest without bloating the main JAR (main excludes
+// grammars/** in processResources below). Same-named files (create_table.sql
+// exists in both dialects) are kept apart by the into mapping.
+tasks.processTestResources {
+    from('src/main/resources/grammars/sql/postgresql/examples') {
+        into 'sql/postgresql'
+    }
+    from('src/main/resources/grammars/sql/clickhouse/examples') {
+        into 'sql/clickhouse'
+    }
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
 // ==================== ОБРАБОТКА РЕСУРСОВ ====================
 
 tasks.processResources {
