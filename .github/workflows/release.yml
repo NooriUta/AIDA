@@ -1,53 +1,64 @@
-name: Release
+name: Release (manual fallback)
+
+# DEPRECATED in favor of inline CHANGELOG + GH Release steps in cd.yml.
+# Kept as manual workflow_dispatch fallback for backfill scenarios.
+#
+# Why inline: cd.yml pushes the tag using GITHUB_TOKEN, which doesn't
+# trigger workflow_run events on push:tags (GitHub loop-prevention).
+# release.yml on push:tags never fires when tag is bot-created.
+#
+# Use this workflow only for manual backfill (workflow_dispatch with tag input).
 
 on:
-  push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to (re-)generate CHANGELOG + GitHub Release for'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: Create GitHub Release + CHANGELOG
+    name: Create GitHub Release + CHANGELOG (manual)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag }}
 
       - name: Generate CHANGELOG for this release
         uses: orhun/git-cliff-action@v4
         id: git-cliff
         with:
           config: cliff.toml
-          args: --latest --strip header
+          args: --tag ${{ inputs.tag }} --strip header
         env:
           OUTPUT: CHANGES_THIS_RELEASE.md
           GITHUB_REPO: ${{ github.repository }}
 
-      - name: Prepend to CHANGELOG.md
-        run: |
-          echo "## [${{ github.ref_name }}] — $(date -u +%Y-%m-%d)" > /tmp/header.md
-          cat /tmp/header.md CHANGES_THIS_RELEASE.md CHANGELOG.md > /tmp/NEW_CHANGELOG.md
-          mv /tmp/NEW_CHANGELOG.md CHANGELOG.md
-
-      - name: Commit CHANGELOG.md to release
+      - name: Prepend to CHANGELOG.md and push to release
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin release
           git checkout release
+          echo "## [${{ inputs.tag }}] — $(date -u +%Y-%m-%d)" > /tmp/header.md
+          cat /tmp/header.md CHANGES_THIS_RELEASE.md CHANGELOG.md > /tmp/NEW_CHANGELOG.md
+          mv /tmp/NEW_CHANGELOG.md CHANGELOG.md
           git add CHANGELOG.md
-          git diff --staged --quiet || git commit -m "chore(release): update CHANGELOG for ${{ github.ref_name }} [skip ci]"
+          git diff --staged --quiet || git commit -m "chore(release): update CHANGELOG for ${{ inputs.tag }} [skip ci]"
           git push origin release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Release ${{ github.ref_name }}"
+          tag_name: ${{ inputs.tag }}
+          name: "Release ${{ inputs.tag }}"
           body_path: CHANGES_THIS_RELEASE.md
           draft: false
           prerelease: false
