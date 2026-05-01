@@ -567,6 +567,8 @@ jobs:
             wait_infra "http://localhost:15173/"         "Verdandi"         "" || { echo "Verdandi health check FAILED";         exit 1; }
             wait_infra "http://localhost:19090/q/health" "Dali"             "" || { echo "Dali health check FAILED";             exit 1; }
             wait_infra "http://localhost:19093/q/health" "heimdall-backend" "" || { echo "heimdall-backend health check FAILED"; exit 1; }
+            # FIX-2: Keycloak — prod auth depends on KC. .well-known endpoint returns 200 when realm is up.
+            wait_infra "http://localhost:18180/kc/realms/seer/.well-known/openid-configuration" "Keycloak" "" || { echo "Keycloak health check FAILED"; exit 1; }
             echo "  All services OK"
 
             echo "Deploy OK — ${{ env.RELEASE_TAG }} (${{ github.sha }})"
@@ -607,6 +609,44 @@ jobs:
                   -m "Release ${{ env.RELEASE_TAG }} — prod deploy verified"
           git push origin "${{ env.RELEASE_TAG }}" --force
           echo "✅ Tagged ${{ env.RELEASE_TAG }} — prod-verified"
+
+      # ── Generate CHANGELOG for this release (FIX-1: inline release.yml logic) ──
+      # release.yml never fires on bot-pushed tags (GITHUB_TOKEN doesn't trigger
+      # cascading workflows by design). Inline the CHANGELOG + GH Release steps
+      # here so they run in the same cd.yml execution.
+      - name: Generate CHANGELOG for this release
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGES_THIS_RELEASE.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Prepend to CHANGELOG.md and push
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        run: |
+          # Fetch and switch to release branch (cd.yml is checked out at SHA, not branch)
+          git fetch origin release
+          git checkout release
+          echo "## [${{ env.RELEASE_TAG }}] — $(date -u +%Y-%m-%d)" > /tmp/header.md
+          cat /tmp/header.md CHANGES_THIS_RELEASE.md CHANGELOG.md > /tmp/NEW_CHANGELOG.md
+          mv /tmp/NEW_CHANGELOG.md CHANGELOG.md
+          git add CHANGELOG.md
+          git diff --staged --quiet || git commit -m "chore(release): update CHANGELOG for ${{ env.RELEASE_TAG }} [skip ci]"
+          git push origin release
+
+      - name: Create GitHub Release
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "Release ${{ env.RELEASE_TAG }}"
+          body_path: CHANGES_THIS_RELEASE.md
+          draft: false
+          prerelease: false
 
       - name: Notify success
         if: success()

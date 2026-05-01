@@ -252,14 +252,24 @@ sync_default_keycloak_org_id() {
     return
   fi
 
-  # Get admin token
-  local token
-  token=$(curl -sf --max-time 5 -X POST "$kc_url/realms/master/protocol/openid-connect/token" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "grant_type=password&client_id=admin-cli&username=$kc_admin_user&password=$kc_admin_pass" 2>/dev/null \
-    | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || echo "")
+  # FIX-3: Retry KC admin-cli token up to 6 attempts (60s total).
+  # KC startup can lag behind init-arcadedb in cold-deploy scenarios — short-poll
+  # avoids stale DaliTenantConfig.keycloakOrgId without indefinitely blocking deploy.
+  local token=""
+  local attempt
+  for attempt in 1 2 3 4 5 6; do
+    token=$(curl -sf --max-time 5 -X POST "$kc_url/realms/master/protocol/openid-connect/token" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -d "grant_type=password&client_id=admin-cli&username=$kc_admin_user&password=$kc_admin_pass" 2>/dev/null \
+      | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || echo "")
+    if [ -n "$token" ]; then
+      [ "$attempt" -gt 1 ] && log "  Keycloak ready (attempt ${attempt}/6)."
+      break
+    fi
+    [ "$attempt" -lt 6 ] && sleep 10
+  done
   if [ -z "$token" ]; then
-    log "  Keycloak unavailable — skipping keycloakOrgId sync."
+    log "  Keycloak unavailable after 6 attempts (60s) — skipping keycloakOrgId sync."
     return
   fi
 
