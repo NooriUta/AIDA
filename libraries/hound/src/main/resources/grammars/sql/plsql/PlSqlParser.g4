@@ -691,7 +691,7 @@ function_spec
         DETERMINISTIC
         | PIPELINED
         | parallel_enable_clause
-        | RESULT_CACHE
+        | result_cache_clause
         | streaming_clause
     )* (AS call_spec)? ';'
     ;
@@ -6697,6 +6697,7 @@ unary_expression
         | (EXISTS | NEXT | PRIOR) '(' index += expression ')'
     )
     | quantified_expression
+    | numeric_function_wrapper
     | standard_function
     | {this.IsNotNumericFunction()}? atom
     | implicit_cursor_expression
@@ -6794,7 +6795,6 @@ string_function
 
 standard_function
     : string_function
-    | numeric_function_wrapper
     | json_function
     | {this.IsNotNumericFunction()}? other_function
     ;
