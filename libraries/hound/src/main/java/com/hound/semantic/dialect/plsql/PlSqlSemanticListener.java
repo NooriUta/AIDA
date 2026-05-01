@@ -87,7 +87,16 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         base.onRoutineEnter(name, "FUNCTION", base.currentSchema(), null, getStartLine(ctx));
         extractParameters(ctx.parameter());
         if (ctx.type_spec() != null) {
-            base.onRoutineReturnType(ctx.type_spec().getText());
+            // Typed extraction: navigate to type_name/datatype leaf; handles %TYPE anchors
+            base.onRoutineReturnType(extractTypeSpecText(ctx.type_spec()));
+        }
+        // HND-09: capture PIPELINED flag from the function declaration keyword
+        if (!ctx.PIPELINED().isEmpty()) {
+            String rGeoid = base.currentRoutine();
+            if (rGeoid != null) {
+                var ri = base.engine.getBuilder().getRoutines().get(rGeoid);
+                if (ri != null) ri.setPipelined(true);
+            }
         }
     }
 
@@ -109,7 +118,15 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         base.onRoutineEnter(name, routineKind, base.currentSchema(), base.currentPackage(), getStartLine(ctx));
         extractParameters(ctx.parameter());
         if (ctx.type_spec() != null) {
-            base.onRoutineReturnType(ctx.type_spec().getText());
+            base.onRoutineReturnType(extractTypeSpecText(ctx.type_spec()));
+        }
+        // HND-09: capture PIPELINED flag from the function declaration keyword
+        if (!ctx.PIPELINED().isEmpty()) {
+            String rGeoid = base.currentRoutine();
+            if (rGeoid != null) {
+                var ri = base.engine.getBuilder().getRoutines().get(rGeoid);
+                if (ri != null) ri.setPipelined(true);
+            }
         }
     }
 
@@ -123,14 +140,34 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     public void enterVariable_declaration(PlSqlParser.Variable_declarationContext ctx) {
         if (ctx == null || ctx.identifier() == null) return;
         String varName = BaseSemanticListener.cleanIdentifier(ctx.identifier().getText());
-        String varType = ctx.type_spec() != null ? ctx.type_spec().getText() : "UNKNOWN";
-        // KI-ROWTYPE-1: detect %ROWTYPE to create a DaliRecord with column-typed fields
-        String upper = varType.toUpperCase();
-        if (upper.endsWith("%ROWTYPE")) {
-            String tableRef = varType.substring(0, varType.length() - "%ROWTYPE".length());
+        PlSqlParser.Type_specContext ts = ctx.type_spec();
+        if (ts == null) return;
+
+        // KI-ROWTYPE-1: typed token check — ts.PERCENT_ROWTYPE() != null
+        if (ts.PERCENT_ROWTYPE() != null) {
+            String tableRef = ts.type_name() != null
+                    ? BaseSemanticListener.cleanIdentifier(ts.type_name().getText()) : "UNKNOWN";
             base.onRowtypeVariable(varName, tableRef);
+
+        } else if (ts.PERCENT_TYPE() != null) {
+            // Anchored scalar: varname t_tab.col%TYPE — tracked as plain var
+            String anchor = ts.type_name() != null
+                    ? ts.type_name().getText() + "%TYPE" : ts.getText();
+            base.onRoutineVariable(varName, anchor);
+
         } else {
-            base.onRoutineVariable(varName, varType);
+            // Regular named type (user-defined) or built-in scalar
+            String typeName = ts.type_name() != null
+                    ? BaseSemanticListener.cleanIdentifier(ts.type_name().getText())
+                    : (ts.datatype() != null ? ts.datatype().getText() : ts.getText());
+            // HND-04: detect PL/SQL collection type → materialise DaliRecord from PlTypeInfo
+            String resolved = BaseSemanticListener.cleanIdentifier(typeName);
+            if (resolved != null && base.engine.getBuilder()
+                    .resolvePlTypeByName(resolved, base.currentRoutine()) != null) {
+                base.onPlTypeVariable(varName, resolved, ctx.getStart().getLine());
+            } else {
+                base.onRoutineVariable(varName, typeName != null ? typeName : "UNKNOWN");
+            }
         }
     }
 
@@ -198,7 +235,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         base.onRoutineEnter(name, "FUNCTION_SPEC", base.currentSchema(), base.currentPackage(), getStartLine(ctx));
         extractParameters(ctx.parameter());
         if (ctx.type_spec() != null) {
-            base.onRoutineReturnType(ctx.type_spec().getText());
+            base.onRoutineReturnType(extractTypeSpecText(ctx.type_spec()));
+        }
+        if (!ctx.PIPELINED().isEmpty()) {
+            String rGeoid = base.currentRoutine();
+            if (rGeoid != null) {
+                var ri = base.engine.getBuilder().getRoutines().get(rGeoid);
+                if (ri != null) ri.setPipelined(true);
+            }
         }
     }
 
@@ -247,6 +291,148 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     @Override
     public void exitCreate_package_body(PlSqlParser.Create_package_bodyContext ctx) {
         base.setPackage(null);
+    }
+
+    // =========================================================================
+    // PL/SQL TYPE IS RECORD / TABLE OF  (HND-03)
+    // =========================================================================
+
+    @Override
+    public void exitType_declaration(PlSqlParser.Type_declarationContext ctx) {
+        if (ctx == null || ctx.identifier() == null) return;
+        String typeName = BaseSemanticListener.cleanIdentifier(ctx.identifier().getText());
+        if (typeName == null || typeName.isBlank()) return;
+
+        // Scope: routine takes priority over package
+        String scopeGeoid = base.currentRoutine() != null
+                ? base.currentRoutine()
+                : base.currentPackage();
+        if (scopeGeoid == null) return;
+
+        var builder = base.engine.getBuilder();
+
+        if (ctx.record_type_def() != null) {
+            // TYPE t_rec IS RECORD (field1 TYPE1, field2 TYPE2, ...)
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.RECORD, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            var fieldSpecs = ctx.record_type_def().field_spec();
+            logger.debug("HND-03 RECORD={} scope={} fieldSpecs={}", typeName, scopeGeoid,
+                    fieldSpecs == null ? "null" : fieldSpecs.size());
+            if (fieldSpecs != null) {
+                for (int i = 0; i < fieldSpecs.size(); i++) {
+                    var fs = fieldSpecs.get(i);
+                    logger.debug("HND-03  fs[{}] colName={} raw={}", i,
+                            fs.column_name() == null ? "NULL" : fs.column_name().getText(),
+                            fs.getText());
+                    if (fs.column_name() == null) continue;
+                    String fieldName = BaseSemanticListener.cleanIdentifier(fs.column_name().getText());
+                    // Use typed access: navigate to type_name/datatype leaf rather than whole type_spec
+                    String fieldType = extractTypeSpecText(fs.type_spec());
+                    pt.addField(fieldName, fieldType, i + 1);
+                }
+            }
+            builder.registerPlType(pt);
+
+        } else if (ctx.table_type_def() != null) {
+            // TYPE t_tab IS TABLE OF t_rec INDEX BY PLS_INTEGER
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.COLLECTION, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            // Typed: navigate to the leaf type_name or datatype, not whole type_spec.getText()
+            String elemType = extractTypeSpecText(ctx.table_type_def().type_spec());
+            if (elemType != null) pt.setElementTypeName(elemType);
+            builder.registerPlType(pt);
+
+        } else if (ctx.varray_type_def() != null) {
+            // HND-12: TYPE t_arr IS VARRAY(N) OF element_type
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.VARRAY, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            String elemType = extractTypeSpecText(ctx.varray_type_def().type_spec());
+            if (elemType != null) pt.setElementTypeName(elemType);
+            builder.registerPlType(pt);
+
+        } else if (ctx.ref_cursor_type_def() != null) {
+            // HND-13: TYPE t_cur IS REF CURSOR [RETURN type_spec]
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.REF_CURSOR, scopeGeoid);
+            pt.setDeclaredAtLine(ctx.start != null ? ctx.start.getLine() : 0);
+            var rc = ctx.ref_cursor_type_def();
+            if (rc.type_spec() != null) {
+                // strong cursor: RETURN tbl%ROWTYPE or record type — typed extraction
+                pt.setElementTypeName(extractTypeSpecText(rc.type_spec()));
+            }
+            builder.registerPlType(pt);
+        }
+    }
+
+    // HND-08: CREATE TYPE schema.T_OBJ AS OBJECT (...) / TABLE OF / VARRAY
+    @Override
+    public void enterCreate_type(PlSqlParser.Create_typeContext ctx) {
+        if (ctx == null || ctx.type_definition() == null) return;
+        PlSqlParser.Type_definitionContext typeDef = ctx.type_definition();
+        if (typeDef.type_name() == null) return;
+
+        // Extract possibly schema-qualified type name: CRM.T_PRICE_BREAK → schema=CRM, name=T_PRICE_BREAK
+        var idExprs = typeDef.type_name().id_expression();
+        if (idExprs == null || idExprs.isEmpty()) return;
+        String schema;
+        String typeName;
+        if (idExprs.size() >= 2) {
+            schema   = BaseSemanticListener.cleanIdentifier(idExprs.get(idExprs.size() - 2).getText());
+            typeName = BaseSemanticListener.cleanIdentifier(idExprs.get(idExprs.size() - 1).getText());
+        } else {
+            schema   = base.currentSchema() != null ? base.currentSchema() : "_GLOBAL_";
+            typeName = BaseSemanticListener.cleanIdentifier(idExprs.get(0).getText());
+        }
+        if (typeName == null || typeName.isBlank()) return;
+        // scopeGeoid for schema-level types uses the schema name as a bare key
+        String scopeGeoid = (schema != null && !schema.isBlank()) ? schema : "_GLOBAL_";
+
+        PlSqlParser.Object_type_defContext objDef =
+                typeDef.object_type_def() != null ? typeDef.object_type_def() : null;
+        if (objDef == null || objDef.object_as_part() == null) return;
+
+        var asPart = objDef.object_as_part();
+        var builder = base.engine.getBuilder();
+
+        if (asPart.OBJECT() != null) {
+            // CREATE TYPE x AS OBJECT (field1 type1, ...)
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.OBJECT, scopeGeoid);
+            int pos = 1;
+            for (var member : objDef.object_member_spec()) {
+                // Alt 1: identifier() + type_spec() → attribute definition
+                if (member.identifier() != null && member.type_spec() != null) {
+                    String fieldName = BaseSemanticListener.cleanIdentifier(member.identifier().getText());
+                    String fieldType = member.type_spec().getText();
+                    pt.addField(fieldName, fieldType, pos++);
+                }
+                // Alt 2: element_spec() → method / subprogram — skip for lineage
+            }
+            logger.debug("HND-08 OBJECT={} scope={} fields={}", typeName, scopeGeoid, pt.getFields().size());
+            builder.registerPlType(pt);
+
+        } else if (asPart.nested_table_type_def() != null) {
+            // CREATE TYPE x AS TABLE OF elem_type — schema-level COLLECTION
+            // Typed: navigate to type_name leaf instead of whole type_spec.getText()
+            String elemTypeName = extractTypeSpecText(asPart.nested_table_type_def().type_spec());
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.COLLECTION, scopeGeoid);
+            if (elemTypeName != null) pt.setElementTypeName(elemTypeName);
+            logger.debug("HND-08 COLLECTION={} scope={} elemType={}", typeName, scopeGeoid, elemTypeName);
+            builder.registerPlType(pt);
+
+        } else if (asPart.varray_type_def() != null) {
+            // HND-12: CREATE TYPE x AS VARRAY(N) OF elem_type — schema-level VARRAY
+            String elemTypeName = extractTypeSpecText(asPart.varray_type_def().type_spec());
+            var pt = new com.hound.semantic.model.PlTypeInfo(
+                    typeName, com.hound.semantic.model.PlTypeInfo.Kind.VARRAY, scopeGeoid);
+            if (elemTypeName != null) pt.setElementTypeName(elemTypeName);
+            logger.debug("HND-12 VARRAY={} scope={} elemType={}", typeName, scopeGeoid, elemTypeName);
+            builder.registerPlType(pt);
+        }
     }
 
     // =========================================================================
@@ -614,7 +800,10 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
     /**
      * KI-PIPE-1: Marks the enclosing function as pipelined when a PIPE ROW statement is found.
-     * PIPE ROW(expr) — expr is the collection element being piped out.
+     * HND-09: If the expression is an OBJECT type constructor call (e.g. SCHEMA.T_REC(...)),
+     * materialise a DaliRecord + DaliRecordField from the PlTypeInfo so lineage can flow
+     * through the piped fields.  The synthetic variable name "__PIPE_ROW_OUT__" is used as
+     * the record geoid anchor; it is unique per routine and idempotent on multiple PIPE ROW calls.
      */
     @Override
     public void enterPipe_row_statement(PlSqlParser.Pipe_row_statementContext ctx) {
@@ -623,6 +812,27 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (routineGeoid == null) return;
         var ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
         if (ri != null) ri.setPipelined(true);
+
+        // Detect constructor call: PIPE ROW(TYPE_NAME(arg, ...))
+        // Use token stream (with spaces) for reliable extraction before first '('.
+        if (ctx.expression() == null) return;
+        String typeRef = extractConstructorTypeName(ctx.expression());
+        if (typeRef == null || typeRef.isBlank()) return;
+
+        // Resolve to a PlTypeInfo that has fields (OBJECT or RECORD)
+        com.hound.semantic.model.PlTypeInfo pt =
+                base.engine.getBuilder().resolvePlTypeByName(typeRef, routineGeoid);
+        if (pt == null || !pt.hasFields()) return;
+
+        // Materialise a DaliRecord so DaliRecordField vertices are emitted and
+        // INSTANTIATES_TYPE edge links this output instance to the PlType definition.
+        // varName encodes the source type so the geoid is self-describing:
+        // e.g. PIPE_ROW_OUT_T_LINE_REC (schema prefix stripped, bare type name only).
+        // varName = full PlType geoid + ":PIPE_ROW_OUT" so the DaliRecord geoid is self-describing:
+        // e.g. "TESTSCHEMA:TYPE:T_LINE_REC:PIPE_ROW_OUT"
+        base.engine.onPlTypeVariable(pt.getGeoid() + ":PIPE_ROW_OUT", typeRef, ctx.getStart().getLine());
+        logger.debug("HND-09/PIPE_ROW: materialised DaliRecord for constructor {} in {}",
+                typeRef, routineGeoid);
     }
 
     /**
@@ -821,7 +1031,7 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             return;
         }
 
-        String tableName = extractTableNameViaReflection(ctx, tableAlias);
+        String tableName = extractTableName(ctx, tableAlias);
 
         if (tableName != null && !tableName.isBlank()) {
             base.onTableReference(tableName, tableAlias, getStartLine(ctx), getEndLine(ctx));
@@ -942,48 +1152,62 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     }
 
     /**
-     * Определяет тип JOIN из контекста.
-     * Порт Python: _get_join_type()
+     * Определяет тип JOIN из контекста через прямые token checks (grammar-rule based).
+     * Fallback на text только для неизвестных случаев.
      */
     private String extractJoinType(PlSqlParser.Join_clauseContext ctx) {
-        String text = extract(ctx).toUpperCase();
-        int joinIdx = text.indexOf("JOIN");
-        if (joinIdx < 0) {
-            if (text.contains("CROSS APPLY")) return "CROSS APPLY";
-            if (text.contains("OUTER APPLY")) return "OUTER APPLY";
-            return "JOIN";
+        // APPLY variants: (CROSS | OUTER) APPLY — no JOIN token present
+        if (ctx.APPLY() != null) {
+            return ctx.CROSS() != null ? "CROSS APPLY" : "OUTER APPLY";
         }
-        String prefix = text.substring(0, joinIdx);
-        if (prefix.contains("NATURAL")) return "NATURAL JOIN";
-        if (prefix.contains("CROSS")) return "CROSS JOIN";
-        StringBuilder type = new StringBuilder();
-        if (prefix.contains("FULL"))   type.append("FULL ");
-        if (prefix.contains("LEFT"))   type.append("LEFT ");
-        if (prefix.contains("RIGHT"))  type.append("RIGHT ");
-        if (prefix.contains("OUTER"))  type.append("OUTER ");
-        if (prefix.contains("INNER"))  type.append("INNER ");
-        type.append("JOIN");
-        return type.toString().trim();
+        if (ctx.NATURAL() != null) return "NATURAL JOIN";
+        if (ctx.CROSS()   != null) return "CROSS JOIN";
+        // FULL / LEFT / RIGHT [OUTER] JOIN
+        var ojt = ctx.outer_join_type();
+        if (ojt != null) {
+            StringBuilder type = new StringBuilder();
+            if (ojt.FULL()  != null) type.append("FULL ");
+            if (ojt.LEFT()  != null) type.append("LEFT ");
+            if (ojt.RIGHT() != null) type.append("RIGHT ");
+            if (ojt.OUTER() != null) type.append("OUTER ");
+            type.append("JOIN");
+            return type.toString().trim();
+        }
+        if (ctx.INNER() != null) return "INNER JOIN";
+        return "JOIN";
     }
 
     /**
      * Порт Python: _determine_join_source_table()
-     * Определяет source table из ON conditions.
+     * Определяет source table из ON conditions через regex по spaced text от extract().
+     * Conditions уже извлечены через extract() (с пробелами), не ctx.getText().
      */
+    private static final Pattern JOIN_ALIAS_PATTERN = Pattern.compile("\\b([a-zA-Z_]\\w*)\\.\\w+\\b");
+    private static final java.util.Set<String> SQL_BUILTIN_FUNCTIONS = java.util.Set.of(
+        "NVL", "NVL2", "COALESCE", "DECODE", "CASE", "NULLIF", "GREATEST", "LEAST",
+        "TO_CHAR", "TO_DATE", "TO_NUMBER", "TO_TIMESTAMP", "TRUNC", "ROUND", "SUBSTR",
+        "INSTR", "LENGTH", "UPPER", "LOWER", "TRIM", "LTRIM", "RTRIM", "REPLACE",
+        "LPAD", "RPAD", "CONCAT", "CHR", "ASCII", "SYSDATE", "SYSTIMESTAMP",
+        "COUNT", "SUM", "AVG", "MIN", "MAX", "LISTAGG", "STRAGG",
+        "ROWNUM", "ROWID", "SYS_GUID", "DBMS_UTILITY"
+    );
+
     private String determineJoinSourceFromConditions(List<String> conditions, String targetRef) {
         Set<String> usedAliases = new LinkedHashSet<>();
-        Pattern p = Pattern.compile("\\b([a-zA-Z_]\\w*)\\.\\w+\\b");
         for (String condition : conditions) {
-            Matcher m = p.matcher(condition);
+            Matcher m = JOIN_ALIAS_PATTERN.matcher(condition);
             while (m.find()) {
-                usedAliases.add(m.group(1).toUpperCase());
+                String prefix = m.group(1).toUpperCase();
+                // Skip known SQL built-in function names (e.g. NVL.something is not an alias)
+                if (SQL_BUILTIN_FUNCTIONS.contains(prefix)) continue;
+                // Skip if the full match contains '@' (DBLINK: schema.table@link)
+                // The matched group is just the prefix, check the char after the match
+                int end = m.end();
+                if (end < condition.length() && condition.charAt(end) == '@') continue;
+                usedAliases.add(prefix);
             }
         }
-        // Убираем alias/name target таблицы
-        if (targetRef != null) {
-            usedAliases.remove(targetRef.toUpperCase());
-        }
-        // Оставшийся alias = source
+        if (targetRef != null) usedAliases.remove(targetRef.toUpperCase());
         return usedAliases.isEmpty() ? null : usedAliases.iterator().next();
     }
 
@@ -1164,10 +1388,21 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             if (si != null) si.setSubtype("BULK_COLLECT");
             List<PlSqlParser.General_elementContext> targets = ctx.general_element();
             if (targets != null && !targets.isEmpty()) {
-                String varName = targets.get(0).getText().toUpperCase();
+                // Typed access: navigate to the first identifier via general_element_part.id_expression
+                // to get the bare variable name without any subscript suffix (e.g. l_tab not l_tab(i))
+                var ge = targets.get(0);
+                var parts = ge.general_element_part();
+                String varName;
+                if (parts != null && !parts.isEmpty()
+                        && parts.get(0).id_expression() != null) {
+                    varName = BaseSemanticListener.cleanIdentifier(
+                            parts.get(0).id_expression().getText()).toUpperCase();
+                } else {
+                    varName = BaseSemanticListener.cleanIdentifier(ge.getText()).toUpperCase();
+                }
                 String routineGeoid = base.currentRoutine();
                 // Create RecordInfo and link it to this SELECT statement
-                var rec = base.engine.getBuilder().ensureRecord(varName, routineGeoid);
+                var rec = base.engine.getBuilder().ensureRecord(varName, routineGeoid, ctx.getStart().getLine());
                 rec.setSourceStatementGeoid(stmtGeoid);
                 // Register as cursor-record alias so AtomProcessor can resolve collection.field
                 base.engine.getScopeManager().registerCursorRecord(varName, stmtGeoid, true);
@@ -1187,9 +1422,12 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (ctx == null || ctx.BULK() == null) return; // only BULK COLLECT INTO
         if (ctx.variable_or_collection() == null || ctx.variable_or_collection().isEmpty()) return;
 
-        // Collection variable name (first target after INTO)
+        // Collection variable name (first target after BULK COLLECT INTO)
+        // Strip collection index if present: l_tab(i) → l_tab
+        String rawVar = ctx.variable_or_collection(0).getText();
+        int varParen = rawVar.indexOf('(');
         String varName = BaseSemanticListener.cleanIdentifier(
-                ctx.variable_or_collection(0).getText()).toUpperCase();
+                varParen > 0 ? rawVar.substring(0, varParen) : rawVar).toUpperCase();
 
         // Cursor name — resolve its SELECT statement geoid
         String cursorSelectGeoid = null;
@@ -1202,7 +1440,7 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         }
 
         String routineGeoid = base.currentRoutine();
-        var rec = base.engine.getBuilder().ensureRecord(varName, routineGeoid);
+        var rec = base.engine.getBuilder().ensureRecord(varName, routineGeoid, ctx.getStart().getLine());
 
         // Link to cursor's SELECT statement (so BULK_COLLECTS_INTO edge can be created)
         if (cursorSelectGeoid != null && rec.getSourceStatementGeoid() == null) {
@@ -1862,134 +2100,166 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     }
 
     /**
-     * Извлекает getText() дочернего правила ctx.methodName() через рефлексию,
-     * возвращает cleanIdentifier от результата или null.
-     */
-    private String extractViaReflection(Object ctx, String methodName) {
-        if (ctx == null) return null;
-        try {
-            Method m = ctx.getClass().getMethod(methodName);
-            Object child = m.invoke(ctx);
-            if (child == null) return null;
-            Method gt = child.getClass().getMethod("getText");
-            String text = (String) gt.invoke(child);
-            return BaseSemanticListener.cleanIdentifier(text);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * Извлекает имя таблицы из Table_ref_auxContext.
+     * Extracts the table name from Table_ref_auxContext using typed grammar-rule access.
+     * No reflection, no text heuristics for the primary path.
      *
-     * Стратегии (по приоритету):
-     * 1. table_ref_aux_internal -> dml_table_expression_clause -> tableview_name (рефлексия)
-     * 2. table_ref_aux_internal -> getText() целиком (рефлексия)
-     * 3. getText() всего ctx минус суффикс алиаса
+     * Primary (Стратегия 1): table_ref_aux_internal → instanceof one → dml.tableview_name()
+     * Fallback (Стратегия 2): short token span → token-stream text minus alias suffix
      */
-    private String extractTableNameViaReflection(PlSqlParser.Table_ref_auxContext ctx,
-                                                 String tableAlias) {
-        // Стратегия 1+2: через table_ref_aux_internal
-        try {
-            Method internalM = ctx.getClass().getMethod("table_ref_aux_internal");
-            Object internal = internalM.invoke(ctx);
-            if (internal != null) {
-                // 1: dml_table_expression_clause -> tableview_name
-                try {
-                    Method dmlM = internal.getClass().getMethod("dml_table_expression_clause");
-                    Object dml = dmlM.invoke(internal);
-                    if (dml != null) {
-                        String name = extractViaReflection(dml, "tableview_name");
-                        if (name != null && !name.isBlank()) return name;
-                    }
-                } catch (Exception ignored) {}
-
-                // 2: getText() internal целиком (но НЕ подзапросы)
-                try {
-                    Method gtM = internal.getClass().getMethod("getText");
-                    String text = (String) gtM.invoke(internal);
-                    if (text != null && !text.isBlank() && !looksLikeSubquery(text)) {
-                        return BaseSemanticListener.cleanIdentifier(text);
-                    }
-                } catch (Exception ignored) {}
+    private String extractTableName(PlSqlParser.Table_ref_auxContext ctx, String tableAlias) {
+        // Стратегия 1: typed grammar-rule access
+        var internal = ctx.table_ref_aux_internal();
+        if (internal != null) {
+            if (isComplexTableExpression(internal)) return null;
+            if (internal instanceof PlSqlParser.Table_ref_aux_internal_oneContext one) {
+                var dml = one.dml_table_expression_clause();
+                if (dml != null && dml.tableview_name() != null) {
+                    return BaseSemanticListener.cleanIdentifier(dml.tableview_name().getText());
+                }
             }
-        } catch (Exception ignored) {}
+        }
 
-        // Стратегия 3: getText() ctx минус алиас в конце (но НЕ подзапросы)
-        // Guard: skip if token span is too large — definitely a subquery, not a table name
+        // Стратегия 2 (fallback): token-stream text minus alias — only for short simple spans
         if (ctx.stop != null && ctx.start != null
                 && (ctx.stop.getTokenIndex() - ctx.start.getTokenIndex()) > 50) {
             return null;
         }
         try {
-            String full = ctx.getText();
+            String full = extract(ctx);
             if (full == null || full.isBlank()) return null;
-            if (tableAlias != null && full.toUpperCase().endsWith(tableAlias)) {
-                full = full.substring(0, full.length() - tableAlias.length());
+            // Strip alias suffix by whitespace boundary — not text search
+            if (tableAlias != null && !tableAlias.isBlank()) {
+                String upper = full.trim().toUpperCase();
+                String aliasUpper = tableAlias.toUpperCase();
+                int lastSpace = upper.lastIndexOf(' ');
+                if (lastSpace >= 0 && upper.substring(lastSpace + 1).equals(aliasUpper)) {
+                    full = full.trim().substring(0, lastSpace).trim();
+                }
             }
-            if (looksLikeSubquery(full)) return null;
-            return BaseSemanticListener.cleanIdentifier(full);
+            // Validate remaining: plain identifier pattern only (no parens, spaces, keywords)
+            String candidate = full.trim().replaceAll("\\s+", "");
+            if (!candidate.isEmpty() && candidate.matches("[A-Za-z_][A-Za-z0-9_.@]*")) {
+                return BaseSemanticListener.cleanIdentifier(candidate);
+            }
+            return null;
         } catch (Exception e) {
             return null;
         }
     }
 
     /**
-     * Если table_ref_aux содержит TABLE(collection_expr), возвращает синтетическое
-     * имя таблицы вида "FUNC_TABLE__schema__pkg__func" (функция без аргументов,
-     * dots заменены на __). Иначе null.
+     * Returns true when a table_ref_aux_internal context represents a complex expression
+     * (subquery, LATERAL, TABLE(), JSON_TABLE, parenthesized join, ONLY clause) that
+     * cannot be reduced to a plain table name.
+     */
+    private static boolean isComplexTableExpression(
+            PlSqlParser.Table_ref_aux_internalContext internal) {
+        // Parenthesized join: (t1 JOIN t2 ON ...)
+        if (internal instanceof PlSqlParser.Table_ref_aux_internal_twoContext) return true;
+        // ONLY (table) clause
+        if (internal instanceof PlSqlParser.Table_ref_aux_internal_threContext) return true;
+        if (internal instanceof PlSqlParser.Table_ref_aux_internal_oneContext one) {
+            var dml = one.dml_table_expression_clause();
+            if (dml == null) return true;
+            // Complex forms checked via typed tokens / typed rule references
+            return dml.select_statement()           != null
+                || dml.subquery()                   != null
+                || dml.LATERAL()                    != null
+                || dml.json_table_clause()          != null
+                || dml.table_collection_expression() != null;
+        }
+        return false;
+    }
+
+    /**
+     * If table_ref_aux contains TABLE(collection_expr), returns a synthetic table name
+     * like "FUNC_TABLE__SCHEMA__PKG__FUNC" (function name, dots replaced with __).
+     * Returns null for any other table expression form.
      *
-     * Пример: TABLE(dwh.parse.strlist(x, ',')) t  →  "FUNC_TABLE__DWH__PARSE__STRLIST"
+     * Example: TABLE(dwh.parse.strlist(x, ',')) t  →  "FUNC_TABLE__DWH__PARSE__STRLIST"
+     *
+     * Uses typed grammar-rule access only — no reflection.
      */
     private String extractTableCollectionName(PlSqlParser.Table_ref_auxContext ctx,
                                               String alias) {
-        try {
-            java.lang.reflect.Method internalM = ctx.getClass().getMethod("table_ref_aux_internal");
-            Object internal = internalM.invoke(ctx);
-            if (internal == null) return null;
+        var internal = ctx.table_ref_aux_internal();
+        if (!(internal instanceof PlSqlParser.Table_ref_aux_internal_oneContext one)) return null;
+        var dml = one.dml_table_expression_clause();
+        if (dml == null || dml.table_collection_expression() == null) return null;
 
-            java.lang.reflect.Method dmlM = internal.getClass().getMethod("dml_table_expression_clause");
-            Object dml = dmlM.invoke(internal);
-            if (dml == null) return null;
-
-            java.lang.reflect.Method tceM = dml.getClass().getMethod("table_collection_expression");
-            Object tce = tceM.invoke(dml);
-            if (tce == null) return null;
-
-            // expression() inside TABLE(...)
-            java.lang.reflect.Method exprM = tce.getClass().getMethod("expression");
-            Object expr = exprM.invoke(tce);
-            String funcName = null;
-            if (expr != null) {
-                String exprText = (String) expr.getClass().getMethod("getText").invoke(expr);
-                // Take only the function name (before first '(')
-                String raw = exprText.contains("(") ? exprText.substring(0, exprText.indexOf('(')) : exprText;
-                raw = BaseSemanticListener.cleanIdentifier(raw); // strip quotes, uppercase
-                if (raw != null && !raw.isBlank()) {
-                    funcName = "FUNC_TABLE__" + raw.replace(".", "__");
-                }
+        var tce = dml.table_collection_expression();
+        String funcName = null;
+        if (tce.expression() != null) {
+            // Token-stream text (with spaces) for reliable leading-function extraction
+            String exprText = extract(tce.expression());
+            String raw = extractFunctionNameFromText(exprText);
+            if (raw != null && !raw.isBlank()) {
+                funcName = "FUNC_TABLE__" + raw.replace(".", "__");
             }
-            if (funcName == null || funcName.isBlank()) {
-                funcName = alias != null && !alias.isBlank()
-                        ? "FUNC_TABLE__" + alias.toUpperCase()
-                        : "FUNC_TABLE";
-            }
-            return funcName;
-        } catch (Exception e) {
-            return null;
         }
+        if (funcName == null || funcName.isBlank()) {
+            funcName = alias != null && !alias.isBlank()
+                    ? "FUNC_TABLE__" + alias.toUpperCase()
+                    : "FUNC_TABLE";
+        }
+        return funcName;
     }
 
-    /** Проверяет, является ли текст подзапросом или составным выражением (не простым именем таблицы) */
-    private static boolean looksLikeSubquery(String text) {
-        if (text == null) return false;
-        String upper = text.trim().toUpperCase();
-        return upper.startsWith("(SELECT")
-                || upper.startsWith("SELECT")
-                || upper.startsWith("(WITH")
-                || upper.startsWith("TABLE(")   // TABLE(collection_expr) — handled separately
-                || upper.startsWith("(")         // parenthesised join: (t1 JOIN t2 ON ...)
-                || text.length() > 200;
+    /**
+     * Extracts the leading function/constructor name from an expression text.
+     * Handles both collapsed (getText) and spaced (extract) text.
+     * Strips SQL keyword wrappers (CAST, MULTISET) to find the actual function.
+     * Falls back to substring-before-paren only if result looks like a valid identifier.
+     */
+    private static String extractFunctionNameFromText(String exprText) {
+        if (exprText == null || exprText.isBlank()) return null;
+        String trimmed = exprText.trim();
+        String upper = trimmed.toUpperCase().replaceAll("\\s+", "");
+        // Skip pure SQL keyword wrappers — the inner function is what matters
+        if (upper.startsWith("CAST(") || upper.startsWith("MULTISET(")) return null;
+        // Find the function name: everything before the first '('
+        String collapsed = upper;  // already no spaces
+        int parenIdx = collapsed.indexOf('(');
+        String candidate = parenIdx > 0 ? collapsed.substring(0, parenIdx) : collapsed;
+        // Validate: must be a valid identifier (letters, digits, underscores, dots)
+        if (candidate.isEmpty() || !candidate.matches("[A-Z_][A-Z0-9_.]*")) return null;
+        // Skip if candidate is a plain SQL keyword (not a type/function name)
+        if (SQL_BUILTIN_FUNCTIONS.contains(candidate)) return null;
+        return candidate;
+    }
+
+    /**
+     * Extracts the type constructor name from a PIPE ROW expression context.
+     * Tries grammar-rule traversal first; falls back to text only for simple cases.
+     * Returns the type ref (e.g. "CRM.T_PRICE_BREAK") or null if not resolvable.
+     */
+    private String extractConstructorTypeName(PlSqlParser.ExpressionContext exprCtx) {
+        if (exprCtx == null) return null;
+        // Use spaced text (extract) — avoids token-concatenation issues
+        String text = extract(exprCtx);
+        return extractFunctionNameFromText(text);
+    }
+
+    /**
+     * Extracts the canonical text from a type_spec context using typed token checks.
+     * Rule: getText() is only called at the leaf level (after navigating to the
+     * specific element via grammar rules), never on the whole type_spec.
+     *
+     * Priority:  %ROWTYPE → %TYPE → type_name → datatype → getText() fallback
+     */
+    private static String extractTypeSpecText(PlSqlParser.Type_specContext ts) {
+        if (ts == null) return null;
+        if (ts.PERCENT_ROWTYPE() != null) {
+            String base = ts.type_name() != null ? ts.type_name().getText() : "";
+            return base + "%ROWTYPE";
+        }
+        if (ts.PERCENT_TYPE() != null) {
+            String base = ts.type_name() != null ? ts.type_name().getText() : "";
+            return base + "%TYPE";
+        }
+        if (ts.type_name() != null) return ts.type_name().getText();
+        if (ts.datatype()  != null) return ts.datatype().getText();
+        return ts.getText(); // last resort: REF or otherwise unrecognized form
     }
 
     /**
@@ -2001,7 +2271,7 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         for (PlSqlParser.ParameterContext p : params) {
             if (p.parameter_name() == null) continue;
             String name = BaseSemanticListener.cleanIdentifier(p.parameter_name().getText());
-            String type = p.type_spec() != null ? p.type_spec().getText() : "UNKNOWN";
+            String type = p.type_spec() != null ? extractTypeSpecText(p.type_spec()) : "UNKNOWN";
             String mode = "IN";
             if (p.IN() != null && !p.IN().isEmpty() && p.OUT() != null && !p.OUT().isEmpty()) mode = "IN OUT";
             else if (p.OUT() != null && !p.OUT().isEmpty()) mode = "OUT";

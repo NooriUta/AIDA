@@ -192,6 +192,27 @@ public class KnotResource {
                                                + s.charCount() + " chars" : "null"))));
     }
 
+    @Query("plTypes")
+    @Description("HND-07 — list PL/SQL TYPE templates (RECORD / COLLECTION) for a lineage session. Role: viewer+")
+    public Uni<List<KnotPlType>> plTypes(
+        @Name("sessionId")
+        @Description("session_id of the DaliSession to query")
+        String sessionId
+    ) {
+        long start = System.currentTimeMillis();
+        heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
+                null, null, 0,
+                Map.of("op", "plTypes",
+                       "call", "plTypes(sessionId=" + (sessionId != null ? sessionId : "") + ")"));
+        return knotService.plTypes(sessionId)
+                .invoke(list -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
+                        null, null, System.currentTimeMillis() - start,
+                        Map.of("op", "plTypes",
+                               "sessionId", sessionId != null ? sessionId : "",
+                               "call", "plTypes(sessionId=" + (sessionId != null ? sessionId : "")
+                                       + ") → " + (list != null ? list.size() : 0) + " types")));
+    }
+
     @Query("knotSourceFile")
     @Description("KNOT — full source file from the source archive (hound_src_{tenant}). Two-step lookup: session_id → DaliSession.file_path (lineage DB) → DaliSourceFile (archive DB). Lazy — fires only when the Source tab is open. Role: viewer+")
     public Uni<KnotSourceFile> knotSourceFile(

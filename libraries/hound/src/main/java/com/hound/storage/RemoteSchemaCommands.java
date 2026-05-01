@@ -49,6 +49,9 @@ final class RemoteSchemaCommands {
                 "CREATE VERTEX TYPE DaliDDLStatement IF NOT EXISTS",
                 // KI-RETURN-1: named field of a DaliRecord (BULK COLLECT / RETURNING INTO targets)
                 "CREATE VERTEX TYPE DaliRecordField IF NOT EXISTS",
+                // HND-01: PL/SQL user-defined TYPE templates (RECORD / COLLECTION)
+                "CREATE VERTEX TYPE DaliPlType IF NOT EXISTS",
+                "CREATE VERTEX TYPE DaliPlTypeField IF NOT EXISTS",
 
                 // Edge types — namespace hierarchy
                 "CREATE EDGE TYPE BELONGS_TO_APP IF NOT EXISTS",
@@ -76,6 +79,7 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE ATOM_REF_COLUMN IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_REF_STMT IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_REF_OUTPUT_COL IF NOT EXISTS",
+                "CREATE EDGE TYPE ATOM_REF_PLTYPE_FIELD IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_PRODUCES IF NOT EXISTS",
                 // Edge types — data flow / lineage
                 "CREATE EDGE TYPE DATA_FLOW IF NOT EXISTS",
@@ -86,19 +90,27 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE BULK_COLLECTS_INTO IF NOT EXISTS",
                 "CREATE EDGE TYPE RECORD_USED_IN IF NOT EXISTS",
                 // KI-RETURN-1: record field membership + RETURNING INTO
-                "CREATE EDGE TYPE HAS_RECORD_FIELD IF NOT EXISTS EXTENDS E",
-                "CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS EXTENDS E",
+                "CREATE EDGE TYPE HAS_RECORD_FIELD IF NOT EXISTS",
+                "CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS",
                 // Edge types — affected columns + join sources
                 "CREATE EDGE TYPE HAS_AFFECTED_COL IF NOT EXISTS",
                 "CREATE EDGE TYPE AFFECTED_COL_REF_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_SOURCE_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_TARGET_TABLE IF NOT EXISTS",
                 // KI-DDL-1: DDL modifier edges (ALTER TABLE ADD/MODIFY/DROP)
-                "CREATE EDGE TYPE DaliDDLModifiesTable IF NOT EXISTS EXTENDS E",
-                "CREATE EDGE TYPE DaliDDLModifiesColumn IF NOT EXISTS EXTENDS E",
+                "CREATE EDGE TYPE DaliDDLModifiesTable IF NOT EXISTS",
+                "CREATE EDGE TYPE DaliDDLModifiesColumn IF NOT EXISTS",
                 // KI-PIPE-1: pipelined function edges
                 "CREATE EDGE TYPE PIPES_FROM IF NOT EXISTS",
                 "CREATE EDGE TYPE READS_PIPELINED IF NOT EXISTS",
+                // HND-01: PL/SQL TYPE edges (EXTENDS E not supported by ArcadeDB; plain edge type is the base)
+                "CREATE EDGE TYPE DECLARES_TYPE IF NOT EXISTS",
+                "CREATE EDGE TYPE OF_TYPE IF NOT EXISTS",
+                "CREATE EDGE TYPE INSTANTIATES_TYPE IF NOT EXISTS",
+                // HND-13: REF CURSOR → return type (DaliTable or %ROWTYPE resolved table)
+                "CREATE EDGE TYPE CURSOR_RETURNS IF NOT EXISTS",
+                // HND-15: CAST(MULTISET(SELECT...) AS t_list) → DaliPlType
+                "CREATE EDGE TYPE MULTISET_INTO IF NOT EXISTS",
                 // KI-005: UNIQUE and CHECK constraint vertex + edge types
                 "CREATE VERTEX TYPE DaliUniqueConstraint IF NOT EXISTS EXTENDS DaliConstraint",
                 "CREATE VERTEX TYPE DaliCheckConstraint IF NOT EXISTS EXTENDS DaliConstraint",
@@ -139,6 +151,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliTable.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliTable.dblink IF NOT EXISTS STRING",        // KI-DBLINK-1
+                "CREATE PROPERTY DaliTable.pl_type_geoid IF NOT EXISTS STRING",  // HND-04: VTABLE → DaliPlType
                 // DaliColumn
                 "CREATE PROPERTY DaliColumn.db_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.column_geoid IF NOT EXISTS STRING",
@@ -299,6 +312,22 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRoutine.is_pipelined IF NOT EXISTS BOOLEAN",
                 // KI-PRAGMA-1: autonomous transaction flag
                 "CREATE PROPERTY DaliRoutine.autonomous_transaction IF NOT EXISTS BOOLEAN",
+                // HND-01: PL/SQL TYPE vertices
+                "CREATE PROPERTY DaliPlType.type_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlType.type_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlType.kind IF NOT EXISTS STRING",          // RECORD | COLLECTION
+                "CREATE PROPERTY DaliPlType.element_type_geoid IF NOT EXISTS STRING",  // COLLECTION → OF_TYPE
+                "CREATE PROPERTY DaliPlType.scope_geoid IF NOT EXISTS STRING",   // declaring package or routine
+                "CREATE PROPERTY DaliPlType.declared_at_line IF NOT EXISTS INTEGER",
+                "CREATE PROPERTY DaliPlType.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlTypeField.field_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlTypeField.type_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlTypeField.field_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlTypeField.field_type IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlTypeField.position IF NOT EXISTS INTEGER",
+                "CREATE PROPERTY DaliPlTypeField.session_id IF NOT EXISTS STRING",
+                // HND-01: DaliRecord back-ref to the PlType template it was instantiated from
+                "CREATE PROPERTY DaliRecord.pl_type_geoid IF NOT EXISTS STRING",
                 // KI-FLASHBACK-1: AS OF TIMESTAMP/SCN on DaliStatement
                 "CREATE PROPERTY DaliStatement.flashback_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliStatement.flashback_expr IF NOT EXISTS STRING",
@@ -336,6 +365,9 @@ final class RemoteSchemaCommands {
                 "CREATE INDEX IF NOT EXISTS ON DaliRecord (record_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliRecordField (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliRecordField (field_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
+                // HND-01: DaliPlType / DaliPlTypeField indexes
+                "CREATE INDEX IF NOT EXISTS ON DaliPlType (session_id, type_geoid) UNIQUE_HASH NULL_STRATEGY SKIP",
+                "CREATE INDEX IF NOT EXISTS ON DaliPlTypeField (session_id, type_geoid) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliStatement (short_name) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliSnippetScript (session_id) NOTUNIQUE NULL_STRATEGY SKIP",
                 "CREATE INDEX IF NOT EXISTS ON DaliDDLStatement (session_id) NOTUNIQUE NULL_STRATEGY SKIP",

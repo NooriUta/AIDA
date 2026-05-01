@@ -1,12 +1,11 @@
--- ERROR FIXTURE: err_update_alias.sql
--- Category: Known grammar limitation — UPDATE with table alias
+-- FIXTURE: err_update_alias.sql (formerly an error fixture, now parses cleanly)
+-- Category: UPDATE with table alias — column_name supports alias.col via grammar rule
 --
--- Oracle allows UPDATE table_alias SET alias.col = val.
--- The PL/SQL ANTLR4 grammar does not support table aliases in UPDATE DML.
--- Expected: ANTLR4 errors on the SET lines (≥1 error per aliased column).
--- Parser recovers; the procedure is still registered, atoms are extracted.
---
--- This is a KNOWN LIMITATION of the grammar, not a bug in Oracle SQL.
+-- Oracle allows UPDATE tbl alias SET alias.col = val.
+-- The PL/SQL grammar column_name rule: identifier ('.' id_expression)* handles alias.col.
+-- Previously triggered a spurious ANTLR error because stripSqlPlusDirectives was
+-- incorrectly stripping indented SET clauses (starting with "SET ") as SQL*Plus directives.
+-- After the fix in HoundParserImpl.isSqlPlusDirective: 0 errors, 0 warnings expected.
 
 CREATE OR REPLACE PROCEDURE HR.UPDATE_SALARIES(p_dept IN NUMBER) AS
 BEGIN
