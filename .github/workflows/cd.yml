@@ -625,18 +625,13 @@ jobs:
           OUTPUT: CHANGES_THIS_RELEASE.md
           GITHUB_REPO: ${{ github.repository }}
 
-      - name: Prepend to CHANGELOG.md and push
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''
-        run: |
-          # Fetch and switch to release branch (cd.yml is checked out at SHA, not branch)
-          git fetch origin release
-          git checkout release
-          echo "## [${{ env.RELEASE_TAG }}] — $(date -u +%Y-%m-%d)" > /tmp/header.md
-          cat /tmp/header.md CHANGES_THIS_RELEASE.md CHANGELOG.md > /tmp/NEW_CHANGELOG.md
-          mv /tmp/NEW_CHANGELOG.md CHANGELOG.md
-          git add CHANGELOG.md
-          git diff --staged --quiet || git commit -m "chore(release): update CHANGELOG for ${{ env.RELEASE_TAG }} [skip ci]"
-          git push origin release
+      # NOTE: CHANGELOG.md commit-and-push to release branch removed (was here previously).
+      # Reason: branch protection on release requires 9 status checks for any push,
+      # bot push of CHANGELOG doesn't have CI runs → blocked with GH006 protected branch.
+      # Fix forward: GitHub Release body (next step) contains full changelog inline,
+      # which is sufficient — users see it on github.com/.../releases page.
+      # If repo CHANGELOG.md needs updating, use the manual `release.yml` workflow_dispatch
+      # which goes through proper PR flow (CHANGELOG → develop → release).
 
       - name: Create GitHub Release
         if: success() && github.event_name == 'workflow_dispatch' && inputs.tag != ''

@@ -37,7 +37,7 @@ dependencies {
     implementation project(':shared:dali-models')
 
     testImplementation 'io.quarkus:quarkus-junit5'
-    testImplementation 'org.assertj:assertj-core:3.27.3'
+    testImplementation 'org.assertj:assertj-core:3.27.7'
     testImplementation 'io.quarkus:quarkus-jacoco'
 }
 
