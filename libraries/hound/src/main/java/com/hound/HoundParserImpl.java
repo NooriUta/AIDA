@@ -447,9 +447,15 @@ public class HoundParserImpl implements HoundParser {
         };
     }
 
-    private static ParseOutcome parseAndWalk(String sql, String dialect, Object listener,
+    private static ParseOutcome parseAndWalk(String rawSql, String dialect, Object listener,
                                               String filePath, HoundEventListener eventListener,
                                               PipelineTimer timer) {
+        // Strip UTF-8 BOM (U+FEFF) — Windows editors (Notepad/Excel/some IDEs) prepend
+        // it on save and ANTLR4 lexers report "token recognition error at: '﻿'"
+        // on line 1 col 0. Stripping centrally here covers all dialects.
+        final String sql = (rawSql != null && !rawSql.isEmpty() && rawSql.charAt(0) == '﻿')
+                ? rawSql.substring(1)
+                : rawSql;
         return switch (dialect.toLowerCase()) {
             case "plsql" -> {
                 AntlrErrorCollector errorCollector =

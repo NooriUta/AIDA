@@ -14,7 +14,26 @@ interface EventLogProps {
 }
 
 function formatTime(ts: number): string {
-  return new Date(ts).toISOString().substring(11, 23); // HH:mm:ss.mmm
+  // Local TZ — toISOString() returns UTC, which confused users when comparing to logs.
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  const ms = String(d.getMilliseconds()).padStart(3, '0');
+  return `${hh}:${mm}:${ss}.${ms}`;
+}
+
+function formatFullTimestamp(ts: number): string {
+  // Local TZ ISO-like string with offset — for the expanded event detail panel.
+  const d = new Date(ts);
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+  const offMin = -d.getTimezoneOffset();
+  const offSign = offMin >= 0 ? '+' : '-';
+  const offH = pad(Math.floor(Math.abs(offMin) / 60));
+  const offM = pad(Math.abs(offMin) % 60);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+       + `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
+       + `${offSign}${offH}:${offM}`;
 }
 
 function EventRow({
@@ -66,7 +85,7 @@ function EventDetail({ event, onClose }: { event: HeimdallEvent; onClose: () => 
           {event.durationMs > 0 && (
             <span style={{ color: 'var(--t3)' }}>{event.durationMs}ms</span>
           )}
-          <span style={{ color: 'var(--t3)' }}>{new Date(event.timestamp).toISOString()}</span>
+          <span style={{ color: 'var(--t3)' }}>{formatFullTimestamp(event.timestamp)}</span>
         </div>
         <button
           onClick={onClose}

@@ -6,6 +6,7 @@ import jakarta.inject.Singleton;
 import org.jobrunr.jobs.Job;
 import org.jobrunr.jobs.RecurringJob;
 import org.jobrunr.jobs.mappers.JobMapper;
+import org.jobrunr.jobs.states.ScheduledState;
 import org.jobrunr.jobs.states.StateName;
 import org.jobrunr.storage.*;
 import org.jobrunr.storage.navigation.AmountRequest;
@@ -143,11 +144,26 @@ public class ArcadeDbStorageProvider extends AbstractStorageProvider {
         String id    = job.getId().toString();
         String state = job.getJobState().getName().name();
         String json  = jobMapper.serializeJob(job);
+
+        // Persist scheduledAt for SCHEDULED jobs. Without it the poll query
+        // `WHERE state='SCHEDULED' AND scheduledAt < :cutoff` never matches
+        // (NULL comparisons are false) and jobs get stuck forever.
+        Date scheduledAt = (job.getJobState() instanceof ScheduledState s)
+                ? Date.from(s.getScheduledAt())
+                : null;
+
+        Map<String, Object> params = new HashMap<>(4);
+        params.put("id",    id);
+        params.put("state", state);
+        params.put("json",  json);
+        params.put("scheduledAt", scheduledAt); // null for non-SCHEDULED states — column allows null
+
         runSql(
-            "UPDATE `jobrunr_jobs` SET id = :id, state = :state, jobAsJson = :json, updatedAt = sysdate() " +
+            "UPDATE `jobrunr_jobs` SET id = :id, state = :state, jobAsJson = :json, " +
+            "scheduledAt = :scheduledAt, updatedAt = sysdate() " +
             "UPSERT RETURN AFTER @rid WHERE id = :id",
-            Map.of("id", id, "state", state, "json", json));
-        log.debug("JobRunr: saved job {} state={}", id, state);
+            params);
+        log.debug("JobRunr: saved job {} state={} scheduledAt={}", id, state, scheduledAt);
         // Notify listeners so BackgroundJobServer wakes up immediately instead of
         // waiting for the next periodic poll cycle (which may be delayed by backoff).
         notifyJobStatsOnChangeListeners();
