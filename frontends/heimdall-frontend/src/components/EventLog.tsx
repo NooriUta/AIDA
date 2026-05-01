@@ -13,7 +13,7 @@ interface EventLogProps {
   connected?: boolean;
 }
 
-function formatTime(ts: number): string {
+export function formatTime(ts: number): string {
   // Local TZ — toISOString() returns UTC, which confused users when comparing to logs.
   const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, '0');
@@ -23,7 +23,7 @@ function formatTime(ts: number): string {
   return `${hh}:${mm}:${ss}.${ms}`;
 }
 
-function formatFullTimestamp(ts: number): string {
+export function formatFullTimestamp(ts: number): string {
   // Local TZ ISO-like string with offset — for the expanded event detail panel.
   const d = new Date(ts);
   const pad = (n: number, w = 2) => String(n).padStart(w, '0');
