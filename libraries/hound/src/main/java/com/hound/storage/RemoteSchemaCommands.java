@@ -193,6 +193,7 @@ final class RemoteSchemaCommands {
                 // DaliAtom
                 "CREATE PROPERTY DaliAtom.atom_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.atom_text IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.atom_geoid IF NOT EXISTS STRING",   // composite uniqueness key text~line:col
                 "CREATE PROPERTY DaliAtom.atom_context IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.parent_context IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.status IF NOT EXISTS STRING",
