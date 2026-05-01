@@ -66,6 +66,18 @@ public class HeimdallEmitter {
         emit(build("hound", type, EventLevel.WARN,  sessionId, 0, payload));
     }
 
+    /**
+     * Returns a new payload with {@code tenantAlias} added (no-op if tenant is null/blank or
+     * key already present). HEIMDALL EventLog UI reads {@code payload.tenantAlias} to populate
+     * the Tenant column — without it the column shows "—".
+     */
+    private static Map<String, Object> withTenant(Map<String, Object> payload, String tenantAlias) {
+        if (tenantAlias == null || tenantAlias.isBlank()) return payload;
+        Map<String, Object> enriched = new java.util.LinkedHashMap<>(payload);
+        enriched.putIfAbsent("tenantAlias", tenantAlias);
+        return enriched;
+    }
+
     // ── Layer 3: typed Dali events ────────────────────────────────────────────
 
     /** Emitted by SessionService when a new session is accepted into the queue. */
@@ -108,51 +120,51 @@ public class HeimdallEmitter {
     }
 
     /** Emitted when Hound begins parsing a single SQL file. */
-    public void fileParsingStarted(String sessionId, String file, String dialect) {
-        houndInfo(EventType.FILE_PARSING_STARTED, sessionId, Map.of(
+    public void fileParsingStarted(String sessionId, String tenantAlias, String file, String dialect) {
+        houndInfo(EventType.FILE_PARSING_STARTED, sessionId, withTenant(Map.of(
                 "file",    file,
-                "dialect", dialect));
+                "dialect", dialect), tenantAlias));
     }
 
     /**
      * Emitted after a file parse completes — carries the atom count for that file.
      * HEIMDALL metrics service aggregates these to compute {@code atomsExtracted}.
      */
-    public void atomExtracted(String sessionId, String file, int atomCount) {
-        houndInfo(EventType.ATOM_EXTRACTED, sessionId, Map.of(
+    public void atomExtracted(String sessionId, String tenantAlias, String file, int atomCount) {
+        houndInfo(EventType.ATOM_EXTRACTED, sessionId, withTenant(Map.of(
                 "file",      file,
-                "atomCount", atomCount));
+                "atomCount", atomCount), tenantAlias));
     }
 
     /**
      * Emitted when ANTLR4 reports a genuine syntax error inside a file.
      * Level is WARN — the file is still (partially) parsed; the session continues.
      */
-    public void parseError(String sessionId, String file, int line, int col, String msg) {
-        houndWarn(EventType.PARSE_ERROR, sessionId, Map.of(
+    public void parseError(String sessionId, String tenantAlias, String file, int line, int col, String msg) {
+        houndWarn(EventType.PARSE_ERROR, sessionId, withTenant(Map.of(
                 "file", file,
                 "line", line,
                 "col",  col,
-                "msg",  msg != null ? msg : ""));
+                "msg",  msg != null ? msg : ""), tenantAlias));
     }
 
     /**
      * Emitted when ANTLR4 reports a known grammar limitation (not a bug in the source file).
      * Level is INFO — informational only; does not affect {@code isSuccess()} or the ✗ indicator.
      */
-    public void parseWarning(String sessionId, String file, int line, int col, String msg) {
-        houndInfo(EventType.PARSE_WARNING, sessionId, Map.of(
+    public void parseWarning(String sessionId, String tenantAlias, String file, int line, int col, String msg) {
+        houndInfo(EventType.PARSE_WARNING, sessionId, withTenant(Map.of(
                 "file", file,
                 "line", line,
                 "col",  col,
-                "msg",  msg != null ? msg : ""));
+                "msg",  msg != null ? msg : ""), tenantAlias));
     }
 
     /** Emitted when Hound encounters an error parsing a file. */
-    public void fileParsingFailed(String sessionId, String file, String error) {
-        emit(build("hound", EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, Map.of(
+    public void fileParsingFailed(String sessionId, String tenantAlias, String file, String error) {
+        emit(build("hound", EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, withTenant(Map.of(
                 "file",  file,
-                "error", error != null ? error : "unknown")));
+                "error", error != null ? error : "unknown"), tenantAlias)));
     }
 
     // ── Layer 3: YGG write events (EV-02 / EV-03 / EV-05 / EV-06) ───────────
@@ -161,18 +173,18 @@ public class HeimdallEmitter {
      * EV-02: Emitted when Hound successfully writes a session's graph to YGG.
      * Fired once per session after all files are written (non-preview only).
      */
-    public void yggWriteCompleted(String sessionId, int vertices, int edges, long durationMs) {
+    public void yggWriteCompleted(String sessionId, String tenantAlias, int vertices, int edges, long durationMs) {
         emit(build("hound", EventType.YGG_WRITE_COMPLETED, EventLevel.INFO, sessionId, durationMs,
-                Map.of("verticesWritten", vertices, "edgesWritten", edges)));
+                withTenant(Map.of("verticesWritten", vertices, "edgesWritten", edges), tenantAlias)));
     }
 
     /**
      * EV-02: Emitted when one or more YGG writes fail after all retries are exhausted.
      * In batch mode: fired if any file permanently failed (others may have succeeded).
      */
-    public void yggWriteFailed(String sessionId, String error) {
+    public void yggWriteFailed(String sessionId, String tenantAlias, String error) {
         emit(build("hound", EventType.YGG_WRITE_FAILED, EventLevel.ERROR, sessionId, 0,
-                Map.of("error", error != null ? error : "unknown")));
+                withTenant(Map.of("error", error != null ? error : "unknown"), tenantAlias)));
     }
 
     /**

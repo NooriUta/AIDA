@@ -54,6 +54,18 @@ public class CompositeListener implements HoundEventListener {
         invoke(() -> secondary.onError(file, error), "onError/secondary");
     }
 
+    @Override
+    public void onParseError(String file, int line, int charPos, String msg) {
+        invoke(() -> primary.onParseError(file, line, charPos, msg),   "onParseError/primary");
+        invoke(() -> secondary.onParseError(file, line, charPos, msg), "onParseError/secondary");
+    }
+
+    @Override
+    public void onParseWarning(String file, int line, int charPos, String msg) {
+        invoke(() -> primary.onParseWarning(file, line, charPos, msg),   "onParseWarning/primary");
+        invoke(() -> secondary.onParseWarning(file, line, charPos, msg), "onParseWarning/secondary");
+    }
+
     // ── Internal ──────────────────────────────────────────────────────────────
 
     private void invoke(Runnable action, String label) {

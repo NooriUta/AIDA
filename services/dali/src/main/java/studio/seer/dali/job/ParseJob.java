@@ -236,7 +236,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
         // EV-02: report YGG write outcome
         if (!input.preview()) {
-            emitter.yggWriteCompleted(sessionId, result.vertexCount(), result.edgeCount(), result.durationMs());
+            emitter.yggWriteCompleted(sessionId, input.tenantAlias(), result.vertexCount(), result.edgeCount(), result.durationMs());
         }
 
         if (!input.preview()) {
@@ -326,7 +326,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
 
         // EV-02: report YGG write outcome for JDBC source
         if (!input.preview()) {
-            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
+            emitter.yggWriteCompleted(sessionId, tenantAlias, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
         }
 
         if (!input.preview()) {
@@ -405,10 +405,10 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
         if (!input.preview()) {
             long failedCount = fileResults.stream().filter(fr -> !fr.success()).count();
             if (failedCount > 0) {
-                emitter.yggWriteFailed(sessionId,
+                emitter.yggWriteFailed(sessionId, input.tenantAlias(),
                         failedCount + " of " + fileResults.size() + " file(s) failed after " + FILE_MAX_RETRIES + " retries");
             }
-            emitter.yggWriteCompleted(sessionId, merged.vertexCount(), merged.edgeCount(), merged.durationMs());
+            emitter.yggWriteCompleted(sessionId, input.tenantAlias(), merged.vertexCount(), merged.edgeCount(), merged.durationMs());
         }
 
         if (!input.preview()) {
@@ -504,7 +504,7 @@ public class ParseJob implements JobRequestHandler<ParseJobRequest> {
                 .<HoundEventListener>map(url -> new HoundHeimdallListener(url, sessionId, tenantAlias, sourceRoot))
                 .orElse(NoOpHoundEventListener.INSTANCE);
         return new CompositeListener(
-                new DaliHoundListener(sessionId, config.dialect(), emitter),
+                new DaliHoundListener(sessionId, config.dialect(), tenantAlias, emitter),
                 heimdall);
     }
 

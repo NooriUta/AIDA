@@ -155,6 +155,15 @@ public class HoundHeimdallListener implements HoundEventListener {
     }
 
     @Override
+    public void onParseWarning(String file, int line, int charPos, String msg) {
+        send("PARSE_WARNING", "INFO", 0, Map.of(
+                "file", relPath(file),
+                "line", line,
+                "col",  charPos,
+                "msg",  truncate(msg, 300)));
+    }
+
+    @Override
     public void onError(String file, Throwable error) {
         lastEmitted.remove(file);
         send("FILE_PARSING_FAILED", "ERROR", 0, Map.of(
