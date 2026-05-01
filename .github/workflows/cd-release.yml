@@ -169,6 +169,16 @@ jobs:
             cd /opt/seer-studio
             set -a; source .env.prod 2>/dev/null || true; set +a
 
+            # Login to YCR via VM service account IAM token (token expires every ~1h)
+            if [ -f ~/.docker/config.json ]; then
+              jq 'del(.credHelpers["cr.yandex"])' ~/.docker/config.json \
+                > /tmp/dc.json && mv /tmp/dc.json ~/.docker/config.json
+            fi
+            IAM_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+              http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token \
+              | jq -r .access_token)
+            echo "$IAM_TOKEN" | docker login cr.yandex -u iam --password-stdin
+
             wait_for() {
               local url="$1" name="$2" retries="${3:-60}"
               # Quick pre-check (matches prod wait_infra pattern)
@@ -283,6 +293,16 @@ jobs:
             cd /opt/seer-studio
             set -a; source .env.prod 2>/dev/null || true; set +a
             PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
+
+            # Login to YCR via VM service account IAM token (token expires every ~1h)
+            if [ -f ~/.docker/config.json ]; then
+              jq 'del(.credHelpers["cr.yandex"])' ~/.docker/config.json \
+                > /tmp/dc.json && mv /tmp/dc.json ~/.docker/config.json
+            fi
+            IAM_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+              http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token \
+              | jq -r .access_token)
+            echo "$IAM_TOKEN" | docker login cr.yandex -u iam --password-stdin
 
             wait_for() {
               local url="$1" name="$2" retries="${3:-60}"
