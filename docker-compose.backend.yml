@@ -1,7 +1,7 @@
 ###############################################################################
 # AIDA — BACKEND (partStable) layer
 #
-# Services: SHUTTLE (GraphQL) · Dali (PL/SQL parser) · Heimdall-backend
+# Services: SHUTTLE (GraphQL) · Dali (PL/SQL parser) · Heimdall-backend · MIMIR (AI)
 #
 # Requires stable layer running first:  make stable-up
 #
@@ -101,3 +101,26 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # ── MIMIR (AI lineage assistant — LangChain4j + Quarkus) ──────────────────
+  mimir:
+    build:
+      context: .
+      dockerfile: services/mimir/Dockerfile
+    ports:
+      - "19094:9094"
+    environment:
+      QUARKUS_HTTP_PORT: "9094"
+      ANVIL_URL:         http://anvil:9095
+      SHUTTLE_URL:       http://shuttle:8080
+      YGG_URL:           http://ygg:2480
+      YGG_USER:          ${ARCADEDB_USER:-root}
+      YGG_PASSWORD:      ${ARCADEDB_ROOT_PASSWORD:-playwithdata}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEEPSEEK_API_KEY:  ${DEEPSEEK_API_KEY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9094/q/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
