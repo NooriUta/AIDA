@@ -146,6 +146,46 @@ public class MimirEventEmitter {
                 "admin",        admin)));
     }
 
+    /** Tenant hit a daily/monthly token or cost cap (TIER2 MT-07). */
+    public void quotaExceeded(String tenantAlias, String reason, long current, long limit, java.time.Instant resetAt) {
+        emit(build(EventType.QUOTA_EXCEEDED, EventLevel.WARN, 0, null, mapOf(
+                "tenant_alias", tenantAlias,
+                "reason",       reason,
+                "current",      current,
+                "limit",        limit,
+                "reset_at",     resetAt == null ? null : resetAt.toString())));
+    }
+
+    /** Token usage + USD cost for a single LLM call (TIER2 MT-07). */
+    public void tokenUsageRecorded(String tenantAlias, String provider, String model,
+                                   long promptTokens, long completionTokens, double costUsd) {
+        emit(build(EventType.TOKEN_USAGE_RECORDED, EventLevel.INFO, 0, null, mapOf(
+                "tenant_alias",      tenantAlias,
+                "provider",          provider,
+                "model",             model,
+                "prompt_tokens",     promptTokens,
+                "completion_tokens", completionTokens,
+                "cost_usd",          costUsd)));
+    }
+
+    /** Orchestrator paused a request waiting for HiL approval (TIER2 MT-08). */
+    public void hilPauseRequested(String tenantAlias, String sessionId, String approvalId, String reason) {
+        emit(build(EventType.HIL_PAUSE_REQUESTED, EventLevel.WARN, 0, sessionId, mapOf(
+                "tenant_alias", tenantAlias,
+                "session_id",   sessionId,
+                "approval_id",  approvalId,
+                "reason",       reason)));
+    }
+
+    /** Operator made an approve/reject decision on a paused session (TIER2 MT-08). */
+    public void hilDecisionMade(String sessionId, boolean approved, String decidedBy, String comment) {
+        emit(build(EventType.HIL_DECISION_MADE, EventLevel.INFO, 0, sessionId, mapOf(
+                "session_id",  sessionId,
+                "approve",     approved,
+                "decided_by",  decidedBy,
+                "comment",     comment)));
+    }
+
     // ── Internal builder ─────────────────────────────────────────────────────
 
     private static HeimdallEvent build(EventType type, EventLevel level, long durationMs,

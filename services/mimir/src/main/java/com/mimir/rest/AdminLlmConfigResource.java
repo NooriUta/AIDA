@@ -6,6 +6,10 @@ import com.mimir.byok.LlmCredentialResolver;
 import com.mimir.byok.TenantLlmConfig;
 import com.mimir.byok.TenantLlmConfigStore;
 import com.mimir.heimdall.MimirEventEmitter;
+import com.mimir.quota.DailyUsage;
+import com.mimir.quota.TenantQuota;
+import com.mimir.quota.TenantQuotaGuard;
+import com.mimir.quota.TenantQuotaStore;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.Consumes;
@@ -13,14 +17,17 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -46,6 +53,8 @@ public class AdminLlmConfigResource {
     @Inject TenantLlmConfigStore   store;
     @Inject LlmCredentialResolver  resolver;
     @Inject MimirEventEmitter      emitter;
+    @Inject TenantQuotaStore       quotaStore;
+    @Inject TenantQuotaGuard       quotaGuard;
 
     public record UpsertRequest(
             @NotBlank String tenantAlias,
@@ -110,5 +119,53 @@ public class AdminLlmConfigResource {
         if (!"admin".equalsIgnoreCase(role) && !"superadmin".equalsIgnoreCase(role)) {
             throw new WebApplicationException("admin role required", 403);
         }
+    }
+
+    // ── TIER2 MT-07 — quota / usage admin ────────────────────────────────
+
+    @PUT
+    @Path("/quota/{tenantAlias}")
+    public Response putQuota(@PathParam("tenantAlias") String tenantAlias,
+                             @HeaderParam("X-Seer-Role") String role,
+                             TenantQuota body) {
+        requireAdmin(role);
+        if (body == null) throw new WebApplicationException("missing body", 400);
+        quotaStore.saveQuota(tenantAlias, body);
+        quotaGuard.invalidate(tenantAlias);
+        LOG.infof("Quota set: tenant=%s daily=%d/$%.2f monthly=%d/$%.2f admin=%s",
+                tenantAlias, body.dailyTokenLimit(), body.dailyCostLimitUsd(),
+                body.monthlyTokenLimit(), body.monthlyCostLimitUsd(), role);
+        return Response.ok(body).build();
+    }
+
+    @GET
+    @Path("/quota/{tenantAlias}")
+    public Response getQuota(@PathParam("tenantAlias") String tenantAlias,
+                             @HeaderParam("X-Seer-Role") String role) {
+        requireAdmin(role);
+        return quotaStore.findQuota(tenantAlias)
+                .map(q -> Response.ok(q).build())
+                .orElseGet(() -> Response.ok(TenantQuota.unlimited()).build());
+    }
+
+    @GET
+    @Path("/usage/{tenantAlias}")
+    public Response getUsage(@PathParam("tenantAlias") String tenantAlias,
+                             @HeaderParam("X-Seer-Role") String role,
+                             @QueryParam("days") Integer days) {
+        requireAdmin(role);
+        int safeDays = days == null ? 30 : Math.max(1, Math.min(days, 365));
+        List<DailyUsage> rows = quotaStore.listUsage(tenantAlias, safeDays);
+        long totalTokens = rows.stream().mapToLong(DailyUsage::totalTokens).sum();
+        double totalCost = rows.stream().mapToDouble(DailyUsage::costEstimateUsd).sum();
+        int totalReq    = rows.stream().mapToInt(DailyUsage::requestCount).sum();
+        return Response.ok(Map.of(
+                "tenantAlias",  tenantAlias,
+                "days",         safeDays,
+                "totals",       Map.of(
+                        "tokens",       totalTokens,
+                        "costUsd",      totalCost,
+                        "requestCount", totalReq),
+                "daily",        rows)).build();
     }
 }

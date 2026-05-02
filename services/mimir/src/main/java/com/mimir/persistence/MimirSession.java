@@ -52,4 +52,17 @@ public record MimirSession(
         return new MimirSession(sessionId, tenantAlias, "failed",
                 List.of(), List.of(), null, now, now);
     }
+
+    /** TIER2 MT-08 — request paused waiting for operator approval. */
+    public static MimirSession paused(String sessionId, String tenantAlias,
+                                      String approvalId, String reason) {
+        Instant now = Instant.now();
+        java.util.Map<String, Object> ps = new java.util.HashMap<>();
+        ps.put("approvalId", approvalId);
+        ps.put("reason",     reason);
+        ps.put("requestedAt", now.toString());
+        ps.put("expiresAt",   now.plusSeconds(30 * 60).toString());
+        return new MimirSession(sessionId, tenantAlias, "paused",
+                List.of(), List.of(), ps, now, now);
+    }
 }
