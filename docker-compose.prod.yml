@@ -94,6 +94,7 @@ services:
       ARCADEDB_PASS:          ${ARCADEDB_ADMIN_PASSWORD}
       LINEAGE_API_URL:        http://shuttle:8080
       HEIMDALL_URL:           http://heimdall-backend:9093
+      MIMIR_URL:              http://mimir:9094
     ports:
       - "13000:3000"
     depends_on:
@@ -237,6 +238,59 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # ── ANVIL (impact-analysis service) ───────────────────────────────────────
+  anvil:
+    image: ghcr.io/nooriuta/verdandi/anvil:latest
+    restart: unless-stopped
+    environment:
+      QUARKUS_HTTP_PORT: "9095"
+      CORS_ORIGINS:   "https://seidrstudio.pro,https://www.seidrstudio.pro,https://seer.seidrstudio.pro,https://heimdall.seidrstudio.pro"
+      YGG_URL:        http://ygg:2480
+      YGG_USER:       root
+      YGG_PASSWORD:   ${ARCADEDB_ADMIN_PASSWORD}
+      HEIMDALL_URL:   http://heimdall-backend:9093
+    ports:
+      - "19095:9095"
+    depends_on:
+      ygg:
+        condition: service_started
+      heimdall-backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9095/q/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ── MIMIR (AI lineage assistant — LangChain4j + Quarkus) ──────────────────
+  # API key injected from Lockbox secret ANTHROPIC_API_KEY (or DEEPSEEK_API_KEY for staging).
+  mimir:
+    image: ghcr.io/nooriuta/verdandi/mimir:latest
+    restart: unless-stopped
+    environment:
+      QUARKUS_HTTP_PORT: "9094"
+      ANVIL_URL:         http://anvil:9095
+      SHUTTLE_URL:       http://shuttle:8080
+      YGG_URL:           http://ygg:2480
+      YGG_USER:          root
+      YGG_PASSWORD:      ${ARCADEDB_ADMIN_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEEPSEEK_API_KEY:  ${DEEPSEEK_API_KEY:-}
+    ports:
+      - "19094:9094"
+    depends_on:
+      shuttle:
+        condition: service_started
+      anvil:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9094/q/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   # Shell removed 2026-05-01 — replaced by independent SPAs on subdomains.
 

@@ -18,6 +18,8 @@ import { tenantRoutes }   from './admin/tenantRoutes';
 import { userLifecycleRoutes } from './admin/userLifecycleRoutes';
 import { adminUsersRoutes }    from './admin/usersRoutes';
 import { serviceAccountRoutes } from './admin/serviceAccountRoutes';
+import { mimirRoutes }          from './routes/mimir';   // MP-06
+import { skuldRoutes }          from './routes/skuld';   // MP-06
 
 async function start(): Promise<void> {
   const app = Fastify({
@@ -73,6 +75,8 @@ async function start(): Promise<void> {
   await app.register(userLifecycleRoutes);  // MTN-61
   await app.register(adminUsersRoutes);       // Round 5 Tier C
   await app.register(serviceAccountRoutes, { prefix: '/api/admin' }); // MTN-34
+  await app.register(mimirRoutes);  // MP-06: /mimir/* → MIMIR :9094
+  await app.register(skuldRoutes);  // MP-06: /skuld/* → FRIGG + HEIMDALL
 
   // ── Health ───────────────────────────────────────────────────────────────────
 

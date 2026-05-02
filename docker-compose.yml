@@ -94,6 +94,8 @@ services:
       DALI_URL:              http://dali:9090
       # HEIMDALL — backend layer
       HEIMDALL_URL:          http://heimdall-backend:9093
+      # MIMIR — backend layer (AI lineage assistant)
+      MIMIR_URL:             http://mimir:9094
       # KC Admin API
       KC_ADMIN_USER:         ${KC_ADMIN_USER:-admin}
       KC_ADMIN_PASS:         ${KC_ADMIN_PASS:-sae0611!}

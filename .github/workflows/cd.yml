@@ -110,6 +110,12 @@ jobs:
           - service: heimdall-frontend
             context: .
             dockerfile: ./frontends/heimdall-frontend/Dockerfile
+          - service: anvil
+            context: .
+            dockerfile: ./services/anvil/Dockerfile
+          - service: mimir
+            context: .
+            dockerfile: ./services/mimir/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -150,7 +156,7 @@ jobs:
       packages: read
     strategy:
       matrix:
-        service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend]
+        service: [verdandi, chur, shuttle, dali, heimdall-backend, heimdall-frontend, anvil, mimir]
     steps:
       - name: Set release tag and lowercase owner
         run: |
@@ -360,7 +366,7 @@ jobs:
             export REPO=cr.yandex/${YC_REGISTRY_ID}
 
             # Pull new images from YCR
-            for svc in verdandi chur shuttle dali heimdall-backend heimdall-frontend; do
+            for svc in verdandi chur shuttle dali heimdall-backend heimdall-frontend anvil mimir; do
               docker pull ${REPO}/${svc}:${IMAGE_TAG}
               docker tag  ${REPO}/${svc}:${IMAGE_TAG} ${REPO}/${svc}:latest
             done
@@ -563,6 +569,8 @@ jobs:
             wait_infra "http://localhost:15173/"         "Verdandi"         "" || { echo "Verdandi health check FAILED";         exit 1; }
             wait_infra "http://localhost:19090/q/health" "Dali"             "" || { echo "Dali health check FAILED";             exit 1; }
             wait_infra "http://localhost:19093/q/health" "heimdall-backend" "" || { echo "heimdall-backend health check FAILED"; exit 1; }
+            wait_infra "http://localhost:19095/q/health" "Anvil"            "" || { echo "Anvil health check FAILED";            exit 1; }
+            wait_infra "http://localhost:19094/q/health" "Mimir"            "" || { echo "Mimir health check FAILED";            exit 1; }
             # FIX-2: Keycloak — prod auth depends on KC. .well-known endpoint returns 200 when realm is up.
             wait_infra "http://localhost:18180/kc/realms/seer/.well-known/openid-configuration" "Keycloak" "" || { echo "Keycloak health check FAILED"; exit 1; }
             echo "  All services OK"
