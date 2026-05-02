@@ -185,10 +185,16 @@ services:
       CORS_ORIGINS: "https://${DOMAIN:-seidrstudio.pro},https://seer.${DOMAIN:-seidrstudio.pro},http://localhost:13000"
       ANVIL_URL: "http://anvil:9095"
       SHUTTLE_URL: "http://shuttle:8080"
+      HEIMDALL_URL: "http://heimdall-backend:9093"
       YGG_URL: "http://ygg:2480"
       YGG_USER: "root"
       YGG_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD}
-      # DEEPSEEK_API_KEY comes from env_file (.env.prod) → quarkus.langchain4j.openai.api-key
+      # Quarkiverse LangChain4j REQUIRES non-empty api-key strings at startup
+      # even if model not used (Anthropic+Ollama are CDI stubs до 02.06.2026 Decision #71).
+      # Empty string in .env.prod → SmallRye SRCFG00040 NoSuchElementException.
+      # Use placeholder if env unset/empty.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-sk-placeholder-not-real}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-ant-placeholder-not-real}
     <<: *env_file
     deploy:
       resources:
