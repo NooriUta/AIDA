@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "generatedAt": "2026-05-02T17:00:00Z",
+  "model": "deepseek-chat",
+  "note": "Tier 3 demo cache fallback (TIER2 MT-02 will load this). Initial seed — replace with real DeepSeek-validated answers from MIMIR_DEEPSEEK_VALIDATION_REPORT after MC-07 IT runs in env with DEEPSEEK_API_KEY.",
+  "responses": [
+    {
+      "questionPattern": "процедуры читают из ORDERS",
+      "matchKeywords": ["процедуры", "ORDERS", "читают", "читает"],
+      "answer": "Из таблицы HR.ORDERS читают 3 процедуры:\n• HR.PKG_ORDERS.PROCESS_ORDER (lines 45-89)\n• HR.PROC_ORDER_REPORT (lines 12-156)\n• HR.PKG_ANALYTICS.AGGREGATE_DAILY (lines 234-289)\n\nСвязи получены через READS_FROM рёбра в графе линейности.",
+      "toolCallsUsed": ["search_nodes", "query_lineage"],
+      "highlightNodeIds": ["HR.ORDERS", "HR.PKG_ORDERS.PROCESS_ORDER", "HR.PROC_ORDER_REPORT", "HR.PKG_ANALYTICS.AGGREGATE_DAILY"],
+      "confidence": 0.92,
+      "simulatedDelayMs": 2800
+    },
+    {
+      "questionPattern": "что сломается если изменить SALARY",
+      "matchKeywords": ["сломается", "SALARY", "изменить", "impact"],
+      "answer": "При изменении HR.EMPLOYEES.SALARY затронуты будут 47 объектов (5 hops downstream):\n• 12 процедур (расчёт зарплаты, отчёты, аудит)\n• 8 представлений (DASHBOARD_PAYROLL, REPORT_*)\n• 23 statements в пакетах\n• 4 целевые таблицы (HR_BACKUP, AUDIT_LOG, ...)\n\nКритическая зависимость — пакет HR.PKG_PAYROLL.\nРекомендую согласовать изменение с владельцами этого пакета до релиза.",
+      "toolCallsUsed": ["find_impact"],
+      "highlightNodeIds": ["HR.EMPLOYEES.SALARY", "HR.PKG_PAYROLL", "HR.DASHBOARD_PAYROLL", "AUDIT_LOG"],
+      "confidence": 0.88,
+      "simulatedDelayMs": 3400
+    },
+    {
+      "questionPattern": "откуда берётся EXPORT_DATE",
+      "matchKeywords": ["EXPORT_DATE", "откуда", "берётся", "берется", "data flow"],
+      "answer": "Колонка CRM.CA_DATA_EXPORTS.EXPORT_DATE заполняется в процедуре CRM.PKG_EXPORT.GENERATE_EXPORT (lines 78-95):\n\n```sql\nINSERT INTO ca_data_exports (export_date, ...)\nVALUES (SYSDATE, ...);\n```\n\nИсходное значение — серверное время (SYSDATE) в момент INSERT. Lineage цепочка:\nSYSDATE → PKG_EXPORT.GENERATE_EXPORT → CA_DATA_EXPORTS.EXPORT_DATE\n\nДополнительно колонка читается в трёх отчётах (downstream).",
+      "toolCallsUsed": ["get_procedure_source", "query_lineage"],
+      "highlightNodeIds": ["CRM.CA_DATA_EXPORTS.EXPORT_DATE", "CRM.PKG_EXPORT.GENERATE_EXPORT"],
+      "confidence": 0.94,
+      "simulatedDelayMs": 3100
+    },
+    {
+      "questionPattern": "PKG_ORDERS source",
+      "matchKeywords": ["PKG_ORDERS", "source", "код", "package"],
+      "answer": "Пакет HR.PKG_ORDERS содержит 4 процедуры:\n\n```sql\nCREATE OR REPLACE PACKAGE BODY HR.PKG_ORDERS AS\n    PROCEDURE PROCESS_ORDER(p_id IN NUMBER) IS\n    BEGIN\n        UPDATE HR.ORDERS SET status = 'PROCESSED'\n        WHERE id = p_id;\n        ...\n    END PROCESS_ORDER;\n\n    PROCEDURE CANCEL_ORDER(p_id IN NUMBER) IS ...\n    FUNCTION CALC_TOTAL(p_id IN NUMBER) RETURN NUMBER IS ...\n    PROCEDURE ARCHIVE_OLD IS ...\nEND PKG_ORDERS;\n```\n\nИсходник из YGG (DaliRoutine.source_text), длина ~430 строк. Использует HR.ORDERS, HR.ORDER_ITEMS.",
+      "toolCallsUsed": ["get_procedure_source"],
+      "highlightNodeIds": ["HR.PKG_ORDERS", "HR.ORDERS", "HR.ORDER_ITEMS"],
+      "confidence": 0.90,
+      "simulatedDelayMs": 2600
+    },
+    {
+      "questionPattern": "schema summary",
+      "matchKeywords": ["схема", "schema", "summary", "обзор", "сколько таблиц"],
+      "answer": "Схема hound_default содержит:\n• 47 таблиц (DaliTable)\n• 23 представления (DaliView)\n• 156 процедур и функций (DaliRoutine)\n• 18 пакетов (DaliPackage)\n• 1247 колонок (DaliColumn)\n\nТоп-5 наиболее ссылаемых объектов:\n1. HR.EMPLOYEES — 87 dependencies\n2. HR.ORDERS — 64 dependencies\n3. CRM.CUSTOMERS — 52 dependencies\n4. HR.PKG_PAYROLL — 41 dependencies\n5. CRM.CA_DATA_EXPORTS — 33 dependencies\n\nРёбер в графе ~3400 (READS_FROM, WRITES_TO, CALLS, HAS_COLUMN).",
+      "toolCallsUsed": ["count_dependencies", "search_nodes"],
+      "highlightNodeIds": ["HR.EMPLOYEES", "HR.ORDERS", "CRM.CUSTOMERS", "HR.PKG_PAYROLL", "CRM.CA_DATA_EXPORTS"],
+      "confidence": 0.85,
+      "simulatedDelayMs": 2400
+    }
+  ]
+}

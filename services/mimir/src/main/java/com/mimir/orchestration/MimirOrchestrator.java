@@ -3,6 +3,8 @@ package com.mimir.orchestration;
 import com.mimir.heimdall.MimirEventEmitter;
 import com.mimir.model.AskRequest;
 import com.mimir.model.MimirAnswer;
+import com.mimir.persistence.MimirSession;
+import com.mimir.persistence.MimirSessionRepository;
 import com.mimir.routing.ModelRouter;
 import com.mimir.tenant.DbNameResolver;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -28,9 +30,10 @@ public class MimirOrchestrator {
 
     private static final Logger LOG = Logger.getLogger(MimirOrchestrator.class);
 
-    @Inject ModelRouter        router;
-    @Inject DbNameResolver     dbNameResolver;
-    @Inject MimirEventEmitter  eventEmitter;
+    @Inject ModelRouter             router;
+    @Inject DbNameResolver          dbNameResolver;
+    @Inject MimirEventEmitter       eventEmitter;
+    @Inject MimirSessionRepository  sessionRepo;
 
     /**
      * Single-agent ask (current) — delegates to ModelRouter.
@@ -66,6 +69,11 @@ public class MimirOrchestrator {
             eventEmitter.responseSynthesized(sessionId, durationMs,
                     0,  // total tokens — populated in TIER2 MT-07
                     answer.highlightNodeIds() != null ? answer.highlightNodeIds().size() : 0);
+
+            // MC-08: persist session in FRIGG (fire-and-forget — failure doesn't break response)
+            sessionRepo.save(MimirSession.completed(sessionId, tenantAlias,
+                    answer.toolCallsUsed(), answer.highlightNodeIds()));
+
             return answer;
         } catch (Exception e) {
             long durationMs = System.currentTimeMillis() - start;
@@ -76,6 +84,8 @@ public class MimirOrchestrator {
             if ("timeout".equals(reason)) {
                 eventEmitter.timeout(sessionId, durationMs, 30_000L);
             }
+            // MC-08: persist failed state too — useful for HEIMDALL forensics
+            sessionRepo.save(MimirSession.failed(sessionId, tenantAlias));
             return MimirAnswer.unavailable();
         }
     }

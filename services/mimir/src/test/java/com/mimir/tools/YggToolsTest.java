@@ -116,4 +116,44 @@ class YggToolsTest {
 
         assertThat(result).containsEntry("count", 0L);
     }
+
+    @Test
+    void describeTableColumnsHappyPath() {
+        when(arcade.query(eq("hound_acme"), any())).thenReturn(
+                new ArcadeDbClient.QueryResult(List.of(
+                        Map.of("column_name", "ID",   "data_type", "NUMBER(19)",
+                               "is_pk", true, "is_fk", false,
+                               "is_required", true, "ordinal_position", 1),
+                        Map.of("column_name", "NAME", "data_type", "VARCHAR2(200)",
+                               "is_pk", false, "is_fk", false,
+                               "is_required", true, "ordinal_position", 2))));
+
+        Map<String, Object> result = tools.describe_table_columns("CRM.COUNTRIES");
+
+        assertThat(result).containsEntry("tableGeoid", "CRM.COUNTRIES");
+        assertThat(result).containsEntry("columnCount", 2);
+        assertThat((List<?>) result.get("columns")).hasSize(2);
+        verify(emitter).toolCallStarted(eq("s1"), eq("describe_table_columns"), any());
+        verify(emitter).toolCallCompleted(eq("s1"), eq("describe_table_columns"), anyLong(), eq(2));
+    }
+
+    @Test
+    void describeTableColumnsArcadeFailureReturnsErrorMap() {
+        when(arcade.query(anyString(), any())).thenThrow(new RuntimeException("ArcadeDB down"));
+
+        Map<String, Object> result = tools.describe_table_columns("CRM.COUNTRIES");
+
+        assertThat(result).containsEntry("error", "query_failed");
+        assertThat(result).containsEntry("columnCount", 0);
+    }
+
+    @Test
+    void describeTableColumnsEmptyResult() {
+        when(arcade.query(anyString(), any())).thenReturn(new ArcadeDbClient.QueryResult(List.of()));
+
+        Map<String, Object> result = tools.describe_table_columns("HR.NONEXISTENT");
+
+        assertThat(result).containsEntry("columnCount", 0);
+        assertThat((List<?>) result.get("columns")).isEmpty();
+    }
 }
