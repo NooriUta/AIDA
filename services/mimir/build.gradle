@@ -49,6 +49,9 @@ dependencies {
     // Shared HEIMDALL event schema
     implementation project(':shared:dali-models')
 
+    // Caffeine — TIER2 MT-06 BYOK credential cache (TTL 5min)
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.quarkus:quarkus-junit5-mockito'
     testImplementation 'io.rest-assured:rest-assured'
