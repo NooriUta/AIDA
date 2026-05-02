@@ -166,4 +166,40 @@ class ClickHouseSemanticListenerTest {
         assertTrue(atomCount > 0,
                 "Expected atoms from SELECT + PREWHERE clause; got: " + atomCount);
     }
+
+    // ─── CH-JTYPE-*: typed grammar-rule JOIN type detection ──────────────────
+    // Verifies that JoinOpLeftRight is detected via typed token check
+    // (ctx.LEFT/RIGHT), not getText().contains() heuristics.
+
+    private static String firstJoinType(UniversalSemanticEngine engine) {
+        return stmtsOfType(engine, "SELECT").stream()
+                .flatMap(s -> s.getJoins().stream())
+                .map(j -> j.joinType())
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Test
+    @DisplayName("CH-JTYPE-1: LEFT JOIN → joinType = LEFT (typed token)")
+    void chJtype1_leftJoin() {
+        UniversalSemanticEngine engine = parse(
+                "SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id");
+        assertEquals("LEFT", firstJoinType(engine));
+    }
+
+    @Test
+    @DisplayName("CH-JTYPE-2: RIGHT OUTER JOIN → joinType = RIGHT")
+    void chJtype2_rightOuterJoin() {
+        UniversalSemanticEngine engine = parse(
+                "SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id");
+        assertEquals("RIGHT", firstJoinType(engine));
+    }
+
+    @Test
+    @DisplayName("CH-JTYPE-3: FULL OUTER JOIN → joinType = FULL")
+    void chJtype3_fullOuterJoin() {
+        UniversalSemanticEngine engine = parse(
+                "SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id");
+        assertEquals("FULL", firstJoinType(engine));
+    }
 }

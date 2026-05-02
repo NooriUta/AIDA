@@ -41,4 +41,13 @@ CREATE OR REPLACE PACKAGE BODY PKG_PIPE_TEST AS
           FROM TABLE(GET_LINES(p_order_id)) t
          GROUP BY t.item_id;
     END LOAD_SUMMARY;
+
+    PROCEDURE SNAPSHOT_ORDER(p_order_id IN NUMBER) IS
+        v_lines TESTSCHEMA.T_LINE_LIST;
+    BEGIN
+        -- CAST(MULTISET(SELECT...) AS t_list) — HND-15b
+        v_lines := CAST(MULTISET(SELECT item_id, qty, unit_price
+                                   FROM ORDER_LINES
+                                  WHERE order_id = p_order_id) AS TESTSCHEMA.T_LINE_LIST);
+    END SNAPSHOT_ORDER;
 END PKG_PIPE_TEST;

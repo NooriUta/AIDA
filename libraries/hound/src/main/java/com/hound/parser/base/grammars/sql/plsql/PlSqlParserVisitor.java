@@ -6572,6 +6572,12 @@ public interface PlSqlParserVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitLiteral(PlSqlParser.LiteralContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link PlSqlParser#datetime_literal}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitDatetime_literal(PlSqlParser.Datetime_literalContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link PlSqlParser#numeric_function_wrapper}.
 	 * @param ctx the parse tree
 	 * @return the visitor result

@@ -23,18 +23,20 @@ public class DaliHoundListener implements HoundEventListener {
 
     private final String         sessionId;
     private final String         dialect;
+    private final String         tenantAlias;
     private final HeimdallEmitter emitter;
 
-    public DaliHoundListener(String sessionId, String dialect, HeimdallEmitter emitter) {
-        this.sessionId = sessionId;
-        this.dialect   = dialect;
-        this.emitter   = emitter;
+    public DaliHoundListener(String sessionId, String dialect, String tenantAlias, HeimdallEmitter emitter) {
+        this.sessionId   = sessionId;
+        this.dialect     = dialect;
+        this.tenantAlias = tenantAlias;
+        this.emitter     = emitter;
     }
 
     @Override
     public void onFileParseStarted(String file, String dialect) {
         log.info("[{}] parse started  file={} dialect={}", sessionId, file, dialect);
-        emitter.fileParsingStarted(sessionId, file, dialect);
+        emitter.fileParsingStarted(sessionId, tenantAlias, file, dialect);
     }
 
     @Override
@@ -49,24 +51,24 @@ public class DaliHoundListener implements HoundEventListener {
         log.info("[{}] parse completed file={} atoms={} vertices={} duration={}ms",
                 sessionId, file, result.atomCount(), result.vertexCount(), result.durationMs());
         // Emit ATOM_EXTRACTED with the total atom count for this file.
-        emitter.atomExtracted(sessionId, file, result.atomCount());
+        emitter.atomExtracted(sessionId, tenantAlias, file, result.atomCount());
     }
 
     @Override
     public void onParseError(String file, int line, int charPos, String msg) {
         log.warn("[{}] parse error     file={} line={}:{} msg={}", sessionId, file, line, charPos, msg);
-        emitter.parseError(sessionId, Paths.get(file).getFileName().toString(), line, charPos, msg);
+        emitter.parseError(sessionId, tenantAlias, Paths.get(file).getFileName().toString(), line, charPos, msg);
     }
 
     @Override
     public void onParseWarning(String file, int line, int charPos, String msg) {
         log.debug("[{}] grammar limit   file={} line={}:{} msg={}", sessionId, file, line, charPos, msg);
-        emitter.parseWarning(sessionId, Paths.get(file).getFileName().toString(), line, charPos, msg);
+        emitter.parseWarning(sessionId, tenantAlias, Paths.get(file).getFileName().toString(), line, charPos, msg);
     }
 
     @Override
     public void onError(String file, Throwable error) {
         log.error("[{}] parse error     file={} error={}", sessionId, file, error.getMessage(), error);
-        emitter.fileParsingFailed(sessionId, file, error.getMessage());
+        emitter.fileParsingFailed(sessionId, tenantAlias, file, error.getMessage());
     }
 }

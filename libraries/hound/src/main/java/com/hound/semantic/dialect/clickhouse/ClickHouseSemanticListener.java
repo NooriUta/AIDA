@@ -425,10 +425,11 @@ public class ClickHouseSemanticListener extends ClickHouseParserBaseListener {
 
     @Override
     public void enterJoinOpLeftRight(ClickHouseParser.JoinOpLeftRightContext ctx) {
-        String text = ctx.getText().toUpperCase();
-        if (text.contains("LEFT"))       pendingJoinType = "LEFT";
-        else if (text.contains("RIGHT")) pendingJoinType = "RIGHT";
-        else                             pendingJoinType = "LEFT";
+        // Grammar (ClickHouseParser.g4:474-477): JoinOpLeftRight has (LEFT | RIGHT) token.
+        // Typed token check — no getText().contains() heuristics.
+        if      (ctx.LEFT()  != null) pendingJoinType = "LEFT";
+        else if (ctx.RIGHT() != null) pendingJoinType = "RIGHT";
+        else                          pendingJoinType = "LEFT"; // grammar-impossible fallback
     }
 
     @Override
