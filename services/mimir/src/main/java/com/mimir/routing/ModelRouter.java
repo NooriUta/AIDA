@@ -1,13 +1,24 @@
 package com.mimir.routing;
 
+import com.mimir.byok.DynamicMimirService;
+import com.mimir.byok.DynamicModelFactory;
+import com.mimir.byok.LlmCredentialResolver;
+import com.mimir.byok.ResolvedKey;
+import com.mimir.heimdall.MimirEventEmitter;
 import com.mimir.service.AnthropicMimirService;
 import com.mimir.service.MimirAiPort;
 import com.mimir.service.MimirService;
 import com.mimir.service.OllamaMimirService;
+import com.mimir.tools.AnvilTools;
+import com.mimir.tools.ShuttleTools;
+import com.mimir.tools.YggTools;
+import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+
+import java.util.Optional;
 
 /**
  * Routes an incoming AskRequest to the appropriate LLM service.
@@ -26,12 +37,23 @@ public class ModelRouter {
 
     private static final Logger LOG = Logger.getLogger(ModelRouter.class);
 
-    @Inject MimirService        deepSeek;
-    @Inject AnthropicMimirService anthropic;
-    @Inject OllamaMimirService  ollama;
+    @Inject MimirService           deepSeek;
+    @Inject AnthropicMimirService  anthropic;
+    @Inject OllamaMimirService     ollama;
+
+    @Inject LlmCredentialResolver  credentialResolver;
+    @Inject DynamicModelFactory    modelFactory;
+    @Inject ChatMemoryProvider     chatMemoryProvider;
+    @Inject AnvilTools             anvilTools;
+    @Inject ShuttleTools           shuttleTools;
+    @Inject YggTools               yggTools;
+    @Inject MimirEventEmitter      eventEmitter;
 
     @ConfigProperty(name = "mimir.default-model", defaultValue = "deepseek")
     String defaultModel;
+
+    @ConfigProperty(name = "mimir.byok.enabled", defaultValue = "true")
+    boolean byokEnabled;
 
     /**
      * Resolves the AI service for the given model name.
@@ -72,8 +94,23 @@ public class ModelRouter {
      * @return the appropriate MimirAiPort implementation
      */
     public MimirAiPort resolveForTenant(String requestedModel, String tenantAlias) {
-        // FOUNDATION: tenantAlias не используется (scaffold для TIER2)
-        // TIER2 MT-06 заменит этот метод на BYOK-aware logic
+        if (byokEnabled && tenantAlias != null && !tenantAlias.isBlank()) {
+            try {
+                Optional<ResolvedKey> byok = credentialResolver.resolveForTenant(tenantAlias);
+                if (byok.isPresent()) {
+                    ResolvedKey rk = byok.get();
+                    LOG.debugf("BYOK active for tenant=%s provider=%s key=%s",
+                            tenantAlias, rk.provider(), rk.keyMask());
+                    eventEmitter.llmCredentialUsed(tenantAlias, rk.provider(), rk.keyMask());
+                    return new DynamicMimirService(
+                            modelFactory.buildFor(rk),
+                            chatMemoryProvider,
+                            anvilTools, shuttleTools, yggTools);
+                }
+            } catch (Exception e) {
+                LOG.warnf(e, "BYOK build failed for tenant=%s — falling back to shared default", tenantAlias);
+            }
+        }
         return resolve(requestedModel);
     }
 }

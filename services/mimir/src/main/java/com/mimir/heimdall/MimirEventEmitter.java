@@ -129,6 +129,23 @@ public class MimirEventEmitter {
                 "tier", "demo-cache")));
     }
 
+    /** Per-tenant BYOK key was used for an LLM call (TIER2 MT-06). */
+    public void llmCredentialUsed(String tenantAlias, String provider, String keyMask) {
+        emit(build(EventType.LLM_CREDENTIAL_USED, EventLevel.INFO, 0, null, mapOf(
+                "tenant_alias", tenantAlias,
+                "provider",     provider,
+                "key_mask",     keyMask)));
+    }
+
+    /** Admin upserted/deleted a tenant LLM config (TIER2 MT-06). */
+    public void llmConfigUpdated(String tenantAlias, String provider, String action, String admin) {
+        emit(build(EventType.LLM_CONFIG_UPDATED, EventLevel.INFO, 0, null, mapOf(
+                "tenant_alias", tenantAlias,
+                "provider",     provider,
+                "action",       action,
+                "admin",        admin)));
+    }
+
     // ── Internal builder ─────────────────────────────────────────────────────
 
     private static HeimdallEvent build(EventType type, EventLevel level, long durationMs,
