@@ -123,6 +123,12 @@ public class MimirEventEmitter {
                 "threshold_ms", thresholdMs)));
     }
 
+    /** Tier-3 demo cache served the response (TIER2 MT-02). */
+    public void cacheHit(String sessionId) {
+        emit(build(EventType.CACHE_HIT, EventLevel.INFO, 0, sessionId, mapOf(
+                "tier", "demo-cache")));
+    }
+
     // ── Internal builder ─────────────────────────────────────────────────────
 
     private static HeimdallEvent build(EventType type, EventLevel level, long durationMs,

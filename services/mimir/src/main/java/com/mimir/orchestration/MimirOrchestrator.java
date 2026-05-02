@@ -1,5 +1,6 @@
 package com.mimir.orchestration;
 
+import com.mimir.cache.DemoCacheService;
 import com.mimir.heimdall.MimirEventEmitter;
 import com.mimir.model.AskRequest;
 import com.mimir.model.MimirAnswer;
@@ -10,6 +11,8 @@ import com.mimir.tenant.DbNameResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+
+import java.util.Optional;
 
 /**
  * Multi-agent reasoning orchestrator — ADR-MIMIR-001 Tier 2 stub.
@@ -34,6 +37,7 @@ public class MimirOrchestrator {
     @Inject DbNameResolver          dbNameResolver;
     @Inject MimirEventEmitter       eventEmitter;
     @Inject MimirSessionRepository  sessionRepo;
+    @Inject DemoCacheService        demoCache;
 
     /**
      * Single-agent ask (current) — delegates to ModelRouter.
@@ -54,6 +58,24 @@ public class MimirOrchestrator {
         String dbName = request.dbName() != null && !request.dbName().isBlank()
                 ? request.dbName()
                 : dbNameResolver.forTenant(tenantAlias);
+
+        // TIER2 MT-02: forced demo mode — answer from cache, skip live model entirely
+        if (demoCache.isDemoMode()) {
+            Optional<MimirAnswer> hit = demoCache.tryCache(questionPreview);
+            if (hit.isPresent()) {
+                MimirAnswer answer = hit.get();
+                long durationMs = System.currentTimeMillis() - start;
+                eventEmitter.modelSelected(sessionId, "demo-cache", "demo-mode");
+                eventEmitter.cacheHit(sessionId);
+                eventEmitter.responseSynthesized(sessionId, durationMs, 0,
+                        answer.highlightNodeIds() != null ? answer.highlightNodeIds().size() : 0);
+                sessionRepo.save(MimirSession.completed(sessionId, tenantAlias,
+                        answer.toolCallsUsed(), answer.highlightNodeIds()));
+                return answer;
+            }
+            LOG.debugf("Demo mode active but no cache pattern matched for tenant=%s session=%s — falling through to live model",
+                    tenantAlias, sessionId);
+        }
 
         // Resolve model (per-tenant aware — scaffold for TIER2 BYOK)
         var port = router.resolveForTenant(requestedModel, tenantAlias);
@@ -80,10 +102,23 @@ public class MimirOrchestrator {
             String reason = classifyFailure(e);
             LOG.warnf(e, "MIMIR LLM call failed (tenant=%s session=%s reason=%s) — falling back to unavailable",
                     tenantAlias, sessionId, reason);
-            eventEmitter.fallbackActivated(sessionId, reason, "unavailable");
             if ("timeout".equals(reason)) {
                 eventEmitter.timeout(sessionId, durationMs, 30_000L);
             }
+
+            // TIER2 MT-02: Tier-1 failed → try Tier-3 demo cache (DeepSeek-only fallback path,
+            // ADR-MIMIR-002 in effect until 2026-06-02 Ollama re-eval)
+            Optional<MimirAnswer> cached = demoCache.tryCache(questionPreview);
+            if (cached.isPresent()) {
+                eventEmitter.fallbackActivated(sessionId, reason, "demo-cache");
+                eventEmitter.cacheHit(sessionId);
+                MimirAnswer answer = cached.get();
+                sessionRepo.save(MimirSession.completed(sessionId, tenantAlias,
+                        answer.toolCallsUsed(), answer.highlightNodeIds()));
+                return answer;
+            }
+
+            eventEmitter.fallbackActivated(sessionId, reason, "unavailable");
             // MC-08: persist failed state too — useful for HEIMDALL forensics
             sessionRepo.save(MimirSession.failed(sessionId, tenantAlias));
             return MimirAnswer.unavailable();
