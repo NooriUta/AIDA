@@ -55,19 +55,60 @@ public class ShuttleTools {
         eventEmitter.toolCallStarted(sessionId, "search_nodes", startArgs);
 
         try {
-            String pattern = namePattern == null ? "" : namePattern.toLowerCase().replace('*', '%');
-            String typeFilter = mapToVertexType(nodeType);
-
-            // Cypher: match by qualifiedName OR name (case-insensitive contains).
-            // Use SQL syntax which ArcadeDB supports for property filtering.
-            String sql = """
-                    SELECT geoid, qualifiedName, @class AS type, schema
-                    FROM %s
-                    WHERE qualifiedName.toLowerCase() LIKE :p
-                       OR name.toLowerCase() LIKE :p
-                    LIMIT :lim
-                    """.formatted(typeFilter);
+            String pattern = namePattern == null ? "" : namePattern.toUpperCase().replace('*', '%');
+            String type = nodeType == null ? "ALL" : nodeType.toUpperCase();
             String likePattern = pattern.contains("%") ? pattern : "%" + pattern + "%";
+
+            // Real Hound ArcadeDB schema (verified 02.05.2026):
+            //   DaliTable:   table_geoid, table_name, schema_geoid, table_type
+            //   DaliRoutine: routine_geoid, routine_name, schema_geoid, routine_type, source_text
+            //   DaliColumn:  column_geoid, column_name, table_geoid, data_type
+            //
+            // Use UNION ALL to search across all 3 vertex types unless filtered.
+            String sql;
+            switch (type) {
+                case "ROUTINE":
+                case "PROCEDURE":
+                case "FUNCTION":
+                    sql = """
+                          SELECT routine_geoid AS geoid, routine_name AS name, @class AS type,
+                                 schema_geoid AS schema
+                          FROM DaliRoutine
+                          WHERE routine_geoid.toUpperCase() LIKE :p
+                             OR routine_name.toUpperCase() LIKE :p
+                          LIMIT :lim
+                          """;
+                    break;
+                case "COLUMN":
+                case "FIELD":
+                    sql = """
+                          SELECT column_geoid AS geoid, column_name AS name, @class AS type,
+                                 table_geoid AS schema
+                          FROM DaliColumn
+                          WHERE column_geoid.toUpperCase() LIKE :p
+                             OR column_name.toUpperCase() LIKE :p
+                          LIMIT :lim
+                          """;
+                    break;
+                case "TABLE":
+                    sql = """
+                          SELECT table_geoid AS geoid, table_name AS name, @class AS type,
+                                 schema_geoid AS schema
+                          FROM DaliTable
+                          WHERE table_geoid.toUpperCase() LIKE :p
+                             OR table_name.toUpperCase() LIKE :p
+                          LIMIT :lim
+                          """;
+                    break;
+                default:  // ALL
+                    sql = """
+                          SELECT table_geoid AS geoid, table_name AS name, @class AS type,
+                                 schema_geoid AS schema
+                          FROM DaliTable
+                          WHERE table_geoid.toUpperCase() LIKE :p OR table_name.toUpperCase() LIKE :p
+                          LIMIT :lim
+                          """;
+            }
 
             Map<String, Object> params = new HashMap<>();
             params.put("p", likePattern);
@@ -78,10 +119,10 @@ public class ShuttleTools {
 
             List<Map<String, String>> result = r.result().stream()
                     .map(row -> Map.of(
-                            "geoid",         String.valueOf(row.getOrDefault("geoid", "")),
-                            "qualifiedName", String.valueOf(row.getOrDefault("qualifiedName", "")),
-                            "type",          String.valueOf(row.getOrDefault("type", "")),
-                            "schema",        String.valueOf(row.getOrDefault("schema", ""))))
+                            "geoid",  String.valueOf(row.getOrDefault("geoid", "")),
+                            "name",   String.valueOf(row.getOrDefault("name", "")),
+                            "type",   String.valueOf(row.getOrDefault("type", "")),
+                            "schema", String.valueOf(row.getOrDefault("schema", ""))))
                     .toList();
 
             eventEmitter.toolCallCompleted(sessionId, "search_nodes",
@@ -95,17 +136,4 @@ public class ShuttleTools {
         }
     }
 
-    /**
-     * Maps user-facing nodeType to ArcadeDB vertex type.
-     * ALL → DaliTable (default — most useful for impact queries).
-     */
-    private static String mapToVertexType(String nodeType) {
-        if (nodeType == null) return "DaliTable";
-        return switch (nodeType.toUpperCase()) {
-            case "ROUTINE", "PROCEDURE", "FUNCTION" -> "DaliRoutine";
-            case "COLUMN", "FIELD" -> "DaliColumn";
-            case "ALL", "*"        -> "V"; // ArcadeDB super vertex type
-            default                -> "DaliTable";
-        };
-    }
 }

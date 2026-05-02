@@ -12,6 +12,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.logging.Logger;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -82,6 +83,49 @@ public class YggTools {
             eventEmitter.toolCallCompleted(sessionId, "get_procedure_source",
                     System.currentTimeMillis() - start, 0);
             return Map.of("error", "query_failed", "message", e.getMessage());
+        }
+    }
+
+    @Tool("List columns of a table with their data types, primary key flags and ordinal positions. " +
+          "Use when user asks 'what columns does X have?', 'how many fields in Y?', 'структура таблицы Z'.")
+    public Map<String, Object> describe_table_columns(
+            @P("Table geoid (e.g. CRM.COUNTRIES, HR.EMPLOYEES)") String tableGeoid
+    ) {
+        long start = System.currentTimeMillis();
+        String alias = tenantContext.alias();
+        String dbName = dbNameResolver.forTenant(alias);
+        String sessionId = tenantContext.sessionId();
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("tableGeoid", tableGeoid == null ? "" : tableGeoid);
+        eventEmitter.toolCallStarted(sessionId, "describe_table_columns", args);
+
+        try {
+            String sql = """
+                    SELECT column_name, data_type, is_pk, is_fk, is_required, ordinal_position
+                    FROM DaliColumn
+                    WHERE table_geoid = :tg
+                    ORDER BY ordinal_position
+                    """;
+            ArcadeDbClient.QueryResult r = arcade.query(dbName,
+                    new ArcadeDbClient.ArcadeQuery("sql", sql, Map.of("tg", tableGeoid)));
+
+            eventEmitter.toolCallCompleted(sessionId, "describe_table_columns",
+                    System.currentTimeMillis() - start, r.result().size());
+
+            return Map.of(
+                    "tableGeoid",  tableGeoid,
+                    "columnCount", r.result().size(),
+                    "columns",     r.result());
+        } catch (Exception e) {
+            LOG.warnf(e, "describe_table_columns failed for tenant=%s tableGeoid=%s", alias, tableGeoid);
+            eventEmitter.toolCallCompleted(sessionId, "describe_table_columns",
+                    System.currentTimeMillis() - start, 0);
+            return Map.of(
+                    "tableGeoid",  tableGeoid == null ? "" : tableGeoid,
+                    "columnCount", 0,
+                    "columns",     List.of(),
+                    "error",       "query_failed");
         }
     }
 
