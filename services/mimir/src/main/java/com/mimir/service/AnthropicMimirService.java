@@ -12,19 +12,19 @@ import io.quarkiverse.langchain4j.RegisterAiService;
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * DeepSeek MIMIR service — default model (openai-compatible, DeepSeek API).
+ * Anthropic Claude MIMIR service.
+ * Uses AnthropicModelSupplier to inject the @ModelName("anthropic") ChatLanguageModel.
  *
- * Uses quarkus.langchain4j.default-config=openai → DeepSeek via api.deepseek.com/v1.
- * ADR-MIMIR-001: Tier 1 — active default provider.
- *
- * Tool routing (Decision #63 — Variant B @Tool only):
- *   AnvilTools   → ANVIL :9095 (find_impact, query_lineage)
- *   ShuttleTools → SHUTTLE :8080/graphql (search_nodes)
- *   YggTools     → YGG ArcadeDB :2480 (get_procedure_source, count_dependencies)
+ * ADR-MIMIR-001: Tier 1 — opt-in via request.model="anthropic".
+ * Activated by setting QUARKUS_LANGCHAIN4J_DEFAULT_CONFIG=anthropic or
+ * passing model="anthropic" in the AskRequest.
  */
-@RegisterAiService(tools = {AnvilTools.class, ShuttleTools.class, YggTools.class})
+@RegisterAiService(
+    tools = {AnvilTools.class, ShuttleTools.class, YggTools.class},
+    chatLanguageModelSupplier = AnthropicModelSupplier.class
+)
 @ApplicationScoped
-public interface MimirService extends MimirAiPort {
+public interface AnthropicMimirService extends MimirAiPort {
 
     @SystemMessage("""
         You are MIMIR — a data lineage analysis assistant for legacy SQL codebases.

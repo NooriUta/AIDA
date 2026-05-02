@@ -3,7 +3,7 @@ package com.mimir.rest;
 import com.mimir.memory.MimirMemoryConfiguration;
 import com.mimir.model.AskRequest;
 import com.mimir.model.MimirAnswer;
-import com.mimir.service.MimirService;
+import com.mimir.orchestration.MimirOrchestrator;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
@@ -20,10 +20,11 @@ public class AskResource {
 
     private static final Logger LOG = Logger.getLogger(AskResource.class);
 
-    @Inject MimirService mimirService;
+    @Inject MimirOrchestrator    orchestrator;
     @Inject MimirMemoryConfiguration memoryConfiguration;
 
     // ── POST /api/ask ─────────────────────────────────────────────────────────
+    // ADR-MIMIR-001: routes via MimirOrchestrator → ModelRouter → model service
 
     @POST
     @Path("/ask")
@@ -38,10 +39,7 @@ public class AskResource {
         }
         long start = System.currentTimeMillis();
         try {
-            String dbName = request.dbName() != null ? request.dbName() : "hound_" + tenantAlias;
-            MimirAnswer answer = mimirService.ask(
-                request.sessionId(), request.question(), dbName, tenantAlias
-            );
+            MimirAnswer answer = orchestrator.ask(request, request.sessionId(), tenantAlias);
             long durationMs = System.currentTimeMillis() - start;
             return Response.ok(new MimirAnswer(
                 answer.answer(),
@@ -87,7 +85,7 @@ public class AskResource {
         return Response.ok(Map.of(
             "status",  "UP",
             "service", "mimir",
-            "llmTier", "openai/deepseek (dev)"
+            "models",  java.util.List.of("deepseek", "anthropic", "ollama")
         )).build();
     }
 }

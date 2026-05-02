@@ -2,7 +2,7 @@ package com.mimir;
 
 import com.mimir.model.AskRequest;
 import com.mimir.model.MimirAnswer;
-import com.mimir.service.MimirService;
+import com.mimir.orchestration.MimirOrchestrator;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
@@ -15,20 +15,20 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
 /**
- * MP-05 smoke tests — MimirService is mocked so no real LLM call is made.
+ * MP-05 smoke tests — MimirOrchestrator is mocked so no real LLM call is made.
+ * ADR-MIMIR-001: AskResource delegates to MimirOrchestrator → ModelRouter.
  * DOD: POST /api/ask → 200, GET /api/health → 200.
  */
 @QuarkusTest
 class AskResourceSmokeTest {
 
     @InjectMock
-    MimirService mimirService;
+    MimirOrchestrator orchestrator;
 
     @Test
     void postAskReturns200WithStubAnswer() {
-        Mockito.when(mimirService.ask(
-            Mockito.anyString(),
-            Mockito.anyString(),
+        Mockito.when(orchestrator.ask(
+            Mockito.any(AskRequest.class),
             Mockito.anyString(),
             Mockito.anyString()
         )).thenReturn(new MimirAnswer(
@@ -61,6 +61,7 @@ class AskResourceSmokeTest {
         .then()
             .statusCode(200)
             .body("status",  equalTo("UP"))
-            .body("service", equalTo("mimir"));
+            .body("service", equalTo("mimir"))
+            .body("models",  hasItems("deepseek", "anthropic", "ollama"));
     }
 }
