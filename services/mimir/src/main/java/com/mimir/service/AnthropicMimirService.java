@@ -1,48 +1,38 @@
 package com.mimir.service;
 
 import com.mimir.model.MimirAnswer;
-import com.mimir.tools.AnvilTools;
-import com.mimir.tools.ShuttleTools;
-import com.mimir.tools.YggTools;
-import dev.langchain4j.service.MemoryId;
-import dev.langchain4j.service.SystemMessage;
-import dev.langchain4j.service.UserMessage;
-import dev.langchain4j.service.V;
-import io.quarkiverse.langchain4j.RegisterAiService;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.jboss.logging.Logger;
+
+import java.util.List;
 
 /**
- * Anthropic Claude MIMIR service.
- * Uses AnthropicModelSupplier to inject the @ModelName("anthropic") ChatLanguageModel.
+ * Anthropic Claude MIMIR service — stub pending MIMIR Foundation sprint.
  *
- * ADR-MIMIR-001: Tier 1 — opt-in via request.model="anthropic".
- * Activated by setting QUARKUS_LANGCHAIN4J_DEFAULT_CONFIG=anthropic or
- * passing model="anthropic" in the AskRequest.
+ * ADR-MIMIR-001 Tier 1: Anthropic wired in MIMIR Foundation once
+ * the correct Quarkiverse chatLanguageModelSupplier API is confirmed.
+ *
+ * Current behaviour: returns a graceful "not yet configured" response
+ * so routing works end-to-end without a real LLM key.
+ *
+ * TODO MIMIR Foundation: replace with @RegisterAiService + proper supplier
+ * once Anthropic integration is validated against Quarkiverse 1.9.x API.
  */
-@RegisterAiService(
-    tools = {AnvilTools.class, ShuttleTools.class, YggTools.class},
-    chatLanguageModelSupplier = AnthropicModelSupplier.class
-)
 @ApplicationScoped
-public interface AnthropicMimirService extends MimirAiPort {
+public class AnthropicMimirService implements MimirAiPort {
 
-    @SystemMessage("""
-        You are MIMIR — a data lineage analysis assistant for legacy SQL codebases.
-        Working database: {dbName}. Tenant: {tenantAlias}.
+    private static final Logger LOG = Logger.getLogger(AnthropicMimirService.class);
 
-        RULES:
-        1. ALWAYS call deterministic tools — never guess node IDs or table names.
-        2. Include highlightNodeIds in your response so LOOM can mark them.
-        3. Respond in the user's language (RU or EN).
-        4. If unsure about a node, call search_nodes first.
-        5. Never hallucinate object names, schemas, or lineage paths.
-        """)
-    @UserMessage("{question}")
     @Override
-    MimirAnswer ask(
-        @MemoryId  String sessionId,
-        @V("question")    String question,
-        @V("dbName")      String dbName,
-        @V("tenantAlias") String tenantAlias
-    );
+    public MimirAnswer ask(String sessionId, String question, String dbName, String tenantAlias) {
+        LOG.warnf("Anthropic provider stub called (session=%s). Real integration in MIMIR Foundation.", sessionId);
+        return new MimirAnswer(
+            "Anthropic Claude integration is coming in MIMIR Foundation sprint. " +
+            "Please use model='deepseek' for now.",
+            List.of(),
+            List.of(),
+            0.0,
+            0L
+        );
+    }
 }
