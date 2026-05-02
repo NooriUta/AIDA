@@ -1,0 +1,66 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version "${quarkusPlatformVersion}"
+    id 'jacoco'
+}
+
+group   = 'com.mimir'
+version = '0.1.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    // REST + JSON
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+
+    // CDI
+    implementation 'io.quarkus:quarkus-arc'
+
+    // Bean Validation
+    implementation 'io.quarkus:quarkus-hibernate-validator'
+
+    // Health
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
+    // REST Client — для вызовов ANVIL / SHUTTLE / YGG
+    implementation 'io.quarkus:quarkus-rest-client'
+    implementation 'io.quarkus:quarkus-rest-client-jackson'
+
+    // LangChain4j — OpenAI-compatible (DeepSeek dev)
+    implementation "io.quarkiverse.langchain4j:quarkus-langchain4j-openai:1.8.2"
+    // LangChain4j — Anthropic Claude (Tier 1 prod — wired in MIMIR Foundation)
+    implementation "io.quarkiverse.langchain4j:quarkus-langchain4j-anthropic:1.8.2"
+    // LangChain4j — Ollama (Tier 2 privacy — wired in MIMIR Tier2)
+    implementation "io.quarkiverse.langchain4j:quarkus-langchain4j-ollama:1.8.2"
+    // LangChain4j core (tools, memory, AI services)
+    implementation "io.quarkiverse.langchain4j:quarkus-langchain4j:1.8.2"
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.quarkus:quarkus-junit5-mockito'
+    testImplementation 'io.rest-assured:rest-assured'
+    testImplementation 'org.assertj:assertj-core:3.27.3'
+    testImplementation 'io.quarkus:quarkus-jacoco'
+}
+
+compileJava.options.encoding     = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'
+
+test { finalizedBy jacocoTestReport }
+jacocoTestReport {
+    dependsOn test
+    executionData fileTree(layout.buildDirectory).include(
+        'jacoco-quarkus.exec', 'jacoco/test.exec'
+    )
+    reports {
+        xml.required  = true
+        html.required = true
+    }
+}
