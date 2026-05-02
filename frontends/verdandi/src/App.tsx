@@ -15,6 +15,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
 import { UnderConstructionPage } from './components/stubs/UnderConstructionPage';
+import MimirSidebar from './components/panels/MimirSidebar';
 import { useAuthStore }   from './stores/authStore';
 import { usePrefsSync }  from './hooks/usePrefsSync';
 import { applyDom }      from './stores/prefsStore';
@@ -88,6 +89,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppRoutes />
+      <MimirSidebar />
       <ToastContainer />
     </QueryClientProvider>
   );

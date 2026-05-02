@@ -15,6 +15,7 @@ import { useIsMobile }     from '../../hooks/useIsMobile';
 import { type NornId, NORNS, PALETTES } from './headerNavData';
 import { TenantPickerButton } from './TenantPickerButton';
 import { HeaderNavSection } from './HeaderNavSection';
+import MimirToolbarButton from '../panels/MimirToolbarButton';
 
 export const Header = memo(() => {
   const { theme, toggleTheme, palette, setPalette } = useLoomStore();
@@ -250,6 +251,9 @@ export const Header = memo(() => {
       )}
 
       {!isMobile && <LanguageSwitcher />}
+
+      {/* TIER2 MT-04 — MIMIR Copilot toggle. Sits right of the language switcher. */}
+      {!isMobile && <MimirToolbarButton />}
 
       {/* Palette switcher */}
       {!isMobile && <div ref={paletteMenuRef} style={{ position: 'relative' }} onBlur={handlePaletteMenuBlur}>
