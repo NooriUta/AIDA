@@ -1,55 +1,149 @@
 package com.mimir.tools;
 
+import com.mimir.client.ArcadeDbClient;
+import com.mimir.heimdall.MimirEventEmitter;
+import com.mimir.tenant.DbNameResolver;
+import com.mimir.tenant.TenantContext;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+import jakarta.inject.Inject;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.jboss.logging.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Tools backed by YGG (ArcadeDB :2480) — source code + dependency stats.
- * Stubs in MP-04 (SPRINT_MIMIR_PREP). Full implementation in MIMIR Foundation.
+ * Tools for direct YGG queries via ArcadeDB REST.
  *
- * Decision #65: Tool 5 = count_dependencies (validate_columns deferred to MIMIR v2).
+ * <p>Decision #65: Tool 5 = {@code count_dependencies} (validate_columns deferred to v2).
+ *
+ * <p>Tenant isolation: dbName = {@code hound_{alias}} via {@link DbNameResolver}.
+ * tenantAlias берётся из {@link TenantContext} (заполняется JAX-RS filter из X-Seer-Tenant-Alias).
  */
 @ApplicationScoped
 public class YggTools {
 
-    @ConfigProperty(name = "mimir.ygg.url",      defaultValue = "http://localhost:2480")
-    String yggUrl;
+    private static final Logger LOG = Logger.getLogger(YggTools.class);
 
-    @ConfigProperty(name = "mimir.ygg.user",     defaultValue = "root")
-    String yggUser;
+    @Inject @RestClient ArcadeDbClient arcade;
+    @Inject TenantContext tenantContext;
+    @Inject DbNameResolver dbNameResolver;
+    @Inject MimirEventEmitter eventEmitter;
 
-    @ConfigProperty(name = "mimir.ygg.password", defaultValue = "playwithdata")
-    String yggPassword;
-
-    @Tool("Get the full SQL source code (DDL) of a stored procedure or view by its node ID.")
-    public Map<String, String> get_procedure_source(
-        @P("Node ID of the stored procedure or view") String nodeId,
-        @P("Database name, e.g. hound_acme") String dbName
+    @Tool("Get the source code (DDL/PL-SQL) of a stored routine (procedure, function or package) " +
+          "by its qualified name. Returns source text, language, and metadata.")
+    public Map<String, Object> get_procedure_source(
+            @P("Qualified routine name (e.g. SCHEMA.PROC_NAME or SCHEMA.PKG.PROC)") String qualifiedName
     ) {
-        // TODO(MIMIR-Foundation): GET yggUrl/api/v1/document/dbName/nodeId
-        return Map.of(
-            "stub", "get_procedure_source not yet implemented",
-            "nodeId", nodeId,
-            "dbName", dbName
-        );
+        long start = System.currentTimeMillis();
+        String alias = tenantContext.alias();
+        String dbName = dbNameResolver.forTenant(alias);
+        String sessionId = tenantContext.sessionId();
+
+        Map<String, Object> startArgs = new HashMap<>();
+        startArgs.put("qualifiedName", qualifiedName == null ? "" : qualifiedName);
+        eventEmitter.toolCallStarted(sessionId, "get_procedure_source", startArgs);
+
+        try {
+            String sql = """
+                    SELECT qualifiedName, source_text AS sourceText, language, schema, name, @class AS type
+                    FROM DaliRoutine
+                    WHERE qualifiedName = :name
+                    LIMIT 1
+                    """;
+            ArcadeDbClient.QueryResult r = arcade.query(dbName,
+                    new ArcadeDbClient.ArcadeQuery("sql", sql, Map.of("name", qualifiedName)));
+
+            if (r.result().isEmpty()) {
+                eventEmitter.toolCallCompleted(sessionId, "get_procedure_source",
+                        System.currentTimeMillis() - start, 0);
+                return Map.of(
+                        "error",         "not_found",
+                        "qualifiedName", qualifiedName,
+                        "message",       "No DaliRoutine with qualifiedName=" + qualifiedName + " in " + dbName);
+            }
+
+            Map<String, Object> row = r.result().get(0);
+            Map<String, Object> result = new HashMap<>();
+            result.put("qualifiedName", String.valueOf(row.getOrDefault("qualifiedName", "")));
+            result.put("sourceText",    String.valueOf(row.getOrDefault("sourceText", "")));
+            result.put("language",      String.valueOf(row.getOrDefault("language", "unknown")));
+            result.put("schema",        String.valueOf(row.getOrDefault("schema", "")));
+            result.put("name",          String.valueOf(row.getOrDefault("name", "")));
+            result.put("type",          String.valueOf(row.getOrDefault("type", "DaliRoutine")));
+
+            eventEmitter.toolCallCompleted(sessionId, "get_procedure_source",
+                    System.currentTimeMillis() - start, 1);
+            return result;
+        } catch (Exception e) {
+            LOG.warnf(e, "get_procedure_source failed for tenant=%s qualifiedName=%s", alias, qualifiedName);
+            eventEmitter.toolCallCompleted(sessionId, "get_procedure_source",
+                    System.currentTimeMillis() - start, 0);
+            return Map.of("error", "query_failed", "message", e.getMessage());
+        }
     }
 
-    @Tool("Count how many routines read from or write to a given table. " +
-          "Returns upstream (writers) and downstream (readers) counts.")
+    @Tool("Count incoming/outgoing dependencies for a node — answers " +
+          "'how critical is this object?'. Returns counts for in / out / both directions.")
     public Map<String, Object> count_dependencies(
-        @P("Table node ID to count dependencies for") String tableNodeId,
-        @P("Database name, e.g. hound_acme") String dbName
+            @P("Node geoid (canonical id, e.g. HR.ORDERS or full SCHEMA.TABLE.COLUMN)") String nodeId,
+            @P("Direction: in (incoming READS_FROM/WRITES_TO) | out | both") String direction
     ) {
-        // TODO(MIMIR-Foundation): ArcadeDB SQL query on yggUrl
-        return Map.of(
-            "stub",            "count_dependencies not yet implemented",
-            "tableNodeId",     tableNodeId,
-            "upstreamCount",   0,
-            "downstreamCount", 0
-        );
+        long start = System.currentTimeMillis();
+        String alias = tenantContext.alias();
+        String dbName = dbNameResolver.forTenant(alias);
+        String sessionId = tenantContext.sessionId();
+
+        Map<String, Object> countArgs = new HashMap<>();
+        countArgs.put("nodeId",    nodeId == null ? "" : nodeId);
+        countArgs.put("direction", direction == null ? "both" : direction);
+        eventEmitter.toolCallStarted(sessionId, "count_dependencies", countArgs);
+
+        try {
+            String dir = direction == null ? "both" : direction.toLowerCase();
+            String cypher = switch (dir) {
+                case "in"  -> """
+                        MATCH (n)-[r:READS_FROM|WRITES_TO]->(t {geoid: $id})
+                        RETURN count(r) AS cnt
+                        """;
+                case "out" -> """
+                        MATCH (s {geoid: $id})-[r:READS_FROM|WRITES_TO]->(n)
+                        RETURN count(r) AS cnt
+                        """;
+                default    -> """
+                        MATCH (n {geoid: $id})
+                        OPTIONAL MATCH (n)-[ro:READS_FROM|WRITES_TO]->(out)
+                        OPTIONAL MATCH (in)-[ri:READS_FROM|WRITES_TO]->(n)
+                        RETURN count(DISTINCT ro) + count(DISTINCT ri) AS cnt
+                        """;
+            };
+
+            ArcadeDbClient.QueryResult r = arcade.query(dbName,
+                    new ArcadeDbClient.ArcadeQuery("cypher", cypher, Map.of("id", nodeId)));
+
+            long count = 0L;
+            if (!r.result().isEmpty()) {
+                Object v = r.result().get(0).get("cnt");
+                if (v instanceof Number n) count = n.longValue();
+            }
+
+            eventEmitter.toolCallCompleted(sessionId, "count_dependencies",
+                    System.currentTimeMillis() - start, 1);
+            return Map.of(
+                    "nodeId",    nodeId,
+                    "direction", dir,
+                    "count",     count);
+        } catch (Exception e) {
+            LOG.warnf(e, "count_dependencies failed for tenant=%s nodeId=%s", alias, nodeId);
+            eventEmitter.toolCallCompleted(sessionId, "count_dependencies",
+                    System.currentTimeMillis() - start, 0);
+            return Map.of(
+                    "nodeId",    nodeId,
+                    "direction", direction == null ? "both" : direction,
+                    "count",     0,
+                    "error",     "query_failed");
+        }
     }
 }
