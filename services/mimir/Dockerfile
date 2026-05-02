@@ -19,6 +19,12 @@ COPY gradle.properties                       gradle.properties
 COPY services/mimir/docker-settings.gradle  settings.gradle
 COPY services/mimir/build.gradle            services/mimir/build.gradle
 COPY services/mimir/gradle.properties       services/mimir/gradle.properties
+
+# shared:dali-models — HeimdallEvent / EventType records used by MIMIR.
+# Added in CORE sprint (PR #103) when MimirEventEmitter became real.
+COPY shared/dali-models/build.gradle        shared/dali-models/build.gradle
+COPY shared/dali-models/src                 shared/dali-models/src
+
 RUN gradle :services:mimir:dependencies --no-daemon -q
 COPY services/mimir/src                     services/mimir/src
 
