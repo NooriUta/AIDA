@@ -159,6 +159,52 @@ services:
           memory: 64M
     logging: *default_logging
 
+  # ── ANVIL (Impact + IDE backend) ───────────────────────────────────────────
+  anvil:
+    image: cr.yandex/${YC_REGISTRY_ID}/anvil:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
+      YGG_URL: "http://ygg:2480"
+      YGG_USER: "root"
+      YGG_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD}
+    <<: *env_file
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+        reservations:
+          memory: 192M
+    logging: *default_logging
+
+  # ── MIMIR (LLM orchestrator) ───────────────────────────────────────────────
+  mimir:
+    image: cr.yandex/${YC_REGISTRY_ID}/mimir:${IMAGE_TAG:-latest}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
+      CORS_ORIGINS: "https://${DOMAIN:-seidrstudio.pro},https://seer.${DOMAIN:-seidrstudio.pro},http://localhost:13000"
+      ANVIL_URL: "http://anvil:9095"
+      SHUTTLE_URL: "http://shuttle:8080"
+      HEIMDALL_URL: "http://heimdall-backend:9093"
+      YGG_URL: "http://ygg:2480"
+      YGG_USER: "root"
+      YGG_PASSWORD: ${ARCADEDB_ADMIN_PASSWORD}
+      # Quarkiverse LangChain4j REQUIRES non-empty api-key strings at startup
+      # even if model not used (Anthropic+Ollama are CDI stubs до 02.06.2026 Decision #71).
+      # Empty string in .env.prod → SmallRye SRCFG00040 NoSuchElementException.
+      # Use placeholder if env unset/empty.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-sk-placeholder-not-real}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-ant-placeholder-not-real}
+    <<: *env_file
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+        reservations:
+          memory: 192M
+    logging: *default_logging
+
   # Shell removed 2026-05-01 — replaced by independent SPAs.
 
   # ── FRIGG (ArcadeDB state store) ───────────────────────────────────────────
