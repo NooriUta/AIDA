@@ -1,0 +1,11 @@
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'aida-root'
+
+include 'shared:dali-models'
+include 'services:anvil'

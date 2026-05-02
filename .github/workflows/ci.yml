@@ -210,5 +210,38 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx vite build
 
+  # ── Backend: ANVIL (Quarkus + Gradle) ───────────────────────────────────────
+  anvil:
+    name: ANVIL — test + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: chmod +x gradlew
+      - run: ./gradlew :services:anvil:test --no-daemon --build-cache
+      - run: ./gradlew :services:anvil:build -x test --no-daemon --build-cache
+
+  # ── Backend: MIMIR (Quarkus + LangChain4j) ──────────────────────────────────
+  mimir:
+    name: MIMIR — test + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: chmod +x gradlew
+      # MimirService mocked via @InjectMock — no real LLM call; dummy API keys prevent startup failure
+      - run: ./gradlew :services:mimir:test --no-daemon --build-cache
+      - run: ./gradlew :services:mimir:build -x test --no-daemon --build-cache
+
   # E2E (Playwright) requires the full Docker Compose stack.
   # Run locally: docker compose up -d && cd frontends/verdandi && npm run e2e
