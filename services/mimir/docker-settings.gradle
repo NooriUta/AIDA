@@ -7,4 +7,5 @@ pluginManagement {
 
 rootProject.name = 'aida-root'
 
+include 'shared:dali-models'
 include 'services:mimir'
