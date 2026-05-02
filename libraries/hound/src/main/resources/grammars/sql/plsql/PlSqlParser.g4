@@ -691,7 +691,7 @@ function_spec
         DETERMINISTIC
         | PIPELINED
         | parallel_enable_clause
-        | RESULT_CACHE
+        | result_cache_clause
         | streaming_clause
     )* (AS call_spec)? ';'
     ;
@@ -1655,8 +1655,7 @@ index_partitioning_clause
     ;
 
 index_partitioning_values_list
-    : literal (',' literal)*
-    | TIMESTAMP literal (',' TIMESTAMP literal)*
+    : (literal | datetime_literal) (',' (literal | datetime_literal))*
     ;
 
 local_partitioned_index
@@ -1824,7 +1823,7 @@ drop_index_partition
     ;
 
 split_index_partition
-    : SPLIT PARTITION partition_name_old AT '(' literal (',' literal)* ')' (
+    : SPLIT PARTITION partition_name_old AT '(' (literal | datetime_literal) (',' (literal | datetime_literal))* ')' (
         INTO '(' index_partition_description ',' index_partition_description ')'
     )? parallel_clause?
     ;
@@ -2216,12 +2215,12 @@ into_clause1
 //Making assumption on partition ad subpartition key value clauses
 partition_key_value
     : literal
-    | TIMESTAMP quoted_string
+    | datetime_literal
     ;
 
 subpartition_key_value
     : literal
-    | TIMESTAMP quoted_string
+    | datetime_literal
     ;
 
 //https://docs.oracle.com/cd/E11882_01/server.112/e41084/statements_4006.htm#SQLRF01106
@@ -3769,12 +3768,11 @@ range_values_clause
     ;
 
 range_values_list
-    : literal (',' literal)*
-    | TIMESTAMP literal (',' TIMESTAMP literal)*
+    : (literal | datetime_literal) (',' (literal | datetime_literal))*
     ;
 
 list_values_clause
-    : VALUES '(' (literal (',' literal)* | TIMESTAMP literal (',' TIMESTAMP literal)* | DEFAULT) ')'
+    : VALUES '(' ((literal | datetime_literal) (',' (literal | datetime_literal))* | DEFAULT) ')'
     ;
 
 table_partition_description
@@ -5053,7 +5051,7 @@ modify_table_partition
 
 split_table_partition
     : SPLIT partition_extended_names (
-        AT '(' literal (',' literal)* ')' INTO '(' range_partition_desc (',' range_partition_desc)* ')'
+        AT '(' (literal | datetime_literal) (',' (literal | datetime_literal))* ')' INTO '(' range_partition_desc (',' range_partition_desc)* ')'
         | INTO '(' (
             range_partition_desc (',' range_partition_desc)*
             | list_partition_desc (',' list_partition_desc)*
@@ -6699,6 +6697,7 @@ unary_expression
         | (EXISTS | NEXT | PRIOR) '(' index += expression ')'
     )
     | quantified_expression
+    | numeric_function_wrapper
     | standard_function
     | {this.IsNotNumericFunction()}? atom
     | implicit_cursor_expression
@@ -6789,11 +6788,13 @@ string_function
     | TO_DATE '(' (table_element | standard_function | expression) (
         DEFAULT concatenation ON CONVERSION ERROR
     )? (',' quoted_string (',' quoted_string)?)? ')'
+    | TO_TIMESTAMP '(' (table_element | standard_function | expression) (
+        DEFAULT concatenation ON CONVERSION ERROR
+    )? (',' quoted_string (',' quoted_string)?)? ')'
     ;
 
 standard_function
     : string_function
-    | numeric_function_wrapper
     | json_function
     | {this.IsNotNumericFunction()}? other_function
     ;
@@ -6927,17 +6928,22 @@ literal
     | MAXVALUE
     ;
 
+datetime_literal
+    : DATE CHAR_STRING
+    | TIMESTAMP CHAR_STRING
+    ;
+
 numeric_function_wrapper
     : numeric_function (single_column_for_loop | multi_column_for_loop)?
     ;
 
 numeric_function
-    : SUM '(' (DISTINCT | ALL)? expression ')' over_clause?
+    : SUM '(' (DISTINCT | ALL)? expression ')' (keep_clause | over_clause)?
     | COUNT '(' (ASTERISK | ((DISTINCT | UNIQUE | ALL)? concatenation)?) ')' over_clause?
-    | ROUND '(' expression (',' UNSIGNED_INTEGER)? ')'
-    | AVG '(' (DISTINCT | ALL)? expression ')' over_clause?
-    | MIN '(' (DISTINCT | ALL)? expression ')' over_clause?
-    | MAX '(' (DISTINCT | ALL)? expression ')' over_clause?
+    | ROUND '(' expression (',' expression)? ')'
+    | AVG '(' (DISTINCT | ALL)? expression ')' (keep_clause | over_clause)?
+    | MIN '(' (DISTINCT | ALL)? expression ')' (keep_clause | over_clause)?
+    | MAX '(' (DISTINCT | ALL)? expression ')' (keep_clause | over_clause)?
     | LEAST '(' expressions_ ')'
     | GREATEST '(' expressions_ ')'
     ;

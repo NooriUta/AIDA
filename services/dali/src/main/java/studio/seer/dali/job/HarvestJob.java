@@ -55,7 +55,7 @@ public class HarvestJob implements JobRequestHandler<HarvestJobRequest> {
 
         String effectiveTenant = (tenantAlias != null && !tenantAlias.isBlank()) ? tenantAlias : "default"; // MTN-04-EXEMPT: single-tenant BC fallback
         log.info("[{}] HarvestJob: starting harvest for {} source(s) tenant={}", harvestId, sources.size(), effectiveTenant);
-        emitter.sessionStarted(harvestId, "all", "multi", false, false, sources.size());
+        emitter.sessionStarted(harvestId, effectiveTenant, "all", "multi", false, false, sources.size());
 
         int enqueued = 0;
         for (DaliConfig.Source src : sources) {
@@ -79,7 +79,7 @@ public class HarvestJob implements JobRequestHandler<HarvestJobRequest> {
                 enqueued++;
             } catch (Exception e) {
                 log.error("[{}] HarvestJob: failed to enqueue source '{}': {}", harvestId, src.name(), e.getMessage(), e);
-                emitter.sessionFailed(harvestId, "Enqueue failed for " + src.name() + ": " + e.getMessage(), 0);
+                emitter.sessionFailed(harvestId, effectiveTenant, "Enqueue failed for " + src.name() + ": " + e.getMessage(), 0);
             }
         }
 

@@ -7669,6 +7669,13 @@ public class PlSqlParserBaseVisitor<T> extends AbstractParseTreeVisitor<T> imple
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
+	@Override public T visitDatetime_literal(PlSqlParser.Datetime_literalContext ctx) { return visitChildren(ctx); }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation returns the result of calling
+	 * {@link #visitChildren} on {@code ctx}.</p>
+	 */
 	@Override public T visitNumeric_function_wrapper(PlSqlParser.Numeric_function_wrapperContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}

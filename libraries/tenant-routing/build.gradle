@@ -30,7 +30,8 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.17'
 
     // ── Jackson — ArcadeDB JSON response parsing ──────────────────────────────
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
+    // 2.21.2 — latest stable; transitively pulls jackson-core 2.21.2 (closes Number Length Bypass DoS)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.2'
 
     // ── Tests ─────────────────────────────────────────────────────────────────
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'

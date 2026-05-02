@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DaliSession } from '../../api/dali';
-import { cancelSession } from '../../api/dali';
+import { cancelSession, restartSession } from '../../api/dali';
 import { useDaliSession } from '../../hooks/useDaliSession';
 import { TERMINAL, DIALECT_LABEL, deriveSessionName, fmtDuration, fmtDateShort } from './sessionListHelpers';
 import { StatusBadge, ProgressBar, SourceCell, RowMetrics } from './SessionListParts';
@@ -25,6 +25,7 @@ export function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = f
   const effectiveTenant = session.tenantAlias ?? tenantAlias;
   const live = useDaliSession(session.id, !isTerminal, effectiveTenant);
   const [cancelling, setCancelling] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const reportedAtRef = useRef('');
   const onUpdateRef = useRef(onUpdate);
   useEffect(() => { onUpdateRef.current = onUpdate; });
@@ -46,6 +47,16 @@ export function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = f
       onUpdate({ ...s, status: 'CANCELLING' });
     } catch { /* polling will reflect true state */ }
     finally { setCancelling(false); }
+  }
+
+  async function handleRestart(e: React.MouseEvent) {
+    e.stopPropagation();
+    setRestarting(true);
+    try {
+      const fresh = await restartSession(s.id, effectiveTenant);
+      onUpdate(fresh);
+    } catch { /* leave row as-is; user can retry */ }
+    finally { setRestarting(false); }
   }
 
   const chevronColor =
@@ -159,6 +170,29 @@ export function SessionRow({ session, expanded, onToggle, onUpdate, hideCols = f
                 }}
               >
                 ✕
+              </button>
+            )}
+            {(s.status === 'FAILED' || s.status === 'CANCELLED')
+              && !(s.source ?? '').startsWith('jdbc:') && (
+              <button
+                onClick={handleRestart}
+                disabled={restarting}
+                title={t('dali.sessions.restartBtn', { defaultValue: 'Restart with same input' })}
+                style={{
+                  background: 'none',
+                  border: '1px solid color-mix(in srgb, var(--acc) 35%, transparent)',
+                  borderRadius: 3,
+                  color: restarting ? 'var(--t4)' : 'var(--acc)',
+                  cursor: restarting ? 'default' : 'pointer',
+                  padding: '1px 5px',
+                  fontSize: 10,
+                  fontFamily: 'var(--mono)',
+                  lineHeight: '1.5',
+                  opacity: restarting ? 0.5 : 0.8,
+                  flexShrink: 0,
+                }}
+              >
+                ↻
               </button>
             )}
             <svg

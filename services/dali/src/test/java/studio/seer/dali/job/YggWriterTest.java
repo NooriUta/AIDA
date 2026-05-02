@@ -146,8 +146,8 @@ class YggWriterTest {
 
         parseJob.execute(sid, singleInput(false));
 
-        verify(emitter).yggWriteCompleted(eq(sid), eq(10), eq(3), anyLong());
-        verify(emitter, never()).yggWriteFailed(any(), any());
+        verify(emitter).yggWriteCompleted(eq(sid), any(), eq(10), eq(3), anyLong());
+        verify(emitter, never()).yggWriteFailed(any(), any(), any());
     }
 
     /**
@@ -163,8 +163,8 @@ class YggWriterTest {
 
         parseJob.execute(sid, singleInput(true));
 
-        verify(emitter, never()).yggWriteCompleted(any(), anyInt(), anyInt(), anyLong());
-        verify(emitter, never()).yggWriteFailed(any(), any());
+        verify(emitter, never()).yggWriteCompleted(any(), any(), anyInt(), anyInt(), anyLong());
+        verify(emitter, never()).yggWriteFailed(any(), any(), any());
     }
 
     /**
@@ -180,8 +180,8 @@ class YggWriterTest {
 
         parseJob.execute(sid, batchInput());
 
-        verify(emitter, times(1)).yggWriteCompleted(eq(sid), anyInt(), anyInt(), anyLong());
-        verify(emitter, never()).yggWriteFailed(any(), any());
+        verify(emitter, times(1)).yggWriteCompleted(eq(sid), any(), anyInt(), anyInt(), anyLong());
+        verify(emitter, never()).yggWriteFailed(any(), any(), any());
     }
 
     /**
@@ -202,7 +202,7 @@ class YggWriterTest {
 
         parseJob.execute(sid, batchInput());
 
-        verify(emitter).yggWriteFailed(eq(sid), contains("file(s) failed"));
-        verify(emitter).yggWriteCompleted(eq(sid), anyInt(), anyInt(), anyLong());
+        verify(emitter).yggWriteFailed(eq(sid), any(), contains("file(s) failed"));
+        verify(emitter).yggWriteCompleted(eq(sid), any(), anyInt(), anyInt(), anyLong());
     }
 }

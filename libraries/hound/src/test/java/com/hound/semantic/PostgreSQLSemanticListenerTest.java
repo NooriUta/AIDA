@@ -161,4 +161,44 @@ class PostgreSQLSemanticListenerTest {
         assertEquals(1, sel.getSourceTables().size(),
                 "Expected 1 source table; got: " + sel.getSourceTables().keySet());
     }
+
+    // ─── PG-JTYPE-*: typed grammar-rule JOIN type detection ──────────────────
+    // Verifies that join_type is detected via typed token check
+    // (ctx.FULL/LEFT/RIGHT/INNER_P), not getText().contains() heuristics.
+
+    private static String firstJoinType(UniversalSemanticEngine engine) {
+        return stmtsOfType(engine, "SELECT").stream()
+                .flatMap(s -> s.getJoins().stream())
+                .map(j -> j.joinType())
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Test
+    @DisplayName("PG-JTYPE-1: LEFT JOIN → joinType = LEFT (typed token)")
+    void pgJtype1_leftJoin() {
+        UniversalSemanticEngine engine = parse("SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id;");
+        assertEquals("LEFT", firstJoinType(engine));
+    }
+
+    @Test
+    @DisplayName("PG-JTYPE-2: RIGHT OUTER JOIN → joinType = RIGHT")
+    void pgJtype2_rightOuterJoin() {
+        UniversalSemanticEngine engine = parse("SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;");
+        assertEquals("RIGHT", firstJoinType(engine));
+    }
+
+    @Test
+    @DisplayName("PG-JTYPE-3: FULL OUTER JOIN → joinType = FULL")
+    void pgJtype3_fullOuterJoin() {
+        UniversalSemanticEngine engine = parse("SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;");
+        assertEquals("FULL", firstJoinType(engine));
+    }
+
+    @Test
+    @DisplayName("PG-JTYPE-4: INNER JOIN → joinType = INNER")
+    void pgJtype4_innerJoin() {
+        UniversalSemanticEngine engine = parse("SELECT * FROM t1 INNER JOIN t2 ON t1.id = t2.id;");
+        assertEquals("INNER", firstJoinType(engine));
+    }
 }

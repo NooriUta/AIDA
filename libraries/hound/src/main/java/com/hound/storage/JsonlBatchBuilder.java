@@ -598,7 +598,8 @@ public class JsonlBatchBuilder {
                         "session_id", sid,
                         "statement_geoid", stmtGeoid,
                         "atom_id", atomId,
-                        "atom_text", at.getKey(),
+                        "atom_text", a.get("atom_text"),  // raw text (e.g. "ITEM_ID")
+                        "atom_geoid",  at.getKey(),         // composite uniqueness key "TEXT~line:col"
                         "atom_context", a.get("atom_context"),
                         "parent_context", a.get("parent_context"),
                         "position", a.get("position"),
@@ -1370,7 +1371,8 @@ public class JsonlBatchBuilder {
                         "session_id", sid,
                         "statement_geoid", stmtGeoid,
                         "atom_id", atomId,
-                        "atom_text", at.getKey(),
+                        "atom_text", a.get("atom_text"),  // raw text (e.g. "ITEM_ID")
+                        "atom_geoid",  at.getKey(),         // composite uniqueness key "TEXT~line:col"
                         "atom_context", a.get("atom_context"),
                         "parent_context", a.get("parent_context"),
                         "position", a.get("position"),

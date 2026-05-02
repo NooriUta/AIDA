@@ -342,12 +342,14 @@ public class PostgreSQLSemanticListener extends PostgreSQLParserBaseListener {
 
     @Override
     public void enterJoin_type(PostgreSQLParser.Join_typeContext ctx) {
-        String text = ctx.getText().toUpperCase();
-        if (text.contains("FULL"))        pendingJoinType = "FULL";
-        else if (text.contains("LEFT"))   pendingJoinType = "LEFT";
-        else if (text.contains("RIGHT"))  pendingJoinType = "RIGHT";
-        else if (text.contains("CROSS"))  pendingJoinType = "CROSS";
-        else                              pendingJoinType = "INNER";
+        // Grammar (PostgreSQLParser.g4:3231): join_type : (FULL | LEFT | RIGHT | INNER_P) OUTER_P? ;
+        // Typed token check — no getText().contains() heuristics. CROSS JOIN is a separate
+        // alternative in joined_table (line 3210/3215), never enters this rule.
+        if      (ctx.FULL()    != null) pendingJoinType = "FULL";
+        else if (ctx.LEFT()    != null) pendingJoinType = "LEFT";
+        else if (ctx.RIGHT()   != null) pendingJoinType = "RIGHT";
+        else if (ctx.INNER_P() != null) pendingJoinType = "INNER";
+        else                            pendingJoinType = "INNER"; // grammar-impossible fallback
     }
 
     @Override

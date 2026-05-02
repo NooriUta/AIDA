@@ -162,6 +162,20 @@ export async function cancelSession(id: string, tenantAlias?: string): Promise<v
   if (!res.ok && res.status !== 409) throw new Error(`HTTP ${res.status}`);
 }
 
+/**
+ * Restarts a FAILED or CANCELLED session — backend re-enqueues a fresh parse
+ * with the same input parameters and returns the new session record.
+ * 4xx responses (404 not-found / 403 forbidden / 409 conflict) are surfaced as Errors.
+ */
+export async function restartSession(id: string, tenantAlias?: string): Promise<DaliSession> {
+  const res = await fetch(`${BASE}/api/sessions/${id}/restart`, { method: 'POST', headers: th(tenantAlias) });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}${body ? `: ${body}` : ''}`);
+  }
+  return res.json();
+}
+
 export async function getYggStats(tenantAlias?: string): Promise<YggStats> {
   const res = await fetch(`${BASE}/api/stats`, { headers: th(tenantAlias) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

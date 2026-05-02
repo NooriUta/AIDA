@@ -36,6 +36,37 @@ class HoundParserImplTest {
     }
 
     @Test
+    void parse_sqlWithUtf8Bom_stripsBomAndParsesCleanly() throws Exception {
+        // Windows editors (Notepad/Excel/some IDEs) prepend UTF-8 BOM (U+FEFF) on save.
+        // Without strip, ANTLR4 reports "token recognition error at: '﻿'" on line 1 col 0.
+        HoundConfig config = HoundConfig.defaultDisabled("plsql");
+
+        // Both with-BOM and without-BOM versions of the same valid PL/SQL fragment.
+        String body = "CREATE TABLE T (ID NUMBER);";
+        String withBom = "﻿" + body;
+
+        java.util.concurrent.atomic.AtomicInteger errEvents = new java.util.concurrent.atomic.AtomicInteger(0);
+        HoundEventListener errCounter = new HoundEventListener() {
+            @Override
+            public void onParseError(String file, int line, int col, String msg) {
+                errEvents.incrementAndGet();
+            }
+        };
+
+        ParseResult result = new HoundParserImpl().parseSources(
+                List.of(new SqlSource.FromText(withBom, "bom-test.sql")),
+                config,
+                errCounter
+        ).get(0);
+
+        assertEquals(0, errEvents.get(),
+                "BOM-prefixed SQL must parse without ANTLR errors after strip");
+        assertNotNull(result);
+        assertTrue(result.errors() == null || result.errors().isEmpty(),
+                "ParseResult.errors should be empty for BOM-prefixed valid SQL");
+    }
+
+    @Test
     void parse_withListener_atomExtractedEventsFire() throws Exception {
         HoundConfig config = HoundConfig.defaultDisabled("plsql");
         AtomicInteger eventCount = new AtomicInteger(0);

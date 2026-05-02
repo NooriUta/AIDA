@@ -66,93 +66,108 @@ public class HeimdallEmitter {
         emit(build("hound", type, EventLevel.WARN,  sessionId, 0, payload));
     }
 
+    /**
+     * Returns a new payload with {@code tenantAlias} added (no-op if tenant is null/blank or
+     * key already present). HEIMDALL EventLog UI reads {@code payload.tenantAlias} to populate
+     * the Tenant column — without it the column shows "—".
+     */
+    private static Map<String, Object> withTenant(Map<String, Object> payload, String tenantAlias) {
+        if (tenantAlias == null || tenantAlias.isBlank()) return payload;
+        Map<String, Object> enriched = new java.util.LinkedHashMap<>(payload);
+        enriched.putIfAbsent("tenantAlias", tenantAlias);
+        return enriched;
+    }
+
     // ── Layer 3: typed Dali events ────────────────────────────────────────────
 
     /** Emitted by SessionService when a new session is accepted into the queue. */
-    public void jobEnqueued(String sessionId, String source, String dialect) {
-        info(EventType.JOB_ENQUEUED, sessionId, Map.of(
+    public void jobEnqueued(String sessionId, String tenantAlias, String source, String dialect) {
+        info(EventType.JOB_ENQUEUED, sessionId, withTenant(Map.of(
                 "source",  source,
-                "dialect", dialect));
+                "dialect", dialect), tenantAlias));
     }
 
     /** Emitted by ParseJob when the job worker picks up the session. */
-    public void sessionStarted(String sessionId, String source, String dialect,
+    public void sessionStarted(String sessionId, String tenantAlias, String source, String dialect,
                                boolean preview, boolean clearBeforeWrite, int threads) {
-        info(EventType.SESSION_STARTED, sessionId, Map.of(
+        info(EventType.SESSION_STARTED, sessionId, withTenant(Map.of(
                 "source",           source,
                 "dialect",          dialect,
                 "preview",          preview,
                 "clearBeforeWrite", clearBeforeWrite,
-                "threads",          threads));
+                "threads",          threads), tenantAlias));
     }
 
     /** Emitted by ParseJob on successful completion. */
-    public void sessionCompleted(String sessionId, int atomCount,
+    public void sessionCompleted(String sessionId, String tenantAlias, int atomCount,
                                  double resolutionRate, long durationMs, int files) {
-        emit(build("dali", EventType.SESSION_COMPLETED, EventLevel.INFO, sessionId, durationMs, Map.of(
+        emit(build("dali", EventType.SESSION_COMPLETED, EventLevel.INFO, sessionId, durationMs, withTenant(Map.of(
                 "atomCount",      atomCount,
                 "resolutionRate", resolutionRate,
-                "files",          files)));
+                "files",          files), tenantAlias)));
     }
 
     /** Emitted by SessionService when a session is cancelled by user request. */
-    public void sessionCancelled(String sessionId) {
+    public void sessionCancelled(String sessionId, String tenantAlias) {
         warn(EventType.SESSION_FAILED, sessionId,
-                Map.of("reason", "CANCELLED_BY_USER"));
+                withTenant(Map.of("reason", "CANCELLED_BY_USER"), tenantAlias));
     }
 
     /** Emitted by ParseJob when an unrecoverable error aborts the session. */
-    public void sessionFailed(String sessionId, String error, long durationMs) {
-        emit(build("dali", EventType.SESSION_FAILED, EventLevel.ERROR, sessionId, durationMs, Map.of(
-                "error", error != null ? error : "unknown")));
+    public void sessionFailed(String sessionId, String tenantAlias, String error, long durationMs) {
+        emit(build("dali", EventType.SESSION_FAILED, EventLevel.ERROR, sessionId, durationMs, withTenant(Map.of(
+                "error", error != null ? error : "unknown"), tenantAlias)));
     }
 
     /** Emitted when Hound begins parsing a single SQL file. */
-    public void fileParsingStarted(String sessionId, String file, String dialect) {
-        houndInfo(EventType.FILE_PARSING_STARTED, sessionId, Map.of(
+    public void fileParsingStarted(String sessionId, String tenantAlias, String file, String dialect) {
+        houndInfo(EventType.FILE_PARSING_STARTED, sessionId, withTenant(Map.of(
                 "file",    file,
-                "dialect", dialect));
+                "dialect", dialect), tenantAlias));
     }
 
     /**
      * Emitted after a file parse completes — carries the atom count for that file.
      * HEIMDALL metrics service aggregates these to compute {@code atomsExtracted}.
      */
-    public void atomExtracted(String sessionId, String file, int atomCount) {
-        houndInfo(EventType.ATOM_EXTRACTED, sessionId, Map.of(
+    public void atomExtracted(String sessionId, String tenantAlias, String file, int atomCount) {
+        houndInfo(EventType.ATOM_EXTRACTED, sessionId, withTenant(Map.of(
                 "file",      file,
-                "atomCount", atomCount));
+                "atomCount", atomCount), tenantAlias));
     }
 
     /**
-     * Emitted when ANTLR4 reports a genuine syntax error inside a file.
-     * Level is WARN — the file is still (partially) parsed; the session continues.
+     * Emitted when ANTLR4 reports a hard syntax error inside a file
+     * (no viable alternative, token recognition error, EOF mismatch).
+     * Level is ERROR — name and level aligned: requires attention even though
+     * session continues with partial parse.
      */
-    public void parseError(String sessionId, String file, int line, int col, String msg) {
-        houndWarn(EventType.PARSE_ERROR, sessionId, Map.of(
+    public void parseError(String sessionId, String tenantAlias, String file, int line, int col, String msg) {
+        emit(build("hound", EventType.PARSE_ERROR, EventLevel.ERROR, sessionId, 0, withTenant(Map.of(
                 "file", file,
                 "line", line,
                 "col",  col,
-                "msg",  msg != null ? msg : ""));
+                "msg",  msg != null ? msg : ""), tenantAlias)));
     }
 
     /**
-     * Emitted when ANTLR4 reports a known grammar limitation (not a bug in the source file).
-     * Level is INFO — informational only; does not affect {@code isSuccess()} or the ✗ indicator.
+     * Emitted when ANTLR4 reports a recoverable grammar limitation
+     * (mismatched input, extraneous input, missing token).
+     * Level is WARN — visible in logs but does not affect {@code isSuccess()}.
      */
-    public void parseWarning(String sessionId, String file, int line, int col, String msg) {
-        houndInfo(EventType.PARSE_WARNING, sessionId, Map.of(
+    public void parseWarning(String sessionId, String tenantAlias, String file, int line, int col, String msg) {
+        houndWarn(EventType.PARSE_WARNING, sessionId, withTenant(Map.of(
                 "file", file,
                 "line", line,
                 "col",  col,
-                "msg",  msg != null ? msg : ""));
+                "msg",  msg != null ? msg : ""), tenantAlias));
     }
 
     /** Emitted when Hound encounters an error parsing a file. */
-    public void fileParsingFailed(String sessionId, String file, String error) {
-        emit(build("hound", EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, Map.of(
+    public void fileParsingFailed(String sessionId, String tenantAlias, String file, String error) {
+        emit(build("hound", EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, withTenant(Map.of(
                 "file",  file,
-                "error", error != null ? error : "unknown")));
+                "error", error != null ? error : "unknown"), tenantAlias)));
     }
 
     // ── Layer 3: YGG write events (EV-02 / EV-03 / EV-05 / EV-06) ───────────
@@ -161,37 +176,37 @@ public class HeimdallEmitter {
      * EV-02: Emitted when Hound successfully writes a session's graph to YGG.
      * Fired once per session after all files are written (non-preview only).
      */
-    public void yggWriteCompleted(String sessionId, int vertices, int edges, long durationMs) {
+    public void yggWriteCompleted(String sessionId, String tenantAlias, int vertices, int edges, long durationMs) {
         emit(build("hound", EventType.YGG_WRITE_COMPLETED, EventLevel.INFO, sessionId, durationMs,
-                Map.of("verticesWritten", vertices, "edgesWritten", edges)));
+                withTenant(Map.of("verticesWritten", vertices, "edgesWritten", edges), tenantAlias)));
     }
 
     /**
      * EV-02: Emitted when one or more YGG writes fail after all retries are exhausted.
      * In batch mode: fired if any file permanently failed (others may have succeeded).
      */
-    public void yggWriteFailed(String sessionId, String error) {
+    public void yggWriteFailed(String sessionId, String tenantAlias, String error) {
         emit(build("hound", EventType.YGG_WRITE_FAILED, EventLevel.ERROR, sessionId, 0,
-                Map.of("error", error != null ? error : "unknown")));
+                withTenant(Map.of("error", error != null ? error : "unknown"), tenantAlias)));
     }
 
     /**
      * EV-03: Emitted after ParseJob truncates the lineage graph before a new parse
      * ({@code clearBeforeWrite=true}).
      */
-    public void yggClearCompleted(String sessionId, long durationMs) {
+    public void yggClearCompleted(String sessionId, String tenantAlias, long durationMs) {
         emit(build("dali", EventType.YGG_CLEAR_COMPLETED, EventLevel.INFO, sessionId, durationMs,
-                Map.of("durationMs", durationMs)));
+                withTenant(Map.of("durationMs", durationMs), tenantAlias)));
     }
 
     /**
      * EV-05: Emitted when ArcadeDB (YGG) is unreachable — connection refused / timed out.
      * Level ERROR: indicates infrastructure problem, not a parse issue.
      */
-    public void dbConnectionError(String sessionId, String db, String error) {
+    public void dbConnectionError(String sessionId, String tenantAlias, String db, String error) {
         emit(build("dali", EventType.DB_CONNECTION_ERROR, EventLevel.ERROR, sessionId, 0,
-                Map.of("db", db != null ? db : "ygg",
-                       "error", error != null ? error : "unknown")));
+                withTenant(Map.of("db", db != null ? db : "ygg",
+                                  "error", error != null ? error : "unknown"), tenantAlias)));
     }
 
     /**
