@@ -27,10 +27,22 @@ public enum EventType {
     // MIMIR (I28)
     QUERY_RECEIVED,
     TIER_SELECTED,
+    MODEL_SELECTED,           // {model, reason: "request"|"default"|"byok"} — Decision #70
     TOOL_CALL_STARTED,
     TOOL_CALL_COMPLETED,
+    LLM_REQUEST_STARTED,      // {model, prompt_tokens}
+    LLM_RESPONSE_RECEIVED,    // {model, duration_ms, prompt_tokens, completion_tokens}
     LLM_RESPONSE_READY,
+    RESPONSE_SYNTHESIZED,     // {total_duration_ms, total_tokens, affected_nodes}
+    FALLBACK_ACTIVATED,       // {reason: "429"|"timeout"|"error", new_tier}
+    TIMEOUT,                  // {elapsed_ms, threshold_ms}
     CACHE_HIT,
+    LLM_CREDENTIAL_USED,      // {tenant_alias, provider, key_mask} — BYOK MT-06
+    LLM_CONFIG_UPDATED,       // {tenant_alias, provider, action: "set"|"delete", admin}
+    QUOTA_EXCEEDED,           // {tenant_alias, reason, current, limit, reset_at} — MT-07
+    TOKEN_USAGE_RECORDED,     // {tenant_alias, provider, model, prompt_tokens, completion_tokens, cost_usd}
+    HIL_PAUSE_REQUESTED,      // {tenant_alias, session_id, approval_id, reason} — MT-08
+    HIL_DECISION_MADE,        // {session_id, approve, decided_by, comment}
 
     // ANVIL (I29)
     TRAVERSAL_STARTED,

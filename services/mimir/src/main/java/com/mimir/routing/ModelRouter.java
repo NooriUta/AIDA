@@ -52,4 +52,28 @@ public class ModelRouter {
             default                    -> deepSeek;  // "deepseek", unknown → deepseek
         };
     }
+
+    /**
+     * Per-tenant routing scaffold (Q-MF2 partial — TIER2 MT-06 BYOK extends this).
+     *
+     * <p>FOUNDATION scope (this method): same as {@link #resolve(String)} but accepts tenantAlias
+     * for future BYOK + per-tenant routing. Currently delegates to model-based resolution.
+     *
+     * <p>TIER2 MT-06 will add:
+     * <pre>{@code
+     * Optional<ResolvedKey> byok = credentialResolver.resolveForTenant(tenantAlias);
+     * if (byok.isPresent()) {
+     *     return new DynamicMimirService(modelFactory.buildFor(byok.get()), ...);
+     * }
+     * }</pre>
+     *
+     * @param requestedModel nullable model from AskRequest
+     * @param tenantAlias    nullable tenant identifier (for future BYOK)
+     * @return the appropriate MimirAiPort implementation
+     */
+    public MimirAiPort resolveForTenant(String requestedModel, String tenantAlias) {
+        // FOUNDATION: tenantAlias не используется (scaffold для TIER2)
+        // TIER2 MT-06 заменит этот метод на BYOK-aware logic
+        return resolve(requestedModel);
+    }
 }

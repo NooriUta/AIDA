@@ -34,6 +34,9 @@ dependencies {
     implementation 'io.quarkus:quarkus-rest-client'
     implementation 'io.quarkus:quarkus-rest-client-jackson'
 
+    // MicroProfile Fault Tolerance — @Timeout, @Retry, @Fallback
+    implementation 'io.quarkus:quarkus-smallrye-fault-tolerance'
+
     // LangChain4j — OpenAI-compatible (DeepSeek dev)
     implementation "io.quarkiverse.langchain4j:quarkus-langchain4j-openai:1.9.2"
     // LangChain4j — Anthropic Claude (Tier 1 prod — wired in MIMIR Foundation)
@@ -42,6 +45,9 @@ dependencies {
     implementation "io.quarkiverse.langchain4j:quarkus-langchain4j-ollama:1.9.2"
     // LangChain4j core (tools, memory, AI services — @RegisterAiService, @Tool, @MemoryId)
     implementation "io.quarkiverse.langchain4j:quarkus-langchain4j-core:1.9.2"
+
+    // Shared HEIMDALL event schema
+    implementation project(':shared:dali-models')
 
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.quarkus:quarkus-junit5-mockito'
