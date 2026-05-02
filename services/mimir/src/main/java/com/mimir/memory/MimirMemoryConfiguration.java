@@ -1,49 +1,35 @@
 package com.mimir.memory;
 
-import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import io.quarkus.arc.DefaultBean;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Produces;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
-import java.util.concurrent.ConcurrentHashMap;
+import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
 /**
- * MIMIR chat memory configuration.
+ * MIMIR session memory manager.
  *
- * Keeps a ConcurrentHashMap<Object, ChatMemory> per session:
- *   - Each sessionId gets an isolated MessageWindowChatMemory (configurable size)
- *   - DELETE /api/sessions/{id} evicts and clears a specific session's history
+ * Delegates to Quarkiverse's synthetic ChatMemoryProvider — generated automatically
+ * for MimirService because of @RegisterAiService + @MemoryId. We do NOT produce our
+ * own ChatMemoryProvider: in Quarkiverse 1.9.x the synthetic bean conflicts with any
+ * @DefaultBean producer, causing AmbiguousResolutionException even when @DefaultBean
+ * is specified (synthetic beans bypass the DefaultBean suppression mechanism).
  *
- * Deliberately avoids ChatMemoryStore — its package changed across LangChain4j
- * versions (dev.langchain4j.store.memory → dev.langchain4j.store.memory.chat),
- * which causes NoClassDefFoundError in Quarkus test JVM even when it compiles.
- * Storing ChatMemory instances directly is simpler and version-agnostic.
+ * Max-messages window is configured via quarkus.langchain4j.chat-memory.max-messages
+ * (Quarkiverse default: 10; set to 20 in application.properties).
+ *
+ * Evict usage: DELETE /api/sessions/{id} → AskResource → evict(sessionId).
  */
 @ApplicationScoped
 public class MimirMemoryConfiguration {
 
-    @ConfigProperty(name = "mimir.memory.max-messages", defaultValue = "20")
-    int maxMessages;
+    private static final Logger LOG = Logger.getLogger(MimirMemoryConfiguration.class);
 
-    /** Thread-safe per-session memory store. */
-    private final ConcurrentHashMap<Object, ChatMemory> memories = new ConcurrentHashMap<>();
-
-    @Produces
-    @DefaultBean
-    @ApplicationScoped
-    public ChatMemoryProvider chatMemoryProvider() {
-        return sessionId -> memories.computeIfAbsent(sessionId,
-            id -> MessageWindowChatMemory.withMaxMessages(maxMessages));
-    }
+    @Inject
+    ChatMemoryProvider chatMemoryProvider;
 
     /** Clears chat history for a session (called on DELETE /api/sessions/:id). */
     public void evict(String sessionId) {
-        ChatMemory memory = memories.remove(sessionId);
-        if (memory != null) {
-            memory.clear();
-        }
+        LOG.debugf("Evicting chat memory for session: %s", sessionId);
+        chatMemoryProvider.get(sessionId).clear();
     }
 }
