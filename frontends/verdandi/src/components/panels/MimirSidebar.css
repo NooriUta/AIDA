@@ -191,6 +191,27 @@
   background: color-mix(in srgb, var(--acc) 28%, var(--bg3));
 }
 
+.mimir-action-btn.mimir-action-skuld {
+  background: color-mix(in srgb, var(--inf) 16%, var(--bg3));
+  border-color: color-mix(in srgb, var(--inf) 50%, transparent);
+  color: var(--inf);
+}
+.mimir-action-btn.mimir-action-skuld:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--inf) 24%, var(--bg3));
+}
+
+/* Tool chip type tints — execution strip preview (MT-04 follow-up) */
+.mimir-tool-chip.mimir-tool-q {
+  background: color-mix(in srgb, var(--inf) 14%, var(--bg2));
+  border-color: color-mix(in srgb, var(--inf) 40%, transparent);
+  color: var(--inf);
+}
+.mimir-tool-chip.mimir-tool-ai {
+  background: color-mix(in srgb, var(--wrn) 14%, var(--bg2));
+  border-color: color-mix(in srgb, var(--wrn) 40%, transparent);
+  color: var(--wrn);
+}
+
 .mimir-approve {
   background: color-mix(in srgb, var(--inf) 22%, var(--bg3));
   border-color: color-mix(in srgb, var(--inf) 55%, transparent);

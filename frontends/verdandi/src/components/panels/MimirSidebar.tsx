@@ -38,6 +38,20 @@ const highlightInGraph = (ids: string[]) => {
   useLoomStore.setState({ highlightedNodes: new Set(labels) } as never);
 };
 
+/** Open the routine / package in SKULD (deep investigation view).
+ *  v0 stub: SKULD module is on the post-HighLoad roadmap (Q3 2026 — sprints/
+ *  SPRINT_SKULD_V1.md). For now we navigate to the placeholder route — the
+ *  UnderConstructionPage shows a "coming soon" panel and offers a deep-link
+ *  back into LOOM. When SKULD lands, this function stays as-is — only the
+ *  route content changes. */
+const openInSkuld = (target: ParsedTarget) => {
+  // We deliberately use window.location instead of react-router navigate
+  // here — sidebar may live outside the router (App.tsx mounts it under
+  // QueryClientProvider). Server-side routes are absolute, browser handles them.
+  const param = encodeURIComponent(`${target.type}:${target.label}`);
+  window.location.href = `/skuld?node=${param}&returnTo=/verdandi`;
+};
+
 /** Drill into the node — uses loomStore.drillDown when available.
  *  For DaliSchema we first push it onto the L1 scope stack (so breadcrumbs
  *  reflect the schema), then drillDown takes us to L2 view. */
@@ -126,9 +140,17 @@ export default function MimirSidebar() {
 
             {m.role === 'mimir' && m.toolCallsUsed && m.toolCallsUsed.length > 0 && (
               <div className="mimir-tool-bar">
-                {m.toolCallsUsed.map((tool, i) => (
-                  <span key={i} className="mimir-tool-chip">⚙ {tool}</span>
-                ))}
+                {m.toolCallsUsed.map((tool, i) => {
+                  // Type strip — Q (Query/data) vs AI (synthesis/llm) chips by tool family
+                  const isQuery = /^(search_|count_|describe_|list_|query_|find_|get_)/.test(tool);
+                  const cls = isQuery ? 'mimir-tool-q' : 'mimir-tool-ai';
+                  const icon = isQuery ? 'Q' : 'AI';
+                  return (
+                    <span key={i} className={`mimir-tool-chip ${cls}`} title={tool}>
+                      {icon} {tool} ✓
+                    </span>
+                  );
+                })}
               </div>
             )}
 
@@ -139,6 +161,7 @@ export default function MimirSidebar() {
               const drillTarget = targets.find(t => t.type === 'DaliSchema')
                                 ?? targets.find(t => t.type === 'DaliTable')
                                 ?? targets[0];
+              const skuldTarget = targets.find(t => t.type === 'DaliRoutine' || t.type === 'DaliPackage');
               return (
                 <div className="mimir-actions">
                   <button
@@ -159,6 +182,16 @@ export default function MimirSidebar() {
                       title={t('mimir.openInLoomTitle', { type: drillTarget.type, label: drillTarget.label })}
                     >
                       {t('mimir.openInLoom', { type: drillTarget.type, label: drillTarget.label })}
+                    </button>
+                  )}
+                  {skuldTarget && (
+                    <button
+                      type="button"
+                      className="mimir-action-btn mimir-action-skuld"
+                      onClick={() => openInSkuld(skuldTarget)}
+                      title={t('mimir.openInSkuldTitle', { label: skuldTarget.label })}
+                    >
+                      {t('mimir.openInSkuld', { label: skuldTarget.label })}
                     </button>
                   )}
                 </div>

@@ -846,6 +846,8 @@
     "showInGraph":       "Показать в графе ({{count}})",
     "openInLoom":        "Открыть {{type}} в LOOM →",
     "openInLoomTitle":   "Перейти к {{type}} {{label}} в графе линейности",
+    "openInSkuld":       "Открыть {{label}} в SKULD →",
+    "openInSkuldTitle":  "Глубокий анализ {{label}} в SKULD (post-HighLoad)",
     "quotaExceeded":     "Превышена квота ({{reason}}).",
     "quotaResetsAt":     "Сброс — {{time}}.",
     "approval": {
