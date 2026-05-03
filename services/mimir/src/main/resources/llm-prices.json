@@ -1,0 +1,13 @@
+{
+  "version": "2026-05-02",
+  "note": "USD per 1K tokens. Hardcoded snapshot — update via PR + new validFrom date when provider rates change. Ollama priced 0 (tenant-managed self-hosted compute).",
+  "prices": [
+    { "provider": "deepseek",     "model": "deepseek-chat",        "inputPricePer1k": 0.00014, "outputPricePer1k": 0.00028 },
+    { "provider": "anthropic",    "model": "claude-sonnet-4-6",    "inputPricePer1k": 0.003,   "outputPricePer1k": 0.015   },
+    { "provider": "anthropic",    "model": "claude-opus-4-7",      "inputPricePer1k": 0.015,   "outputPricePer1k": 0.075   },
+    { "provider": "openai",       "model": "gpt-4o-mini",          "inputPricePer1k": 0.00015, "outputPricePer1k": 0.0006  },
+    { "provider": "openai",       "model": "gpt-4o",               "inputPricePer1k": 0.0025,  "outputPricePer1k": 0.01    },
+    { "provider": "ollama",       "model": "qwen2.5:14b",          "inputPricePer1k": 0.0,     "outputPricePer1k": 0.0     },
+    { "provider": "ollama-cloud", "model": "qwen2.5:14b",          "inputPricePer1k": 0.0,     "outputPricePer1k": 0.0     }
+  ]
+}

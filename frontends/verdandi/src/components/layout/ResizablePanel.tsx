@@ -9,6 +9,9 @@ interface ResizablePanelProps {
   maxWidth?: number;
   children?: React.ReactNode;
   title?: string;
+  /** Vertical label rendered on the collapsed-state pull-tab. When omitted,
+   *  the tab is the original 36 px chevron-only button. */
+  toggleLabel?: string;
 }
 
 export const ResizablePanel = memo(({
@@ -18,6 +21,7 @@ export const ResizablePanel = memo(({
   maxWidth = 480,
   children,
   title,
+  toggleLabel,
 }: ResizablePanelProps) => {
   const { t } = useTranslation();
   const [width, setWidth]         = useState(defaultWidth);
@@ -110,35 +114,51 @@ export const ResizablePanel = memo(({
         />
       )}
 
-      {/* Collapse toggle */}
+      {/* Collapse toggle — chevron-only tab, or chevron + vertical label
+          when `toggleLabel` is provided (so two stacked tabs can be told apart). */}
       <button
         onClick={() => setCollapsed((c) => !c)}
         title={t(collapsed ? 'panel.expand' : 'panel.collapse')}
         aria-expanded={!collapsed}
-        aria-label={t(collapsed ? 'panel.expand' : 'panel.collapse')}
+        aria-label={toggleLabel ?? t(collapsed ? 'panel.expand' : 'panel.collapse')}
         style={{
           position: 'absolute',
           top: '50%',
           [isLeft ? 'right' : 'left']: collapsed ? '-18px' : '-14px',
           transform: 'translateY(-50%)',
           width: '18px',
-          height: '36px',
+          height: toggleLabel ? '60px' : '36px',
           background: 'var(--seer-surface-2)',
           border: '1px solid var(--seer-border)',
           borderRadius: isLeft ? '0 4px 4px 0' : '4px 0 0 4px',
           cursor: 'pointer',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
+          gap: 4,
           color: 'var(--seer-text-muted)',
           zIndex: 20,
           padding: 0,
         }}
       >
-        {isLeft
+        {/* Chevron icon only when there is no letter label — labelled tabs
+            (K, M, …) read better without the < / > arrow distraction. */}
+        {!toggleLabel && (isLeft
           ? (collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />)
           : (collapsed ? <ChevronLeft  size={12} /> : <ChevronRight size={12} />)
-        }
+        )}
+        {toggleLabel && (
+          <span style={{
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: 0,
+            textTransform: 'uppercase',
+            lineHeight: 1,
+          }}>
+            {toggleLabel}
+          </span>
+        )}
       </button>
     </div>
   );

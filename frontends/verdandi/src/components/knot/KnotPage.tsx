@@ -143,7 +143,7 @@ export const KnotPage = memo(() => {
   if (urlRecord) {
     return (
       <div style={{
-        display: 'grid', gridTemplateRows: '42px 1fr',
+        display: 'grid', gridTemplateRows: 'auto 1fr',
         height: '100%', overflow: 'hidden', background: 'var(--bg0)',
       }}>
         <Header />
@@ -160,7 +160,7 @@ export const KnotPage = memo(() => {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: '42px 1fr',
+      gridTemplateRows: 'auto 1fr',
       height: '100%',
       overflow: 'hidden',
       background: 'var(--bg0)',

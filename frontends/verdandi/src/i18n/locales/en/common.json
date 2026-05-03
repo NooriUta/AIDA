@@ -828,5 +828,34 @@
       "dblclick": "drill-down",
       "click":    "select / highlight"
     }
+  },
+
+  "mimir": {
+    "title":             "MIMIR Copilot",
+    "ask":               "Ask MIMIR",
+    "askTitle":          "Toggle MIMIR Copilot",
+    "newSession":        "New session",
+    "close":             "Close",
+    "send":              "Send",
+    "placeholder":       "Ask MIMIR…",
+    "thinking":          "thinking…",
+    "empty":             "Ask about lineage, impact, source code or schema. MIMIR will call deterministic tools and summarise the result.",
+    "newSessionStarted": "New session started. Ask anything.",
+    "errorPrefix":       "MIMIR error",
+    "decisionError":     "Decision error",
+    "showInGraph":       "Show in graph ({{count}})",
+    "openInLoom":        "Open {{type}} in LOOM →",
+    "openInLoomTitle":   "Drill into {{type}} {{label}} in the lineage canvas",
+    "openInSkuld":       "Open {{label}} in SKULD →",
+    "openInSkuldTitle":  "Open deep investigation for {{label}} in SKULD (post-HighLoad)",
+    "quotaExceeded":     "Quota exceeded ({{reason}}).",
+    "quotaResetsAt":     "Resets at {{time}}.",
+    "approval": {
+      "required": "Approval required ({{reason}}). Estimated cost: ${{cost}}.",
+      "comment":  "Comment (optional)",
+      "approve":  "Approve",
+      "reject":   "Reject",
+      "recorded": "Decision recorded: approve={{approve}}"
+    }
   }
 }

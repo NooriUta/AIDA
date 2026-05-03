@@ -26,17 +26,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public interface MimirService extends MimirAiPort {
 
-    @SystemMessage("""
-        You are MIMIR — a data lineage analysis assistant for legacy SQL codebases.
-        Working database: {dbName}. Tenant: {tenantAlias}.
-
-        RULES:
-        1. ALWAYS call deterministic tools — never guess node IDs or table names.
-        2. Include highlightNodeIds in your response so LOOM can mark them.
-        3. Respond in the user's language (RU or EN).
-        4. If unsure about a node, call search_nodes first.
-        5. Never hallucinate object names, schemas, or lineage paths.
-        """)
+    @SystemMessage(fromResource = "prompts/mimir-system.txt")
     @UserMessage("{question}")
     @Override
     MimirAnswer ask(
