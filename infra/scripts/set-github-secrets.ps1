@@ -52,26 +52,36 @@ Write-Host "  S3 bucket:   $BUCKET"
 Write-Host ""
 
 # ── Set GitHub Secrets ────────────────────────────────────────────────────────
+# IMPORTANT: never use `string | gh secret set` on Windows PowerShell 5.1 —
+# the default pipe encoding prepends a UTF-8 BOM, which then sneaks into
+# secret values (we hit this on YC_REGISTRY_ID → docker push got "﻿..."
+# in the reference, retry exhausted, cd-staging crashed).
+# Use --body for short literals; for multi-line content (JSON, SSH key),
+# write to a temp file and feed via --body-file (no encoding surprise).
 Write-Host "[2/4] Setting GitHub Secrets..."
 
-$VM_IP       | gh secret set DEPLOY_HOST    --repo $REPO
+gh secret set DEPLOY_HOST    --repo $REPO --body $VM_IP        | Out-Null
 Write-Host "  v DEPLOY_HOST"
 
-$REGISTRY_ID | gh secret set YC_REGISTRY_ID --repo $REPO
+gh secret set YC_REGISTRY_ID --repo $REPO --body $REGISTRY_ID  | Out-Null
 Write-Host "  v YC_REGISTRY_ID"
 
-$CI_SA_KEY   | gh secret set YC_SA_KEY      --repo $REPO
-Write-Host "  v YC_SA_KEY"
-
-"ubuntu"     | gh secret set DEPLOY_USER    --repo $REPO
+gh secret set DEPLOY_USER    --repo $REPO --body "ubuntu"      | Out-Null
 Write-Host "  v DEPLOY_USER"
 
+# Multi-line: write to temp file with explicit UTF-8 NoBOM, then --body-file.
+$saTmp = Join-Path $env:TEMP "yc-sa-key.tmp.json"
+[System.IO.File]::WriteAllText($saTmp, $CI_SA_KEY, [System.Text.UTF8Encoding]::new($false))
+gh secret set YC_SA_KEY --repo $REPO --body-file $saTmp | Out-Null
+Remove-Item $saTmp -Force
+Write-Host "  v YC_SA_KEY"
+
 if (Test-Path $SshKeyPath) {
-    Get-Content $SshKeyPath -Raw | gh secret set DEPLOY_KEY --repo $REPO
+    gh secret set DEPLOY_KEY --repo $REPO --body-file $SshKeyPath | Out-Null
     Write-Host "  v DEPLOY_KEY (from $SshKeyPath)"
 } else {
     Write-Host "  ! DEPLOY_KEY - key not found at $SshKeyPath"
-    Write-Host "    Set manually: Get-Content <key_path> -Raw | gh secret set DEPLOY_KEY --repo $REPO"
+    Write-Host "    Set manually: gh secret set DEPLOY_KEY --repo $REPO --body-file <key_path>"
 }
 
 Write-Host ""
@@ -89,6 +99,10 @@ Write-Host "    {""key"":""FRIGG_PASSWORD"",            ""text_value"":""FILL_ME
 Write-Host "    {""key"":""KEYCLOAK_CLIENT_SECRET"",    ""text_value"":""FILL_ME""},"
 Write-Host "    {""key"":""COOKIE_SECRET"",             ""text_value"":""FILL_ME""},"
 Write-Host "    {""key"":""ANTHROPIC_API_KEY"",         ""text_value"":""FILL_ME""},"
+Write-Host "    {""key"":""DEEPSEEK_API_KEY"",          ""text_value"":""FILL_ME""},"
+Write-Host "    {""key"":""MIMIR_KEY_ENCRYPTION_KEY"",  ""text_value"":""FILL_ME""},"
+Write-Host "    {""key"":""MIMIR_DEFAULT_MODEL"",       ""text_value"":""deepseek""},"
+Write-Host "    {""key"":""MIMIR_DEMO_MODE"",           ""text_value"":""false""},"
 Write-Host "    {""key"":""AWS_ACCESS_KEY_ID"",         ""text_value"":""$S3_ACCESS""},"
 Write-Host "    {""key"":""AWS_SECRET_ACCESS_KEY"",     ""text_value"":""$S3_SECRET""}"
 Write-Host "  ]'"
@@ -105,7 +119,11 @@ $cookieBytes = New-Object byte[] 32
 $cookieSuggestion = [System.BitConverter]::ToString($cookieBytes).Replace("-","").ToLower()
 Write-Host "  Suggested COOKIE_SECRET: $cookieSuggestion"
 Write-Host ""
-Write-Host "  ANTHROPIC_API_KEY       (sk-ant-...)"
+Write-Host "  ANTHROPIC_API_KEY       (sk-ant-...) [optional, MIMIR Anthropic Tier 1]"
+Write-Host "  DEEPSEEK_API_KEY        (sk-...)     [REQUIRED for MIMIR /api/ask — DeepSeek default]"
+Write-Host "  MIMIR_KEY_ENCRYPTION_KEY (32B b64)   [REQUIRED for TIER2 BYOK — openssl rand -base64 32]"
+Write-Host "  MIMIR_DEFAULT_MODEL     (deepseek)   [optional override: anthropic | ollama]"
+Write-Host "  MIMIR_DEMO_MODE         (false)      [true → answers from cache fixtures, no LLM]"
 Write-Host "  AWS_ACCESS_KEY_ID       (pre-filled above from Terraform)"
 Write-Host "  AWS_SECRET_ACCESS_KEY   (pre-filled above from Terraform)"
 Write-Host ""

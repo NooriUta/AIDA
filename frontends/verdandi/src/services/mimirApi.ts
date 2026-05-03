@@ -1,0 +1,112 @@
+// MIMIR Copilot HTTP client — talks to Chur (BFF) which forwards to MIMIR :9094.
+// All endpoints are session-cookie authenticated via Chur; tenant alias is
+// injected by Chur from the active tenant on the session.
+//
+// Same-origin by default — verdandi nginx (and vite dev proxy) forward /mimir
+// to Chur. VITE_CHUR_URL only needed when the SPA is served from a host that
+// can't reach Chur via the same origin (rarely needed).
+
+const BASE = import.meta.env.VITE_CHUR_URL ?? '';
+
+export interface AskRequest {
+  question:      string;
+  sessionId:     string;
+  dbName?:       string | null;
+  model?:        string | null;
+  agents?:       string[] | null;
+  maxToolCalls?: number;
+}
+
+export interface QuotaInfo {
+  reason:        string;
+  currentTokens: number;
+  limitTokens:   number;
+  currentCost:   number;
+  limitCost:     number;
+  resetAt:       string | null;
+}
+
+export interface ApprovalInfo {
+  approvalId:        string;
+  reason:            string;
+  requestedAt:       string;
+  expiresAt:         string;
+  estimatedCostUsd:  number;
+}
+
+export interface MimirAnswer {
+  answer:           string;
+  toolCallsUsed:    string[];
+  highlightNodeIds: string[];
+  confidence:       number;
+  durationMs:       number;
+  provider?:        string | null;
+  model?:           string | null;
+  promptTokens?:    number;
+  completionTokens?: number;
+  quota?:           QuotaInfo | null;
+  awaitingApproval?: ApprovalInfo | null;
+}
+
+export interface DecisionRequest {
+  approvalId: string;
+  approve:    boolean;
+  comment?:   string;
+}
+
+const tenantHeaders = (): Record<string, string> => {
+  const alias = localStorage.getItem('seer-active-tenant');
+  return alias
+    ? { 'X-Seer-Override-Tenant': alias, 'X-Seer-Tenant-Alias': alias }
+    : {};
+};
+
+/** Strips HTML tags + collapses whitespace so a 1.5kB nginx error doesn't flood the chat. */
+function shortError(text: string, max = 240): string {
+  const plain = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return plain.length > max ? plain.slice(0, max) + '…' : plain;
+}
+
+export async function askMimir(req: AskRequest): Promise<MimirAnswer> {
+  const r = await fetch(`${BASE}/mimir/ask`, {
+    method:      'POST',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json', ...tenantHeaders() },
+    body:        JSON.stringify(req),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`MIMIR ask ${r.status}: ${shortError(text)}`);
+  }
+  return r.json();
+}
+
+export async function getMimirHealth(): Promise<{ status: string }> {
+  const r = await fetch(`${BASE}/mimir/health`, { credentials: 'include' });
+  return r.json();
+}
+
+export async function deleteMimirSession(sessionId: string): Promise<void> {
+  await fetch(`${BASE}/mimir/sessions/${encodeURIComponent(sessionId)}`, {
+    method:      'DELETE',
+    credentials: 'include',
+    headers:     tenantHeaders(),
+  });
+}
+
+/** Operator approves or rejects a HiL-paused session. */
+export async function decideMimirSession(
+  sessionId: string,
+  body:      DecisionRequest,
+): Promise<MimirAnswer | { sessionId: string; status: string; decidedBy: string }> {
+  const r = await fetch(
+    `${BASE}/mimir/sessions/${encodeURIComponent(sessionId)}/decision`,
+    {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json', ...tenantHeaders() },
+      body:        JSON.stringify(body),
+    },
+  );
+  return r.json();
+}

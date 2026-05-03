@@ -16,10 +16,15 @@ export function ProtectedRoute({ children }: Props) {
   // up yet via its own /auth/me call).
   if (isCheckingSession) return null;
 
-  // Use a RELATIVE path so the redirect is correct both in standalone mode
-  // ("/login") and when verdandi is mounted inside Shell at "/verdandi/*"
-  // ("/verdandi/login").
-  if (!isAuthenticated) return <Navigate to="login" replace />;
+  // Absolute "/login" — react-router v6's <Navigate> auto-prepends the
+  // BrowserRouter `basename`, so this resolves to "/login" in standalone mode
+  // and "/verdandi/login" when verdandi is mounted inside Shell.
+  //
+  // We deliberately do NOT use a relative path: the catch-all `path="*"` route
+  // matches at *the current pathname*, so relative `to="login"` resolves into
+  // an unbounded loop `/foo/login → /foo/login/login → /foo/login/login/login…`
+  // when an unauthenticated user lands on any unknown URL.
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   return <>{children}</>;
 }
