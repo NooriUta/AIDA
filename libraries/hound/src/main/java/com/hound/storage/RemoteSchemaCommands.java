@@ -126,6 +126,95 @@ final class RemoteSchemaCommands {
                 // adds memory pressure on TRAVERSE and risks batch-endpoint payload overflow.
                 "CREATE DOCUMENT TYPE DaliSnippet IF NOT EXISTS",
                 "CREATE DOCUMENT TYPE DaliSnippetScript IF NOT EXISTS",
+
+                // ═══════════════════════════════════════════════════════════════════
+                // Sprint 1.1 EDGE_TAXONOMY_V1 (ADR-HND-009) — ABSTRACT hierarchy
+                // ═══════════════════════════════════════════════════════════════════
+                //
+                // Round 9 finding: ArcadeDB 26.4.2 не поддерживает 'EXTENDS E ABSTRACT'
+                // и 'ALTER TYPE X ABSTRACT TRUE'. Используем pattern:
+                //   1) CREATE EDGE TYPE parent (без ABSTRACT keyword)
+                //   2) ALTER TYPE parent CUSTOM abstract = true (logical marker)
+                //   3) CREATE EDGE TYPE child EXTENDS parent  (новые типы)
+                //   4) ALTER TYPE existing SUPERTYPE +parent  (существующие — добавляем родителя)
+                // Convention-level enforcement: writers НИКОГДА не вызывают
+                // appendEdge('parentName', ...) — только конкретные подтипы.
+                //
+                // ─── 8 top-level logical-abstract types ──────────────────────────
+                "CREATE EDGE TYPE ATOM_REF IF NOT EXISTS",
+                "ALTER TYPE ATOM_REF CUSTOM abstract = true",
+                "CREATE EDGE TYPE NAMESPACE IF NOT EXISTS",
+                "ALTER TYPE NAMESPACE CUSTOM abstract = true",
+                "CREATE EDGE TYPE STMT_HAS IF NOT EXISTS",
+                "ALTER TYPE STMT_HAS CUSTOM abstract = true",
+                "CREATE EDGE TYPE LINEAGE_FLOW IF NOT EXISTS",  // super-group для всех flow
+                "ALTER TYPE LINEAGE_FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE DDL_OP IF NOT EXISTS",
+                "ALTER TYPE DDL_OP CUSTOM abstract = true",
+                "CREATE EDGE TYPE JOIN_REF IF NOT EXISTS",
+                "ALTER TYPE JOIN_REF CUSTOM abstract = true",
+                "CREATE EDGE TYPE PLTYPE_REF IF NOT EXISTS",
+                "ALTER TYPE PLTYPE_REF CUSTOM abstract = true",
+                "CREATE EDGE TYPE CONSTRAINT_REF IF NOT EXISTS",
+                "ALTER TYPE CONSTRAINT_REF CUSTOM abstract = true",
+
+                // ─── 4 nested under LINEAGE_FLOW (multi-level inheritance) ───────
+                "CREATE EDGE TYPE FLOW IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE TABLE_DATA_FLOW IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE TABLE_DATA_FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE RECORD_FLOW IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE RECORD_FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE WRITE_SIDE IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE WRITE_SIDE CUSTOM abstract = true",
+
+                // ─── ALTER existing types: assign supertype ──────────────────────
+                // ATOM_REF subtypes (5)
+                "ALTER TYPE ATOM_REF_TABLE SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_COLUMN SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_STMT SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_OUTPUT_COL SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_PLTYPE_FIELD SUPERTYPE +ATOM_REF",
+                // NAMESPACE subtypes (9)
+                "ALTER TYPE BELONGS_TO_APP SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_SCHEMA SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_TABLE SUPERTYPE +NAMESPACE",
+                "ALTER TYPE HAS_COLUMN SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_ROUTINE SUPERTYPE +NAMESPACE",
+                "ALTER TYPE BELONGS_TO_SESSION SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_STMT SUPERTYPE +NAMESPACE",
+                "ALTER TYPE HAS_PARAMETER SUPERTYPE +NAMESPACE",
+                "ALTER TYPE HAS_VARIABLE SUPERTYPE +NAMESPACE",
+                // STMT_HAS subtypes (3)
+                "ALTER TYPE HAS_OUTPUT_COL SUPERTYPE +STMT_HAS",
+                "ALTER TYPE HAS_JOIN SUPERTYPE +STMT_HAS",
+                "ALTER TYPE HAS_AFFECTED_COL SUPERTYPE +STMT_HAS",
+                // FLOW subtypes (2 — JOIN_FLOW, UNION_FLOW удалены в Sprint 0.1)
+                "ALTER TYPE DATA_FLOW SUPERTYPE +FLOW",
+                "ALTER TYPE FILTER_FLOW SUPERTYPE +FLOW",
+                // TABLE_DATA_FLOW subtypes (2; READS_FROM direction inverted in Sprint 1.2)
+                "ALTER TYPE READS_FROM SUPERTYPE +TABLE_DATA_FLOW",
+                "ALTER TYPE WRITES_TO SUPERTYPE +TABLE_DATA_FLOW",
+                // RECORD_FLOW subtypes (2 — RECORD_USED_IN/HAS_RECORD_FIELD остаются singletons)
+                "ALTER TYPE BULK_COLLECTS_INTO SUPERTYPE +RECORD_FLOW",
+                "ALTER TYPE RETURNS_INTO SUPERTYPE +RECORD_FLOW",
+                // JOIN_REF subtypes (2)
+                "ALTER TYPE JOIN_SOURCE_TABLE SUPERTYPE +JOIN_REF",
+                "ALTER TYPE JOIN_TARGET_TABLE SUPERTYPE +JOIN_REF",
+                // PLTYPE_REF subtypes (3 + MULTISET_INTO как singleton lineage-skip)
+                "ALTER TYPE DECLARES_TYPE SUPERTYPE +PLTYPE_REF",
+                "ALTER TYPE OF_TYPE SUPERTYPE +PLTYPE_REF",
+                "ALTER TYPE INSTANTIATES_TYPE SUPERTYPE +PLTYPE_REF",
+                // DDL_OP subtypes (1 — DDL_MODIFIES после F-2 folding в Sprint 0.1)
+                "ALTER TYPE DDL_MODIFIES SUPERTYPE +DDL_OP",
+                // CONSTRAINT_REF subtypes assigned in Phase 3 (after reality-check + folding F-1)
+
+                // ─── 4 new ATOM_REF subtypes (DDL only — writers in Phase 2 atom pipeline) ───
+                "CREATE EDGE TYPE ATOM_REF_VARIABLE IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE EDGE TYPE ATOM_REF_PARAMETER IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE EDGE TYPE ATOM_REF_FUNCTION IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE EDGE TYPE ATOM_REF_SEQUENCE IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE PROPERTY ATOM_REF_PARAMETER.param_mode IF NOT EXISTS STRING",  // IN | OUT | INOUT (specific to PARAMETER)
         };
     }
 

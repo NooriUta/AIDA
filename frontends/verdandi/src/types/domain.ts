@@ -29,6 +29,18 @@ export type DaliEdgeType =
   | 'HAS_ATOM'
   | 'ATOM_REF_COLUMN'
   | 'ATOM_REF_TABLE'
+  // Sprint 1.1 EDGE_TAXONOMY_V1 (ADR-HND-009) — 4 new ATOM_REF subtypes (DDL ready, writers in Phase 2)
+  | 'ATOM_REF_VARIABLE'
+  | 'ATOM_REF_PARAMETER'
+  | 'ATOM_REF_FUNCTION'
+  | 'ATOM_REF_SEQUENCE'
+  // Sprint 1.1 — also expose ABSTRACT parents for polymorphic frontend queries (UI may not render directly)
+  | 'ATOM_REF'        // logical-abstract parent of ATOM_REF_*
+  | 'NAMESPACE'       // logical-abstract parent of CONTAINS_* / HAS_* / BELONGS_TO_*
+  | 'STMT_HAS'        // logical-abstract parent of HAS_OUTPUT_COL / HAS_JOIN / HAS_AFFECTED_COL
+  | 'LINEAGE_FLOW'    // super-group: FLOW + TABLE_DATA_FLOW + RECORD_FLOW + WRITE_SIDE
+  | 'FLOW' | 'TABLE_DATA_FLOW' | 'WRITE_SIDE'  // nested under LINEAGE_FLOW
+  | 'JOIN_REF' | 'PLTYPE_REF' | 'DDL_OP' | 'CONSTRAINT_REF'
   | 'HAS_COLUMN'
   | 'HAS_JOIN'
   | 'READS_FROM'
