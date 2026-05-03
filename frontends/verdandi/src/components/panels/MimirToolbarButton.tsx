@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useMimirChatStore } from '../../stores/mimirChatStore';
 
 /**
@@ -5,6 +6,7 @@ import { useMimirChatStore } from '../../stores/mimirChatStore';
  * Mount once in the app shell — clicking toggles the sidebar.
  */
 export default function MimirToolbarButton() {
+  const { t } = useTranslation();
   const open   = useMimirChatStore((s) => s.open);
   const toggle = useMimirChatStore((s) => s.toggle);
   return (
@@ -13,10 +15,10 @@ export default function MimirToolbarButton() {
       className="mimir-toolbar-button"
       aria-pressed={open}
       onClick={toggle}
-      title={open ? 'Close MIMIR' : 'Ask MIMIR'}
+      title={t('mimir.askTitle')}
     >
       <span className="mimir-dot" aria-hidden="true" />
-      Ask MIMIR
+      {t('mimir.ask')}
     </button>
   );
 }

@@ -828,5 +828,30 @@
       "dblclick": "drill-down",
       "click":    "выбрать / выделить"
     }
+  },
+
+  "mimir": {
+    "title":             "MIMIR Copilot",
+    "ask":               "Спросить MIMIR",
+    "askTitle":          "Открыть MIMIR Copilot",
+    "newSession":        "Новый сеанс",
+    "close":             "Закрыть",
+    "send":              "Отправить",
+    "placeholder":       "Спросите MIMIR…",
+    "thinking":          "думаю…",
+    "empty":             "Задайте вопрос о линейности, влиянии изменений, исходном коде или схеме. MIMIR вызовет нужные инструменты и сведёт ответ.",
+    "newSessionStarted": "Новый сеанс запущен. Можно задавать вопросы.",
+    "errorPrefix":       "Ошибка MIMIR",
+    "decisionError":     "Ошибка решения",
+    "showInGraph":       "Показать в графе ({{count}})",
+    "quotaExceeded":     "Превышена квота ({{reason}}).",
+    "quotaResetsAt":     "Сброс — {{time}}.",
+    "approval": {
+      "required": "Требуется подтверждение ({{reason}}). Оценочная стоимость: ${{cost}}.",
+      "comment":  "Комментарий (необязательно)",
+      "approve":  "Одобрить",
+      "reject":   "Отклонить",
+      "recorded": "Решение записано: approve={{approve}}"
+    }
   }
 }

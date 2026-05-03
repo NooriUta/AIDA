@@ -9,6 +9,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Optional;
 
 /**
  * AES-256-GCM symmetric encryption for tenant API keys at rest in FRIGG.
@@ -35,14 +36,18 @@ public class CredentialEncryptor {
     private static final int IV_LEN = 12;
     private static final int TAG_BITS = 128;
 
-    @ConfigProperty(name = "MIMIR_KEY_ENCRYPTION_KEY", defaultValue = "")
-    String masterKeyBase64;
+    // Optional + no default — SmallRye Config 3.x rejects defaultValue="" on
+    // a required String, so an unset env in dev/test must keep MIMIR bootable.
+    // Encryptor only fails at first encrypt/decrypt when no key was provided.
+    @ConfigProperty(name = "MIMIR_KEY_ENCRYPTION_KEY")
+    Optional<String> masterKeyBase64Opt;
 
     private SecretKeySpec key;
     private final SecureRandom rng = new SecureRandom();
 
     private synchronized SecretKeySpec key() {
         if (key != null) return key;
+        String masterKeyBase64 = masterKeyBase64Opt == null ? null : masterKeyBase64Opt.orElse(null);
         if (masterKeyBase64 == null || masterKeyBase64.isBlank()) {
             throw new CredentialException("MIMIR_KEY_ENCRYPTION_KEY is not configured");
         }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMimirChat } from '../../hooks/useMimirChat';
 import { useMimirChatStore } from '../../stores/mimirChatStore';
 import { useLoomStore } from '../../stores/loomStore';
@@ -12,18 +13,11 @@ const highlightInGraph = (ids: string[]) => {
 };
 
 /**
- * MIMIR Copilot sidebar v0 (TIER2 MT-04).
- *
- * Layout:
- *  – Header with «MIMIR Copilot» title, session reset and close buttons
- *  – Scrollable messages area (user / mimir / system bubbles)
- *  – Tool-bar inside MIMIR bubbles showing toolCallsUsed
- *  – HiL approve/reject controls when the answer is awaitingApproval
- *  – Quota-exceeded banner when the answer carries quota info
- *  – «Show in graph» button forwards highlightNodeIds to the LOOM store
- *  – Textarea + send button at the bottom; Enter sends, Shift+Enter newline
+ * MIMIR Copilot sidebar v0 (TIER2 MT-04). All user-visible strings come from
+ * the `mimir.*` i18n namespace (en/ru) so it tracks the language switcher.
  */
 export default function MimirSidebar() {
+  const { t } = useTranslation();
   const open    = useMimirChatStore((s) => s.open);
   const setOpen = useMimirChatStore((s) => s.setOpen);
   const { messages, pending, error, send, approve, reject, reset } = useMimirChat();
@@ -47,19 +41,17 @@ export default function MimirSidebar() {
     await send(q);
   };
 
-  const handleShowInGraph = (ids: string[]) => highlightInGraph(ids);
-
   return (
-    <aside className="mimir-sidebar" aria-label="MIMIR Copilot">
+    <aside className="mimir-sidebar" aria-label={t('mimir.title')}>
       <header className="mimir-header">
         <span className="mimir-dot" aria-hidden="true" />
-        <h2>MIMIR Copilot</h2>
+        <h2>{t('mimir.title')}</h2>
         <button
           type="button"
           className="mimir-icon-btn"
           onClick={reset}
-          title="New session"
-          aria-label="New session"
+          title={t('mimir.newSession')}
+          aria-label={t('mimir.newSession')}
         >
           ↻
         </button>
@@ -67,8 +59,8 @@ export default function MimirSidebar() {
           type="button"
           className="mimir-icon-btn"
           onClick={() => setOpen(false)}
-          title="Close"
-          aria-label="Close"
+          title={t('mimir.close')}
+          aria-label={t('mimir.close')}
         >
           ×
         </button>
@@ -76,10 +68,7 @@ export default function MimirSidebar() {
 
       <div className="mimir-messages" ref={scrollRef}>
         {messages.length === 0 && (
-          <div className="mimir-empty">
-            Ask about lineage, impact, source code or schema. MIMIR will call
-            deterministic tools and summarise the result.
-          </div>
+          <div className="mimir-empty">{t('mimir.empty')}</div>
         )}
 
         {messages.map((m) => (
@@ -88,8 +77,8 @@ export default function MimirSidebar() {
 
             {m.role === 'mimir' && m.toolCallsUsed && m.toolCallsUsed.length > 0 && (
               <div className="mimir-tool-bar">
-                {m.toolCallsUsed.map((t, i) => (
-                  <span key={i} className="mimir-tool-chip">⚙ {t}</span>
+                {m.toolCallsUsed.map((tool, i) => (
+                  <span key={i} className="mimir-tool-chip">⚙ {tool}</span>
                 ))}
               </div>
             )}
@@ -99,18 +88,20 @@ export default function MimirSidebar() {
                 <button
                   type="button"
                   className="mimir-action-btn"
-                  onClick={() => handleShowInGraph(m.highlightNodeIds!)}
+                  onClick={() => highlightInGraph(m.highlightNodeIds!)}
                 >
-                  Show in graph ({m.highlightNodeIds.length})
+                  {t('mimir.showInGraph', { count: m.highlightNodeIds.length })}
                 </button>
               </div>
             )}
 
             {m.quotaExceeded && (
               <div className="mimir-quota-banner">
-                Quota exceeded ({m.quotaExceeded.reason}).{' '}
+                {t('mimir.quotaExceeded', { reason: m.quotaExceeded.reason })}{' '}
                 {m.quotaExceeded.resetAt && (
-                  <>Resets at {new Date(m.quotaExceeded.resetAt).toLocaleString()}.</>
+                  t('mimir.quotaResetsAt', {
+                    time: new Date(m.quotaExceeded.resetAt).toLocaleString(),
+                  })
                 )}
               </div>
             )}
@@ -118,12 +109,14 @@ export default function MimirSidebar() {
             {m.awaitingApproval && (
               <div className="mimir-approval">
                 <div className="mimir-approval-text">
-                  Approval required ({m.awaitingApproval.reason}). Estimated cost: $
-                  {m.awaitingApproval.estimatedCostUsd.toFixed(4)}.
+                  {t('mimir.approval.required', {
+                    reason: m.awaitingApproval.reason,
+                    cost:   m.awaitingApproval.estimatedCostUsd.toFixed(4),
+                  })}
                 </div>
                 <textarea
                   className="mimir-approval-comment"
-                  placeholder="Comment (optional)"
+                  placeholder={t('mimir.approval.comment')}
                   value={decisionComment}
                   onChange={(e) => setDecisionComment(e.target.value)}
                 />
@@ -137,7 +130,7 @@ export default function MimirSidebar() {
                     }}
                     disabled={pending}
                   >
-                    Approve
+                    {t('mimir.approval.approve')}
                   </button>
                   <button
                     type="button"
@@ -148,7 +141,7 @@ export default function MimirSidebar() {
                     }}
                     disabled={pending}
                   >
-                    Reject
+                    {t('mimir.approval.reject')}
                   </button>
                 </div>
               </div>
@@ -164,7 +157,7 @@ export default function MimirSidebar() {
 
         {pending && (
           <div className="mimir-msg mimir-msg-mimir mimir-thinking">
-            <span className="mimir-dot mimir-dot-anim" /> thinking…
+            <span className="mimir-dot mimir-dot-anim" /> {t('mimir.thinking')}
           </div>
         )}
 
@@ -181,9 +174,9 @@ export default function MimirSidebar() {
         }}
       >
         <textarea
-          aria-label="Question"
+          aria-label={t('mimir.placeholder')}
           value={text}
-          placeholder="Ask MIMIR…"
+          placeholder={t('mimir.placeholder')}
           rows={2}
           disabled={pending}
           onChange={(e) => setText(e.target.value)}
@@ -195,7 +188,7 @@ export default function MimirSidebar() {
           }}
         />
         <button type="submit" className="mimir-send-btn" disabled={pending || !text.trim()}>
-          Send
+          {t('mimir.send')}
         </button>
       </form>
     </aside>

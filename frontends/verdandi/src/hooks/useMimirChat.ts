@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   askMimir,
   decideMimirSession,
@@ -18,6 +19,7 @@ import { useMimirChatStore } from '../stores/mimirChatStore';
  * Pending state is tracked so the input can disable while a turn is in flight.
  */
 export function useMimirChat() {
+  const { t } = useTranslation();
   const sessionId  = useMimirChatStore((s) => s.sessionId);
   const messages   = useMimirChatStore((s) => s.messages);
   const pending    = useMimirChatStore((s) => s.pending);
@@ -47,13 +49,13 @@ export function useMimirChat() {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'request failed';
         setError(msg);
-        pushSystem(`MIMIR error: ${msg}`);
+        pushSystem(`${t('mimir.errorPrefix')}: ${msg}`);
         return null;
       } finally {
         setPending(false);
       }
     },
-    [pending, sessionId, pushUser, pushAnswer, pushSystem, setPending, setError],
+    [pending, sessionId, pushUser, pushAnswer, pushSystem, setPending, setError, t],
   );
 
   const decide = useCallback(
@@ -64,17 +66,17 @@ export function useMimirChat() {
         if ((result as MimirAnswer).answer) {
           pushAnswer(result as MimirAnswer);
         } else {
-          pushSystem(`Decision recorded: approve=${approve}`);
+          pushSystem(t('mimir.approval.recorded', { approve }));
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'decision failed';
         setError(msg);
-        pushSystem(`MIMIR decision error: ${msg}`);
+        pushSystem(`${t('mimir.decisionError')}: ${msg}`);
       } finally {
         setPending(false);
       }
     },
-    [sessionId, pushAnswer, pushSystem, setPending, setError],
+    [sessionId, pushAnswer, pushSystem, setPending, setError, t],
   );
 
   return {
