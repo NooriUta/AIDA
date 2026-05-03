@@ -52,26 +52,36 @@ Write-Host "  S3 bucket:   $BUCKET"
 Write-Host ""
 
 # ── Set GitHub Secrets ────────────────────────────────────────────────────────
+# IMPORTANT: never use `string | gh secret set` on Windows PowerShell 5.1 —
+# the default pipe encoding prepends a UTF-8 BOM, which then sneaks into
+# secret values (we hit this on YC_REGISTRY_ID → docker push got "﻿..."
+# in the reference, retry exhausted, cd-staging crashed).
+# Use --body for short literals; for multi-line content (JSON, SSH key),
+# write to a temp file and feed via --body-file (no encoding surprise).
 Write-Host "[2/4] Setting GitHub Secrets..."
 
-$VM_IP       | gh secret set DEPLOY_HOST    --repo $REPO
+gh secret set DEPLOY_HOST    --repo $REPO --body $VM_IP        | Out-Null
 Write-Host "  v DEPLOY_HOST"
 
-$REGISTRY_ID | gh secret set YC_REGISTRY_ID --repo $REPO
+gh secret set YC_REGISTRY_ID --repo $REPO --body $REGISTRY_ID  | Out-Null
 Write-Host "  v YC_REGISTRY_ID"
 
-$CI_SA_KEY   | gh secret set YC_SA_KEY      --repo $REPO
-Write-Host "  v YC_SA_KEY"
-
-"ubuntu"     | gh secret set DEPLOY_USER    --repo $REPO
+gh secret set DEPLOY_USER    --repo $REPO --body "ubuntu"      | Out-Null
 Write-Host "  v DEPLOY_USER"
 
+# Multi-line: write to temp file with explicit UTF-8 NoBOM, then --body-file.
+$saTmp = Join-Path $env:TEMP "yc-sa-key.tmp.json"
+[System.IO.File]::WriteAllText($saTmp, $CI_SA_KEY, [System.Text.UTF8Encoding]::new($false))
+gh secret set YC_SA_KEY --repo $REPO --body-file $saTmp | Out-Null
+Remove-Item $saTmp -Force
+Write-Host "  v YC_SA_KEY"
+
 if (Test-Path $SshKeyPath) {
-    Get-Content $SshKeyPath -Raw | gh secret set DEPLOY_KEY --repo $REPO
+    gh secret set DEPLOY_KEY --repo $REPO --body-file $SshKeyPath | Out-Null
     Write-Host "  v DEPLOY_KEY (from $SshKeyPath)"
 } else {
     Write-Host "  ! DEPLOY_KEY - key not found at $SshKeyPath"
-    Write-Host "    Set manually: Get-Content <key_path> -Raw | gh secret set DEPLOY_KEY --repo $REPO"
+    Write-Host "    Set manually: gh secret set DEPLOY_KEY --repo $REPO --body-file <key_path>"
 }
 
 Write-Host ""
