@@ -229,6 +229,81 @@ public class YggTools {
         }
     }
 
+    @Tool("Run a read-only ArcadeDB query against the tenant's metadata graph when no other " +
+          "@Tool fits. Pass dialect=\"sql\" (preferred) or dialect=\"cypher\". The query MUST be " +
+          "read-only (SELECT / MATCH ... RETURN) and MUST end with LIMIT N where N ≤ 100. " +
+          "Use this for ad-hoc shape questions (e.g. 'CALLS edges from package X', 'DaliRoutine " +
+          "with empty source_text'). Mutating statements (INSERT/UPDATE/DELETE/CREATE/DROP) are " +
+          "rejected. Result is the raw row list — at most 100 rows, additionally hard-capped by " +
+          "the database. Always state in the answer that you used an ad-hoc query.")
+    public Map<String, Object> query_metadata(
+            @P("Either \"sql\" (ArcadeDB SQL) or \"cypher\" (openCypher)") String dialect,
+            @P("Read-only query. Must end with LIMIT N where N <= 100. " +
+               "Examples:\n" +
+               "  SELECT count(*) AS n FROM (SELECT expand(out(\"CONTAINS_TABLE\")) FROM DaliSchema WHERE schema_name = 'DWH') LIMIT 1\n" +
+               "  MATCH (p:DaliPackage)-[:CONTAINS_ROUTINE]->(r:DaliRoutine) WHERE p.package_name='PKG_ORDERS' RETURN r.routine_name LIMIT 50") String query
+    ) {
+        long start = System.currentTimeMillis();
+        String alias = tenantContext.alias();
+        String dbName = dbNameResolver.forTenant(alias);
+        String sessionId = tenantContext.sessionId();
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("dialect", dialect == null ? "" : dialect);
+        args.put("query",   query   == null ? "" : query);
+        eventEmitter.toolCallStarted(sessionId, "query_metadata", args);
+
+        // Whitelist + safety checks
+        String d = dialect == null ? "sql" : dialect.toLowerCase().trim();
+        if (!d.equals("sql") && !d.equals("cypher")) {
+            eventEmitter.toolCallCompleted(sessionId, "query_metadata", System.currentTimeMillis() - start, 0);
+            return Map.of("error", "unsupported_dialect", "message", "dialect must be 'sql' or 'cypher'");
+        }
+        if (query == null || query.isBlank()) {
+            eventEmitter.toolCallCompleted(sessionId, "query_metadata", System.currentTimeMillis() - start, 0);
+            return Map.of("error", "empty_query");
+        }
+        String upper = query.toUpperCase(java.util.Locale.ROOT);
+        // Reject mutations even if hidden inside an embedded statement
+        for (String forbidden : List.of("INSERT ", "UPDATE ", "DELETE ", "CREATE ", "DROP ",
+                                       "ALTER ", "TRUNCATE ", "GRANT ", "REVOKE ")) {
+            if (upper.contains(forbidden)) {
+                eventEmitter.toolCallCompleted(sessionId, "query_metadata", System.currentTimeMillis() - start, 0);
+                return Map.of("error", "mutation_forbidden", "verb", forbidden.trim());
+            }
+        }
+        // Mandatory LIMIT (we don't try to inject one — easier to just refuse)
+        if (!upper.contains("LIMIT ")) {
+            eventEmitter.toolCallCompleted(sessionId, "query_metadata", System.currentTimeMillis() - start, 0);
+            return Map.of("error", "limit_required",
+                    "message", "Query must end with LIMIT N (N <= 100)");
+        }
+
+        try {
+            ArcadeDbClient.QueryResult r = arcade.query(dbName,
+                    new ArcadeDbClient.ArcadeQuery(d, query, Map.of()));
+            // Hard cap on returned rows in case LIMIT was lax
+            List<Map<String, Object>> rows = r.result();
+            if (rows.size() > 100) rows = rows.subList(0, 100);
+            eventEmitter.toolCallCompleted(sessionId, "query_metadata",
+                    System.currentTimeMillis() - start, rows.size());
+            return Map.of(
+                    "dialect", d,
+                    "rowCount", rows.size(),
+                    "rows", rows);
+        } catch (Exception e) {
+            LOG.warnf(e, "query_metadata failed for tenant=%s dialect=%s", alias, d);
+            eventEmitter.toolCallCompleted(sessionId, "query_metadata",
+                    System.currentTimeMillis() - start, 0);
+            return Map.of(
+                    "dialect", d,
+                    "rowCount", 0,
+                    "rows", List.of(),
+                    "error", "query_failed",
+                    "message", e.getMessage() == null ? "" : e.getMessage());
+        }
+    }
+
     @Tool("Count incoming/outgoing dependencies for a node — answers " +
           "'how critical is this object?'. Returns counts for in / out / both directions.")
     public Map<String, Object> count_dependencies(
