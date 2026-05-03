@@ -1,0 +1,38 @@
+# ⚠ ШАБЛОН — все textValue должны быть заменены реальными значениями
+#    либо через `yc lockbox secret add-version --id <SECRET_ID> --payload '[...]'`,
+#    либо через UI Lockbox. Этот файл НЕ должен содержать реальные секреты —
+#    отслеживается GitHub Push Protection (secret scanning).
+#
+# См. infra/scripts/set-github-secrets.{sh,ps1} для генератора заполнения.
+
+- key: ARCADEDB_ADMIN_PASSWORD
+  textValue: REPLACE_WITH_REAL_VALUE
+- key: ARCADEDB_PASS
+  textValue: REPLACE_WITH_REAL_VALUE
+- key: FRIGG_PASSWORD
+  textValue: REPLACE_WITH_REAL_VALUE
+- key: KEYCLOAK_CLIENT_SECRET
+  textValue: REPLACE_WITH_REAL_VALUE
+- key: COOKIE_SECRET
+  # Generate: openssl rand -hex 32
+  textValue: REPLACE_WITH_REAL_VALUE
+- key: ANTHROPIC_API_KEY
+  textValue: sk-ant-REPLACE_OR_PLACEHOLDER
+# ── MIMIR (SPRINT_MIMIR_TIER2 — DeepSeek default + BYOK encryption) ──────────
+- key: DEEPSEEK_API_KEY
+  textValue: sk-REPLACE_WITH_REAL_DEEPSEEK_KEY
+# AES-256-GCM master key for tenant BYOK credential encryption (32 bytes b64).
+# Generate: head -c 32 /dev/urandom | base64
+- key: MIMIR_KEY_ENCRYPTION_KEY
+  textValue: REPLACE_WITH_BASE64_32_BYTES
+# Default model when client doesn't request one. Values: deepseek | anthropic | ollama
+- key: MIMIR_DEFAULT_MODEL
+  textValue: deepseek
+# Tier-3 demo cache forced mode. true → all answers from cache fixture (no LLM call).
+- key: MIMIR_DEMO_MODE
+  textValue: "false"
+# AWS credentials for S3 backup — pre-filled by Terraform after `terraform apply`.
+- key: AWS_ACCESS_KEY_ID
+  textValue: REPLACE_FROM_TERRAFORM_OUTPUT
+- key: AWS_SECRET_ACCESS_KEY
+  textValue: REPLACE_FROM_TERRAFORM_OUTPUT

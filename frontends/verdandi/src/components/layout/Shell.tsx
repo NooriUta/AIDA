@@ -7,6 +7,7 @@ import { FilterToolbarL1 } from './FilterToolbarL1';
 import { StatusBar } from './StatusBar';
 import { ResizablePanel } from './ResizablePanel';
 import { MobileInspectorDrawer } from './MobileInspectorDrawer';
+import { MimirChevronTab } from '../panels/MimirChevronTab';
 import { LoomCanvas } from '../canvas/LoomCanvas';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { EventStreamPanel } from '../loom/EventStreamPanel';
@@ -41,14 +42,16 @@ export const Shell = memo(() => {
   /** SD-03: EventStream bottom split toggle. Hidden by default + on mobile (<1200px). */
   const [showEvents, setShowEvents] = useState(false);
 
-  // Auto-open inspector drawer when a node is selected
+  // Auto-open inspector drawer when a node is selected — desktop only.
+  // On mobile we wait for an explicit K FAB tap so a stray finger touch
+  // doesn't pop the bottom-sheet over the canvas.
   const prevNodeId = useRef<string | null>(null);
   useEffect(() => {
-    if (selectedNodeId && selectedNodeId !== prevNodeId.current) {
+    if (!isMobile && selectedNodeId && selectedNodeId !== prevNodeId.current) {
       setInspectorOpen(true);
     }
     prevNodeId.current = selectedNodeId;
-  }, [selectedNodeId, setInspectorOpen]);
+  }, [selectedNodeId, setInspectorOpen, isMobile]);
 
   // KNOT → LOOM: auto-navigate when ?pkg= or ?schema= param is present
   useEffect(() => {
@@ -74,7 +77,7 @@ export const Shell = memo(() => {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: '42px 1fr 28px',
+      gridTemplateRows: 'auto 1fr 28px',
       height: '100%',
       overflow: 'hidden',
       background: 'var(--seer-bg)',
@@ -152,10 +155,16 @@ export const Shell = memo(() => {
               minWidth={240}
               maxWidth={inspectorMaxWidth}
               title={t('panel.inspector')}
+              toggleLabel="K"
             >
               <InspectorPanel />
             </ResizablePanel>
           )}
+
+          {/* Stacked above the Inspector pull-tab — same chevron style, opens
+              the MIMIR Copilot sidebar. Desktop only; mobile uses the header
+              button. */}
+          {!isMobile && <MimirChevronTab />}
 
         </div>
 

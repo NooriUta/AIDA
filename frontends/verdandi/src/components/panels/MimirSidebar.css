@@ -1,0 +1,439 @@
+/* MimirSidebar — uses canonical Seiðr palette only (--bg*, --t*, --acc, --bd, --inf/--wrn, --seer-*).
+   No hardcoded colors so it tracks every palette switch (Norn theme picker, light/dark). */
+
+.mimir-sidebar {
+  position: fixed;
+  top: 42px;
+  right: 0;
+  width: min(440px, 100vw);
+  height: calc(100vh - 42px);
+  background: var(--bg1);
+  color: var(--t1);
+  border-left: 1px solid var(--bd);
+  display: flex;
+  flex-direction: column;
+  z-index: 90;
+  font-family: inherit;
+  font-size: 13px;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Mobile: header stacks into two rows (42 px main + 36 px tenant strip),
+   so the sidebar must drop below ~78 px and span the full width. We also
+   bump z-index so it sits over the bottom-right "M" FAB and clears it. */
+@media (max-width: 768px) {
+  .mimir-sidebar {
+    top: 78px;
+    width: 100vw;
+    height: calc(100vh - 78px);
+    border-left: none;
+    box-shadow: none;
+    z-index: 96;
+  }
+}
+
+.mimir-header {
+  display: flex;
+  align-items: center;
+  gap: var(--seer-space-2, 8px);
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  border-bottom: 1px solid var(--bd);
+  background: var(--bg2);
+}
+
+.mimir-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t1);
+  text-transform: uppercase;
+}
+
+.mimir-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--acc);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--acc) 60%, transparent);
+}
+
+.mimir-dot-anim { animation: mimir-pulse 1.2s ease-in-out infinite; }
+
+@keyframes mimir-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.8); }
+}
+
+.mimir-icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--t2);
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: var(--seer-radius-sm, 4px);
+  font-size: 13px;
+}
+
+.mimir-icon-btn:hover {
+  background: var(--bg3);
+  border-color: var(--bd);
+  color: var(--t1);
+}
+
+.mimir-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--seer-space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--seer-space-2, 8px);
+}
+
+.mimir-empty {
+  padding: var(--seer-space-4, 16px);
+  border: 1px dashed var(--bd);
+  border-radius: var(--seer-radius-md, 6px);
+  color: var(--t3);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mimir-msg {
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  border-radius: var(--seer-radius-md, 6px);
+  max-width: 95%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.45;
+  border: 1px solid transparent;
+}
+
+/* User question — accent-tinted surface */
+.mimir-msg-user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--acc) 16%, var(--bg2));
+  color: var(--t1);
+  border-color: color-mix(in srgb, var(--acc) 35%, transparent);
+}
+
+/* MIMIR answer — neutral surface */
+.mimir-msg-mimir {
+  align-self: flex-start;
+  background: var(--bg2);
+  border-color: var(--bd);
+}
+
+/* System notice (errors, session messages) — warm tint */
+.mimir-msg-system {
+  align-self: stretch;
+  background: color-mix(in srgb, var(--wrn) 16%, var(--bg2));
+  border-color: color-mix(in srgb, var(--wrn) 40%, transparent);
+  color: var(--wrn);
+  font-size: 12px;
+}
+
+.mimir-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--seer-space-2, 8px);
+  font-style: italic;
+  color: var(--t3);
+}
+
+.mimir-error {
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  background: color-mix(in srgb, var(--err, var(--wrn)) 18%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--err, var(--wrn)) 40%, transparent);
+  color: var(--err, var(--wrn));
+  border-radius: var(--seer-radius-md, 6px);
+  font-size: 12px;
+}
+
+.mimir-tool-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--seer-space-1, 4px);
+  margin-top: var(--seer-space-2, 8px);
+}
+
+.mimir-tool-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  background: color-mix(in srgb, var(--inf) 18%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--inf) 45%, transparent);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--inf);
+}
+
+.mimir-actions {
+  margin-top: var(--seer-space-2, 8px);
+  display: flex;
+  gap: var(--seer-space-1, 4px);
+  flex-wrap: wrap;
+}
+
+.mimir-action-btn {
+  background: var(--bg3);
+  border: 1px solid var(--bd);
+  color: var(--t1);
+  padding: 3px 10px;
+  font-size: 12px;
+  border-radius: var(--seer-radius-sm, 4px);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mimir-action-btn:hover:not(:disabled) {
+  background: var(--bg2);
+  border-color: var(--bdh);
+}
+
+.mimir-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.mimir-action-btn.mimir-action-primary {
+  background: color-mix(in srgb, var(--acc) 18%, var(--bg3));
+  border-color: var(--acc);
+  color: var(--acc);
+  font-weight: 600;
+}
+.mimir-action-btn.mimir-action-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--acc) 28%, var(--bg3));
+}
+
+.mimir-action-btn.mimir-action-skuld {
+  background: color-mix(in srgb, var(--inf) 16%, var(--bg3));
+  border-color: color-mix(in srgb, var(--inf) 50%, transparent);
+  color: var(--inf);
+}
+.mimir-action-btn.mimir-action-skuld:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--inf) 24%, var(--bg3));
+}
+
+/* ── Markdown rendering inside MIMIR bubbles (TIER2 follow-up) ──────────── */
+.mimir-md-h {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t1);
+  margin: 8px 0 4px;
+  letter-spacing: 0.02em;
+}
+.mimir-md-p {
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+.mimir-md-p:last-child { margin-bottom: 0; }
+.mimir-md-ul, .mimir-md-ol {
+  margin: 4px 0 6px;
+  padding-left: 22px;
+  line-height: 1.5;
+}
+.mimir-md-ul li, .mimir-md-ol li { margin-bottom: 2px; }
+.mimir-md-code {
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: ui-monospace, "DM Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--acc);
+}
+.mimir-md-pre {
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-sm, 4px);
+  padding: 8px 10px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-family: ui-monospace, "DM Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--t1);
+}
+.mimir-md-pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.mimir-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 11px;
+  background: var(--bg2);
+  display: block;
+  overflow-x: auto;
+  white-space: normal;
+}
+.mimir-md-table th, .mimir-md-table td {
+  border: 1px solid var(--bd);
+  padding: 4px 6px;
+  vertical-align: top;
+  word-break: break-word;
+  min-width: 0;
+}
+.mimir-md-table th {
+  background: var(--bg3);
+  color: var(--t1);
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mimir-md-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg2) 70%, var(--bg3));
+}
+
+/* Tool chip type tints — execution strip preview (MT-04 follow-up) */
+.mimir-tool-chip.mimir-tool-q {
+  background: color-mix(in srgb, var(--inf) 14%, var(--bg2));
+  border-color: color-mix(in srgb, var(--inf) 40%, transparent);
+  color: var(--inf);
+}
+.mimir-tool-chip.mimir-tool-ai {
+  background: color-mix(in srgb, var(--wrn) 14%, var(--bg2));
+  border-color: color-mix(in srgb, var(--wrn) 40%, transparent);
+  color: var(--wrn);
+}
+
+.mimir-approve {
+  background: color-mix(in srgb, var(--inf) 22%, var(--bg3));
+  border-color: color-mix(in srgb, var(--inf) 55%, transparent);
+  color: var(--inf);
+}
+
+.mimir-reject {
+  background: color-mix(in srgb, var(--wrn) 18%, var(--bg3));
+  border-color: color-mix(in srgb, var(--wrn) 50%, transparent);
+  color: var(--wrn);
+}
+
+.mimir-quota-banner {
+  margin-top: var(--seer-space-2, 8px);
+  padding: var(--seer-space-1, 4px) var(--seer-space-2, 8px);
+  background: color-mix(in srgb, var(--wrn) 14%, transparent);
+  border-left: 3px solid var(--wrn);
+  font-size: 12px;
+  color: var(--t1);
+}
+
+.mimir-approval {
+  margin-top: var(--seer-space-2, 8px);
+  padding: var(--seer-space-2, 8px);
+  background: color-mix(in srgb, var(--wrn) 8%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--wrn) 35%, transparent);
+  border-radius: var(--seer-radius-md, 6px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--seer-space-1, 4px);
+}
+
+.mimir-approval-text {
+  font-size: 12px;
+  color: var(--wrn);
+}
+
+.mimir-approval-comment {
+  width: 100%;
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-sm, 4px);
+  color: var(--t1);
+  padding: var(--seer-space-1, 4px) var(--seer-space-2, 8px);
+  font-size: 12px;
+  resize: vertical;
+  min-height: 36px;
+  font-family: inherit;
+}
+
+.mimir-approval-buttons {
+  display: flex;
+  gap: var(--seer-space-1, 4px);
+}
+
+.mimir-meta {
+  margin-top: var(--seer-space-1, 4px);
+  color: var(--t3);
+  font-size: 11px;
+}
+
+.mimir-input {
+  display: flex;
+  gap: var(--seer-space-1, 4px);
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  border-top: 1px solid var(--bd);
+  background: var(--bg2);
+}
+
+.mimir-input textarea {
+  flex: 1;
+  resize: vertical;
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  color: var(--t1);
+  border-radius: var(--seer-radius-sm, 4px);
+  padding: var(--seer-space-1, 4px) var(--seer-space-2, 8px);
+  font-family: inherit;
+  font-size: 13px;
+  min-height: 40px;
+}
+
+.mimir-input textarea:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+
+.mimir-send-btn {
+  background: var(--acc);
+  color: var(--bg0);
+  border: 1px solid var(--acc);
+  padding: 0 14px;
+  font-size: 12px;
+  border-radius: var(--seer-radius-sm, 4px);
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: inherit;
+}
+
+.mimir-send-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--acc) 80%, var(--t1));
+}
+
+.mimir-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mimir-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--seer-space-1, 4px);
+  padding: 5px 10px;
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-md, 6px);
+  color: var(--t2);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+}
+
+.mimir-toolbar-button:hover {
+  color: var(--t1);
+  border-color: var(--bdh);
+}
+
+.mimir-toolbar-button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--acc) 18%, var(--bg2));
+  border-color: var(--acc);
+  color: var(--acc);
+}

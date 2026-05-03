@@ -10,7 +10,7 @@ import studio.seer.shared.HeimdallEvent;
  * Fire-and-forget client to HEIMDALL Backend :9093.
  * Same contract as services/anvil/heimdall/HeimdallClient.
  */
-@Path("/api/events")
+@Path("/events")
 @RegisterRestClient(configKey = "heimdall-api")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)

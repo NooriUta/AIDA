@@ -195,6 +195,16 @@ services:
       # Use placeholder if env unset/empty.
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-sk-placeholder-not-real}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-ant-placeholder-not-real}
+      # TIER2 — model selection + demo cache
+      MIMIR_DEFAULT_MODEL: ${MIMIR_DEFAULT_MODEL:-deepseek}
+      MIMIR_DEMO_MODE: ${MIMIR_DEMO_MODE:-false}
+      # TIER2 MT-06 BYOK — AES-256-GCM master key (32 bytes b64).
+      # Empty → BYOK admin endpoints fail at first encrypt/decrypt;
+      # MIMIR boots regardless (CredentialEncryptor uses Optional<String>).
+      MIMIR_KEY_ENCRYPTION_KEY: ${MIMIR_KEY_ENCRYPTION_KEY:-}
+      # FRIGG database name overrides — only set if non-default.
+      FRIGG_TENANTS_DB: ${FRIGG_TENANTS_DB:-frigg-tenants}
+      MIMIR_BYOK_SKIP_INIT: ${MIMIR_BYOK_SKIP_INIT:-false}
     <<: *env_file
     deploy:
       resources:

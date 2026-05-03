@@ -123,6 +123,69 @@ public class MimirEventEmitter {
                 "threshold_ms", thresholdMs)));
     }
 
+    /** Tier-3 demo cache served the response (TIER2 MT-02). */
+    public void cacheHit(String sessionId) {
+        emit(build(EventType.CACHE_HIT, EventLevel.INFO, 0, sessionId, mapOf(
+                "tier", "demo-cache")));
+    }
+
+    /** Per-tenant BYOK key was used for an LLM call (TIER2 MT-06). */
+    public void llmCredentialUsed(String tenantAlias, String provider, String keyMask) {
+        emit(build(EventType.LLM_CREDENTIAL_USED, EventLevel.INFO, 0, null, mapOf(
+                "tenant_alias", tenantAlias,
+                "provider",     provider,
+                "key_mask",     keyMask)));
+    }
+
+    /** Admin upserted/deleted a tenant LLM config (TIER2 MT-06). */
+    public void llmConfigUpdated(String tenantAlias, String provider, String action, String admin) {
+        emit(build(EventType.LLM_CONFIG_UPDATED, EventLevel.INFO, 0, null, mapOf(
+                "tenant_alias", tenantAlias,
+                "provider",     provider,
+                "action",       action,
+                "admin",        admin)));
+    }
+
+    /** Tenant hit a daily/monthly token or cost cap (TIER2 MT-07). */
+    public void quotaExceeded(String tenantAlias, String reason, long current, long limit, java.time.Instant resetAt) {
+        emit(build(EventType.QUOTA_EXCEEDED, EventLevel.WARN, 0, null, mapOf(
+                "tenant_alias", tenantAlias,
+                "reason",       reason,
+                "current",      current,
+                "limit",        limit,
+                "reset_at",     resetAt == null ? null : resetAt.toString())));
+    }
+
+    /** Token usage + USD cost for a single LLM call (TIER2 MT-07). */
+    public void tokenUsageRecorded(String tenantAlias, String provider, String model,
+                                   long promptTokens, long completionTokens, double costUsd) {
+        emit(build(EventType.TOKEN_USAGE_RECORDED, EventLevel.INFO, 0, null, mapOf(
+                "tenant_alias",      tenantAlias,
+                "provider",          provider,
+                "model",             model,
+                "prompt_tokens",     promptTokens,
+                "completion_tokens", completionTokens,
+                "cost_usd",          costUsd)));
+    }
+
+    /** Orchestrator paused a request waiting for HiL approval (TIER2 MT-08). */
+    public void hilPauseRequested(String tenantAlias, String sessionId, String approvalId, String reason) {
+        emit(build(EventType.HIL_PAUSE_REQUESTED, EventLevel.WARN, 0, sessionId, mapOf(
+                "tenant_alias", tenantAlias,
+                "session_id",   sessionId,
+                "approval_id",  approvalId,
+                "reason",       reason)));
+    }
+
+    /** Operator made an approve/reject decision on a paused session (TIER2 MT-08). */
+    public void hilDecisionMade(String sessionId, boolean approved, String decidedBy, String comment) {
+        emit(build(EventType.HIL_DECISION_MADE, EventLevel.INFO, 0, sessionId, mapOf(
+                "session_id",  sessionId,
+                "approve",     approved,
+                "decided_by",  decidedBy,
+                "comment",     comment)));
+    }
+
     // ── Internal builder ─────────────────────────────────────────────────────
 
     private static HeimdallEvent build(EventType type, EventLevel level, long durationMs,

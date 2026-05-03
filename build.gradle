@@ -54,6 +54,71 @@ ext {
     verdandiDir      = file('frontends/verdandi')
     heimdallFrontDir = file('frontends/heimdall-frontend')
     gradleCmd        = new File(rootDir, isWindows ? 'gradlew.bat' : 'gradlew').canonicalPath
+
+    // .env loader — Quarkus dev (gradlew) не читает .env автоматически.
+    // Эта функция парсит aida-root/.env и проставляет System properties + env vars,
+    // которые Quarkus подхватывает через MicroProfile Config (env vars > system props > application.properties).
+    // Использование: вызвать loadDotEnv() в quarkusDev-обёртках, IDE Run Configurations или devAll.
+    loadDotEnv = { File envFile = new File(rootDir, '.env') ->
+        if (!envFile.exists()) {
+            logger.lifecycle("[loadDotEnv] ${envFile.absolutePath} not found — skipping")
+            return [:]
+        }
+        Map<String, String> loaded = [:]
+        envFile.eachLine { line ->
+            def trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith('#')) return
+            def idx = trimmed.indexOf('=')
+            if (idx < 1) return
+            def key = trimmed.substring(0, idx).trim()
+            def val = trimmed.substring(idx + 1).trim()
+            // strip surrounding quotes
+            if ((val.startsWith('"') && val.endsWith('"')) ||
+                (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.substring(1, val.length() - 1)
+            }
+            // do NOT override what was already exported in the shell — it wins
+            if (System.getenv(key) == null && System.getProperty(key) == null) {
+                System.setProperty(key, val)
+                loaded[key] = val
+            }
+        }
+        if (!loaded.isEmpty()) {
+            logger.lifecycle("[loadDotEnv] loaded ${loaded.size()} keys from ${envFile.name}: ${loaded.keySet().sort().join(', ')}")
+        }
+        return loaded
+    }
+}
+
+// ─── .env auto-load — works for ANY gradle invocation in this repo ────────────
+//
+// Gradle calls this at configuration phase, before any task runs. System
+// properties survive into the same JVM (quarkusDev), and we also forward them
+// into forked QuarkusDev processes via the per-service build.gradle hook
+// `tasks.withType(io.quarkus.gradle.tasks.QuarkusDev)` (configured below in
+// services/<svc>/build.gradle when present).
+//
+// Order of precedence (MicroProfile Config):
+//   1. shell-exported env var          (highest — explicit override)
+//   2. -D system property               (Gradle command line)
+//   3. value from .env via loadDotEnv() (NEW — covered by this hook)
+//   4. application.properties default   (lowest)
+//
+// To skip: pass `-Paida.skipDotEnv=true` (e.g. CI has its own secrets).
+if (!project.hasProperty('aida.skipDotEnv')) {
+    def envMap = ext.loadDotEnv()
+    // Forward to Quarkus dev forked JVM via QuarkusDev's MapProperty<String,String>
+    // `environmentVariables` (Quarkus 3.17 API). The forked process sees them as
+    // real env vars, which MicroProfile Config reads first (highest precedence).
+    if (!envMap.isEmpty()) {
+        allprojects {
+            tasks.matching { it.name == 'quarkusDev' }.configureEach { task ->
+                if (task.hasProperty('environmentVariables')) {
+                    envMap.each { k, v -> task.environmentVariables.put(k, v) }
+                }
+            }
+        }
+    }
 }
 
 // ─── verdandi tasks ───────────────────────────────────────────────────────────
@@ -183,11 +248,26 @@ task anvilBuild(type: GradleBuild) {
     tasks       = [':services:anvil:build']
 }
 
+// ─── mimir tasks ─────────────────────────────────────────────────────────────
+
+task mimirDev(type: GradleBuild) {
+    group       = 'mimir'
+    description = 'Start MIMIR AI assistant in dev mode (Quarkus, :9094). ' +
+                  'Set MIMIR_DEMO_MODE=true to skip live LLM calls and serve from cache.'
+    tasks       = [':services:mimir:quarkusDev']
+}
+
+task mimirBuild(type: GradleBuild) {
+    group       = 'mimir'
+    description = 'Build MIMIR fat-jar'
+    tasks       = [':services:mimir:build']
+}
+
 // ─── devAll — start all services ─────────────────────────────────────────────
 
 task devAll {
     group       = 'Development'
-    description = 'Start all services: Shuttle (:8080) + Dali (:9090) + ANVIL (:9095) + Heimdall (:9093/:5174) + Chur (:3000) + verdandi (:5173)'
+    description = 'Start all services: Shuttle (:8080) + Dali (:9090) + ANVIL (:9095) + MIMIR (:9094) + Heimdall (:9093/:5174) + Chur (:3000) + verdandi (:5173)'
     dependsOn   churInstall, verdandiInstall, heimdallFrontendInstall
 
     doLast {
@@ -203,6 +283,9 @@ task devAll {
                 "start \"Anvil\" /D \"${rootDir}\" \"${gradleCmd}\" :services:anvil:quarkusDev")
                 .start()
             new ProcessBuilder('cmd', '/c',
+                "start \"Mimir\" /D \"${rootDir}\" \"${gradleCmd}\" :services:mimir:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
                 "start \"Heimdall-Backend\" /D \"${rootDir}\" \"${gradleCmd}\" :services:heimdall-backend:quarkusDev")
                 .start()
             new ProcessBuilder('cmd', '/c',
@@ -214,7 +297,7 @@ task devAll {
             new ProcessBuilder('cmd', '/c',
                 "start \"verdandi\" /D \"${verdandiDir}\" \"${npmCmd}\" run dev")
                 .start()
-            println '> Opened 7 windows: Shuttle (:8080) Dali (:9090) Anvil (:9095) Heimdall-Backend (:9093) Heimdall-Frontend (:5174) Chur (:3000) verdandi (:5173)'
+            println '> Opened 8 windows: Shuttle (:8080) Dali (:9090) Anvil (:9095) Mimir (:9094) Heimdall-Backend (:9093) Heimdall-Frontend (:5174) Chur (:3000) verdandi (:5173)'
         } else {
             // Unix/macOS — run all in parallel, inherit output to this terminal
             def shuttleProc = new ProcessBuilder(gradleCmd, ':services:shuttle:quarkusDev')
@@ -222,6 +305,8 @@ task devAll {
             def daliProc = new ProcessBuilder(gradleCmd, ':services:dali:quarkusDev')
                 .directory(rootDir).inheritIO().start()
             def anvilProc = new ProcessBuilder(gradleCmd, ':services:anvil:quarkusDev')
+                .directory(rootDir).inheritIO().start()
+            def mimirProc = new ProcessBuilder(gradleCmd, ':services:mimir:quarkusDev')
                 .directory(rootDir).inheritIO().start()
             def heimdallBackProc = new ProcessBuilder(gradleCmd, ':services:heimdall-backend:quarkusDev')
                 .directory(rootDir).inheritIO().start()
@@ -235,12 +320,13 @@ task devAll {
                 shuttleProc.destroyForcibly()
                 daliProc.destroyForcibly()
                 anvilProc.destroyForcibly()
+                mimirProc.destroyForcibly()
                 heimdallBackProc.destroyForcibly()
                 heimdallFrontProc.destroyForcibly()
                 churProc.destroyForcibly()
                 verdandiProc.destroyForcibly()
             }))
-            [shuttleProc, daliProc, anvilProc, heimdallBackProc, heimdallFrontProc, churProc, verdandiProc]*.waitFor()
+            [shuttleProc, daliProc, anvilProc, mimirProc, heimdallBackProc, heimdallFrontProc, churProc, verdandiProc]*.waitFor()
         }
     }
 }

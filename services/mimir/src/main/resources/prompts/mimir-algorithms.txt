@@ -1,0 +1,55 @@
+ARCADEDB GRAPH ALGORITHMS — verified on 26.4.1-SNAPSHOT (Q30 session 1, 21.04.2026).
+
+Invocation pattern (always inside query_metadata with dialect="cypher"):
+  CALL algo.<name>(<args>) YIELD <fields> RETURN <fields> LIMIT N
+
+PATH / TRAVERSAL — answer "show me the path / impact / depth"
+  algo.dijkstra(srcNode, tgtNode, edgeType, weightField)
+      shortest path; returns {path:{nodes:[...]}, weight}. Pass "" weightField for hop-count.
+  algo.astar(srcNode, tgtNode, edgeType, weightField, latProp, lngProp)
+      same as dijkstra; only useful when nodes have lat/lng — usually pick dijkstra.
+  algo.bellmanFord(srcNode, tgtNode, edgeType, weightField)
+      shortest path with negative-cycle detection; ~10× slower than dijkstra.
+  algo.bfs(node)                             — full BFS from node
+  algo.bfs(node, edgeType, direction, depth) — type-restricted BFS, e.g. ("HAS_COLUMN","OUT",3)
+  algo.dfs(node)                             — full DFS (deeper paths first)
+  algo.longestPath()                         — DAG depth assessment, all sources
+  algo.longestPath(srcNode)                  — single-source max depth
+  algo.steinerTree(terminalList, edgeType, weightField)
+      minimal subgraph spanning a set of important tables.
+  AVOID:
+    algo.kShortestPaths   — OOM on full graph; use N×dijkstra() instead.
+    algo.apsp             — OOM (all-pairs shortest path); not feasible via REST.
+    algo.allSimplePaths   — known 26.4.1 bug, transaction commit error.
+
+CENTRALITY — answer "how critical / influential / which is the hub"
+  algo.pagerank()                                  YIELD node, score      — table criticality
+  algo.articlerank()                               YIELD node, score      — dampened PageRank
+  algo.personalizedPageRank(srcNode)               YIELD nodeId, score    — "what's important near X"
+  algo.eigenvector()                               YIELD node, score      — prestige-based
+  algo.katz()                                      YIELD nodeId, score    — Katz centrality
+  algo.hits()                                      YIELD node, hubScore, authorityScore
+                                                                          — hub vs authority split
+  algo.degree()                                    YIELD node, inDegree, outDegree, degree
+                                                                          — LOOM node sizing
+  algo.voteRank()                                  YIELD nodeId, rank     — influence propagation
+  SLOW (~9–16 s on 347k nodes; restrict the subgraph first):
+    algo.closeness, algo.harmonic, algo.eccentricity
+
+COMMUNITY / CLUSTERING — answer "natural groupings, modules"
+  Available but not yet benchmarked at scale: louvain, labelPropagation,
+  weaklyConnectedComponents (wcc), stronglyConnectedComponents (scc),
+  triangleCount, localClusteringCoefficient. Test with LIMIT before relying on totals.
+
+SIMILARITY — answer "find tables similar to X"
+  Available: nodeSimilarity (Jaccard / Cosine over neighbour sets). Pair with
+  CONTAINS_COLUMN edge type to compare tables by column-set overlap.
+
+USAGE NOTES:
+- The 26.4.1 community Cypher implementation has bugs around nested calls and very large
+  result sets — always wrap in `WITH ... LIMIT 100` and never YIELD `*`.
+- Argument order matters: edgeType comes BEFORE weightField on dijkstra family.
+- For lineage explanations prefer dijkstra(s, t, "CONTAINS_TABLE", "") — empty weightField
+  yields hop-count which is what users actually want to see.
+- For "blast radius" prefer the find_impact @Tool over algo.bfs — it returns a flat node list
+  scoped to the tenant; algo.bfs is unscoped and includes the entire graph.

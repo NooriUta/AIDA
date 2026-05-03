@@ -1,15 +1,23 @@
 package com.mimir.orchestration;
 
+import com.mimir.cache.DemoCacheService;
 import com.mimir.heimdall.MimirEventEmitter;
+import com.mimir.hil.HilDecision;
+import com.mimir.hil.HilGate;
 import com.mimir.model.AskRequest;
 import com.mimir.model.MimirAnswer;
 import com.mimir.persistence.MimirSession;
 import com.mimir.persistence.MimirSessionRepository;
+import com.mimir.quota.QuotaCheckResult;
+import com.mimir.quota.TenantQuotaGuard;
+import com.mimir.quota.TenantUsageTracker;
 import com.mimir.routing.ModelRouter;
 import com.mimir.tenant.DbNameResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+
+import java.util.Optional;
 
 /**
  * Multi-agent reasoning orchestrator — ADR-MIMIR-001 Tier 2 stub.
@@ -34,6 +42,10 @@ public class MimirOrchestrator {
     @Inject DbNameResolver          dbNameResolver;
     @Inject MimirEventEmitter       eventEmitter;
     @Inject MimirSessionRepository  sessionRepo;
+    @Inject DemoCacheService        demoCache;
+    @Inject TenantQuotaGuard        quotaGuard;
+    @Inject TenantUsageTracker      usageTracker;
+    @Inject HilGate                 hilGate;
 
     /**
      * Single-agent ask (current) — delegates to ModelRouter.
@@ -55,6 +67,49 @@ public class MimirOrchestrator {
                 ? request.dbName()
                 : dbNameResolver.forTenant(tenantAlias);
 
+        // TIER2 MT-07: pre-call quota check
+        QuotaCheckResult quotaCheck = quotaGuard.check(tenantAlias);
+        if (!quotaCheck.allowed()) {
+            eventEmitter.quotaExceeded(tenantAlias, quotaCheck.reason(),
+                    quotaCheck.current(), quotaCheck.limit(), quotaCheck.resetAt());
+            sessionRepo.save(MimirSession.failed(sessionId, tenantAlias));
+            return MimirAnswer.quotaExceeded(new MimirAnswer.QuotaInfo(
+                    quotaCheck.reason(),
+                    quotaCheck.current(), quotaCheck.limit(),
+                    quotaCheck.currentValue(), quotaCheck.limitValue(),
+                    quotaCheck.resetAt()));
+        }
+
+        // TIER2 MT-08: HiL gate — high cost / destructive op / tenant policy → pause
+        HilDecision hil = hilGate.check(request, tenantAlias);
+        if (!hil.allowed()) {
+            String approvalId = java.util.UUID.randomUUID().toString();
+            java.time.Instant now = java.time.Instant.now();
+            java.time.Instant exp = now.plusSeconds(30 * 60);
+            eventEmitter.hilPauseRequested(tenantAlias, sessionId, approvalId, hil.reason());
+            sessionRepo.save(MimirSession.paused(sessionId, tenantAlias, approvalId, hil.reason()));
+            return MimirAnswer.awaitingApproval(new MimirAnswer.ApprovalInfo(
+                    approvalId, hil.reason(), now, exp, hil.estimatedCostUsd()));
+        }
+
+        // TIER2 MT-02: forced demo mode — answer from cache, skip live model entirely
+        if (demoCache.isDemoMode()) {
+            Optional<MimirAnswer> hit = demoCache.tryCache(questionPreview);
+            if (hit.isPresent()) {
+                MimirAnswer answer = hit.get();
+                long durationMs = System.currentTimeMillis() - start;
+                eventEmitter.modelSelected(sessionId, "demo-cache", "demo-mode");
+                eventEmitter.cacheHit(sessionId);
+                eventEmitter.responseSynthesized(sessionId, durationMs, 0,
+                        answer.highlightNodeIds() != null ? answer.highlightNodeIds().size() : 0);
+                sessionRepo.save(MimirSession.completed(sessionId, tenantAlias,
+                        answer.toolCallsUsed(), answer.highlightNodeIds()));
+                return answer;
+            }
+            LOG.debugf("Demo mode active but no cache pattern matched for tenant=%s session=%s — falling through to live model",
+                    tenantAlias, sessionId);
+        }
+
         // Resolve model (per-tenant aware — scaffold for TIER2 BYOK)
         var port = router.resolveForTenant(requestedModel, tenantAlias);
         String resolvedModel = requestedModel != null && !requestedModel.isBlank()
@@ -66,8 +121,20 @@ public class MimirOrchestrator {
         try {
             MimirAnswer answer = port.ask(sessionId, request.question(), dbName, tenantAlias);
             long durationMs = System.currentTimeMillis() - start;
+
+            // TIER2 MT-07: token usage tracking. When the LLM provider didn't
+            // report token counts (current Quarkiverse path), fall back to a
+            // 4-chars-per-token heuristic so quotas measure something real.
+            long promptTokens = answer.promptTokens() > 0 ? answer.promptTokens()
+                    : TenantUsageTracker.estimateTokens(request.question());
+            long completionTokens = answer.completionTokens() > 0 ? answer.completionTokens()
+                    : TenantUsageTracker.estimateTokens(answer.answer());
+            String provider = answer.provider() != null ? answer.provider() : resolvedModel;
+            String modelName = answer.model() != null ? answer.model() : resolvedModel;
+            usageTracker.record(tenantAlias, provider, modelName, promptTokens, completionTokens);
+
             eventEmitter.responseSynthesized(sessionId, durationMs,
-                    0,  // total tokens — populated in TIER2 MT-07
+                    (int) (promptTokens + completionTokens),
                     answer.highlightNodeIds() != null ? answer.highlightNodeIds().size() : 0);
 
             // MC-08: persist session in FRIGG (fire-and-forget — failure doesn't break response)
@@ -80,10 +147,27 @@ public class MimirOrchestrator {
             String reason = classifyFailure(e);
             LOG.warnf(e, "MIMIR LLM call failed (tenant=%s session=%s reason=%s) — falling back to unavailable",
                     tenantAlias, sessionId, reason);
-            eventEmitter.fallbackActivated(sessionId, reason, "unavailable");
             if ("timeout".equals(reason)) {
                 eventEmitter.timeout(sessionId, durationMs, 30_000L);
             }
+
+            // TIER2 MT-02: cache fallback is opt-in via mimir.demo-mode=true.
+            // When demo-mode is OFF (default in dev/prod), a live-model failure must NOT
+            // be silently substituted with a hardcoded fixture — that lies to the user
+            // about real-data answers. Cache exists only as the demo-stand safety net.
+            if (demoCache.isDemoMode()) {
+                Optional<MimirAnswer> cached = demoCache.tryCache(questionPreview);
+                if (cached.isPresent()) {
+                    eventEmitter.fallbackActivated(sessionId, reason, "demo-cache");
+                    eventEmitter.cacheHit(sessionId);
+                    MimirAnswer answer = cached.get();
+                    sessionRepo.save(MimirSession.completed(sessionId, tenantAlias,
+                            answer.toolCallsUsed(), answer.highlightNodeIds()));
+                    return answer;
+                }
+            }
+
+            eventEmitter.fallbackActivated(sessionId, reason, "unavailable");
             // MC-08: persist failed state too — useful for HEIMDALL forensics
             sessionRepo.save(MimirSession.failed(sessionId, tenantAlias));
             return MimirAnswer.unavailable();
