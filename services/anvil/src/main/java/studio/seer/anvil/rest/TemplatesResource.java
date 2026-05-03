@@ -84,7 +84,7 @@ public class TemplatesResource {
             MATCH (t:DaliTable)
             WHERE t.db_name = $dbName
               AND NOT (t)<-[:DATA_FLOW]-()
-              AND NOT (t)<-[:READS_FROM]-()
+              AND NOT (t)-[:READS_FROM]->()
             RETURN t.geoid AS id, t.qualifiedName AS label, 'DaliTable' AS type
             ORDER BY label ASC LIMIT 100
             """.strip(),

@@ -79,8 +79,9 @@ export function applyStmtColumns(
       });
 
   // ── Column-level flow edges ────────────────────────────────────────────────
+  // Sprint 1.2 inversion: edges are now in canonical DB direction, no flip needed.
   // baseEdges has WRITES_TO  (source=stmtId,  target=tableId)
-  //           and READS_FROM (source=tableId, target=stmtId) — flipped for display.
+  //           and READS_FROM (source=tableId, target=stmtId) — natural after inversion.
   const renderedIds = new Set(nodes.map((n) => n.id));
   const cfEdges: LoomEdge[] = [];
   const cfSeen  = new Set<string>();
@@ -97,6 +98,7 @@ export function applyStmtColumns(
     const edgeType = e.data?.edgeType as string | undefined;
     if (edgeType !== 'WRITES_TO' && edgeType !== 'READS_FROM') continue;
 
+    // Both edges now natural direction — WRITES_TO stmt→table, READS_FROM table→stmt.
     const stmtId  = edgeType === 'WRITES_TO' ? e.source : e.target;
     const tableId = edgeType === 'WRITES_TO' ? e.target : e.source;
     if (!renderedIds.has(stmtId) || !renderedIds.has(tableId)) continue;

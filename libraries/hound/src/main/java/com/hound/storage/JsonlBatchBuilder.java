@@ -840,7 +840,8 @@ public class JsonlBatchBuilder {
                         ? (List<String>) st.getValue().get("table_alias") : List.of();
                 Map<String, Object> rfProps = new java.util.HashMap<>(sidProps);
                 rfProps.put("aliases", new ArrayList<>(stAl));
-                b.appendEdge("READS_FROM", e.getKey(), st.getKey(), rfProps);
+                // Sprint 1.2 READS_FROM inversion (Round 7 §11): tableGeoid → stmtGeoid
+                b.appendEdge("READS_FROM", st.getKey(), e.getKey(), rfProps);
             }
             for (var tt : e.getValue().getTargetTables().entrySet()) {
                 @SuppressWarnings("unchecked")
@@ -1575,7 +1576,8 @@ public class JsonlBatchBuilder {
                         ? (List<String>) st.getValue().get("table_alias") : List.of();
                 Map<String, Object> rfProps = new java.util.HashMap<>(sidProps);
                 rfProps.put("aliases", new ArrayList<>(stAl));
-                b.appendEdge("READS_FROM", e.getKey(), st.getKey(), rfProps);
+                // Sprint 1.2 READS_FROM inversion (Round 7 §11): tableGeoid → stmtGeoid
+                b.appendEdge("READS_FROM", st.getKey(), e.getKey(), rfProps);
             }
             for (var tt : e.getValue().getTargetTables().entrySet()) {
                 @SuppressWarnings("unchecked")

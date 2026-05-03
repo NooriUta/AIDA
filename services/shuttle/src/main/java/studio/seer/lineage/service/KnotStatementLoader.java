@@ -64,7 +64,7 @@ class KnotStatementLoader {
         // Query 2: TABLE sources/targets — READS_FROM/WRITES_TO → DaliTable
         String cypherTables = """
             MATCH (stmt:DaliStatement {session_id: $sid})
-            OPTIONAL MATCH (stmt)-[rf:READS_FROM]->(src:DaliTable)
+            OPTIONAL MATCH (src:DaliTable)-[rf:READS_FROM]->(stmt)
             OPTIONAL MATCH (stmt)-[wt:WRITES_TO]->(tgt:DaliTable)
             RETURN id(stmt)                             AS sid,
                    src.table_name                       AS srcName,

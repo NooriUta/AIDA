@@ -290,20 +290,18 @@ function transformSchemaExplore(result: ExploreResult): {
     )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
-      const flip = edgeType === 'READS_FROM';
+      // Sprint 1.2 inversion: READS_FROM flip-logic удалён. DB-direction is canonical.
       // Backend sets sourceHandle / targetHandle for column-level
       // DATA_FLOW / FILTER_FLOW ('src-#13:X' / 'tgt-#31:Y'). Pass them
-      // through to React Flow so the edge lands on the specific column
-      // row inside the parent TableNode / StatementNode card.
-      // Handles are also flipped together with source/target for READS_FROM.
+      // through to React Flow so the edge lands on the specific column row.
       const srcH = e.sourceHandle && e.sourceHandle.length > 0 ? e.sourceHandle : undefined;
       const tgtH = e.targetHandle && e.targetHandle.length > 0 ? e.targetHandle : undefined;
       return {
         id:           e.id,
-        source:       flip ? e.target : e.source,
-        target:       flip ? e.source : e.target,
-        sourceHandle: flip ? tgtH : srcH,
-        targetHandle: flip ? srcH : tgtH,
+        source:       e.source,
+        target:       e.target,
+        sourceHandle: srcH,
+        targetHandle: tgtH,
         type:         'default',
         pathOptions:  { curvature: EDGE_CURVATURE },
         animated:     ANIMATED_EDGES.has(edgeType),
@@ -595,19 +593,15 @@ export function transformGqlExplore(
     )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
-      const flip = edgeType === 'READS_FROM';
-      // Column-level handles (backend sets 'src-#13:X' / 'tgt-#31:Y' for
-      // DATA_FLOW and FILTER_FLOW). Route them into the specific column
-      // row inside the parent card; flip together with source/target for
-      // READS_FROM so the swap keeps handles on the correct side.
+      // Sprint 1.2 inversion: READS_FROM flip-logic удалён. DB-direction is canonical.
       const srcH = e.sourceHandle && e.sourceHandle.length > 0 ? e.sourceHandle : undefined;
       const tgtH = e.targetHandle && e.targetHandle.length > 0 ? e.targetHandle : undefined;
       return {
         id:           e.id,
-        source:       flip ? e.target : e.source,
-        target:       flip ? e.source : e.target,
-        sourceHandle: flip ? tgtH : srcH,
-        targetHandle: flip ? srcH : tgtH,
+        source:       e.source,
+        target:       e.target,
+        sourceHandle: srcH,
+        targetHandle: tgtH,
         type:         'default',
         pathOptions:  { curvature: EDGE_CURVATURE },
         animated:     ANIMATED_EDGES.has(edgeType),

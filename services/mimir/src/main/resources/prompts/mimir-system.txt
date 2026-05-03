@@ -37,7 +37,7 @@ preference:
     relationship list.
 {|
       MATCH (s:DaliSchema {schema_name:'DWH'})-[:CONTAINS_TABLE]->(t:DaliTable) RETURN t.table_name LIMIT 100
-      MATCH (r:DaliRoutine)-[:READS_FROM]->(t:DaliTable {table_name:'ORDERS'}) RETURN r.routine_name LIMIT 50
+      MATCH (t:DaliTable {table_name:'ORDERS'})-[:READS_FROM]->(s:DaliStatement)<-[:CONTAINS_STMT]-(r:DaliRoutine) RETURN DISTINCT r.routine_name LIMIT 50
 |}
 
   - ArcadeDB SQL — when the answer is an AGGREGATE or ANALYTIC over a single vertex/edge type:

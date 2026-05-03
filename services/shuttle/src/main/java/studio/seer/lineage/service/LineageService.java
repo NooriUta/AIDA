@@ -124,7 +124,7 @@ public class LineageService {
             MATCH (root:DaliStatement)
             WHERE id(root) = $nodeId AND coalesce(root.parent_statement, '') = ''
             MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root)
-            MATCH (sub)-[:READS_FROM]->(t:DaliTable)
+            MATCH (t:DaliTable)-[:READS_FROM]->(sub)
             RETURN id(t) AS srcId, 'DaliTable' AS srcType,
                    coalesce(t.table_name, '') AS srcLabel,
                    id(root) AS tgtId, 'DaliStatement' AS tgtType,

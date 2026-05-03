@@ -252,7 +252,7 @@ public class KnotService {
         // Avoids 3-hop traversal Session→Routine→Statement used in the original code.
         // Column details are lazy-loaded via knotTableDetail — only count here.
         String cypherMain = """
-            MATCH (stmt:DaliStatement {session_id: $sid})-[:READS_FROM|WRITES_TO]->(t:DaliTable)
+            MATCH (stmt:DaliStatement {session_id: $sid})-[:READS_FROM|WRITES_TO]-(t:DaliTable)
             OPTIONAL MATCH (t)-[:HAS_COLUMN]->(c:DaliColumn)
             WITH t, count(DISTINCT c) AS colCount
             RETURN DISTINCT
@@ -271,7 +271,7 @@ public class KnotService {
         // READS_FROM and WRITES_TO counts in a single query — split by edgeType in Java.
         // Was: 2 separate Cypher queries with 3-hop traversal each (3 total → now 2).
         String cypherCounts = """
-            MATCH (stmt:DaliStatement {session_id: $sid})-[e:READS_FROM|WRITES_TO]->(t:DaliTable)
+            MATCH (stmt:DaliStatement {session_id: $sid})-[e:READS_FROM|WRITES_TO]-(t:DaliTable)
             RETURN t.table_name AS tableName, type(e) AS edgeType, count(*) AS cnt
             """;
 

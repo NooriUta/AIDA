@@ -117,16 +117,16 @@ export function transformGqlStatementTree(result: ExploreResult): {
     })
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
-      // READS_FROM: flip so table is source, statement is target (canonical display)
-      const flip = edgeType === 'READS_FROM';
+      // Sprint 1.2 inversion: READS_FROM теперь Table→Stmt в DB — flip-логика удалена.
+      // Frontend использует direction из DB as-is.
       const srcH = e.sourceHandle && e.sourceHandle.length > 0 ? e.sourceHandle : undefined;
       const tgtH = e.targetHandle && e.targetHandle.length > 0 ? e.targetHandle : undefined;
       return {
         id:           e.id,
-        source:       flip ? e.target : e.source,
-        target:       flip ? e.source : e.target,
-        sourceHandle: flip ? tgtH : srcH,
-        targetHandle: flip ? srcH : tgtH,
+        source:       e.source,
+        target:       e.target,
+        sourceHandle: srcH,
+        targetHandle: tgtH,
         type:         'default',
         pathOptions:  { curvature: EDGE_CURVATURE },
         animated:     ANIMATED_EDGES.has(edgeType),

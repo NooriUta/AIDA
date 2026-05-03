@@ -66,7 +66,7 @@ public class ExploreRoutineService {
             MATCH (r:DaliRoutine) WHERE id(r) = $rid
             MATCH (r)-[:CONTAINS_STMT]->(s:DaliStatement)
             WHERE coalesce(s.parent_statement, '') = ''
-            MATCH (s)-[:READS_FROM]->(t:DaliTable)
+            MATCH (t:DaliTable)-[:READS_FROM]->(s)
             RETURN id(s) AS srcId,
                    coalesce(s.stmt_geoid, s.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    '' AS srcScope, '' AS srcPackage, '' AS srcKind,
@@ -94,7 +94,7 @@ public class ExploreRoutineService {
             MATCH (r:DaliRoutine) WHERE id(r) = $rid
             MATCH (r)-[:CONTAINS_STMT]->(root:DaliStatement)
             WHERE coalesce(root.parent_statement, '') = ''
-            MATCH (root)<-[:CHILD_OF*1..20]-(sub:DaliStatement)-[:READS_FROM]->(t:DaliTable)
+            MATCH (root)<-[:CHILD_OF*1..20]-(sub:DaliStatement), (t:DaliTable)-[:READS_FROM]->(sub)
             RETURN DISTINCT id(root) AS srcId,
                    coalesce(root.stmt_geoid, root.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    '' AS srcScope, '' AS srcPackage, '' AS srcKind,

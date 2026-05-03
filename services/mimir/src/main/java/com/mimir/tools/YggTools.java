@@ -322,20 +322,21 @@ public class YggTools {
 
         try {
             String dir = direction == null ? "both" : direction.toLowerCase();
+            // Sprint 1.2 inversion: READS_FROM is now Table→Stmt, WRITES_TO remains Stmt→Table.
+            // Use undirected edges (-[]-) to count both directions in a single query.
             String cypher = switch (dir) {
                 case "in"  -> """
-                        MATCH (n)-[r:READS_FROM|WRITES_TO]->(t {geoid: $id})
+                        MATCH (n)-[r:READS_FROM|WRITES_TO]-(t {geoid: $id})
                         RETURN count(r) AS cnt
                         """;
                 case "out" -> """
-                        MATCH (s {geoid: $id})-[r:READS_FROM|WRITES_TO]->(n)
+                        MATCH (s {geoid: $id})-[r:READS_FROM|WRITES_TO]-(n)
                         RETURN count(r) AS cnt
                         """;
                 default    -> """
                         MATCH (n {geoid: $id})
-                        OPTIONAL MATCH (n)-[ro:READS_FROM|WRITES_TO]->(out)
-                        OPTIONAL MATCH (in)-[ri:READS_FROM|WRITES_TO]->(n)
-                        RETURN count(DISTINCT ro) + count(DISTINCT ri) AS cnt
+                        OPTIONAL MATCH (n)-[r:READS_FROM|WRITES_TO]-(other)
+                        RETURN count(DISTINCT r) AS cnt
                         """;
             };
 
