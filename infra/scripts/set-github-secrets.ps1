@@ -103,9 +103,11 @@ Write-Host "  KEYCLOAK_CLIENT_SECRET  (Keycloak client secret for Chur BFF)"
 Write-Host "  COOKIE_SECRET           (>=32 random chars)"
 Write-Host ""
 
-# Generate a random COOKIE_SECRET suggestion
+# Generate a random COOKIE_SECRET suggestion.
+# `RandomNumberGenerator::Fill` is .NET 5+; Windows PowerShell 5.1 ships
+# .NET Framework 4.x, so use the Create()+GetBytes() path that exists everywhere.
 $cookieBytes = New-Object byte[] 32
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($cookieBytes)
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($cookieBytes)
 $cookieSuggestion = [System.BitConverter]::ToString($cookieBytes).Replace("-","").ToLower()
 Write-Host "  Suggested COOKIE_SECRET: $cookieSuggestion"
 Write-Host ""
