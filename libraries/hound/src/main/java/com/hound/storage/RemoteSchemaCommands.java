@@ -72,8 +72,9 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE WRITES_TO IF NOT EXISTS",
                 "CREATE EDGE TYPE USES_SUBQUERY IF NOT EXISTS",
                 "CREATE EDGE TYPE NESTED_IN IF NOT EXISTS",
-                "CREATE EDGE TYPE ROUTINE_USES_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE CALLS IF NOT EXISTS",
+                // ROUTINE_USES_TABLE removed (Sprint 0.1 SCHEMA_CLEANUP, EDGE_TAXONOMY_ANALYSIS §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.6.
                 // Edge types — atom resolution
                 "CREATE EDGE TYPE ATOM_REF_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_REF_COLUMN IF NOT EXISTS",
@@ -84,8 +85,8 @@ final class RemoteSchemaCommands {
                 // Edge types — data flow / lineage
                 "CREATE EDGE TYPE DATA_FLOW IF NOT EXISTS",
                 "CREATE EDGE TYPE FILTER_FLOW IF NOT EXISTS",
-                "CREATE EDGE TYPE JOIN_FLOW IF NOT EXISTS",
-                "CREATE EDGE TYPE UNION_FLOW IF NOT EXISTS",
+                // JOIN_FLOW, UNION_FLOW removed (Sprint 0.1 SCHEMA_CLEANUP, §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.1, §15.2.
                 // Edge types — record (BULK COLLECT)
                 "CREATE EDGE TYPE BULK_COLLECTS_INTO IF NOT EXISTS",
                 "CREATE EDGE TYPE RECORD_USED_IN IF NOT EXISTS",
@@ -97,18 +98,19 @@ final class RemoteSchemaCommands {
                 "CREATE EDGE TYPE AFFECTED_COL_REF_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_SOURCE_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_TARGET_TABLE IF NOT EXISTS",
-                // KI-DDL-1: DDL modifier edges (ALTER TABLE ADD/MODIFY/DROP)
-                "CREATE EDGE TYPE DaliDDLModifiesTable IF NOT EXISTS",
-                "CREATE EDGE TYPE DaliDDLModifiesColumn IF NOT EXISTS",
-                // KI-PIPE-1: pipelined function edges
-                "CREATE EDGE TYPE PIPES_FROM IF NOT EXISTS",
-                "CREATE EDGE TYPE READS_PIPELINED IF NOT EXISTS",
+                // KI-DDL-1: DDL modifier edge — F-2 folding (Sprint 0.1, §13.8 F-2).
+                //   Was: DaliDDLModifiesTable (DDL→Table), DaliDDLModifiesColumn (DDL→Column).
+                //   Now: DDL_MODIFIES with target_kind property: 'table' | 'column'.
+                //   Также переименование PascalCase → UPPER_SNAKE (см. §5.5).
+                "CREATE EDGE TYPE DDL_MODIFIES IF NOT EXISTS",
+                // KI-PIPE-1 removed: PIPES_FROM, READS_PIPELINED (Sprint 0.1 SCHEMA_CLEANUP, §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.3, §15.4.
                 // HND-01: PL/SQL TYPE edges (EXTENDS E not supported by ArcadeDB; plain edge type is the base)
                 "CREATE EDGE TYPE DECLARES_TYPE IF NOT EXISTS",
                 "CREATE EDGE TYPE OF_TYPE IF NOT EXISTS",
                 "CREATE EDGE TYPE INSTANTIATES_TYPE IF NOT EXISTS",
-                // HND-13: REF CURSOR → return type (DaliTable or %ROWTYPE resolved table)
-                "CREATE EDGE TYPE CURSOR_RETURNS IF NOT EXISTS",
+                // HND-13 removed: CURSOR_RETURNS (Sprint 0.1 SCHEMA_CLEANUP, §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.5.
                 // HND-15: CAST(MULTISET(SELECT...) AS t_list) → DaliPlType
                 "CREATE EDGE TYPE MULTISET_INTO IF NOT EXISTS",
                 // KI-005: UNIQUE and CHECK constraint vertex + edge types
@@ -291,8 +293,9 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliForeignKey.ref_table_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliForeignKey.ref_column_names IF NOT EXISTS STRING",  // JSON array
                 "CREATE PROPERTY DaliForeignKey.on_delete IF NOT EXISTS STRING",         // CASCADE | SET NULL | null
-                // KI-DDL-1: operation property on DDL modifier edges (ADD | MODIFY | DROP)
-                "CREATE PROPERTY DaliDDLModifiesColumn.operation IF NOT EXISTS STRING",
+                // KI-DDL-1: properties on DDL_MODIFIES (folded — Sprint 0.1, §13.8 F-2)
+                "CREATE PROPERTY DDL_MODIFIES.target_kind IF NOT EXISTS STRING",  // 'table' | 'column'
+                "CREATE PROPERTY DDL_MODIFIES.operation IF NOT EXISTS STRING",     // ADD | MODIFY | DROP (column ops only)
                 // ── Constraint edge types ───────────────────────────────────────────────
                 // DaliTable ──HAS_PRIMARY_KEY──► DaliPrimaryKey
                 "CREATE EDGE TYPE HAS_PRIMARY_KEY IF NOT EXISTS",

@@ -1428,7 +1428,8 @@ class RemoteWriter {
             }
         }
 
-        // ── KI-DDL-1: DaliDDLModifiesTable / DaliDDLModifiesColumn ──
+        // ── KI-DDL-1: DDL_MODIFIES (F-2 folding, Sprint 0.1 — see EDGE_TAXONOMY_ANALYSIS §13.8 F-2) ──
+        // Was: DaliDDLModifiesTable, DaliDDLModifiesColumn — folded into DDL_MODIFIES with target_kind property.
         for (var e : str.getStatements().entrySet()) {
             StatementInfo ddlSi = e.getValue();
             if (!isDdl(ddlSi.getType())) continue;
@@ -1437,13 +1438,15 @@ class RemoteWriter {
             // DaliDDLStatement → DaliTable (target table of ALTER)
             for (String tGeoid : ddlSi.getTargetTables().keySet()) {
                 String tRid = rid.tables.get(tGeoid);
-                if (tRid != null) edgeByRid("DaliDDLModifiesTable", ddlRid, tRid, sid);
+                if (tRid != null) edgeByRid("DDL_MODIFIES", ddlRid, tRid, sid,
+                                             "target_kind", "table");
             }
             // DaliDDLStatement → DaliColumn (each ADD/MODIFY/DROP column)
             for (StatementInfo.AffectedColumnGeoid pair : ddlSi.getAffectedColumnGeoids()) {
                 String cRid = rid.columns.get(pair.geoid());
                 if (cRid != null)
-                    edgeByRid("DaliDDLModifiesColumn", ddlRid, cRid, sid,
+                    edgeByRid("DDL_MODIFIES", ddlRid, cRid, sid,
+                              "target_kind", "column",
                               "operation", pair.operation());
             }
         }

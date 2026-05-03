@@ -48,10 +48,9 @@ export type DaliEdgeType =
   | 'HAS_VARIABLE'
   | 'DATA_FLOW'
   | 'FILTER_FLOW'
-  | 'JOIN_FLOW'
-  | 'UNION_FLOW'
+  // JOIN_FLOW, UNION_FLOW, ROUTINE_USES_TABLE removed (Sprint 0.1 SCHEMA_CLEANUP §13.5).
+  // Если переоткроют — см. EDGE_TAXONOMY_ANALYSIS §15.1, §15.2, §15.6.
   | 'ATOM_PRODUCES'
-  | 'ROUTINE_USES_TABLE'
   // Phase S2.4 — PL/SQL record edges
   | 'HAS_RECORD_FIELD'     // DaliRecord → DaliRecordField (structural containment, suppressed as arrow)
   | 'BULK_COLLECTS_INTO'   // DaliStatement → DaliRecord (BULK COLLECT INTO result)

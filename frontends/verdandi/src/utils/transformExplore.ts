@@ -38,7 +38,7 @@ const SUPPRESSED_EDGES = new Set<string>([
   'CHILD_OF', 'USES_SUBQUERY', 'NESTED_IN',
   // NOTE: 'CALLS' is intentionally NOT suppressed — routine→routine call edges
   // are rendered at L2 AGG to show inter-procedure call flow.
-  'ROUTINE_USES_TABLE',
+  // ROUTINE_USES_TABLE removed Sprint 0.1 SCHEMA_CLEANUP (§13.5).
   'ATOM_REF_TABLE',
   'ATOM_REF_COLUMN',
   'ATOM_REF_STMT',

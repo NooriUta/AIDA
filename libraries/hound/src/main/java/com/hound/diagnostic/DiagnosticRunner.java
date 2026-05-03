@@ -167,13 +167,14 @@ public class DiagnosticRunner {
         }
 
         // Edge counts
+        // Sprint 0.1 SCHEMA_CLEANUP (§13.5): removed JOIN_FLOW, UNION_FLOW, ROUTINE_USES_TABLE.
         String[] edgTypes = {"BELONGS_TO_SESSION","CONTAINS_SCHEMA","CONTAINS_TABLE",
                 "CONTAINS_ROUTINE","BELONGS_TO_APP",
                 "HAS_COLUMN","HAS_PARAMETER","HAS_VARIABLE","CHILD_OF","CONTAINS_STMT",
                 "HAS_OUTPUT_COL","HAS_ATOM","HAS_JOIN","READS_FROM","WRITES_TO",
-                "USES_SUBQUERY","ROUTINE_USES_TABLE","CALLS","ATOM_REF_TABLE",
+                "USES_SUBQUERY","CALLS","ATOM_REF_TABLE",
                 "ATOM_REF_COLUMN","ATOM_PRODUCES","DATA_FLOW","FILTER_FLOW",
-                "JOIN_FLOW","UNION_FLOW","NESTED_IN"};
+                "NESTED_IN"};
         println("");
         println("  ▸ Edge counts по типам");
         totalQueries++;

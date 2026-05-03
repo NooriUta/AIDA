@@ -30,7 +30,7 @@ public class TemplatesResource {
             WHERE start.geoid = $nodeId AND start.db_name = $dbName
             CALL {
               WITH start
-              MATCH path = (start)-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW|JOIN_FLOW*1..5]->(affected)
+              MATCH path = (start)-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW*1..5]->(affected)
               WHERE affected.db_name = $dbName
               RETURN affected, length(path) AS depth
             }

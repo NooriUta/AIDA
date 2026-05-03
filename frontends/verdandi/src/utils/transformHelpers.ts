@@ -38,9 +38,9 @@ export const SCOPE_FILTER_TYPES = new Set<DaliNodeType>([
 ]);
 
 // ─── SEER Design System v1.1 — Amber Forest edge colours ────────────────────
+// Sprint 0.1 SCHEMA_CLEANUP: JOIN_FLOW, UNION_FLOW removed (§13.5).
 export const ANIMATED_EDGES = new Set<DaliEdgeType>([
   'DATA_FLOW', 'ATOM_PRODUCES', 'FILTER_FLOW',
-  'JOIN_FLOW', 'UNION_FLOW',
 ]);
 
 export function getEdgeStyle(type: DaliEdgeType): CSSProperties {
@@ -62,8 +62,7 @@ export function getEdgeStyle(type: DaliEdgeType): CSSProperties {
     case 'WRITES_TO':       return { stroke: '#D4922A', strokeWidth: 1.5 };
     case 'DATA_FLOW':       return { stroke: '#A8B860', strokeWidth: 1.5, strokeDasharray: '5 3' };
     case 'FILTER_FLOW':     return { stroke: '#B87AA8', strokeWidth: 1.5, strokeDasharray: '1 4' };
-    case 'JOIN_FLOW':       return { stroke: '#88B8A8', strokeWidth: 1.5 };
-    case 'UNION_FLOW':      return { stroke: '#A8B860', strokeWidth: 1.5 };
+    // JOIN_FLOW, UNION_FLOW removed Sprint 0.1 SCHEMA_CLEANUP (§13.5).
     case 'ATOM_PRODUCES':   return { stroke: '#A8B860', strokeWidth: 1.5 };
     case 'ATOM_REF_COLUMN': return { stroke: '#88B8A8', strokeWidth: 1 };
     case 'HAS_ATOM':        return { stroke: '#88B8A8', strokeWidth: 1 };

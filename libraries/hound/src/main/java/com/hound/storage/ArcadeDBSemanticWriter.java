@@ -171,17 +171,21 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
     // ═══════════════════════════════════════════════════════════════
 
     public void cleanAll() {
+        // Sprint 0.1 SCHEMA_CLEANUP (§13.5): removed JOIN_FLOW, UNION_FLOW, ROUTINE_USES_TABLE.
+        // Sprint 0.1 F-2 folding: DaliDDLModifies* → DDL_MODIFIES.
+        // FIELD_MAPS_TO retained (planned reintroduction Q3 2026 — ArcadeDB 27.x + ANTLR ≥ 4.13).
         String[] edgeTypes = {
                 "ATOM_REF_TABLE","ATOM_REF_COLUMN","ATOM_REF_STMT","ATOM_REF_OUTPUT_COL","ATOM_PRODUCES",
-                "DATA_FLOW","FILTER_FLOW","JOIN_FLOW","UNION_FLOW",
+                "DATA_FLOW","FILTER_FLOW",
                 "JOIN_SOURCE_TABLE","JOIN_TARGET_TABLE",
                 "HAS_AFFECTED_COL","AFFECTED_COL_REF_TABLE",
                 "HAS_ATOM","HAS_OUTPUT_COL","HAS_JOIN","READS_FROM","WRITES_TO",
                 "USES_SUBQUERY","NESTED_IN","CONTAINS_STMT",
                 "HAS_PARAMETER","HAS_VARIABLE","CHILD_OF","CONTAINS_ROUTINE",
-                "ROUTINE_USES_TABLE","CALLS",
+                "CALLS",
                 "BULK_COLLECTS_INTO","RECORD_USED_IN","HAS_RECORD_FIELD","FIELD_MAPS_TO",
                 "DECLARES_TYPE","OF_TYPE","INSTANTIATES_TYPE",
+                "DDL_MODIFIES",
                 "HAS_COLUMN","CONTAINS_TABLE","CONTAINS_SCHEMA","BELONGS_TO_APP","BELONGS_TO_SESSION"
         };
         String[] vtxTypes = {

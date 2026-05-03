@@ -1103,7 +1103,7 @@ public abstract class BaseSemanticListener {
     /**
      * KI-DDL-1: Records a column affected by ALTER TABLE ADD / MODIFY / DROP.
      * Computes the column geoid from the current ddl_table_geoid and registers it
-     * on the current statement so RemoteWriter can emit DaliDDLModifiesColumn edges.
+     * on the current statement so RemoteWriter can emit DDL_MODIFIES edges (target_kind='column'; F-2 Sprint 0.1).
      *
      * @param colName   bare column name (will be uppercased)
      * @param operation "ADD" | "MODIFY" | "DROP"

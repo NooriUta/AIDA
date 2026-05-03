@@ -98,9 +98,11 @@ public class ImpactService {
 
     private String buildTraversalCypher(String nodeId, String direction, int maxHops,
                                         String db, List<String> includeTypes) {
+        // Sprint 0.1 SCHEMA_CLEANUP: JOIN_FLOW удалён из DDL (§13.5). Если в будущем
+        // переоткроют (см. EDGE_TAXONOMY_ANALYSIS §15.1) — добавить в этот pattern.
         String relPattern = "upstream".equals(direction)
-                ? "<-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW|JOIN_FLOW*1.." + maxHops + "]-"
-                : "-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW|JOIN_FLOW*1.." + maxHops + "]->";
+                ? "<-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW*1.." + maxHops + "]-"
+                : "-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW*1.." + maxHops + "]->";
         String typeList = toArcadeList(includeTypes);
 
         return """
