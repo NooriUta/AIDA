@@ -13,19 +13,21 @@ import java.util.Map;
 /**
  * REST client to ArcadeDB :2480 — used by ShuttleTools (search) and YggTools (procedure source / count).
  *
- * <p>Authentication: HTTP Basic auth via {@link ArcadeDbAuthFilter}.
+ * <p>Authentication: HTTP Basic auth via {@link ArcadeDbReadOnlyAuthFilter}
+ * — uses the {@code mimir_ro} ArcadeDB user (reader role) so even malformed
+ * tool queries cannot mutate the metadata graph. Defence at the DB layer
+ * complements the read-only intent of every method below.
  *
  * <p>Endpoints used:
  * <ul>
  *     <li>{@code POST /api/v1/query/{db}}  — Cypher / SQL queries (read-only)</li>
- *     <li>{@code POST /api/v1/command/{db}} — write commands (NOT used by MIMIR — MIMIR is read-only)</li>
  * </ul>
  *
  * <p>Tenant isolation: dbName is per-tenant ({@code hound_{alias}}), resolved by {@link com.mimir.tenant.DbNameResolver}.
  */
 @Path("/api/v1")
 @RegisterRestClient(configKey = "arcadedb-client")
-@RegisterProvider(ArcadeDbAuthFilter.class)
+@RegisterProvider(ArcadeDbReadOnlyAuthFilter.class)
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public interface ArcadeDbClient {

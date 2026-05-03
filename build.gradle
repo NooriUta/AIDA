@@ -54,6 +54,71 @@ ext {
     verdandiDir      = file('frontends/verdandi')
     heimdallFrontDir = file('frontends/heimdall-frontend')
     gradleCmd        = new File(rootDir, isWindows ? 'gradlew.bat' : 'gradlew').canonicalPath
+
+    // .env loader — Quarkus dev (gradlew) не читает .env автоматически.
+    // Эта функция парсит aida-root/.env и проставляет System properties + env vars,
+    // которые Quarkus подхватывает через MicroProfile Config (env vars > system props > application.properties).
+    // Использование: вызвать loadDotEnv() в quarkusDev-обёртках, IDE Run Configurations или devAll.
+    loadDotEnv = { File envFile = new File(rootDir, '.env') ->
+        if (!envFile.exists()) {
+            logger.lifecycle("[loadDotEnv] ${envFile.absolutePath} not found — skipping")
+            return [:]
+        }
+        Map<String, String> loaded = [:]
+        envFile.eachLine { line ->
+            def trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith('#')) return
+            def idx = trimmed.indexOf('=')
+            if (idx < 1) return
+            def key = trimmed.substring(0, idx).trim()
+            def val = trimmed.substring(idx + 1).trim()
+            // strip surrounding quotes
+            if ((val.startsWith('"') && val.endsWith('"')) ||
+                (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.substring(1, val.length() - 1)
+            }
+            // do NOT override what was already exported in the shell — it wins
+            if (System.getenv(key) == null && System.getProperty(key) == null) {
+                System.setProperty(key, val)
+                loaded[key] = val
+            }
+        }
+        if (!loaded.isEmpty()) {
+            logger.lifecycle("[loadDotEnv] loaded ${loaded.size()} keys from ${envFile.name}: ${loaded.keySet().sort().join(', ')}")
+        }
+        return loaded
+    }
+}
+
+// ─── .env auto-load — works for ANY gradle invocation in this repo ────────────
+//
+// Gradle calls this at configuration phase, before any task runs. System
+// properties survive into the same JVM (quarkusDev), and we also forward them
+// into forked QuarkusDev processes via the per-service build.gradle hook
+// `tasks.withType(io.quarkus.gradle.tasks.QuarkusDev)` (configured below in
+// services/<svc>/build.gradle when present).
+//
+// Order of precedence (MicroProfile Config):
+//   1. shell-exported env var          (highest — explicit override)
+//   2. -D system property               (Gradle command line)
+//   3. value from .env via loadDotEnv() (NEW — covered by this hook)
+//   4. application.properties default   (lowest)
+//
+// To skip: pass `-Paida.skipDotEnv=true` (e.g. CI has its own secrets).
+if (!project.hasProperty('aida.skipDotEnv')) {
+    def envMap = ext.loadDotEnv()
+    // Forward to Quarkus dev forked JVM via QuarkusDev's MapProperty<String,String>
+    // `environmentVariables` (Quarkus 3.17 API). The forked process sees them as
+    // real env vars, which MicroProfile Config reads first (highest precedence).
+    if (!envMap.isEmpty()) {
+        allprojects {
+            tasks.matching { it.name == 'quarkusDev' }.configureEach { task ->
+                if (task.hasProperty('environmentVariables')) {
+                    envMap.each { k, v -> task.environmentVariables.put(k, v) }
+                }
+            }
+        }
+    }
 }
 
 // ─── verdandi tasks ───────────────────────────────────────────────────────────
