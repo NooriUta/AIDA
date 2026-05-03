@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 
-const MIMIR_URL = process.env.MIMIR_URL ?? 'http://127.0.0.1:9094';
+const MIMIR_URL      = process.env.MIMIR_URL ?? 'http://127.0.0.1:9094';
+const DEFAULT_TENANT = process.env.MIMIR_DEFAULT_TENANT_ALIAS ?? 'default';
 
 /**
  * Proxy routes: Chur → MIMIR AI assistant (port 9094).
@@ -28,7 +29,7 @@ export const mimirRoutes: FastifyPluginAsync = async (app) => {
           method:  'POST',
           headers: {
             'Content-Type':        'application/json',
-            'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
+            'X-Seer-Tenant-Alias': activeTenantAlias ?? DEFAULT_TENANT,
             'X-Seer-Role':         role,
           },
           body: JSON.stringify(request.body),
@@ -49,7 +50,7 @@ export const mimirRoutes: FastifyPluginAsync = async (app) => {
       const { activeTenantAlias } = request.user;
       try {
         const upstream = await fetch(`${MIMIR_URL}/api/sessions`, {
-          headers: { 'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default' },
+          headers: { 'X-Seer-Tenant-Alias': activeTenantAlias ?? DEFAULT_TENANT },
         });
         return reply.status(upstream.status).send(await upstream.json());
       } catch {
@@ -68,7 +69,7 @@ export const mimirRoutes: FastifyPluginAsync = async (app) => {
       try {
         const upstream = await fetch(
           `${MIMIR_URL}/api/sessions/${encodeURIComponent(id)}`,
-          { headers: { 'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default' } },
+          { headers: { 'X-Seer-Tenant-Alias': activeTenantAlias ?? DEFAULT_TENANT } },
         );
         return reply.status(upstream.status).send(await upstream.json());
       } catch {
@@ -89,7 +90,7 @@ export const mimirRoutes: FastifyPluginAsync = async (app) => {
           `${MIMIR_URL}/api/sessions/${encodeURIComponent(id)}`,
           {
             method:  'DELETE',
-            headers: { 'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default' },
+            headers: { 'X-Seer-Tenant-Alias': activeTenantAlias ?? DEFAULT_TENANT },
           },
         );
         return reply.status(upstream.status).send();
@@ -113,7 +114,7 @@ export const mimirRoutes: FastifyPluginAsync = async (app) => {
             method:  'POST',
             headers: {
               'Content-Type':        'application/json',
-              'X-Seer-Tenant-Alias': activeTenantAlias ?? 'default',
+              'X-Seer-Tenant-Alias': activeTenantAlias ?? DEFAULT_TENANT,
               'X-Seer-Role':         role ?? 'user',
               'X-Seer-User-Id':      sub ?? 'unknown',
             },

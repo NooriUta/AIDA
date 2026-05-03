@@ -151,16 +151,20 @@ public class MimirOrchestrator {
                 eventEmitter.timeout(sessionId, durationMs, 30_000L);
             }
 
-            // TIER2 MT-02: Tier-1 failed → try Tier-3 demo cache (DeepSeek-only fallback path,
-            // ADR-MIMIR-002 in effect until 2026-06-02 Ollama re-eval)
-            Optional<MimirAnswer> cached = demoCache.tryCache(questionPreview);
-            if (cached.isPresent()) {
-                eventEmitter.fallbackActivated(sessionId, reason, "demo-cache");
-                eventEmitter.cacheHit(sessionId);
-                MimirAnswer answer = cached.get();
-                sessionRepo.save(MimirSession.completed(sessionId, tenantAlias,
-                        answer.toolCallsUsed(), answer.highlightNodeIds()));
-                return answer;
+            // TIER2 MT-02: cache fallback is opt-in via mimir.demo-mode=true.
+            // When demo-mode is OFF (default in dev/prod), a live-model failure must NOT
+            // be silently substituted with a hardcoded fixture — that lies to the user
+            // about real-data answers. Cache exists only as the demo-stand safety net.
+            if (demoCache.isDemoMode()) {
+                Optional<MimirAnswer> cached = demoCache.tryCache(questionPreview);
+                if (cached.isPresent()) {
+                    eventEmitter.fallbackActivated(sessionId, reason, "demo-cache");
+                    eventEmitter.cacheHit(sessionId);
+                    MimirAnswer answer = cached.get();
+                    sessionRepo.save(MimirSession.completed(sessionId, tenantAlias,
+                            answer.toolCallsUsed(), answer.highlightNodeIds()));
+                    return answer;
+                }
             }
 
             eventEmitter.fallbackActivated(sessionId, reason, "unavailable");

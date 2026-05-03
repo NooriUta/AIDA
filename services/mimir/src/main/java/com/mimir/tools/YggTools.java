@@ -129,6 +129,106 @@ public class YggTools {
         }
     }
 
+    @Tool("Count tables that belong to a given DB schema. Use this to answer " +
+          "'how many tables in schema X', 'сколько таблиц в схеме X'. Traverses " +
+          "DaliSchema --CONTAINS_TABLE--> DaliTable, scoped to the user's tenant DB. " +
+          "Also returns example table names for context.")
+    public Map<String, Object> count_tables_in_schema(
+            @P("Schema name as it appears in the source DB, e.g. 'DWH', 'HR', 'CRM'") String schemaName
+    ) {
+        long start = System.currentTimeMillis();
+        String alias = tenantContext.alias();
+        String dbName = dbNameResolver.forTenant(alias);
+        String sessionId = tenantContext.sessionId();
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("schemaName", schemaName == null ? "" : schemaName);
+        eventEmitter.toolCallStarted(sessionId, "count_tables_in_schema", args);
+
+        if (schemaName == null || schemaName.isBlank()) {
+            eventEmitter.toolCallCompleted(sessionId, "count_tables_in_schema",
+                    System.currentTimeMillis() - start, 0);
+            return Map.of(
+                    "schemaName",  "",
+                    "tableCount",  0,
+                    "tables",      List.of(),
+                    "error",       "schema_name_required");
+        }
+
+        try {
+            // Count via edge traversal (no schema_geoid scan — uses CONTAINS_TABLE index implicitly)
+            String countSql = """
+                    SELECT count(*) AS n
+                    FROM (SELECT expand(out("CONTAINS_TABLE")) FROM DaliSchema WHERE schema_name = :s)
+                    """;
+            ArcadeDbClient.QueryResult c = arcade.query(dbName,
+                    new ArcadeDbClient.ArcadeQuery("sql", countSql, Map.of("s", schemaName)));
+            long n = 0L;
+            if (!c.result().isEmpty()) {
+                Object v = c.result().get(0).get("n");
+                if (v instanceof Number num) n = num.longValue();
+            }
+
+            // Sample up to 10 names so the LLM can mention real examples without flooding context
+            String sampleSql = """
+                    SELECT table_name
+                    FROM (SELECT expand(out("CONTAINS_TABLE")) FROM DaliSchema WHERE schema_name = :s)
+                    ORDER BY table_name
+                    LIMIT 10
+                    """;
+            ArcadeDbClient.QueryResult s = arcade.query(dbName,
+                    new ArcadeDbClient.ArcadeQuery("sql", sampleSql, Map.of("s", schemaName)));
+
+            eventEmitter.toolCallCompleted(sessionId, "count_tables_in_schema",
+                    System.currentTimeMillis() - start, (int) n);
+
+            return Map.of(
+                    "schemaName", schemaName,
+                    "tableCount", n,
+                    "sample",     s.result());
+        } catch (Exception e) {
+            LOG.warnf(e, "count_tables_in_schema failed for tenant=%s schema=%s", alias, schemaName);
+            eventEmitter.toolCallCompleted(sessionId, "count_tables_in_schema",
+                    System.currentTimeMillis() - start, 0);
+            return Map.of(
+                    "schemaName", schemaName,
+                    "tableCount", 0,
+                    "sample",     List.of(),
+                    "error",      "query_failed");
+        }
+    }
+
+    @Tool("List schema names available in the user's tenant DB. Returns the names that " +
+          "count_tables_in_schema and other tools accept. Use to answer 'what schemas are there?', " +
+          "'какие у нас схемы?', or to disambiguate before drilling into a specific one.")
+    public Map<String, Object> list_schemas() {
+        long start = System.currentTimeMillis();
+        String alias = tenantContext.alias();
+        String dbName = dbNameResolver.forTenant(alias);
+        String sessionId = tenantContext.sessionId();
+
+        eventEmitter.toolCallStarted(sessionId, "list_schemas", Map.of());
+
+        try {
+            ArcadeDbClient.QueryResult r = arcade.query(dbName,
+                    new ArcadeDbClient.ArcadeQuery("sql",
+                            "SELECT schema_name FROM DaliSchema ORDER BY schema_name", Map.of()));
+            eventEmitter.toolCallCompleted(sessionId, "list_schemas",
+                    System.currentTimeMillis() - start, r.result().size());
+            return Map.of(
+                    "schemaCount", r.result().size(),
+                    "schemas",     r.result().stream()
+                            .map(row -> row.get("schema_name"))
+                            .filter(java.util.Objects::nonNull)
+                            .toList());
+        } catch (Exception e) {
+            LOG.warnf(e, "list_schemas failed for tenant=%s", alias);
+            eventEmitter.toolCallCompleted(sessionId, "list_schemas",
+                    System.currentTimeMillis() - start, 0);
+            return Map.of("schemaCount", 0, "schemas", List.of(), "error", "query_failed");
+        }
+    }
+
     @Tool("Count incoming/outgoing dependencies for a node — answers " +
           "'how critical is this object?'. Returns counts for in / out / both directions.")
     public Map<String, Object> count_dependencies(

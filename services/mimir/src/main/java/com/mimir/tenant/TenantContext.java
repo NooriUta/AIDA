@@ -1,6 +1,8 @@
 package com.mimir.tenant;
 
 import jakarta.enterprise.context.RequestScoped;
+import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Per-request tenant context — populated by {@link TenantContextFilter} from
@@ -20,8 +22,12 @@ public class TenantContext {
     private String alias;
     private String sessionId;
 
+    @Inject
+    @ConfigProperty(name = "mimir.default-tenant-alias", defaultValue = "default")
+    String defaultAlias;
+
     public String alias() {
-        return alias != null ? alias : "default";
+        return (alias != null && !alias.isBlank()) ? alias : defaultAlias;
     }
 
     public String sessionId() {

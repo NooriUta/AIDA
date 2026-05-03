@@ -99,14 +99,21 @@ public class DemoCacheService {
         return Optional.empty();
     }
 
+    /**
+     * Strict AND-matching: ALL non-blank keywords must occur in the question
+     * (case-insensitive substring). OR-matching turned out to be too eager —
+     * a single common word like "сколько таблиц" matched a generic schema-summary
+     * fixture for any question with that phrase, even when the question was about
+     * a specific schema the fixture knew nothing about. AND-matching keeps a hit
+     * rare and only when the question is genuinely about the fixture's topic.
+     */
     private static boolean matches(String haystackLower, DemoCacheEntry entry) {
-        if (entry.matchKeywords() == null) return false;
+        if (entry.matchKeywords() == null || entry.matchKeywords().isEmpty()) return false;
         for (String kw : entry.matchKeywords()) {
-            if (kw != null && !kw.isBlank() && haystackLower.contains(kw.toLowerCase())) {
-                return true;
-            }
+            if (kw == null || kw.isBlank()) continue;
+            if (!haystackLower.contains(kw.toLowerCase())) return false;
         }
-        return false;
+        return true;
     }
 
     int entryCount() {
