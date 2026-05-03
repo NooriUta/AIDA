@@ -25,7 +25,7 @@ const { EDGE_CURVATURE } = TRANSFORM;
 
 // Edge types visible as arrows on the L4 canvas
 const L4_FLOW_EDGES = new Set<string>([
-  'READS_FROM',   // statement → table (flipped for display)
+  'READS_FROM',   // table → statement (canonical after Sprint 1.2 inversion)
   'DATA_FLOW',    // outputCol → outputCol (animated)
   'FILTER_FLOW',  // column-level filter predicate
 ]);

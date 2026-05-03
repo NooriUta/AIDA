@@ -149,8 +149,9 @@ describe('transformGqlExplore — flat path', () => {
       [gEdge('e1', 't1', 't2', 'READS_FROM')],
     );
     const { edges } = transformGqlExplore(result, new Set(['t2']));
-    // READS_FROM is flipped: source=t2 (reader), target=t1 (table)
-    expect(edges.some((e) => e.source === 't2' || e.target === 't1')).toBe(true);
+    // Sprint 1.2 inversion: READS_FROM direction is canonical (Table→Stmt) — no flip.
+    // Fixture: source=t1 (Table), target=t2 (Stmt-like external) — passes through unchanged.
+    expect(edges.some((e) => e.source === 't1' && e.target === 't2')).toBe(true);
   });
 });
 
