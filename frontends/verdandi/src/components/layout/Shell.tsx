@@ -7,6 +7,7 @@ import { FilterToolbarL1 } from './FilterToolbarL1';
 import { StatusBar } from './StatusBar';
 import { ResizablePanel } from './ResizablePanel';
 import { MobileInspectorDrawer } from './MobileInspectorDrawer';
+import { MimirChevronTab } from '../panels/MimirChevronTab';
 import { LoomCanvas } from '../canvas/LoomCanvas';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { EventStreamPanel } from '../loom/EventStreamPanel';
@@ -74,7 +75,7 @@ export const Shell = memo(() => {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: '42px 1fr 28px',
+      gridTemplateRows: 'auto 1fr 28px',
       height: '100%',
       overflow: 'hidden',
       background: 'var(--seer-bg)',
@@ -152,10 +153,16 @@ export const Shell = memo(() => {
               minWidth={240}
               maxWidth={inspectorMaxWidth}
               title={t('panel.inspector')}
+              toggleLabel="K"
             >
               <InspectorPanel />
             </ResizablePanel>
           )}
+
+          {/* Stacked above the Inspector pull-tab — same chevron style, opens
+              the MIMIR Copilot sidebar. Desktop only; mobile uses the header
+              button. */}
+          {!isMobile && <MimirChevronTab />}
 
         </div>
 

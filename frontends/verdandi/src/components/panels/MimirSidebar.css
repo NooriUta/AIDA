@@ -3,10 +3,10 @@
 
 .mimir-sidebar {
   position: fixed;
-  top: 56px;
+  top: 42px;
   right: 0;
-  width: 360px;
-  height: calc(100vh - 56px);
+  width: min(440px, 100vw);
+  height: calc(100vh - 42px);
   background: var(--bg1);
   color: var(--t1);
   border-left: 1px solid var(--bd);
@@ -16,6 +16,12 @@
   font-family: inherit;
   font-size: 13px;
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-width: 768px) {
+  .mimir-sidebar {
+    width: 100vw;
+  }
 }
 
 .mimir-header {
@@ -198,6 +204,82 @@
 }
 .mimir-action-btn.mimir-action-skuld:hover:not(:disabled) {
   background: color-mix(in srgb, var(--inf) 24%, var(--bg3));
+}
+
+/* ── Markdown rendering inside MIMIR bubbles (TIER2 follow-up) ──────────── */
+.mimir-md-h {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t1);
+  margin: 8px 0 4px;
+  letter-spacing: 0.02em;
+}
+.mimir-md-p {
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+.mimir-md-p:last-child { margin-bottom: 0; }
+.mimir-md-ul, .mimir-md-ol {
+  margin: 4px 0 6px;
+  padding-left: 22px;
+  line-height: 1.5;
+}
+.mimir-md-ul li, .mimir-md-ol li { margin-bottom: 2px; }
+.mimir-md-code {
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: ui-monospace, "DM Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--acc);
+}
+.mimir-md-pre {
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-sm, 4px);
+  padding: 8px 10px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-family: ui-monospace, "DM Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--t1);
+}
+.mimir-md-pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.mimir-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 11px;
+  background: var(--bg2);
+  display: block;
+  overflow-x: auto;
+  white-space: normal;
+}
+.mimir-md-table th, .mimir-md-table td {
+  border: 1px solid var(--bd);
+  padding: 4px 6px;
+  vertical-align: top;
+  word-break: break-word;
+  min-width: 0;
+}
+.mimir-md-table th {
+  background: var(--bg3);
+  color: var(--t1);
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mimir-md-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg2) 70%, var(--bg3));
 }
 
 /* Tool chip type tints — execution strip preview (MT-04 follow-up) */

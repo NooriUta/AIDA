@@ -15,7 +15,6 @@ import { useIsMobile }     from '../../hooks/useIsMobile';
 import { type NornId, NORNS, PALETTES } from './headerNavData';
 import { TenantPickerButton } from './TenantPickerButton';
 import { HeaderNavSection } from './HeaderNavSection';
-import MimirToolbarButton from '../panels/MimirToolbarButton';
 
 export const Header = memo(() => {
   const { theme, toggleTheme, palette, setPalette } = useLoomStore();
@@ -72,18 +71,28 @@ export const Header = memo(() => {
 
   const initials = user ? user.username.slice(0, 2).toUpperCase() : '??';
 
+  // Row-1 wrapper: on mobile it's an extra flex strip so row-2 (tenant) can sit below;
+  // on desktop it's a Fragment so the original single-row layout is preserved 1:1.
+  const Row1Wrap = isMobile
+    ? ({ children }: { children: React.ReactNode }) => (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '0 12px', height: '42px', flexShrink: 0,
+        }}>{children}</div>
+      )
+    : ({ children }: { children: React.ReactNode }) => <>{children}</>;
+
   return (
     <header style={{
-      height: '42px',
+      ...(isMobile
+        ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch', padding: 0, gap: 0 }
+        : { height: '42px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '8px' }),
       background: 'var(--bg0)',
       borderBottom: '1px solid var(--bd)',
-      display: 'flex',
-      alignItems: 'center',
-      padding: '0 12px',
-      gap: '8px',
       flexShrink: 0,
       zIndex: 100,
     }}>
+      <Row1Wrap>
 
       {/* ── SEER logo + Norn switcher dropdown ──────────────────────────── */}
       <div ref={seerMenuRef} style={{ position: 'relative', flexShrink: 0 }} onBlur={handleSeerMenuBlur}>
@@ -194,8 +203,8 @@ export const Header = memo(() => {
 
       <ToolbarDivider />
 
-      {/* ── Tenant picker (super-admin: dropdown; others: static badge) ──── */}
-      {user?.activeTenantAlias && (
+      {/* ── Tenant picker — desktop only in row 1; mobile gets its own row 2 below */}
+      {!isMobile && user?.activeTenantAlias && (
         <>
           <TenantPickerButton user={user} />
           <ToolbarDivider />
@@ -252,8 +261,9 @@ export const Header = memo(() => {
 
       {!isMobile && <LanguageSwitcher />}
 
-      {/* TIER2 MT-04 — MIMIR Copilot toggle. Sits right of the language switcher. */}
-      {!isMobile && <MimirToolbarButton />}
+      {/* MIMIR opens via the K/M chevron tabs (desktop) and a bottom-fab
+          button (mobile) — the header trigger has been retired so it doesn't
+          duplicate either entry point. */}
 
       {/* Palette switcher */}
       {!isMobile && <div ref={paletteMenuRef} style={{ position: 'relative' }} onBlur={handlePaletteMenuBlur}>
@@ -386,6 +396,23 @@ export const Header = memo(() => {
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
       <CommandPalette open={cmdPaletteOpen} onClose={() => setCmdPaletteOpen(false)} />
       <SearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} />
+
+      </Row1Wrap>
+
+      {/* ── Row 2 — mobile-only tenant picker strip ────────────────────── */}
+      {isMobile && user?.activeTenantAlias && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 12px',
+          borderTop: '0.5px solid var(--bd)',
+          background: 'var(--bg0)',
+          minHeight: 36,
+        }}>
+          <TenantPickerButton user={user} />
+        </div>
+      )}
     </header>
   );
 });
