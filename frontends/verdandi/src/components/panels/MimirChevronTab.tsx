@@ -24,12 +24,13 @@ export const MimirChevronTab = memo(() => {
       aria-pressed={open}
       aria-label={t('mimir.ask')}
       style={{
-        position: 'absolute',
-        // Stack above the Inspector pull-tab. Inspector sits at top: 50%; we
-        // sit ~100px higher so both tabs are clearly separate touch targets.
-        top: 'calc(50% - 70px)',
-        right: open ? '-14px' : '-18px',
-        transform: 'translateY(-50%)',
+        // Anchor to the viewport so the parent's `overflow: hidden` doesn't
+        // clip us — Inspector's pull-tab uses absolute-in-flex which works
+        // because its container is at the screen edge; we're a sibling and
+        // would be clipped without `fixed`. Stack ~70 px above Inspector.
+        position: 'fixed',
+        top: 'calc(50vh - 70px)',
+        right: 0,
         width: '18px',
         height: '60px',
         background: open
@@ -39,6 +40,7 @@ export const MimirChevronTab = memo(() => {
         borderColor: open
           ? 'color-mix(in srgb, var(--acc) 50%, var(--seer-border))'
           : 'var(--seer-border)',
+        borderRight: 'none',
         borderRadius: '4px 0 0 4px',
         cursor: 'pointer',
         display: 'flex',

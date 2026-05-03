@@ -18,9 +18,17 @@
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.25);
 }
 
+/* Mobile: header stacks into two rows (42 px main + 36 px tenant strip),
+   so the sidebar must drop below ~78 px and span the full width. We also
+   bump z-index so it sits over the bottom-right "M" FAB and clears it. */
 @media (max-width: 768px) {
   .mimir-sidebar {
+    top: 78px;
     width: 100vw;
+    height: calc(100vh - 78px);
+    border-left: none;
+    box-shadow: none;
+    z-index: 96;
   }
 }
 
