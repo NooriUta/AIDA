@@ -17,6 +17,7 @@ import { ToastContainer } from './components/Toast';
 import { UnderConstructionPage } from './components/stubs/UnderConstructionPage';
 import MimirSidebar from './components/panels/MimirSidebar';
 import { MimirMobileFab } from './components/panels/MimirMobileFab';
+import { KnotMobileFab } from './components/panels/KnotMobileFab';
 import { useAuthStore }   from './stores/authStore';
 import { usePrefsSync }  from './hooks/usePrefsSync';
 import { applyDom }      from './stores/prefsStore';
@@ -92,6 +93,7 @@ export default function App() {
       <AppRoutes />
       <MimirSidebar />
       <MimirMobileFab />
+      <KnotMobileFab />
       <ToastContainer />
     </QueryClientProvider>
   );

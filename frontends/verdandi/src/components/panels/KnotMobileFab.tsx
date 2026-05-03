@@ -1,22 +1,25 @@
 import { memo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useMimirChatStore } from '../../stores/mimirChatStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useAuthStore } from '../../stores/authStore';
+import { useLoomStore } from '../../stores/loomStore';
 
 /**
- * Floating "M" action button for MIMIR on mobile, anchored to the bottom-right
- * corner — matches the bottom-anchored KNOT mobile entry point. Hidden on
- * desktop (the right-edge MimirChevronTab covers that case) and on /login.
+ * Floating "K" action button for the KNOT Inspector (mobile). Toggles the
+ * MobileInspectorDrawer that holds <InspectorPanel />. Stacks above the MIMIR
+ * "M" FAB. Hidden on desktop and on /login.
+ *
+ * Note: this is the KNOT *Inspector* — the per-node context panel — not the
+ * /knot route navigation. KNOT-page nav lives in the header sub-module nav.
  */
-export const MimirMobileFab = memo(() => {
+export const KnotMobileFab = memo(() => {
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const isMobile = useIsMobile();
   const user = useAuthStore((s) => s.user);
-  const open    = useMimirChatStore((s) => s.open);
-  const toggle  = useMimirChatStore((s) => s.toggle);
+  const inspectorOpen    = useLoomStore((s) => s.inspectorOpen);
+  const setInspectorOpen = useLoomStore((s) => s.setInspectorOpen);
 
   if (!isMobile) return null;
   if (!user) return null;
@@ -25,28 +28,28 @@ export const MimirMobileFab = memo(() => {
   return (
     <button
       type="button"
-      onClick={toggle}
-      title={t('mimir.askTitle')}
-      aria-pressed={open}
-      aria-label={t('mimir.ask')}
+      onClick={() => setInspectorOpen(!inspectorOpen)}
+      title={t('panel.inspector')}
+      aria-pressed={inspectorOpen}
+      aria-label={t('panel.inspector')}
       style={{
         position: 'fixed',
         right: 14,
-        bottom: 14,
+        // Stack above the MIMIR FAB (which sits at bottom 14 with 40 px height).
+        bottom: 14 + 40 + 10,
         width: 40,
         height: 40,
         borderRadius: '50%',
-        background: open
+        background: inspectorOpen
           ? 'color-mix(in srgb, var(--acc) 30%, var(--bg1))'
           : 'var(--bg1)',
         border: '1px solid',
-        borderColor: open
+        borderColor: inspectorOpen
           ? 'color-mix(in srgb, var(--acc) 60%, var(--bd))'
           : 'var(--bd)',
-        color: open ? 'var(--acc)' : 'var(--t1)',
+        color: inspectorOpen ? 'var(--acc)' : 'var(--t1)',
         fontSize: 15,
         fontWeight: 700,
-        letterSpacing: 0,
         cursor: 'pointer',
         boxShadow: '0 2px 8px rgba(0,0,0,0.28)',
         zIndex: 95,
@@ -56,9 +59,9 @@ export const MimirMobileFab = memo(() => {
         padding: 0,
       }}
     >
-      M
+      K
     </button>
   );
 });
 
-MimirMobileFab.displayName = 'MimirMobileFab';
+KnotMobileFab.displayName = 'KnotMobileFab';
