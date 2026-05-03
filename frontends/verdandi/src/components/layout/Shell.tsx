@@ -42,14 +42,16 @@ export const Shell = memo(() => {
   /** SD-03: EventStream bottom split toggle. Hidden by default + on mobile (<1200px). */
   const [showEvents, setShowEvents] = useState(false);
 
-  // Auto-open inspector drawer when a node is selected
+  // Auto-open inspector drawer when a node is selected — desktop only.
+  // On mobile we wait for an explicit K FAB tap so a stray finger touch
+  // doesn't pop the bottom-sheet over the canvas.
   const prevNodeId = useRef<string | null>(null);
   useEffect(() => {
-    if (selectedNodeId && selectedNodeId !== prevNodeId.current) {
+    if (!isMobile && selectedNodeId && selectedNodeId !== prevNodeId.current) {
       setInspectorOpen(true);
     }
     prevNodeId.current = selectedNodeId;
-  }, [selectedNodeId, setInspectorOpen]);
+  }, [selectedNodeId, setInspectorOpen, isMobile]);
 
   // KNOT → LOOM: auto-navigate when ?pkg= or ?schema= param is present
   useEffect(() => {
