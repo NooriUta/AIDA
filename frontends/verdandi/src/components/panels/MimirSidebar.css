@@ -181,6 +181,16 @@
 
 .mimir-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.mimir-action-btn.mimir-action-primary {
+  background: color-mix(in srgb, var(--acc) 18%, var(--bg3));
+  border-color: var(--acc);
+  color: var(--acc);
+  font-weight: 600;
+}
+.mimir-action-btn.mimir-action-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--acc) 28%, var(--bg3));
+}
+
 .mimir-approve {
   background: color-mix(in srgb, var(--inf) 22%, var(--bg3));
   border-color: color-mix(in srgb, var(--inf) 55%, transparent);

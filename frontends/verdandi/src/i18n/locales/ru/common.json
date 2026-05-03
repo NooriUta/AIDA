@@ -844,6 +844,8 @@
     "errorPrefix":       "Ошибка MIMIR",
     "decisionError":     "Ошибка решения",
     "showInGraph":       "Показать в графе ({{count}})",
+    "openInLoom":        "Открыть {{type}} в LOOM →",
+    "openInLoomTitle":   "Перейти к {{type}} {{label}} в графе линейности",
     "quotaExceeded":     "Превышена квота ({{reason}}).",
     "quotaResetsAt":     "Сброс — {{time}}.",
     "approval": {

@@ -844,6 +844,8 @@
     "errorPrefix":       "MIMIR error",
     "decisionError":     "Decision error",
     "showInGraph":       "Show in graph ({{count}})",
+    "openInLoom":        "Open {{type}} in LOOM →",
+    "openInLoomTitle":   "Drill into {{type}} {{label}} in the lineage canvas",
     "quotaExceeded":     "Quota exceeded ({{reason}}).",
     "quotaResetsAt":     "Resets at {{time}}.",
     "approval": {
