@@ -375,6 +375,13 @@ jobs:
             echo "=== YGG/FRIGG database warm-up probe ==="
             probe_or_recreate() {
               local base_url="$1" pass="$2" db="$3" recreate_ok="$4"
+              # Resolve container name from base_url port — staging-only convention.
+              local container
+              case "$base_url" in
+                *:2480) container="Ygg-1" ;;
+                *:2481) container="seer-studio-frigg-1" ;;
+                *)      container="" ;;
+              esac
               local ok=0
               for i in $(seq 1 18); do
                 CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
@@ -391,9 +398,30 @@ jobs:
                 curl -sf --max-time 10 -u "root:${pass}" \
                   -X DELETE "${base_url}/api/v1/drop/${db}" 2>/dev/null || true
                 sleep 2
-                curl -sf --max-time 10 -u "root:${pass}" \
-                  -X POST "${base_url}/api/v1/create/${db}" 2>/dev/null && \
-                  echo "  [${db}] recreated" || echo "  [${db}] ERROR: recreate failed"
+                local create_code
+                create_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+                  -u "root:${pass}" -X POST "${base_url}/api/v1/create/${db}" 2>/dev/null || echo "000")
+                if [ "$create_code" = "200" ] || [ "$create_code" = "201" ] || [ "$create_code" = "204" ]; then
+                  echo "  [${db}] recreated (HTTP ${create_code})"
+                  return
+                fi
+                # ── Aggressive rescue: drop+create through API failed (likely
+                # corrupted .lck on disk). If we know the container, wipe the
+                # database directory and let ArcadeDB recreate from scratch.
+                # Staging-only — never run this on prod (see cd-release.yml).
+                if [ -n "$container" ]; then
+                  echo "  [${db}] API drop+create failed (HTTP ${create_code}); wiping disk dir"
+                  docker exec "${container}" rm -rf "/home/arcadedb/databases/${db}" 2>/dev/null \
+                    && echo "  [${db}] disk dir wiped" \
+                    || echo "  [${db}] WARN: disk wipe failed (container or path missing)"
+                  sleep 2
+                  curl -sf --max-time 10 -u "root:${pass}" \
+                    -X POST "${base_url}/api/v1/create/${db}" 2>/dev/null \
+                    && echo "  [${db}] recreated after wipe" \
+                    || echo "  [${db}] ERROR: still cannot create after disk wipe"
+                else
+                  echo "  [${db}] ERROR: recreate failed and container unknown"
+                fi
               elif [ "$ok" = "0" ]; then
                 echo "  [${db}] ERROR: not available after 90s"
               fi
