@@ -116,6 +116,12 @@ export default defineConfig({
         target: process.env.CHUR_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
+      // TIER2 MT-04: MIMIR sidebar — Chur fronts /mimir/ask, /mimir/sessions/:id,
+      // /mimir/sessions/:id/decision, /mimir/health, /mimir/admin/*.
+      '/mimir': {
+        target: process.env.CHUR_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 });

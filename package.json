@@ -7,6 +7,8 @@
     "prepare": "husky",
     "dev:shuttle":          "gradlew.bat :services:shuttle:quarkusDev",
     "dev:dali":             "gradlew.bat :services:dali:quarkusDev",
+    "dev:anvil":            "gradlew.bat :services:anvil:quarkusDev",
+    "dev:mimir":            "gradlew.bat :services:mimir:quarkusDev",
     "dev:heimdall-backend": "gradlew.bat :services:heimdall-backend:quarkusDev"
   },
   "devDependencies": {

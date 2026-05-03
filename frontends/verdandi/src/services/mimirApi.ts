@@ -1,8 +1,12 @@
 // MIMIR Copilot HTTP client — talks to Chur (BFF) which forwards to MIMIR :9094.
 // All endpoints are session-cookie authenticated via Chur; tenant alias is
 // injected by Chur from the active tenant on the session.
+//
+// Same-origin by default — verdandi nginx (and vite dev proxy) forward /mimir
+// to Chur. VITE_CHUR_URL only needed when the SPA is served from a host that
+// can't reach Chur via the same origin (rarely needed).
 
-const BASE = import.meta.env.VITE_CHUR_URL ?? `${location.origin}`;
+const BASE = import.meta.env.VITE_CHUR_URL ?? '';
 
 export interface AskRequest {
   question:      string;
@@ -57,6 +61,12 @@ const tenantHeaders = (): Record<string, string> => {
     : {};
 };
 
+/** Strips HTML tags + collapses whitespace so a 1.5kB nginx error doesn't flood the chat. */
+function shortError(text: string, max = 240): string {
+  const plain = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return plain.length > max ? plain.slice(0, max) + '…' : plain;
+}
+
 export async function askMimir(req: AskRequest): Promise<MimirAnswer> {
   const r = await fetch(`${BASE}/mimir/ask`, {
     method:      'POST',
@@ -66,7 +76,7 @@ export async function askMimir(req: AskRequest): Promise<MimirAnswer> {
   });
   if (!r.ok) {
     const text = await r.text();
-    throw new Error(`MIMIR ask ${r.status}: ${text}`);
+    throw new Error(`MIMIR ask ${r.status}: ${shortError(text)}`);
   }
   return r.json();
 }

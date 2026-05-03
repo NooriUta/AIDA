@@ -183,11 +183,26 @@ task anvilBuild(type: GradleBuild) {
     tasks       = [':services:anvil:build']
 }
 
+// ─── mimir tasks ─────────────────────────────────────────────────────────────
+
+task mimirDev(type: GradleBuild) {
+    group       = 'mimir'
+    description = 'Start MIMIR AI assistant in dev mode (Quarkus, :9094). ' +
+                  'Set MIMIR_DEMO_MODE=true to skip live LLM calls and serve from cache.'
+    tasks       = [':services:mimir:quarkusDev']
+}
+
+task mimirBuild(type: GradleBuild) {
+    group       = 'mimir'
+    description = 'Build MIMIR fat-jar'
+    tasks       = [':services:mimir:build']
+}
+
 // ─── devAll — start all services ─────────────────────────────────────────────
 
 task devAll {
     group       = 'Development'
-    description = 'Start all services: Shuttle (:8080) + Dali (:9090) + ANVIL (:9095) + Heimdall (:9093/:5174) + Chur (:3000) + verdandi (:5173)'
+    description = 'Start all services: Shuttle (:8080) + Dali (:9090) + ANVIL (:9095) + MIMIR (:9094) + Heimdall (:9093/:5174) + Chur (:3000) + verdandi (:5173)'
     dependsOn   churInstall, verdandiInstall, heimdallFrontendInstall
 
     doLast {
@@ -203,6 +218,9 @@ task devAll {
                 "start \"Anvil\" /D \"${rootDir}\" \"${gradleCmd}\" :services:anvil:quarkusDev")
                 .start()
             new ProcessBuilder('cmd', '/c',
+                "start \"Mimir\" /D \"${rootDir}\" \"${gradleCmd}\" :services:mimir:quarkusDev")
+                .start()
+            new ProcessBuilder('cmd', '/c',
                 "start \"Heimdall-Backend\" /D \"${rootDir}\" \"${gradleCmd}\" :services:heimdall-backend:quarkusDev")
                 .start()
             new ProcessBuilder('cmd', '/c',
@@ -214,7 +232,7 @@ task devAll {
             new ProcessBuilder('cmd', '/c',
                 "start \"verdandi\" /D \"${verdandiDir}\" \"${npmCmd}\" run dev")
                 .start()
-            println '> Opened 7 windows: Shuttle (:8080) Dali (:9090) Anvil (:9095) Heimdall-Backend (:9093) Heimdall-Frontend (:5174) Chur (:3000) verdandi (:5173)'
+            println '> Opened 8 windows: Shuttle (:8080) Dali (:9090) Anvil (:9095) Mimir (:9094) Heimdall-Backend (:9093) Heimdall-Frontend (:5174) Chur (:3000) verdandi (:5173)'
         } else {
             // Unix/macOS — run all in parallel, inherit output to this terminal
             def shuttleProc = new ProcessBuilder(gradleCmd, ':services:shuttle:quarkusDev')
@@ -222,6 +240,8 @@ task devAll {
             def daliProc = new ProcessBuilder(gradleCmd, ':services:dali:quarkusDev')
                 .directory(rootDir).inheritIO().start()
             def anvilProc = new ProcessBuilder(gradleCmd, ':services:anvil:quarkusDev')
+                .directory(rootDir).inheritIO().start()
+            def mimirProc = new ProcessBuilder(gradleCmd, ':services:mimir:quarkusDev')
                 .directory(rootDir).inheritIO().start()
             def heimdallBackProc = new ProcessBuilder(gradleCmd, ':services:heimdall-backend:quarkusDev')
                 .directory(rootDir).inheritIO().start()
@@ -235,12 +255,13 @@ task devAll {
                 shuttleProc.destroyForcibly()
                 daliProc.destroyForcibly()
                 anvilProc.destroyForcibly()
+                mimirProc.destroyForcibly()
                 heimdallBackProc.destroyForcibly()
                 heimdallFrontProc.destroyForcibly()
                 churProc.destroyForcibly()
                 verdandiProc.destroyForcibly()
             }))
-            [shuttleProc, daliProc, anvilProc, heimdallBackProc, heimdallFrontProc, churProc, verdandiProc]*.waitFor()
+            [shuttleProc, daliProc, anvilProc, mimirProc, heimdallBackProc, heimdallFrontProc, churProc, verdandiProc]*.waitFor()
         }
     }
 }

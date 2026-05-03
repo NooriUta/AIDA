@@ -1,8 +1,10 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Dev: Backend Only" type="CompoundRunConfigurationType">
-    <toRun name="shuttle: quarkusDev" type="GradleRunConfiguration" />
-    <toRun name="dali: quarkusDev" type="GradleRunConfiguration" />
-    <toRun name="heimdall-backend: quarkusDev" type="GradleRunConfiguration" />
+    <toRun name="shuttle: quarkusDev" type="js.build_tools.npm" />
+    <toRun name="dali: quarkusDev" type="js.build_tools.npm" />
+    <toRun name="anvil: quarkusDev" type="js.build_tools.npm" />
+    <toRun name="mimir: quarkusDev" type="js.build_tools.npm" />
+    <toRun name="heimdall-backend: quarkusDev" type="js.build_tools.npm" />
     <toRun name="chur: dev" type="js.build_tools.npm" />
     <method v="2" />
   </configuration>

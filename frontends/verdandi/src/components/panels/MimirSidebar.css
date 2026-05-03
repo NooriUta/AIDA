@@ -1,49 +1,52 @@
+/* MimirSidebar — uses canonical Seiðr palette only (--bg*, --t*, --acc, --bd, --inf/--wrn, --seer-*).
+   No hardcoded colors so it tracks every palette switch (Norn theme picker, light/dark). */
+
 .mimir-sidebar {
   position: fixed;
   top: 56px;
   right: 0;
   width: 360px;
   height: calc(100vh - 56px);
-  background: var(--mimir-bg, #0f1116);
-  color: var(--mimir-fg, #e0e6ee);
-  border-left: 1px solid var(--mimir-border, #2a2f3a);
+  background: var(--bg1);
+  color: var(--t1);
+  border-left: 1px solid var(--bd);
   display: flex;
   flex-direction: column;
   z-index: 90;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: inherit;
   font-size: 13px;
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.3);
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.25);
 }
 
 .mimir-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--mimir-border, #2a2f3a);
-  background: linear-gradient(180deg, #1a1d24 0%, #14161c 100%);
+  gap: var(--seer-space-2, 8px);
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  border-bottom: 1px solid var(--bd);
+  background: var(--bg2);
 }
 
 .mimir-header h2 {
   flex: 1;
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  color: var(--t1);
+  text-transform: uppercase;
 }
 
 .mimir-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: #4dd5e0;
-  box-shadow: 0 0 8px rgba(77, 213, 224, 0.6);
+  background: var(--acc);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--acc) 60%, transparent);
 }
 
-.mimir-dot-anim {
-  animation: mimir-pulse 1.2s ease-in-out infinite;
-}
+.mimir-dot-anim { animation: mimir-pulse 1.2s ease-in-out infinite; }
 
 @keyframes mimir-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -53,159 +56,175 @@
 .mimir-icon-btn {
   background: transparent;
   border: 1px solid transparent;
-  color: var(--mimir-fg, #e0e6ee);
+  color: var(--t2);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 14px;
+  padding: 3px 7px;
+  border-radius: var(--seer-radius-sm, 4px);
+  font-size: 13px;
 }
 
 .mimir-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--mimir-border, #2a2f3a);
+  background: var(--bg3);
+  border-color: var(--bd);
+  color: var(--t1);
 }
 
 .mimir-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: var(--seer-space-3, 12px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--seer-space-2, 8px);
 }
 
 .mimir-empty {
-  padding: 16px;
-  border: 1px dashed var(--mimir-border, #2a2f3a);
-  border-radius: 6px;
-  color: #8a93a4;
+  padding: var(--seer-space-4, 16px);
+  border: 1px dashed var(--bd);
+  border-radius: var(--seer-radius-md, 6px);
+  color: var(--t3);
   text-align: center;
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .mimir-msg {
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  border-radius: var(--seer-radius-md, 6px);
   max-width: 95%;
   white-space: pre-wrap;
   word-wrap: break-word;
   line-height: 1.45;
+  border: 1px solid transparent;
 }
 
+/* User question — accent-tinted surface */
 .mimir-msg-user {
   align-self: flex-end;
-  background: #1f3a59;
-  color: #e8eef6;
+  background: color-mix(in srgb, var(--acc) 16%, var(--bg2));
+  color: var(--t1);
+  border-color: color-mix(in srgb, var(--acc) 35%, transparent);
 }
 
+/* MIMIR answer — neutral surface */
 .mimir-msg-mimir {
   align-self: flex-start;
-  background: #1a1d24;
-  border: 1px solid var(--mimir-border, #2a2f3a);
+  background: var(--bg2);
+  border-color: var(--bd);
 }
 
+/* System notice (errors, session messages) — warm tint */
 .mimir-msg-system {
   align-self: stretch;
-  background: rgba(244, 165, 96, 0.12);
-  border: 1px solid rgba(244, 165, 96, 0.4);
-  color: #f4a560;
+  background: color-mix(in srgb, var(--wrn) 16%, var(--bg2));
+  border-color: color-mix(in srgb, var(--wrn) 40%, transparent);
+  color: var(--wrn);
   font-size: 12px;
 }
 
 .mimir-thinking {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--seer-space-2, 8px);
   font-style: italic;
-  color: #8a93a4;
+  color: var(--t3);
 }
 
 .mimir-error {
-  padding: 8px 12px;
-  background: rgba(231, 76, 60, 0.15);
-  border: 1px solid rgba(231, 76, 60, 0.4);
-  color: #ff8a80;
-  border-radius: 6px;
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  background: color-mix(in srgb, var(--err, var(--wrn)) 18%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--err, var(--wrn)) 40%, transparent);
+  color: var(--err, var(--wrn));
+  border-radius: var(--seer-radius-md, 6px);
   font-size: 12px;
 }
 
 .mimir-tool-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--seer-space-1, 4px);
+  margin-top: var(--seer-space-2, 8px);
 }
 
 .mimir-tool-chip {
   display: inline-block;
-  padding: 2px 8px;
-  background: rgba(77, 213, 224, 0.15);
-  border: 1px solid rgba(77, 213, 224, 0.4);
+  padding: 1px 8px;
+  background: color-mix(in srgb, var(--inf) 18%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--inf) 45%, transparent);
   border-radius: 12px;
   font-size: 11px;
-  color: #4dd5e0;
+  color: var(--inf);
 }
 
 .mimir-actions {
-  margin-top: 8px;
+  margin-top: var(--seer-space-2, 8px);
   display: flex;
-  gap: 6px;
+  gap: var(--seer-space-1, 4px);
   flex-wrap: wrap;
 }
 
 .mimir-action-btn {
-  background: #2a3142;
-  border: 1px solid #3a4458;
-  color: #e0e6ee;
-  padding: 4px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--bd);
+  color: var(--t1);
+  padding: 3px 10px;
   font-size: 12px;
-  border-radius: 4px;
+  border-radius: var(--seer-radius-sm, 4px);
   cursor: pointer;
+  font-family: inherit;
 }
 
 .mimir-action-btn:hover:not(:disabled) {
-  background: #354056;
+  background: var(--bg2);
+  border-color: var(--bdh);
 }
 
-.mimir-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.mimir-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.mimir-approve {
+  background: color-mix(in srgb, var(--inf) 22%, var(--bg3));
+  border-color: color-mix(in srgb, var(--inf) 55%, transparent);
+  color: var(--inf);
 }
 
-.mimir-approve { background: #1c5c34; border-color: #2c8a4f; }
-.mimir-reject  { background: #5a2030; border-color: #8a3a4e; }
+.mimir-reject {
+  background: color-mix(in srgb, var(--wrn) 18%, var(--bg3));
+  border-color: color-mix(in srgb, var(--wrn) 50%, transparent);
+  color: var(--wrn);
+}
 
 .mimir-quota-banner {
-  margin-top: 8px;
-  padding: 6px 8px;
-  background: rgba(244, 165, 96, 0.15);
-  border-left: 3px solid #f4a560;
+  margin-top: var(--seer-space-2, 8px);
+  padding: var(--seer-space-1, 4px) var(--seer-space-2, 8px);
+  background: color-mix(in srgb, var(--wrn) 14%, transparent);
+  border-left: 3px solid var(--wrn);
   font-size: 12px;
+  color: var(--t1);
 }
 
 .mimir-approval {
-  margin-top: 10px;
-  padding: 8px;
-  background: rgba(244, 165, 96, 0.08);
-  border: 1px solid rgba(244, 165, 96, 0.3);
-  border-radius: 6px;
+  margin-top: var(--seer-space-2, 8px);
+  padding: var(--seer-space-2, 8px);
+  background: color-mix(in srgb, var(--wrn) 8%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--wrn) 35%, transparent);
+  border-radius: var(--seer-radius-md, 6px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--seer-space-1, 4px);
 }
 
 .mimir-approval-text {
   font-size: 12px;
-  color: #f4a560;
+  color: var(--wrn);
 }
 
 .mimir-approval-comment {
   width: 100%;
-  background: #14161c;
-  border: 1px solid var(--mimir-border, #2a2f3a);
-  border-radius: 4px;
-  color: var(--mimir-fg, #e0e6ee);
-  padding: 4px 6px;
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-sm, 4px);
+  color: var(--t1);
+  padding: var(--seer-space-1, 4px) var(--seer-space-2, 8px);
   font-size: 12px;
   resize: vertical;
   min-height: 36px;
@@ -214,66 +233,86 @@
 
 .mimir-approval-buttons {
   display: flex;
-  gap: 6px;
+  gap: var(--seer-space-1, 4px);
 }
 
 .mimir-meta {
-  margin-top: 6px;
-  color: #6a7387;
+  margin-top: var(--seer-space-1, 4px);
+  color: var(--t3);
   font-size: 11px;
 }
 
 .mimir-input {
   display: flex;
-  gap: 6px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--mimir-border, #2a2f3a);
-  background: #14161c;
+  gap: var(--seer-space-1, 4px);
+  padding: var(--seer-space-2, 8px) var(--seer-space-3, 12px);
+  border-top: 1px solid var(--bd);
+  background: var(--bg2);
 }
 
 .mimir-input textarea {
   flex: 1;
   resize: vertical;
-  background: #0f1116;
-  border: 1px solid var(--mimir-border, #2a2f3a);
-  color: var(--mimir-fg, #e0e6ee);
-  border-radius: 4px;
-  padding: 6px 8px;
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  color: var(--t1);
+  border-radius: var(--seer-radius-sm, 4px);
+  padding: var(--seer-space-1, 4px) var(--seer-space-2, 8px);
   font-family: inherit;
   font-size: 13px;
   min-height: 40px;
 }
 
-.mimir-send-btn {
-  background: #2557a7;
-  color: #fff;
-  border: none;
-  padding: 0 14px;
-  font-size: 13px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
+.mimir-input textarea:focus {
+  outline: none;
+  border-color: var(--acc);
 }
 
-.mimir-send-btn:hover:not(:disabled) { background: #2f6bcb; }
-.mimir-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mimir-send-btn {
+  background: var(--acc);
+  color: var(--bg0);
+  border: 1px solid var(--acc);
+  padding: 0 14px;
+  font-size: 12px;
+  border-radius: var(--seer-radius-sm, 4px);
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: inherit;
+}
+
+.mimir-send-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--acc) 80%, var(--t1));
+}
+
+.mimir-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 .mimir-toolbar-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: transparent;
-  border: 1px solid var(--mimir-border, #2a2f3a);
-  border-radius: 4px;
-  color: var(--mimir-fg, #e0e6ee);
+  gap: var(--seer-space-1, 4px);
+  padding: 5px 10px;
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: var(--seer-radius-md, 6px);
+  color: var(--t2);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.04em;
 }
 
-.mimir-toolbar-button:hover { background: rgba(255, 255, 255, 0.05); }
+.mimir-toolbar-button:hover {
+  color: var(--t1);
+  border-color: var(--bdh);
+}
+
 .mimir-toolbar-button[aria-pressed="true"] {
-  background: rgba(77, 213, 224, 0.15);
-  border-color: #4dd5e0;
-  color: #4dd5e0;
+  background: color-mix(in srgb, var(--acc) 18%, var(--bg2));
+  border-color: var(--acc);
+  color: var(--acc);
 }
