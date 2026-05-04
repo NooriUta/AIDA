@@ -46,6 +46,15 @@ public class StructureAndLineageBuilder {
     /** HND-02: PL/SQL TYPE IS RECORD / TABLE OF templates. Key = type geoid. */
     private final Map<String, PlTypeInfo> plTypes = new LinkedHashMap<>();
 
+    /** HAL2-01: synthetic table geoids where PIPELINED column injection failed (PlType not yet available). */
+    private final Set<String> pendingPipelinedTables = new LinkedHashSet<>();
+
+    /** HAL2-01: table geoids referenced by %ROWTYPE where DDL columns were not found at parse time. */
+    private final Set<String> pendingRowtypeTables = new LinkedHashSet<>();
+
+    /** HAL2-01: statement geoids containing CAST(MULTISET) where target type is unresolved. */
+    private final Set<String> pendingMultisetStmts = new LinkedHashSet<>();
+
     // STAB-2: диагностический логгер (null = prod-режим, no-op)
     private ResolutionLogger resolutionLogger;
 
@@ -554,6 +563,14 @@ public class StructureAndLineageBuilder {
     }
 
     public Map<String, PlTypeInfo> getPlTypes() { return plTypes; }
+
+    // ═══════ HAL2-01: Pending INJECT tracking ═══════
+    public void markPendingPipelined(String syntheticTableGeoid) { pendingPipelinedTables.add(syntheticTableGeoid); }
+    public boolean isPendingPipelined(String tableGeoid) { return pendingPipelinedTables.contains(tableGeoid); }
+    public void markPendingRowtype(String tableGeoid) { pendingRowtypeTables.add(tableGeoid); }
+    public boolean isPendingRowtype(String tableGeoid) { return pendingRowtypeTables.contains(tableGeoid); }
+    public void markPendingMultiset(String stmtGeoid) { pendingMultisetStmts.add(stmtGeoid); }
+    public boolean isPendingMultiset(String stmtGeoid) { return pendingMultisetStmts.contains(stmtGeoid); }
 
     // ═══════ Lineage ═══════
 

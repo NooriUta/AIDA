@@ -301,6 +301,9 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliAtom.routine_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.pending_verification IF NOT EXISTS BOOLEAN",
                 "CREATE PROPERTY DaliAtom.last_verified_session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.pending_kind IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.pending_snapshot IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.pending_since IF NOT EXISTS LONG",
                 "CREATE PROPERTY DaliAtom.status IF NOT EXISTS STRING",       // legacy — kept for migration, removed in V2
                 "CREATE PROPERTY DaliAtom.warning IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.merge_clause IF NOT EXISTS STRING",

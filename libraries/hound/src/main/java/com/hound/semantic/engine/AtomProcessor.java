@@ -428,17 +428,30 @@ public class AtomProcessor {
                     logger.debug("PENDING_QUALIFIED: {} alias={} col={} deferred",
                             entry.getKey(), alias, colName);
                 } else {
-                    if ("SELECT".equals(parentCtx) || "INSERT".equals(parentCtx)
-                            || "UPDATE".equals(parentCtx) || "MERGE".equals(parentCtx)
-                            || "SET_EXPR".equals(parentCtx)) {
-                        logger.warn("Could not resolve atom: {} in context {}", entry.getKey(), parentCtx);
-                        listener.onSemanticWarning(file, "ATOM_UNRESOLVED",
-                                "Could not resolve atom: " + entry.getKey()
-                                        + " in context " + parentCtx);
+                    // HAL2-01: check if atom references a pending source → PENDING_INJECT
+                    String pendingKind = detectPendingKind(atomData, statementGeoid, resolution);
+                    if (pendingKind != null) {
+                        atomData.put("status", AtomInfo.STATUS_PENDING_INJECT);
+                        atomData.put("primary_status", AtomInfo.STATUS_PENDING_INJECT);
+                        atomData.put("pending_kind", pendingKind);
+                        atomData.put("pending_since", System.currentTimeMillis());
+                        String pendingRoutine = scopeManager != null ? scopeManager.currentRoutine() : null;
+                        atomData.put("pending_snapshot", buildPendingSnapshot(
+                                pendingRoutine, statementGeoid));
+                        logger.debug("HAL2-01: PENDING_INJECT kind={} atom={}", pendingKind, entry.getKey());
+                    } else {
+                        if ("SELECT".equals(parentCtx) || "INSERT".equals(parentCtx)
+                                || "UPDATE".equals(parentCtx) || "MERGE".equals(parentCtx)
+                                || "SET_EXPR".equals(parentCtx)) {
+                            logger.warn("Could not resolve atom: {} in context {}", entry.getKey(), parentCtx);
+                            listener.onSemanticWarning(file, "ATOM_UNRESOLVED",
+                                    "Could not resolve atom: " + entry.getKey()
+                                            + " in context " + parentCtx);
+                        }
+                        atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+                        atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                        atomData.put("warning", AtomInfo.LEGACY_STATUS_UNRESOLVED);
                     }
-                    atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
-                    atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
-                    atomData.put("warning", AtomInfo.LEGACY_STATUS_UNRESOLVED);
                 }
                 if (resolution != null) {
                     atomData.put("resolution", resolution);
@@ -1529,6 +1542,42 @@ public class AtomProcessor {
             case "HIGH"   -> 4;
             default       -> 0;
         };
+    }
+
+    // ═══════ HAL2-01: PENDING_INJECT detection ═══════
+
+    private String detectPendingKind(Map<String, Object> atomData,
+                                     String statementGeoid,
+                                     Map<String, Object> resolution) {
+        if (builder == null) return null;
+
+        // 1. PIPELINED: atom references a synthetic table from TABLE(fn()) where injection failed
+        String tableGeoid = resolution != null ? (String) resolution.get("table_geoid") : null;
+        if (tableGeoid == null) tableGeoid = (String) atomData.get("table_geoid");
+        if (tableGeoid != null && builder.isPendingPipelined(tableGeoid)) {
+            return AtomInfo.PENDING_KIND_PIPELINED;
+        }
+
+        // 2. ROWTYPE: atom references a table that was used in %ROWTYPE but had no DDL columns
+        if (tableGeoid != null && builder.isPendingRowtype(tableGeoid)) {
+            return AtomInfo.PENDING_KIND_ROWTYPE;
+        }
+
+        // 3. MULTISET: atom is in a statement containing CAST(MULTISET) with unresolved type
+        if (statementGeoid != null && builder.isPendingMultiset(statementGeoid)) {
+            return AtomInfo.PENDING_KIND_MULTISET;
+        }
+
+        return null;
+    }
+
+    private String buildPendingSnapshot(String routineGeoid, String statementGeoid) {
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"routine_geoid\":\"").append(routineGeoid != null ? routineGeoid : "").append("\"");
+        sb.append(",\"statement_geoid\":\"").append(statementGeoid != null ? statementGeoid : "").append("\"");
+        sb.append(",\"session_id\":\"").append(file != null ? file : "").append("\"");
+        sb.append("}");
+        return sb.toString();
     }
 
     public void clear() {

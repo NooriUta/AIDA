@@ -1245,8 +1245,11 @@ public class UniversalSemanticEngine {
                                 col.getOrdinalPosition(), col.getGeoid()))
                         .count();
                 if (count > 0) rowtypesFilled++;
-                else logger.debug("KI-ROWTYPE-1: no columns found for table {} (record {})",
-                        pr.tableGeoid(), pr.recGeoid());
+                else {
+                    builder.markPendingRowtype(pr.tableGeoid());
+                    logger.debug("HAL2-01: ROWTYPE pending — no columns for table {} (record {})",
+                            pr.tableGeoid(), pr.recGeoid());
+                }
             }
             logger.info("KI-ROWTYPE-1: {} of {} %ROWTYPE records populated with column fields",
                     rowtypesFilled, pendingRowtypes.size());

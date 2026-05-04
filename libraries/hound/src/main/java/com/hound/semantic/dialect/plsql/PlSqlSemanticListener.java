@@ -1473,6 +1473,11 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
                 String typeName = BaseSemanticListener.cleanIdentifier(ctx.type_spec().getText());
                 com.hound.semantic.model.PlTypeInfo pt =
                         base.engine.getBuilder().resolvePlTypeByName(typeName, null);
+                if (pt == null) {
+                    base.engine.getBuilder().markPendingMultiset(stmtGeoid);
+                    logger.debug("HAL2-01: MULTISET pending — type {} not resolved, stmt {}",
+                            typeName, stmtGeoid);
+                }
                 String targetGeoid = pt != null ? pt.getGeoid() : typeName;
                 base.engine.getBuilder().addLineageEdge(stmtGeoid, targetGeoid, "MULTISET_INTO", stmtGeoid);
                 logger.debug("HND-15b MULTISET_INTO {} → {}", stmtGeoid, targetGeoid);
@@ -2300,11 +2305,21 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
                 base.engine.getBuilder().getRoutines().values().stream()
                         .filter(r -> r.getName().equalsIgnoreCase(bareName))
                         .findFirst().orElse(null);
-        if (ri == null || ri.getReturnType() == null) return;
+        if (ri == null || ri.getReturnType() == null) {
+            base.engine.getBuilder().markPendingPipelined(syntheticTableGeoid);
+            logger.debug("HAL2-01: PIPELINED pending — routine {} not resolved, table {}",
+                    bareName, syntheticTableGeoid);
+            return;
+        }
 
         com.hound.semantic.model.PlTypeInfo collType =
                 base.engine.getBuilder().resolvePlTypeByName(ri.getReturnType(), null);
-        if (collType == null || !collType.isCollection()) return;
+        if (collType == null || !collType.isCollection()) {
+            base.engine.getBuilder().markPendingPipelined(syntheticTableGeoid);
+            logger.debug("HAL2-01: PIPELINED pending — collection type {} not resolved, table {}",
+                    ri.getReturnType(), syntheticTableGeoid);
+            return;
+        }
 
         com.hound.semantic.model.PlTypeInfo elemType =
                 base.engine.getBuilder().resolvePlTypeByName(collType.getElementTypeName(), null);
@@ -2312,6 +2327,10 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             base.engine.getBuilder().injectColumnsFromPlType(syntheticTableGeoid, elemType);
             logger.debug("HND-14: injected {} cols from {} into {}",
                     elemType.getFields().size(), elemType.getName(), syntheticTableGeoid);
+        } else {
+            base.engine.getBuilder().markPendingPipelined(syntheticTableGeoid);
+            logger.debug("HAL2-01: PIPELINED pending — element type {} not resolved, table {}",
+                    collType.getElementTypeName(), syntheticTableGeoid);
         }
     }
 

@@ -42,6 +42,11 @@ public class AtomInfo {
     public static final String CONFIDENCE_LOW    = "LOW";
     public static final String CONFIDENCE_FUZZY  = "FUZZY";
 
+    // ── pending_kind enum (ADR-HND-008) ─────────────────────────────────────────
+    public static final String PENDING_KIND_PIPELINED = "PIPELINED";
+    public static final String PENDING_KIND_ROWTYPE   = "ROWTYPE";
+    public static final String PENDING_KIND_MULTISET  = "MULTISET";
+
     // ── Legacy constants (used only for data migration) ────────────────────────
     public static final String LEGACY_STATUS_RESOLVED   = "Обработано";
     public static final String LEGACY_STATUS_UNRESOLVED = "Не разобрано";
