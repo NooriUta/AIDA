@@ -1065,27 +1065,29 @@ class RemoteWriter {
             for (var at : atoms.entrySet()) {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema
+                // Detect UNBOUND for column-reference atoms whose DaliColumn is absent from schema
                 String atomColForWarn = (String) a.get("column_name");
                 String atomTblForWarn = (String) a.get("table_geoid");
                 boolean isColRefRw = Boolean.TRUE.equals(a.get("is_column_reference"));
-                if (a.get("warning") == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
+                if (a.get("warning") == null && AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
                         && isColRefRw && atomTblForWarn != null && atomColForWarn != null
                         && !str.getColumns().containsKey(atomTblForWarn + "." + atomColForWarn.toUpperCase())) {
-                    a.put("warning", AtomInfo.STATUS_UNBOUND);
+                    a.put("warning", AtomInfo.LEGACY_STATUS_UNBOUND);
                 }
 
                 rcmd("INSERT INTO DaliAtom SET session_id=?, statement_geoid=?, atom_id=?, atom_text=?, atom_geoid=?, " +
                         "atom_context=?, parent_context=?, position=?, sposition=?, " +
                         "is_complex=?, is_column_reference=?, is_function_call=?, is_constant=?, " +
                         "is_routine_param=?, is_routine_var=?, table_name=?, column_name=?, " +
-                        "table_geoid=?, status=?, warning=?, merge_clause=?, output_column_sequence=?, nested_atoms_count=?",
+                        "table_geoid=?, primary_status=?, qualifier=?, status=?, warning=?, merge_clause=?, " +
+                        "output_column_sequence=?, nested_atoms_count=?",
                     sid, stmtGeoid, atomId, a.get("atom_text"), at.getKey(),
                     a.get("atom_context"), a.get("parent_context"), a.get("position"), a.get("sposition"),
                     a.get("is_complex"), a.get("is_column_reference"), a.get("is_function_call"),
                     a.get("is_constant"), a.get("is_routine_param"), a.get("is_routine_var"),
                     a.get("table_name"), a.get("column_name"),
-                    a.get("table_geoid"), a.get("status"), a.get("warning"), a.get("merge_clause"),
+                    a.get("table_geoid"), a.get("primary_status"), a.get("qualifier"),
+                    a.get("status"), a.get("warning"), a.get("merge_clause"),
                     a.get("output_column_sequence"), a.get("nested_atoms_count"));
             }
         }

@@ -55,7 +55,7 @@ class MergeSetSourceAliasResolvedTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toUpperCase().startsWith("SOURCE.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedSource,
@@ -75,7 +75,7 @@ class MergeSetSourceAliasResolvedTest {
                 .anyMatch(e -> {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.equalsIgnoreCase("SOURCE.ID")
-                            && "Обработано".equals(e.get("result_kind"));
+                            && "RESOLVED".equals(e.get("result_kind"));
                 });
 
         assertTrue(sourceIdResolved, "SOURCE.ID should appear as resolved in the resolution log");
@@ -94,7 +94,7 @@ class MergeSetSourceAliasResolvedTest {
                 .anyMatch(e -> {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.equalsIgnoreCase("SOURCE.VALUE")
-                            && "Обработано".equals(e.get("result_kind"));
+                            && "RESOLVED".equals(e.get("result_kind"));
                 });
 
         assertTrue(sourceValueResolved, "SOURCE.VALUE should appear as resolved in the resolution log");
@@ -118,7 +118,7 @@ class MergeSetSourceAliasResolvedTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toUpperCase().startsWith("T.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedTarget,
@@ -146,7 +146,7 @@ class MergeSetSourceAliasResolvedTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toUpperCase().startsWith("SRC.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedSrc,

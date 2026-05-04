@@ -284,13 +284,15 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliStatement.type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliStatement.short_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliStatement.session_id IF NOT EXISTS STRING",
-                // DaliAtom
+                // DaliAtom (HAL-01 ADR-HND-002: primary_status + qualifier replace status)
                 "CREATE PROPERTY DaliAtom.atom_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.atom_text IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.atom_geoid IF NOT EXISTS STRING",   // composite uniqueness key text~line:col
                 "CREATE PROPERTY DaliAtom.atom_context IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.parent_context IF NOT EXISTS STRING",
-                "CREATE PROPERTY DaliAtom.status IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.primary_status IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.qualifier IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.status IF NOT EXISTS STRING",       // legacy — kept for migration, removed in V2
                 "CREATE PROPERTY DaliAtom.warning IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.merge_clause IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.session_id IF NOT EXISTS STRING",

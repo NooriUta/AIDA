@@ -34,7 +34,6 @@ class KnotStatementLoader {
     Uni<List<KnotStatement>> loadStatements(Map<String, Object> params) {
         // Fetch ALL statements for the session (not just roots).
         // Tree is built in Java via CHILD_OF edges from a second query.
-        // Atom status values in hound DB: 'Обработано' | 'unresolved' | 'constant' | 'function_call'
         // All queries start from DaliStatement(session_id) NOTUNIQUE index — avoids 3-hop
         // traversal prefix Session→Routine→Statement used in older versions.
 
@@ -53,10 +52,14 @@ class KnotStatementLoader {
                    coalesce(r.routine_type, '')                                     AS routineType,
                    stmt.aliases                                                     AS stmtAliases,
                    count(a)                                                         AS atomTotal,
-                   count(CASE WHEN toLower(a.status)='обработано'  THEN 1 END)     AS atomResolved,
-                   count(CASE WHEN toLower(a.status)='unresolved'  THEN 1 END)     AS atomFailed,
-                   count(CASE WHEN toLower(a.status)='constant'    THEN 1 END)     AS atomConst,
-                   count(CASE WHEN toLower(a.status)='function_call' THEN 1 END)   AS atomFunc
+                   count(CASE WHEN a.primary_status='RESOLVED'      THEN 1
+                              WHEN toLower(a.status)='обработано' THEN 1 END)     AS atomResolved,
+                   count(CASE WHEN a.primary_status='UNRESOLVED'   THEN 1
+                              WHEN toLower(a.status)='unresolved'  THEN 1 END)     AS atomFailed,
+                   count(CASE WHEN a.primary_status='CONSTANT'     THEN 1
+                              WHEN toLower(a.status)='constant'    THEN 1 END)     AS atomConst,
+                   count(CASE WHEN a.primary_status='FUNCTION_CALL' THEN 1
+                              WHEN toLower(a.status)='function_call' THEN 1 END)   AS atomFunc
             ORDER BY r.routine_name, geoid
             LIMIT 1000
             """;

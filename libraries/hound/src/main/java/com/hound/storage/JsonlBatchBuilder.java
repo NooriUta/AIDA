@@ -587,19 +587,19 @@ public class JsonlBatchBuilder {
                 String atomTblForWarn1 = (String) a.get("table_geoid");
                 boolean isColRef1 = Boolean.TRUE.equals(a.get("is_column_reference"));
                 String atomWarning1 = (String) a.get("warning");
-                if (atomWarning1 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
+                if (atomWarning1 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
                         && isColRef1 && atomTblForWarn1 != null && atomColForWarn1 != null
                         && str.getTables().containsKey(atomTblForWarn1)
                         && !str.getColumns().containsKey(atomTblForWarn1 + "." + atomColForWarn1.toUpperCase())) {
-                    atomWarning1 = AtomInfo.STATUS_UNBOUND;
+                    atomWarning1 = AtomInfo.LEGACY_STATUS_UNBOUND;
                 }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(
                         "session_id", sid,
                         "statement_geoid", stmtGeoid,
                         "atom_id", atomId,
-                        "atom_text", a.get("atom_text"),  // raw text (e.g. "ITEM_ID")
-                        "atom_geoid",  at.getKey(),         // composite uniqueness key "TEXT~line:col"
+                        "atom_text", a.get("atom_text"),
+                        "atom_geoid",  at.getKey(),
                         "atom_context", a.get("atom_context"),
                         "parent_context", a.get("parent_context"),
                         "position", a.get("position"),
@@ -613,6 +613,8 @@ public class JsonlBatchBuilder {
                         "table_name", a.get("table_name"),
                         "column_name", a.get("column_name"),
                         "table_geoid", a.get("table_geoid"),
+                        "primary_status", a.get("primary_status"),
+                        "qualifier", a.get("qualifier"),
                         "status", a.get("status"),
                         "warning", atomWarning1,
                         "merge_clause", a.get("merge_clause"),
@@ -1354,19 +1356,19 @@ public class JsonlBatchBuilder {
                 String atomTblForWarn2 = (String) a.get("table_geoid");
                 boolean isColRef2 = Boolean.TRUE.equals(a.get("is_column_reference"));
                 String atomWarning2 = (String) a.get("warning");
-                if (atomWarning2 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
+                if (atomWarning2 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
                         && isColRef2 && atomTblForWarn2 != null && atomColForWarn2 != null
                         && str.getTables().containsKey(atomTblForWarn2)
                         && !str.getColumns().containsKey(atomTblForWarn2 + "." + atomColForWarn2.toUpperCase())) {
-                    atomWarning2 = AtomInfo.STATUS_UNBOUND;
+                    atomWarning2 = AtomInfo.LEGACY_STATUS_UNBOUND;
                 }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(
                         "session_id", sid,
                         "statement_geoid", stmtGeoid,
                         "atom_id", atomId,
-                        "atom_text", a.get("atom_text"),  // raw text (e.g. "ITEM_ID")
-                        "atom_geoid",  at.getKey(),         // composite uniqueness key "TEXT~line:col"
+                        "atom_text", a.get("atom_text"),
+                        "atom_geoid",  at.getKey(),
                         "atom_context", a.get("atom_context"),
                         "parent_context", a.get("parent_context"),
                         "position", a.get("position"),
@@ -1380,6 +1382,8 @@ public class JsonlBatchBuilder {
                         "table_name", a.get("table_name"),
                         "column_name", a.get("column_name"),
                         "table_geoid", a.get("table_geoid"),
+                        "primary_status", a.get("primary_status"),
+                        "qualifier", a.get("qualifier"),
                         "status", a.get("status"),
                         "warning", atomWarning2,
                         "merge_clause", a.get("merge_clause"),

@@ -148,10 +148,11 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                     (Map<String, Map<String, Object>>) cont.get("atoms");
             if (atoms == null) continue;
             for (var at : atoms.entrySet()) {
-                String status = (String) at.getValue().get("status");
-                if (AtomInfo.STATUS_RESOLVED.equals(status))         atomResolvedTmp++;
-                else if ("constant".equals(status))      atomConstTmp++;
-                else if ("function_call".equals(status)) atomFuncTmp++;
+                String ps = (String) at.getValue().get("primary_status");
+                if (ps == null) ps = (String) at.getValue().get("status");
+                if (AtomInfo.STATUS_RESOLVED.equals(ps))         atomResolvedTmp++;
+                else if (AtomInfo.STATUS_CONSTANT.equals(ps))      atomConstTmp++;
+                else if (AtomInfo.STATUS_FUNCTION_CALL.equals(ps)) atomFuncTmp++;
                 else                                     atomFailedTmp++;
             }
         }

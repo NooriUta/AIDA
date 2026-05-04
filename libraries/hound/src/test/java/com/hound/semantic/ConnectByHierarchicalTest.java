@@ -56,7 +56,7 @@ class ConnectByHierarchicalTest {
                     return raw != null && (raw.equalsIgnoreCase("employee_id")
                             || raw.equalsIgnoreCase("manager_id"));
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedKey,
@@ -65,7 +65,7 @@ class ConnectByHierarchicalTest {
         // LEVEL pseudo-column must not appear as unresolved
         long unresolvedLevel = entries.stream()
                 .filter(e -> "LEVEL".equalsIgnoreCase((String) e.get("raw_input")))
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedLevel, "LEVEL pseudo-column must not be unresolved");
@@ -90,7 +90,7 @@ class ConnectByHierarchicalTest {
                     return raw != null && (raw.equalsIgnoreCase("seg_tags")
                             || raw.equalsIgnoreCase("row_id"));
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedCols,
@@ -110,7 +110,7 @@ class ConnectByHierarchicalTest {
 
         // No user-table column refs here — only pseudo-columns. None should be unresolved.
         long unexpectedUnresolved = entries.stream()
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .filter(e -> {
                     String raw = (String) e.get("raw_input");
                     // LEVEL is pseudo-column; SYSDATE is a function — exclude known safe names
@@ -145,7 +145,7 @@ class ConnectByHierarchicalTest {
         // o.order_id inside LATERAL WHERE must be resolved from outer FROM orders o
         long unresolvedOuterRef = entries.stream()
                 .filter(e -> "o.order_id".equalsIgnoreCase((String) e.get("raw_input")))
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedOuterRef,
@@ -158,7 +158,7 @@ class ConnectByHierarchicalTest {
                     return raw != null && Set.of("PRODUCT_ID", "AMOUNT")
                             .contains(raw.toUpperCase());
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedInner,

@@ -405,7 +405,7 @@ class HttpBatchClientMvccTest {
               .append(",\"@id\":\"").append(atomId).append('"')
               .append(",\"session_id\":\"").append(sessionId).append('"')
               .append(",\"atom_geoid\":\"").append(atomId).append('"')
-              .append(",\"status\":\"Обработано\"")
+              .append(",\"status\":\"RESOLVED\",\"primary_status\":\"RESOLVED\"")
               .append("}\n");
         }
 
@@ -467,7 +467,7 @@ class HttpBatchClientMvccTest {
               .append(",\"@id\":\"").append(atomId).append('"')
               .append(",\"session_id\":\"").append(sessionId).append('"')
               .append(",\"atom_geoid\":\"").append(atomId).append('"')
-              .append(",\"status\":\"Обработано\"")
+              .append(",\"status\":\"RESOLVED\",\"primary_status\":\"RESOLVED\"")
               .append("}\n");
         }
 

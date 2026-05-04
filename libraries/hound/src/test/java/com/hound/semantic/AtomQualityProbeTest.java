@@ -46,10 +46,10 @@ class AtomQualityProbeTest {
 
         List<Map<String, Object>> log = engine.getResolutionLog();
         int total      = log.size();
-        int resolved   = (int) log.stream().filter(e -> "Обработано"   .equals(e.get("result_kind"))).count();
-        int unresolved = (int) log.stream().filter(e -> "unresolved"   .equals(e.get("result_kind"))).count();
-        int constants  = (int) log.stream().filter(e -> "constant"     .equals(e.get("result_kind"))).count();
-        int functions  = (int) log.stream().filter(e -> "function_call".equals(e.get("result_kind"))).count();
+        int resolved   = (int) log.stream().filter(e -> "RESOLVED"     .equals(e.get("result_kind"))).count();
+        int unresolved = (int) log.stream().filter(e -> "UNRESOLVED"   .equals(e.get("result_kind"))).count();
+        int constants  = (int) log.stream().filter(e -> "CONSTANT"     .equals(e.get("result_kind"))).count();
+        int functions  = (int) log.stream().filter(e -> "FUNCTION_CALL".equals(e.get("result_kind"))).count();
         int other      = total - resolved - unresolved - constants - functions;
         return new FileStats(file.getFileName().toString(), total, resolved, unresolved, constants, functions, other);
     }

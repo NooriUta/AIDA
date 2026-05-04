@@ -47,9 +47,9 @@ public class YggStatsResource {
             Map<String, Long> atomsByStatus = atomCounts(conn);
 
             long atomsResolved   = countAtoms(conn,
-                    "status in ('Обработано', 'constant')");
+                    "coalesce(primary_status, status) in ('RESOLVED', 'CONSTANT', 'Обработано', 'constant')");
             long atomsUnresolved = countAtoms(conn,
-                    "status is null OR status NOT IN ['Обработано', 'constant'] OR statement_geoid = 'unattached'");
+                    "primary_status is null AND status is null OR coalesce(primary_status, status) NOT IN ['RESOLVED', 'CONSTANT', 'Обработано', 'constant'] OR statement_geoid = 'unattached'");
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("tables",          tables);
@@ -59,9 +59,9 @@ public class YggStatsResource {
             result.put("routines",        routines);
             result.put("atomsTotal",      atomsByStatus.values().stream().mapToLong(Long::longValue).sum());
             result.put("atomsResolved",   atomsResolved);
-            result.put("atomsConstant",   atomsByStatus.getOrDefault("constant",  0L));
+            result.put("atomsConstant",   atomsByStatus.getOrDefault("CONSTANT",  0L) + atomsByStatus.getOrDefault("constant", 0L));
             result.put("atomsUnresolved", atomsUnresolved);
-            result.put("atomsPending",    atomsByStatus.getOrDefault("pending",   0L));
+            result.put("atomsPending",    atomsByStatus.getOrDefault("PENDING_INJECT", 0L) + atomsByStatus.getOrDefault("pending", 0L));
 
             return Response.ok(result).build();
         } catch (Exception e) {
@@ -104,10 +104,10 @@ public class YggStatsResource {
         Map<String, Long> result = new LinkedHashMap<>();
         try {
             List<Map<String, Object>> rows = conn.sql(
-                    "SELECT status, count(*) as cnt FROM `DaliAtom` GROUP BY status", Map.of());
+                    "SELECT coalesce(primary_status, status) as ps, count(*) as cnt FROM `DaliAtom` GROUP BY coalesce(primary_status, status)", Map.of());
             if (rows == null) return result;
             for (Map<String, Object> row : rows) {
-                Object statusObj = row.get("status");
+                Object statusObj = row.get("ps");
                 Object cntObj    = row.get("cnt");
                 String status = statusObj != null ? statusObj.toString() : "pending";
                 long   cnt    = cntObj instanceof Number n ? n.longValue() : 0L;

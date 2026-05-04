@@ -44,7 +44,7 @@ class AtomClassificationTest {
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
                 .findFirst();
         assertTrue(interval.isPresent(), "INTERVAL atom should appear in resolution log");
-        assertEquals("constant", interval.get().get("result_kind"),
+        assertEquals("CONSTANT", interval.get().get("result_kind"),
                 "INTERVAL '20' DAY should be classified as constant");
     }
 
@@ -55,7 +55,7 @@ class AtomClassificationTest {
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
                 .findFirst();
         assertTrue(interval.isPresent());
-        assertEquals("constant", interval.get().get("result_kind"),
+        assertEquals("CONSTANT", interval.get().get("result_kind"),
                 "INTERVAL '240' HOUR should be classified as constant");
     }
 
@@ -66,7 +66,7 @@ class AtomClassificationTest {
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
                 .findFirst();
         assertTrue(interval.isPresent());
-        assertEquals("constant", interval.get().get("result_kind"),
+        assertEquals("CONSTANT", interval.get().get("result_kind"),
                 "INTERVAL DAY TO SECOND should be classified as constant");
     }
 
@@ -77,7 +77,7 @@ class AtomClassificationTest {
                 """);
         long unresolvedIntervals = entries.stream()
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
         assertEquals(0, unresolvedIntervals, "No INTERVAL atom should be unresolved");
     }
@@ -93,7 +93,7 @@ class AtomClassificationTest {
                 .filter(e -> ":1".equals(e.get("raw_input")))
                 .findFirst();
         assertTrue(bind.isPresent(), "Bind variable :1 should appear in resolution log");
-        assertEquals("constant", bind.get().get("result_kind"),
+        assertEquals("CONSTANT", bind.get().get("result_kind"),
                 "Bind variable :1 should be classified as constant");
     }
 
@@ -105,7 +105,7 @@ class AtomClassificationTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.startsWith(":");
                 })
-                .filter(e -> "constant".equals(e.get("result_kind")))
+                .filter(e -> "CONSTANT".equals(e.get("result_kind")))
                 .count();
         assertEquals(2, bindConstants, "Both named bind variables should be classified as constants");
     }
@@ -118,7 +118,7 @@ class AtomClassificationTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.startsWith(":");
                 })
-                .filter(e -> "constant".equals(e.get("result_kind")))
+                .filter(e -> "CONSTANT".equals(e.get("result_kind")))
                 .count();
         assertEquals(2, bindConstants, "Alphabetic bind variables should be classified as constants");
     }
@@ -133,7 +133,7 @@ class AtomClassificationTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.startsWith(":");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
         assertEquals(0, unresolvedBinds, "No bind variable should be unresolved");
     }
@@ -152,7 +152,7 @@ class AtomClassificationTest {
                 })
                 .findFirst();
         assertTrue(date.isPresent(), "DATE literal should appear in resolution log");
-        assertEquals("constant", date.get().get("result_kind"),
+        assertEquals("CONSTANT", date.get().get("result_kind"),
                 "DATE 'string' should be classified as constant");
     }
 
@@ -166,7 +166,7 @@ class AtomClassificationTest {
                 })
                 .findFirst();
         assertTrue(ts.isPresent(), "TIMESTAMP literal should appear in resolution log");
-        assertEquals("constant", ts.get().get("result_kind"),
+        assertEquals("CONSTANT", ts.get().get("result_kind"),
                 "TIMESTAMP 'string' should be classified as constant");
     }
 }

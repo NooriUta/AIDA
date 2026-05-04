@@ -42,7 +42,9 @@ public class DataFlowProcessor {
                 Map<String, Object> a = atomEntry.getValue();
 
                 // Only resolved atoms with an output column association
-                if (!AtomInfo.STATUS_RESOLVED.equals(a.get("status"))) continue;
+                String ps = (String) a.get("primary_status");
+                if (ps == null) ps = (String) a.get("status");
+                if (!AtomInfo.STATUS_RESOLVED.equals(ps)) continue;
                 Object outSeq = a.get("output_column_sequence");
                 if (outSeq == null) continue;
 

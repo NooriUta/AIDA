@@ -57,7 +57,7 @@ class HoundS3PlannedFeaturesTest {
 
         long unresolvedDeptId = entries.stream()
                 .filter(e -> "dept_id".equalsIgnoreCase((String) e.get("raw_input")))
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedDeptId,
@@ -85,7 +85,7 @@ class HoundS3PlannedFeaturesTest {
                             || raw.equalsIgnoreCase("salary")
                             || raw.equalsIgnoreCase("department_id"));
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedEmployee,
@@ -115,7 +115,7 @@ class HoundS3PlannedFeaturesTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toLowerCase().startsWith("jt.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedJt,

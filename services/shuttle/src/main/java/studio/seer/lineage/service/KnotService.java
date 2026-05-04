@@ -27,9 +27,9 @@ import java.util.*;
  * │ DaliStatement    │ stmt_geoid              │ stmt_type = null (all rows) → parse from geoid[3]   │
  * │                  │                         │ line_number = null (all rows) → parse from geoid[4] │
  * ├──────────────────┼─────────────────────────┼─────────────────────────────────────────────────────┤
- * │ DaliAtom         │ status                  │ atom_type = null (all rows) — type is encoded in    │
- * │                  │                         │ status: 'Обработано'|'unresolved'|'constant'|        │
- * │                  │                         │ 'function_call' (NOT the English values in plan)    │
+ * │ DaliAtom         │ primary_status,         │ primary_status: RESOLVED|UNRESOLVED|CONSTANT|        │
+ * │                  │ qualifier, status       │ FUNCTION_CALL (ADR-HND-002). Legacy status field    │
+ * │                  │                         │ kept for migration. qualifier: LINKED|CTE|etc.      │
  * ├──────────────────┼─────────────────────────┼─────────────────────────────────────────────────────┤
  * │ DaliTable        │ table_name, table_geoid,│ No direct BELONGS_TO_SESSION edges (count = 0) →   │
  * │                  │ schema_geoid            │ must traverse via Routine→Statement→READS_FROM       │
@@ -170,10 +170,10 @@ public class KnotService {
         // Atom counts grouped by status — uses DaliAtom(session_id) NOTUNIQUE index directly.
         // Was: 3-hop reverse traversal on ALL atoms (561 995 rows) — catastrophic full scan.
         String sqlAtoms = """
-            SELECT status, count(*) AS cnt
+            SELECT coalesce(primary_status, status) AS ps, count(*) AS cnt
             FROM DaliAtom
             WHERE session_id = :sid
-            GROUP BY status
+            GROUP BY coalesce(primary_status, status)
             """;
 
         return Uni.combine().all()
@@ -213,17 +213,16 @@ public class KnotService {
                     }
                 }
 
-                // Atom breakdown — actual status values in hound DB
                 int atomTotal = 0, atomResolved = 0, atomFailed = 0, atomConst = 0, atomFunc = 0;
                 for (var row : atomRows) {
-                    String status = str(row, "status").toLowerCase();
+                    String ps = str(row, "ps");
                     int cnt = num(row, "cnt");
                     atomTotal += cnt;
-                    switch (status) {
-                        case "обработано"    -> atomResolved += cnt;
-                        case "unresolved"    -> atomFailed   += cnt;
-                        case "constant"      -> atomConst    += cnt;
-                        case "function_call" -> atomFunc     += cnt;
+                    switch (ps) {
+                        case "RESOLVED", "обработано", "Обработано" -> atomResolved += cnt;
+                        case "UNRESOLVED", "unresolved"             -> atomFailed   += cnt;
+                        case "CONSTANT", "constant"                 -> atomConst    += cnt;
+                        case "FUNCTION_CALL", "function_call"       -> atomFunc     += cnt;
                     }
                 }
 

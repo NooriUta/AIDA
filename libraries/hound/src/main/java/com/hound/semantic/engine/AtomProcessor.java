@@ -95,6 +95,7 @@ public class AtomProcessor {
         // Если есть вложенные атомы — сразу помечаем как обработанный
         if (nestedAtomCount > 0) {
             atomData.put("status", AtomInfo.STATUS_RESOLVED);
+            atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
             atomData.put("is_complex_atom", true);
         }
 
@@ -333,18 +334,20 @@ public class AtomProcessor {
             Map<String, Object> atomData = entry.getValue();
 
             // Пропускаем уже обработанные
-            if (atomData.get("status") != null) continue;
+            if (atomData.get("primary_status") != null) continue;
 
             // Пропускаем константы
             if (Boolean.TRUE.equals(atomData.get("is_constant"))) {
-                atomData.put("status", "constant");
+                atomData.put("status", AtomInfo.STATUS_CONSTANT);
+                atomData.put("primary_status", AtomInfo.STATUS_CONSTANT);
                 constants++;
                 appendLog(statementGeoid, atomData, null);
                 continue;
             }
             // Пропускаем вызовы функций
             if (Boolean.TRUE.equals(atomData.get("is_function_call"))) {
-                atomData.put("status", "function_call");
+                atomData.put("status", AtomInfo.STATUS_FUNCTION_CALL);
+                atomData.put("primary_status", AtomInfo.STATUS_FUNCTION_CALL);
                 functions++;
                 appendLog(statementGeoid, atomData, null);
                 continue;
@@ -355,6 +358,7 @@ public class AtomProcessor {
 
             if (resolution != null && Boolean.TRUE.equals(resolution.get("resolved"))) {
                 atomData.put("status", AtomInfo.STATUS_RESOLVED);
+                atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
                 atomData.put("resolution", resolution);
                 atomData.put("table_geoid", resolution.get("table_geoid"));
                 atomData.put("column_name", resolution.get("column_name"));
@@ -363,9 +367,20 @@ public class AtomProcessor {
                 atomData.put("is_routine_param", Boolean.TRUE.equals(resolution.get("is_routine_param")));
                 atomData.put("is_routine_var", Boolean.TRUE.equals(resolution.get("is_routine_var")));
 
-                // Reconstruct column only for physical tables.
-                // SubQuery/CTE atoms resolve to a statement geoid — those are linked
-                // via ATOM_REF_OUTPUT_COL, not via DaliColumn records.
+                // HAL-01: derive qualifier from resolution source
+                String resolveStrategy = (String) resolution.get("strategy");
+                if (resolveStrategy != null) {
+                    switch (resolveStrategy) {
+                        case "cte"      -> atomData.put("qualifier", AtomInfo.QUALIFIER_CTE);
+                        case "subquery" -> atomData.put("qualifier", AtomInfo.QUALIFIER_SUBQUERY);
+                        case "inferred" -> atomData.put("qualifier", AtomInfo.QUALIFIER_INFERRED);
+                        case "fuzzy"    -> atomData.put("qualifier", AtomInfo.QUALIFIER_FUZZY);
+                        default         -> atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                    }
+                } else {
+                    atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                }
+
                 String tableGeoid = (String) resolution.get("table_geoid");
                 String columnName = (String) resolution.get("column_name");
                 if (tableGeoid != null && columnName != null && builder != null
@@ -376,12 +391,10 @@ public class AtomProcessor {
                 resolved++;
                 logger.debug("Atom resolved: {} → table={}, column={}", entry.getKey(), tableGeoid, columnName);
 
-                // Routine variables / parameters cannot produce DATA_FLOW edges (no DaliColumn source).
-                // Mark them so the UI can surface the gap rather than silently showing no lineage.
                 boolean isVar   = Boolean.TRUE.equals(atomData.get("is_routine_var"));
                 boolean isParam = Boolean.TRUE.equals(atomData.get("is_routine_param"));
                 if ((isVar || isParam) && atomData.get("dml_target_ref") != null) {
-                    atomData.put("warning", AtomInfo.STATUS_UNBOUND);
+                    atomData.put("warning", AtomInfo.LEGACY_STATUS_UNBOUND);
                 }
             } else {
                 failed++;
@@ -391,8 +404,9 @@ public class AtomProcessor {
                         || "SET_EXPR".equals(parentCtx)) {
                     logger.warn("Could not resolve atom: {} in context {}", entry.getKey(), parentCtx);
                 }
-                atomData.put("status", "unresolved");
-                atomData.put("warning", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("warning", AtomInfo.LEGACY_STATUS_UNRESOLVED);
                 if (resolution != null) {
                     atomData.put("resolution", resolution);
                 }
