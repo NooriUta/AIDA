@@ -1671,6 +1671,60 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
     }
 
     // =========================================================================
+    // HAL3-03: WRITES_TO_PARAMETER — OUT params at call sites
+    // =========================================================================
+
+    @Override
+    public void exitCall_statement(PlSqlParser.Call_statementContext ctx) {
+        if (ctx == null) return;
+        String callerRoutineGeoid = base.currentRoutine();
+        if (callerRoutineGeoid == null) return;
+
+        String calledName = null;
+        var routineNames = ctx.routine_name();
+        if (routineNames != null && !routineNames.isEmpty()) {
+            calledName = BaseSemanticListener.cleanIdentifier(routineNames.get(0).getText());
+        }
+        if (calledName == null || calledName.isBlank()) {
+            String raw = ctx.getText();
+            int paren = raw.indexOf('(');
+            calledName = BaseSemanticListener.cleanIdentifier(
+                    paren > 0 ? raw.substring(0, paren) : raw);
+        }
+        if (calledName == null || calledName.isBlank()) return;
+
+        String calledUpper = calledName.toUpperCase();
+        RoutineInfo calledRoutine = null;
+        String calledGeoid = null;
+        for (var entry : base.engine.getBuilder().getRoutines().entrySet()) {
+            String rg = entry.getKey().toUpperCase();
+            if (rg.endsWith(":" + calledUpper) || rg.equals(calledUpper)) {
+                calledRoutine = entry.getValue();
+                calledGeoid = entry.getKey();
+                break;
+            }
+        }
+        if (calledRoutine == null) return;
+
+        String sourceGeoid = base.engine.getScopeManager().currentStatement();
+        if (sourceGeoid == null) sourceGeoid = callerRoutineGeoid;
+
+        int pIdx = 0;
+        for (RoutineInfo.ParameterInfo p : calledRoutine.getTypedParameters()) {
+            if ("OUT".equalsIgnoreCase(p.mode()) || "INOUT".equalsIgnoreCase(p.mode())
+                    || "IN OUT".equalsIgnoreCase(p.mode())) {
+                base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                        sourceGeoid,
+                        CompensationStats.EDGE_WRITES_TO_PARAMETER,
+                        calledGeoid + ":PARAM:" + pIdx,
+                        CompensationStats.KIND_PARAMETER,
+                        null));
+            }
+            pIdx++;
+        }
+    }
+
+    // =========================================================================
     // Values clause
     // =========================================================================
 

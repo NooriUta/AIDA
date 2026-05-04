@@ -84,6 +84,44 @@ class AssignmentEdgeTest {
         assertTrue(hasParamTarget, "Target geoid should reference a PARAM index for p_result");
     }
 
+    private static final String CALL_WITH_OUT_PARAM = """
+            CREATE OR REPLACE PACKAGE BODY DWH.PKG_CALL_TEST AS
+              PROCEDURE CALLED_PROC(
+                p_out  OUT NUMBER,
+                p_in   IN  VARCHAR2
+              ) IS
+              BEGIN
+                p_out := 42;
+              END CALLED_PROC;
+
+              PROCEDURE CALLER_PROC IS
+                v_result NUMBER;
+              BEGIN
+                CALL CALLED_PROC(v_result, 'hello');
+              END CALLER_PROC;
+            END PKG_CALL_TEST;
+            """;
+
+    @Test
+    void callWithOutParam_emitsWritesToParameter() {
+        UniversalSemanticEngine engine = parse(CALL_WITH_OUT_PARAM);
+        List<CompensationStats> stats = engine.getBuilder().getCompensationStats();
+
+        long writesParam = stats.stream()
+                .filter(cs -> CompensationStats.EDGE_WRITES_TO_PARAMETER.equals(cs.edgeType()))
+                .filter(cs -> CompensationStats.KIND_PARAMETER.equals(cs.targetKind()))
+                .count();
+
+        assertTrue(writesParam >= 1,
+                "Expected at least 1 WRITES_TO_PARAMETER for OUT param, got " + writesParam);
+
+        boolean hasCalledParam = stats.stream()
+                .filter(cs -> CompensationStats.EDGE_WRITES_TO_PARAMETER.equals(cs.edgeType()))
+                .anyMatch(cs -> cs.targetGeoid() != null && cs.targetGeoid().contains("CALLED_PROC"));
+        assertTrue(hasCalledParam,
+                "WRITES_TO_PARAMETER target should reference CALLED_PROC's PARAM");
+    }
+
     @Test
     void noAssignmentInSelectOnly_noCompensationStats() {
         String sql = """
