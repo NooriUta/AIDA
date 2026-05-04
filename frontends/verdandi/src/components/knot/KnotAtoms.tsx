@@ -55,7 +55,7 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
   );
 
   const failedAtoms = useMemo(() => {
-    const goodStatuses = new Set(['RESOLVED', 'CONSTANT', 'FUNCTION_CALL', 'ОБРАБОТАНО', '']);
+    const goodStatuses = new Set(['RESOLVED', 'CONSTANT', 'FUNCTION_CALL', 'RECONSTRUCT_DIRECT', 'RECONSTRUCT_INVERSE', 'ОБРАБОТАНО', '']);
     return atoms.filter(a => !goodStatuses.has((a.status || '').toUpperCase()));
   }, [atoms]);
 
@@ -82,8 +82,8 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
     if (statusFilter !== 'all') {
       result = result.filter(a => {
         const s = (a.status || '').toUpperCase();
-        if (statusFilter === 'resolved')      return s === 'RESOLVED' || s === 'ОБРАБОТАНО';
-        if (statusFilter === 'failed')        return s === 'UNRESOLVED';
+        if (statusFilter === 'resolved')      return s === 'RESOLVED' || s === 'ОБРАБОТАНО' || s === 'RECONSTRUCT_DIRECT' || s === 'RECONSTRUCT_INVERSE';
+        if (statusFilter === 'failed')        return s === 'UNRESOLVED' || s === 'PARTIAL';
         if (statusFilter === 'constant')      return s === 'CONSTANT';
         if (statusFilter === 'function_call') return s === 'FUNCTION_CALL';
         return true;
@@ -314,7 +314,9 @@ export const KnotAtoms = memo(({ session: s, atoms }: Props) => {
                     const statusUp = (a.status || '').toUpperCase();
                     const statusColor =
                       statusUp === 'RESOLVED' || statusUp === 'ОБРАБОТАНО' ? 'var(--suc)' :
+                      statusUp === 'RECONSTRUCT_DIRECT' || statusUp === 'RECONSTRUCT_INVERSE' ? 'var(--warn, #D4A040)' :
                       statusUp === 'UNRESOLVED'    ? 'var(--dan, #C06060)' :
+                      statusUp === 'PARTIAL'       ? 'var(--dan, #C06060)' :
                       statusUp === 'CONSTANT'      ? 'var(--t3)' :
                       statusUp === 'FUNCTION_CALL' ? 'var(--t2)' : 'var(--t3)';
 

@@ -1065,14 +1065,15 @@ class RemoteWriter {
             for (var at : atoms.entrySet()) {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
-                // Detect UNBOUND for column-reference atoms whose DaliColumn is absent from schema
+                // HAL-04: detect RECONSTRUCT_DIRECT — table found but column absent from DDL schema
                 String atomColForWarn = (String) a.get("column_name");
                 String atomTblForWarn = (String) a.get("table_geoid");
                 boolean isColRefRw = Boolean.TRUE.equals(a.get("is_column_reference"));
                 if (a.get("warning") == null && AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
                         && isColRefRw && atomTblForWarn != null && atomColForWarn != null
                         && !str.getColumns().containsKey(atomTblForWarn + "." + atomColForWarn.toUpperCase())) {
-                    a.put("warning", AtomInfo.LEGACY_STATUS_UNBOUND);
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                 }
 
                 rcmd("INSERT INTO DaliAtom SET session_id=?, statement_geoid=?, atom_id=?, atom_text=?, atom_geoid=?, " +

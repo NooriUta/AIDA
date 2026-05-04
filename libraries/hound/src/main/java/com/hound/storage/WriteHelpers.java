@@ -139,7 +139,7 @@ final class WriteHelpers {
         for (Map<String, Object> a : atoms.values()) {
             String ps = (String) a.get("primary_status");
             if (ps == null) ps = (String) a.get("status");
-            if (AtomInfo.STATUS_RESOLVED.equals(ps))                       resolved++;
+            if (AtomInfo.STATUS_RESOLVED.equals(ps) || AtomInfo.STATUS_RECONSTRUCT_DIRECT.equals(ps)) resolved++;
             if (Boolean.TRUE.equals(a.get("is_constant")))      constants++;
             if (Boolean.TRUE.equals(a.get("is_function_call"))) functions++;
         }

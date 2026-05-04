@@ -580,9 +580,7 @@ public class JsonlBatchBuilder {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
                 atomIdMap.put(stmtGeoid + ":" + at.getKey(), atomId);
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema.
-                // Only applies to physical-table atoms: SubQuery/CTE/MERGE-USING SELECT atoms resolve via
-                // ATOM_REF_OUTPUT_COL (not DaliColumn), so absence from str.getColumns() is expected.
+                // HAL-04: detect RECONSTRUCT_DIRECT — table found but column absent from DDL schema
                 String atomColForWarn1 = (String) a.get("column_name");
                 String atomTblForWarn1 = (String) a.get("table_geoid");
                 boolean isColRef1 = Boolean.TRUE.equals(a.get("is_column_reference"));
@@ -591,7 +589,8 @@ public class JsonlBatchBuilder {
                         && isColRef1 && atomTblForWarn1 != null && atomColForWarn1 != null
                         && str.getTables().containsKey(atomTblForWarn1)
                         && !str.getColumns().containsKey(atomTblForWarn1 + "." + atomColForWarn1.toUpperCase())) {
-                    atomWarning1 = AtomInfo.LEGACY_STATUS_UNBOUND;
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                 }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(
@@ -1352,9 +1351,7 @@ public class JsonlBatchBuilder {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
                 atomIdMap.put(stmtGeoid + ":" + at.getKey(), atomId);
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema.
-                // Only applies to physical-table atoms: SubQuery/CTE/MERGE-USING SELECT atoms resolve via
-                // ATOM_REF_OUTPUT_COL (not DaliColumn), so absence from str.getColumns() is expected.
+                // HAL-04: detect RECONSTRUCT_DIRECT — table found but column absent from DDL schema
                 String atomColForWarn2 = (String) a.get("column_name");
                 String atomTblForWarn2 = (String) a.get("table_geoid");
                 boolean isColRef2 = Boolean.TRUE.equals(a.get("is_column_reference"));
@@ -1363,7 +1360,8 @@ public class JsonlBatchBuilder {
                         && isColRef2 && atomTblForWarn2 != null && atomColForWarn2 != null
                         && str.getTables().containsKey(atomTblForWarn2)
                         && !str.getColumns().containsKey(atomTblForWarn2 + "." + atomColForWarn2.toUpperCase())) {
-                    atomWarning2 = AtomInfo.LEGACY_STATUS_UNBOUND;
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                 }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(

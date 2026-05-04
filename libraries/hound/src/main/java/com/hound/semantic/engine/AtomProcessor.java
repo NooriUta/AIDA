@@ -397,7 +397,8 @@ public class AtomProcessor {
                 boolean isVar   = Boolean.TRUE.equals(atomData.get("is_routine_var"));
                 boolean isParam = Boolean.TRUE.equals(atomData.get("is_routine_param"));
                 if ((isVar || isParam) && atomData.get("dml_target_ref") != null) {
-                    atomData.put("warning", AtomInfo.LEGACY_STATUS_UNBOUND);
+                    atomData.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    atomData.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                 }
             } else {
                 failed++;
@@ -417,10 +418,36 @@ public class AtomProcessor {
             appendLog(statementGeoid, atomData, resolution);
         }
 
-        // HAL-02: derive kind from boolean flags + reference_type
-        // HAL-03: derive confidence from resolve_strategy + kind adjustment (ADR-HND-003)
+        // HAL-02: derive kind; HAL-04: CTRL_FLOW + FN_VERIFIED; HAL-03: confidence
         for (var atomData : stmtAtoms.values()) {
             atomData.put("kind", deriveKind(atomData));
+
+            // HAL-04: CTRL_FLOW qualifier for control-flow contexts (ADR-HND-004 §4A)
+            String parentCtx = (String) atomData.get("parent_context");
+            if (parentCtx != null) {
+                switch (parentCtx) {
+                    case "IF_COND", "WHILE_COND", "EXIT_WHEN", "CONTINUE_WHEN", "RETURN_EXPR"
+                            -> atomData.put("qualifier", AtomInfo.QUALIFIER_CTRL_FLOW);
+                    default -> {}
+                }
+            }
+
+            // HAL-04: FN_VERIFIED / FN_UNVERIFIED for function calls
+            if (AtomInfo.STATUS_FUNCTION_CALL.equals(atomData.get("primary_status"))) {
+                boolean verified = false;
+                if (builder != null) {
+                    String atomText = (String) atomData.get("atom_text");
+                    if (atomText != null) {
+                        String funcName = atomText.contains("(")
+                                ? atomText.substring(0, atomText.indexOf('(')).trim().toUpperCase()
+                                : atomText.toUpperCase();
+                        verified = builder.getRoutines().containsKey(funcName);
+                    }
+                }
+                atomData.put("qualifier", verified
+                        ? AtomInfo.QUALIFIER_FN_VERIFIED : AtomInfo.QUALIFIER_FN_UNVERIFIED);
+            }
+
             atomData.put("confidence", deriveConfidence(atomData));
         }
 
@@ -1276,6 +1303,15 @@ public class AtomProcessor {
 
         // Constants and system pseudo-columns are always HIGH
         if (AtomInfo.STATUS_CONSTANT.equals(ps)) return AtomInfo.CONFIDENCE_HIGH;
+
+        // RECONSTRUCT_DIRECT: table found, column missing → MEDIUM
+        if (AtomInfo.STATUS_RECONSTRUCT_DIRECT.equals(ps)) return AtomInfo.CONFIDENCE_MEDIUM;
+        // RECONSTRUCT_INVERSE: reserved for V2, if set → MEDIUM
+        if (AtomInfo.STATUS_RECONSTRUCT_INVERSE.equals(ps)) return AtomInfo.CONFIDENCE_MEDIUM;
+        // PARTIAL: parent with mixed children → LOW
+        if (AtomInfo.STATUS_PARTIAL.equals(ps)) return AtomInfo.CONFIDENCE_LOW;
+        // PENDING_INJECT: deferred resolution → null (no confidence yet)
+        if (AtomInfo.STATUS_PENDING_INJECT.equals(ps)) return null;
 
         // Function calls: verified → HIGH, unverified → LOW
         if (AtomInfo.STATUS_FUNCTION_CALL.equals(ps)) {
