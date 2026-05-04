@@ -34,6 +34,14 @@ public class AtomProcessor {
     // S1.PRE: resolution log — one entry per resolved/unresolved column-reference atom
     private final List<Map<String, Object>> resolutionLog = new ArrayList<>();
 
+    // HAL-08: pending qualified atom refs (alias.column where alias not yet known)
+    public record PendingQualifiedAtom(
+            Map<String, Object> atomData, String alias, String columnName,
+            String statementGeoid, String atomKey) {}
+    private final List<PendingQualifiedAtom> pendingQualifiedAtoms = new ArrayList<>();
+
+    public List<PendingQualifiedAtom> getPendingQualifiedAtoms() { return pendingQualifiedAtoms; }
+
     // G3: current MERGE UPDATE target column (set at enterMerge_element, cleared at exit)
     private String currentMergeTargetColumn = null;
 
@@ -407,14 +415,31 @@ public class AtomProcessor {
             } else {
                 failed++;
                 String parentCtx = (String) atomData.get("parent_context");
-                if ("SELECT".equals(parentCtx) || "INSERT".equals(parentCtx)
-                        || "UPDATE".equals(parentCtx) || "MERGE".equals(parentCtx)
-                        || "SET_EXPR".equals(parentCtx)) {
-                    logger.warn("Could not resolve atom: {} in context {}", entry.getKey(), parentCtx);
+
+                // HAL-08: qualified alias.column deferred to post-walk pending resolution
+                if (resolution != null && Boolean.TRUE.equals(resolution.get("pending_qualified"))) {
+                    String alias = (String) resolution.get("pending_alias");
+                    String colName = (String) resolution.get("pending_column");
+                    atomData.put("status", AtomInfo.STATUS_PENDING_INJECT);
+                    atomData.put("primary_status", AtomInfo.STATUS_PENDING_INJECT);
+                    atomData.put("column_name", colName);
+                    pendingQualifiedAtoms.add(new PendingQualifiedAtom(
+                            atomData, alias, colName, statementGeoid, entry.getKey()));
+                    logger.debug("PENDING_QUALIFIED: {} alias={} col={} deferred",
+                            entry.getKey(), alias, colName);
+                } else {
+                    if ("SELECT".equals(parentCtx) || "INSERT".equals(parentCtx)
+                            || "UPDATE".equals(parentCtx) || "MERGE".equals(parentCtx)
+                            || "SET_EXPR".equals(parentCtx)) {
+                        logger.warn("Could not resolve atom: {} in context {}", entry.getKey(), parentCtx);
+                        listener.onSemanticWarning(file, "ATOM_UNRESOLVED",
+                                "Could not resolve atom: " + entry.getKey()
+                                        + " in context " + parentCtx);
+                    }
+                    atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+                    atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                    atomData.put("warning", AtomInfo.LEGACY_STATUS_UNRESOLVED);
                 }
-                atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
-                atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
-                atomData.put("warning", AtomInfo.LEGACY_STATUS_UNRESOLVED);
                 if (resolution != null) {
                     atomData.put("resolution", resolution);
                 }
@@ -795,7 +820,11 @@ public class AtomProcessor {
                     }
                 }
 
-                result.put("reason", "Таблица/подзапрос не найден для: " + tableAlias);
+                // HAL-08: defer to pending — alias may appear in a later block
+                result.put("pending_qualified", true);
+                result.put("pending_alias", tableAlias);
+                result.put("pending_column", columnName);
+                result.put("reason", "Таблица/подзапрос не найден для: " + tableAlias + " (deferred)");
                 return result;
             }
 
@@ -1267,6 +1296,115 @@ public class AtomProcessor {
                 atomData.put("confidence", deriveConfidence(atomData));
             }
         }
+    }
+
+    /**
+     * Post-walk: resolve deferred alias.column atoms.
+     * Called from resolvePendingColumns after all statements are parsed.
+     * For each pending qualified atom:
+     *   1. Re-try alias resolution (may succeed now that all CTEs/subqueries are registered)
+     *   2. If still unresolved: alias = table_name → find or create table + inferred column
+     *   3. Update atom status to RESOLVED or RECONSTRUCT_DIRECT
+     */
+    public void resolvePendingQualifiedAtoms() {
+        if (pendingQualifiedAtoms.isEmpty()) return;
+        int resolved = 0, reconstructed = 0;
+
+        for (var pqa : pendingQualifiedAtoms) {
+            var atomData = pqa.atomData();
+            String alias = pqa.alias();
+            String colName = pqa.columnName();
+            String stmtGeoid = pqa.statementGeoid();
+
+            // 1. Re-try alias resolution
+            if (nameResolver != null) {
+                ResolvedRef ref = nameResolver.resolve(alias, "any", stmtGeoid);
+                if (ref.isResolved()) {
+                    String tGeoid = ref.getGeoid();
+                    atomData.put("table_geoid", tGeoid);
+                    atomData.put("table_name", alias);
+                    atomData.put("column_name", colName);
+                    atomData.put("is_column_reference", true);
+                    atomData.put("resolve_strategy", ref.getStrategy());
+                    atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
+                    atomData.put("status", AtomInfo.STATUS_RESOLVED);
+                    atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                    if (builder != null && tGeoid != null
+                            && !builder.getStatements().containsKey(tGeoid)) {
+                        builder.addInferredColumn(tGeoid, colName, "L5Q");
+                    }
+                    atomData.put("kind", deriveKind(atomData));
+                    atomData.put("confidence", deriveConfidence(atomData));
+                    resolved++;
+                    continue;
+                }
+
+                // 1b. Try parent statement scope
+                if (builder != null) {
+                    StatementInfo si = builder.getStatements().get(stmtGeoid);
+                    if (si != null && si.getParentStatementGeoid() != null) {
+                        ref = nameResolver.resolve(alias, "any", si.getParentStatementGeoid());
+                        if (ref.isResolved()) {
+                            String tGeoid = ref.getGeoid();
+                            atomData.put("table_geoid", tGeoid);
+                            atomData.put("table_name", alias);
+                            atomData.put("column_name", colName);
+                            atomData.put("is_column_reference", true);
+                            atomData.put("resolve_strategy", ref.getStrategy());
+                            atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
+                            atomData.put("status", AtomInfo.STATUS_RESOLVED);
+                            atomData.put("qualifier", AtomInfo.QUALIFIER_SUBQUERY);
+                            if (!builder.getStatements().containsKey(tGeoid)) {
+                                builder.addInferredColumn(tGeoid, colName, "L5Q");
+                            }
+                            atomData.put("kind", deriveKind(atomData));
+                            atomData.put("confidence", deriveConfidence(atomData));
+                            resolved++;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // 2. alias = table_name → reconstruct table + inferred column
+            if (builder != null) {
+                String upperAlias = alias.toUpperCase();
+                // Find existing table by name
+                String tGeoid = null;
+                for (var tEntry : builder.getTables().entrySet()) {
+                    String tName = tEntry.getValue().tableName();
+                    if (tName != null && tName.toUpperCase().endsWith(upperAlias)) {
+                        tGeoid = tEntry.getKey();
+                        break;
+                    }
+                }
+                // Not found → register new table with alias as table_name
+                if (tGeoid == null) {
+                    tGeoid = builder.ensureTable(upperAlias, null);
+                }
+                builder.addInferredColumn(tGeoid, colName, "L5Q");
+                atomData.put("table_geoid", tGeoid);
+                atomData.put("table_name", upperAlias);
+                atomData.put("column_name", colName);
+                atomData.put("is_column_reference", true);
+                atomData.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                atomData.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                atomData.put("qualifier", AtomInfo.QUALIFIER_INFERRED);
+                atomData.put("resolve_strategy", "reconstruct_qualified");
+                atomData.put("kind", deriveKind(atomData));
+                atomData.put("confidence", deriveConfidence(atomData));
+                reconstructed++;
+            } else {
+                atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("kind", deriveKind(atomData));
+            }
+        }
+
+        logger.info("Pending qualified atoms: {} total, {} resolved, {} reconstructed, {} unresolved",
+                pendingQualifiedAtoms.size(), resolved, reconstructed,
+                pendingQualifiedAtoms.size() - resolved - reconstructed);
+        pendingQualifiedAtoms.clear();
     }
 
     /** S1.PRE: one entry per processed atom — used to write DaliResolutionLog. */

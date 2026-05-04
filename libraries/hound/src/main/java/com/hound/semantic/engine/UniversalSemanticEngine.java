@@ -24,6 +24,8 @@ public class UniversalSemanticEngine {
     private final StructureAndLineageBuilder builder;
     private final AtomProcessor atomProcessor;
     private final JoinProcessor joinProcessor;
+    private final HoundEventListener listener;
+    private final String file;
 
     /** No-arg constructor — uses NoOp listener (backward-compatible). */
     public UniversalSemanticEngine() {
@@ -33,10 +35,12 @@ public class UniversalSemanticEngine {
     /**
      * Constructor with event listener.
      *
-     * @param listener receives onAtomExtracted / onRecordRegistered events
+     * @param listener receives onAtomExtracted / onRecordRegistered / onSemanticWarning events
      * @param file     file path forwarded to listener callbacks
      */
     public UniversalSemanticEngine(HoundEventListener listener, String file) {
+        this.listener = listener;
+        this.file = file;
         this.scopeManager = new ScopeManager();
         this.nameResolver = new NameResolver();
         this.builder = new StructureAndLineageBuilder(listener, file);
@@ -581,6 +585,8 @@ public class UniversalSemanticEngine {
             }
             logger.warn("Routine EXIT: auto-closing orphan statement scope [{}]",
                     popped.getStatementGeoid());
+            listener.onSemanticWarning(file, "SCOPE_ORPHAN",
+                    "Auto-closing orphan statement scope: " + popped.getStatementGeoid());
         }
         // Clear cursor state — cursors and record vars are routine-scoped
         scopeManager.clearCursorState();
@@ -921,6 +927,9 @@ public class UniversalSemanticEngine {
                 } else {
                     logger.warn("JOIN source UNRESOLVED: alias='{}' stmt='{}'",
                             j.sourceTableAlias(), stmtGeoid);
+                    listener.onSemanticWarning(file, "JOIN_UNRESOLVED",
+                            "JOIN source unresolved: alias=" + j.sourceTableAlias()
+                                    + " stmt=" + stmtGeoid);
                 }
             }
 
@@ -1219,7 +1228,10 @@ public class UniversalSemanticEngine {
                     p4Resolved, pendingColumns.size());
         }
 
-        // Pass 5 (KI-ROWTYPE-1): populate %ROWTYPE record fields from resolved table columns
+        // Pass 5Q: resolve deferred alias.column atoms → table + inferred column
+        atomProcessor.resolvePendingQualifiedAtoms();
+
+        // Pass 6 (KI-ROWTYPE-1): populate %ROWTYPE record fields from resolved table columns
         if (!pendingRowtypes.isEmpty()) {  // previously Pass 3, renumbered after KI-PENDING-1 passes
             int rowtypesFilled = 0;
             for (PendingRowtype pr : pendingRowtypes) {
