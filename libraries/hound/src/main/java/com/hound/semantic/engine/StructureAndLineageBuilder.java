@@ -563,6 +563,12 @@ public class StructureAndLineageBuilder {
         for (com.hound.semantic.model.PlTypeFieldInfo f : recordType.getFields()) {
             addColumnWithOrdinal(tableGeoid, f.name(), null, null, pos++, f.dataType());
         }
+        // HAL2-06: mark injected table as VTABLE for RECONSTRUCT_INVERSE classification
+        TableInfo ti = tables.get(tableGeoid);
+        if (ti != null) {
+            ti.setTableType("VTABLE");
+            if (ti.getPlTypeGeoid() == null) ti.setPlTypeGeoid(recordType.getGeoid());
+        }
     }
 
     public Map<String, PlTypeInfo> getPlTypes() { return plTypes; }

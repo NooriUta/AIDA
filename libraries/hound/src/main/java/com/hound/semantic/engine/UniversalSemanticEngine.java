@@ -1259,6 +1259,9 @@ public class UniversalSemanticEngine {
         // HAL2-02: second pass — resolve PENDING_INJECT atoms via PlType registry
         atomProcessor.resolvePendingInjectAtoms();
 
+        // HAL2-06: classify atoms resolved against VTABLE as RECONSTRUCT_INVERSE
+        atomProcessor.classifyVtableAtoms();
+
         // HAL-05: classify unattached atoms (CONSTANT_ORPHAN detection)
         atomProcessor.classifyUnattachedAtoms();
     }

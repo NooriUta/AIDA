@@ -1487,6 +1487,30 @@ public class AtomProcessor {
     }
 
     /**
+     * HAL2-06: Classify atoms resolved against VTABLE (PlType-backed virtual tables)
+     * as RECONSTRUCT_INVERSE. Called after all resolution passes.
+     */
+    public void classifyVtableAtoms() {
+        if (builder == null) return;
+        int upgraded = 0;
+        for (var stmtEntry : atomsByStatement.values()) {
+            for (Map<String, Object> a : stmtEntry.values()) {
+                if (!AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))) continue;
+                String tableGeoid = (String) a.get("table_geoid");
+                if (tableGeoid == null) continue;
+                TableInfo ti = builder.getTables().get(tableGeoid);
+                if (ti != null && "VTABLE".equals(ti.tableType())) {
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    upgraded++;
+                }
+            }
+        }
+        if (upgraded > 0)
+            logger.info("HAL2-06: {} atoms upgraded to RECONSTRUCT_INVERSE (VTABLE-backed)", upgraded);
+    }
+
+    /**
      * HAL2-03: Expire PENDING_INJECT atoms older than the given TTL.
      * Transitions them to UNRESOLVED and clears pending fields.
      * @param ttlMs TTL in milliseconds (default: {@link AtomInfo#PENDING_TTL_MS})

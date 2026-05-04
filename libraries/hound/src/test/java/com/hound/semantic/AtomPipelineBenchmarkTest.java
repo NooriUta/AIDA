@@ -209,6 +209,86 @@ class AtomPipelineBenchmarkTest {
                   END;
                 END;
                 """);
+        // HAL2-07: PIPELINED TABLE(fn()) — atoms should get RECONSTRUCT_INVERSE
+        SYNTHETIC_SQL.put("syn_pipelined_table_func", """
+                CREATE OR REPLACE TYPE T_PIPE_REC AS OBJECT (
+                    emp_id     NUMBER(10),
+                    emp_name   VARCHAR2(100),
+                    dept_code  VARCHAR2(10)
+                );
+                /
+                CREATE OR REPLACE TYPE T_PIPE_TAB AS TABLE OF T_PIPE_REC;
+                /
+                CREATE OR REPLACE PACKAGE BODY PKG_PIPE_BENCH AS
+                    FUNCTION GET_ACTIVE_EMPS RETURN T_PIPE_TAB PIPELINED IS
+                        CURSOR c IS SELECT id, name, dept FROM employees WHERE active = 1;
+                    BEGIN
+                        FOR r IN c LOOP
+                            PIPE ROW (T_PIPE_REC(r.id, r.name, r.dept));
+                        END LOOP;
+                    END GET_ACTIVE_EMPS;
+
+                    PROCEDURE LOAD_SUMMARY IS
+                    BEGIN
+                        INSERT INTO emp_summary (emp_id, emp_name, dept_code)
+                        SELECT t.emp_id, t.emp_name, t.dept_code
+                          FROM TABLE(GET_ACTIVE_EMPS()) t;
+                    END LOAD_SUMMARY;
+
+                    PROCEDURE LOAD_DEPT_COUNTS IS
+                        v_cnt NUMBER;
+                    BEGIN
+                        SELECT COUNT(*) INTO v_cnt
+                          FROM TABLE(GET_ACTIVE_EMPS()) t
+                         WHERE t.dept_code = 'IT';
+                    END LOAD_DEPT_COUNTS;
+                END PKG_PIPE_BENCH;
+                """);
+        // HAL2-07: CAST(MULTISET(SELECT...)) pattern
+        SYNTHETIC_SQL.put("syn_cast_multiset", """
+                CREATE OR REPLACE TYPE T_ID_LIST AS TABLE OF NUMBER;
+                /
+                CREATE OR REPLACE PACKAGE BODY PKG_MULTISET_BENCH AS
+                    PROCEDURE STORE_IDS IS
+                        v_ids T_ID_LIST;
+                    BEGIN
+                        SELECT CAST(MULTISET(SELECT id FROM departments WHERE active = 1) AS T_ID_LIST)
+                        INTO v_ids FROM DUAL;
+                        FORALL i IN 1..v_ids.COUNT
+                          INSERT INTO dept_active (dept_id) VALUES (v_ids(i));
+                    END STORE_IDS;
+                END PKG_MULTISET_BENCH;
+                """);
+        // HAL2-07: RETURNING INTO — write-side lineage
+        SYNTHETIC_SQL.put("syn_returning_into", """
+                CREATE OR REPLACE PACKAGE BODY PKG_RETURN_BENCH AS
+                    PROCEDURE INSERT_AND_GET IS
+                        v_id   NUMBER;
+                        v_name VARCHAR2(100);
+                    BEGIN
+                        INSERT INTO employees (name, dept_id)
+                        VALUES ('New Hire', 10)
+                        RETURNING id, name INTO v_id, v_name;
+                    END INSERT_AND_GET;
+                END PKG_RETURN_BENCH;
+                """);
+        // HAL2-07: FETCH BULK COLLECT with named cursor
+        SYNTHETIC_SQL.put("syn_fetch_cursor", """
+                CREATE OR REPLACE PACKAGE BODY PKG_FETCH_BENCH AS
+                    PROCEDURE PROCESS_ALL IS
+                        CURSOR c_data IS SELECT id, value FROM source_data WHERE status = 'NEW';
+                        TYPE t_data IS TABLE OF c_data%ROWTYPE;
+                        l_batch t_data;
+                    BEGIN
+                        OPEN c_data;
+                        FETCH c_data BULK COLLECT INTO l_batch LIMIT 1000;
+                        CLOSE c_data;
+                        FORALL i IN 1..l_batch.COUNT
+                          INSERT INTO target_data (src_id, src_value)
+                          VALUES (l_batch(i).id, l_batch(i).value);
+                    END PROCESS_ALL;
+                END PKG_FETCH_BENCH;
+                """);
     }
 
     // ── Aggregated results ───────────────────────────────────────────────────
@@ -514,13 +594,14 @@ class AtomPipelineBenchmarkTest {
 
         int denominator = totalAtoms - constantOrphan;
         double qualityTrue = denominator > 0
-                ? (double) resolved / denominator * 100.0 : 0;
+                ? (double) (resolved + reconstDirect + reconstInverse) / denominator * 100.0 : 0;
         double qualitySyntax = denominator > 0
                 ? (double) (resolved + constant + reconstDirect + reconstInverse + funcCall) / denominator * 100.0
                 : 0;
 
         System.out.printf("%n── Quality KPIs ──%n");
-        System.out.printf("  quality_true:   %.1f%% (%d / %d)%n", qualityTrue, resolved, denominator);
+        System.out.printf("  quality_true:   %.1f%% (%d / %d)%n", qualityTrue,
+                resolved + reconstDirect + reconstInverse, denominator);
         System.out.printf("  quality_syntax: %.1f%% (%d / %d)%n", qualitySyntax,
                 resolved + constant + reconstDirect + reconstInverse + funcCall, denominator);
         System.out.println("═══════════════════════════════════\n");

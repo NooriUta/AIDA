@@ -11,7 +11,7 @@ public class TableInfo {
     private final String geoid;
     private final String tableName;
     private final String schemaGeoid;
-    private final String tableType;  // TABLE, VIEW, CTE, TEMP, VTABLE
+    private String tableType;  // TABLE, VIEW, CTE, TEMP, VTABLE
     private final Set<String> aliases = new LinkedHashSet<>();
     private int columnCount = 0;
     /** HND-04: for VTABLE entries — geoid of the DaliPlType (COLLECTION) that backs this virtual table. */
@@ -28,6 +28,7 @@ public class TableInfo {
     public String tableName() { return tableName; }
     public String schemaGeoid() { return schemaGeoid; }
     public String tableType() { return tableType; }
+    public void setTableType(String type) { if (type != null) this.tableType = type; }
     public Set<String> aliases() { return aliases; }
     public int columnCount() { return columnCount; }
 
