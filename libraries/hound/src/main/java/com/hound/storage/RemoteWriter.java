@@ -283,6 +283,12 @@ class RemoteWriter {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                         logger.debug("[ad-hoc] DaliSchema '{}' already exists — reusing", e.getKey());
+                        try {
+                            rcmd("UPDATE DaliSchema SET session_id=? WHERE db_name IS NULL AND schema_geoid=?",
+                                    sid, e.getKey());
+                        } catch (Exception upEx) {
+                            logger.warn("[ad-hoc] Failed to update DaliSchema '{}' session_id: {}", e.getKey(), upEx.getMessage());
+                        }
                     } else {
                         throw ex;
                     }
@@ -333,14 +339,16 @@ class RemoteWriter {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                         logger.debug("[ad-hoc] DaliTable '{}' already exists — reusing", e.getKey());
-                        // Upgrade reconstructed → master if DDL now defines this table
-                        if (tblMaster) {
-                            try {
-                                rcmd("UPDATE DaliTable SET data_source=? WHERE db_name IS NULL AND table_geoid=? AND (data_source IS NULL OR data_source <> ?)",
-                                        MASTER, e.getKey(), MASTER);
-                            } catch (Exception upEx) {
-                                logger.warn("[ad-hoc] Failed to upgrade DaliTable '{}' to master: {}", e.getKey(), upEx.getMessage());
+                        try {
+                            if (tblMaster) {
+                                rcmd("UPDATE DaliTable SET session_id=?, data_source=? WHERE db_name IS NULL AND table_geoid=?",
+                                        sid, MASTER, e.getKey());
+                            } else {
+                                rcmd("UPDATE DaliTable SET session_id=? WHERE db_name IS NULL AND table_geoid=?",
+                                        sid, e.getKey());
                             }
+                        } catch (Exception upEx) {
+                            logger.warn("[ad-hoc] Failed to update DaliTable '{}': {}", e.getKey(), upEx.getMessage());
                         }
                     } else {
                         throw ex;
@@ -389,18 +397,19 @@ class RemoteWriter {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                         logger.debug("[ad-hoc] DaliColumn '{}' already exists — reusing", e.getKey());
-                        // Upgrade reconstructed → master if DDL now defines this column's table
                         try {
-                            String upd = colMaster
-                                ? "UPDATE DaliColumn SET data_source=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=?"
-                                : "UPDATE DaliColumn SET is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=? AND (is_pk = false AND is_fk = false)";
                             if (colMaster) {
-                                rcmd(upd, MASTER, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                                rcmd("UPDATE DaliColumn SET session_id=?, data_source=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=?",
+                                        sid, MASTER, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
                             } else if (c.isPk() || c.isFk()) {
-                                rcmd(upd, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                                rcmd("UPDATE DaliColumn SET session_id=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=? AND (is_pk = false AND is_fk = false)",
+                                        sid, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                            } else {
+                                rcmd("UPDATE DaliColumn SET session_id=? WHERE db_name IS NULL AND column_geoid=?",
+                                        sid, e.getKey());
                             }
                         } catch (Exception upEx) {
-                            logger.warn("[ad-hoc] Failed to upgrade DaliColumn '{}': {}", e.getKey(), upEx.getMessage());
+                            logger.warn("[ad-hoc] Failed to update DaliColumn '{}': {}", e.getKey(), upEx.getMessage());
                         }
                     } else {
                         throw ex;
