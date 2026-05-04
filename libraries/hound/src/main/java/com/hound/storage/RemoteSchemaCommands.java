@@ -52,6 +52,8 @@ final class RemoteSchemaCommands {
                 // HND-01: PL/SQL user-defined TYPE templates (RECORD / COLLECTION)
                 "CREATE VERTEX TYPE DaliPlType IF NOT EXISTS",
                 "CREATE VERTEX TYPE DaliPlTypeField IF NOT EXISTS",
+                // HAL3-04 (ADR-HND-011): explicit cursor vertex
+                "CREATE VERTEX TYPE DaliCursor IF NOT EXISTS",
 
                 // Edge types — namespace hierarchy
                 "CREATE EDGE TYPE BELONGS_TO_APP IF NOT EXISTS",
@@ -329,6 +331,12 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliVariable.var_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliVariable.var_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliVariable.session_id IF NOT EXISTS STRING",
+                // DaliCursor (HAL3-04, ADR-HND-011)
+                "CREATE PROPERTY DaliCursor.cursor_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.cursor_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.routine_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.select_stmt_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.session_id IF NOT EXISTS STRING",
                 // DaliAffectedColumn
                 "CREATE PROPERTY DaliAffectedColumn.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAffectedColumn.statement_geoid IF NOT EXISTS STRING",

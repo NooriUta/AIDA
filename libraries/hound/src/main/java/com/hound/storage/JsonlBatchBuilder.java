@@ -329,6 +329,16 @@ public class JsonlBatchBuilder {
                 ));
                 vIdx++;
             }
+            // HAL3-04: DaliCursor vertices
+            for (RoutineInfo.CursorInfo c : r.getCursors()) {
+                b.appendVertex("DaliCursor", e.getKey() + ":CURSOR:" + c.name(), mapOf(
+                        "session_id", sid,
+                        "routine_geoid", e.getKey(),
+                        "cursor_name", c.name(),
+                        "cursor_geoid", e.getKey() + ":CURSOR:" + c.name(),
+                        "select_stmt_geoid", c.selectStmtGeoid()
+                ));
+            }
         }
 
         // 8. DaliStatement — DDL (CREATE/ALTER/DROP) are excluded: they go to DaliDDLStatement only
@@ -1183,6 +1193,16 @@ public class JsonlBatchBuilder {
                         "var_type", v.type()
                 ));
                 vIdx++;
+            }
+            // HAL3-04: DaliCursor vertices
+            for (RoutineInfo.CursorInfo c : r.getCursors()) {
+                b.appendVertex("DaliCursor", e.getKey() + ":CURSOR:" + c.name(), mapOf(
+                        "session_id", sid,
+                        "routine_geoid", e.getKey(),
+                        "cursor_name", c.name(),
+                        "cursor_geoid", e.getKey() + ":CURSOR:" + c.name(),
+                        "select_stmt_geoid", c.selectStmtGeoid()
+                ));
             }
         }
 

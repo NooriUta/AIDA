@@ -700,7 +700,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         // Register cursor name → statement geoid BEFORE the statement scope is popped
         if (ctx.identifier() != null) {
             String cursorName = BaseSemanticListener.cleanIdentifier(ctx.identifier().getText());
+            String stmtGeoid = base.engine.getScopeManager().currentStatement();
             base.onCursorDeclared(cursorName);
+            // HAL3-04: register cursor in RoutineInfo for DaliCursor vertex creation
+            String routineGeoid = base.currentRoutine();
+            if (routineGeoid != null) {
+                RoutineInfo ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+                if (ri != null) ri.addCursor(cursorName, stmtGeoid);
+            }
         }
         base.onStatementExit();
         base.setIsFirstSubq(null);
@@ -1435,11 +1442,13 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
         // Cursor name — resolve its SELECT statement geoid
         String cursorSelectGeoid = null;
+        String cursorNameUpper = null;
         if (ctx.cursor_name() != null) {
             String rawCursor = ctx.cursor_name().getText();
             int paren = rawCursor.indexOf('(');
             String cursorName = BaseSemanticListener.cleanIdentifier(
                     paren >= 0 ? rawCursor.substring(0, paren) : rawCursor);
+            cursorNameUpper = cursorName.toUpperCase();
             cursorSelectGeoid = base.engine.getScopeManager().getCursorStmtGeoid(cursorName);
         }
 
@@ -1456,6 +1465,19 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
                 : base.engine.getScopeManager().currentStatement();
         if (stmtGeoid != null)
             base.engine.getScopeManager().registerCursorRecord(varName, stmtGeoid, true);
+
+        // HAL3-04: emit READS_FROM_CURSOR edge (DaliStatement → DaliCursor)
+        if (cursorNameUpper != null && routineGeoid != null) {
+            String cursorGeoid = routineGeoid + ":CURSOR:" + cursorNameUpper;
+            String sourceGeoid = base.engine.getScopeManager().currentStatement();
+            if (sourceGeoid == null) sourceGeoid = routineGeoid;
+            base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                    sourceGeoid,
+                    CompensationStats.EDGE_READS_FROM_CURSOR,
+                    cursorGeoid,
+                    CompensationStats.KIND_CURSOR,
+                    null));
+        }
 
         logger.debug("G8 FETCH BULK COLLECT: {} → cursor stmt {}", varName, cursorSelectGeoid);
     }
@@ -1987,6 +2009,59 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             if (!varName.isBlank())
                 base.onReturningTarget(varName, retExprs, stmtGeoid, false);
         }
+
+        // HAL3-04: emit write-side CompensationStats for RETURNING INTO targets
+        String routineGeoid = base.currentRoutine();
+        if (routineGeoid != null) {
+            RoutineInfo ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+            if (ri != null) {
+                for (var ge : into.general_element()) {
+                    String varName = BaseSemanticListener.cleanIdentifier(ge.getText()).toUpperCase();
+                    int dot = varName.indexOf('.');
+                    if (dot > 0) varName = varName.substring(0, dot);
+                    emitReturningIntoCompensation(ri, routineGeoid, stmtGeoid, varName);
+                }
+                for (var bv : into.bind_variable()) {
+                    String varName = BaseSemanticListener.cleanIdentifier(
+                            bv.getText().replace(":", "")).toUpperCase();
+                    emitReturningIntoCompensation(ri, routineGeoid, stmtGeoid, varName);
+                }
+            }
+        }
+    }
+
+    private void emitReturningIntoCompensation(RoutineInfo ri, String routineGeoid,
+                                                String stmtGeoid, String varName) {
+        if (varName == null || varName.isBlank()) return;
+        String targetGeoid = null;
+        String targetKind = null;
+        int vIdx = 0;
+        for (RoutineInfo.VariableInfo v : ri.getTypedVariables()) {
+            if (varName.equalsIgnoreCase(v.name())) {
+                targetGeoid = routineGeoid + ":VAR:" + vIdx;
+                targetKind = CompensationStats.KIND_VARIABLE;
+                break;
+            }
+            vIdx++;
+        }
+        if (targetGeoid == null) {
+            int pIdx = 0;
+            for (RoutineInfo.ParameterInfo p : ri.getTypedParameters()) {
+                if (varName.equalsIgnoreCase(p.name())) {
+                    targetGeoid = routineGeoid + ":PARAM:" + pIdx;
+                    targetKind = CompensationStats.KIND_PARAMETER;
+                    break;
+                }
+                pIdx++;
+            }
+        }
+        if (targetGeoid == null) return;
+        base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                stmtGeoid,
+                CompensationStats.EDGE_ASSIGNS_TO_VARIABLE,
+                targetGeoid,
+                targetKind,
+                null));
     }
 
     // ── KI-DDL-1: ALTER TABLE column change tracking ─────────────────────────
