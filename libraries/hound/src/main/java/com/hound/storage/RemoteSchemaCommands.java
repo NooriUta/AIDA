@@ -292,6 +292,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliAtom.parent_context IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.primary_status IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.qualifier IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.kind IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.status IF NOT EXISTS STRING",       // legacy — kept for migration, removed in V2
                 "CREATE PROPERTY DaliAtom.warning IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.merge_clause IF NOT EXISTS STRING",

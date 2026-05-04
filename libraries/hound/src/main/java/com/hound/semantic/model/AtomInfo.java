@@ -13,6 +13,19 @@ public class AtomInfo {
     public static final String STATUS_PARTIAL            = "PARTIAL";
     public static final String STATUS_PENDING_INJECT     = "PENDING_INJECT";
 
+    // ── kind enum (ADR-HND-009) ─────────────────────────────────────────────────
+    public static final String KIND_COLUMN        = "COLUMN";
+    public static final String KIND_OUTPUT_COL    = "OUTPUT_COL";
+    public static final String KIND_VARIABLE      = "VARIABLE";
+    public static final String KIND_PARAMETER     = "PARAMETER";
+    public static final String KIND_FUNCTION_CALL = "FUNCTION_CALL";
+    public static final String KIND_SEQUENCE      = "SEQUENCE";
+    public static final String KIND_RECORD_FIELD  = "RECORD_FIELD";
+    public static final String KIND_CURSOR_RECORD = "CURSOR_RECORD";
+    public static final String KIND_CONSTANT      = "CONSTANT";
+    public static final String KIND_AMBIGUOUS     = "AMBIGUOUS";
+    public static final String KIND_UNKNOWN       = "UNKNOWN";
+
     // ── qualifier enum (ADR-HND-002) ───────────────────────────────────────────
     public static final String QUALIFIER_LINKED       = "LINKED";
     public static final String QUALIFIER_CTE          = "CTE";

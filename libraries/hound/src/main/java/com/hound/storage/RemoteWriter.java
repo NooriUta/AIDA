@@ -1079,14 +1079,14 @@ class RemoteWriter {
                         "atom_context=?, parent_context=?, position=?, sposition=?, " +
                         "is_complex=?, is_column_reference=?, is_function_call=?, is_constant=?, " +
                         "is_routine_param=?, is_routine_var=?, table_name=?, column_name=?, " +
-                        "table_geoid=?, primary_status=?, qualifier=?, status=?, warning=?, merge_clause=?, " +
+                        "table_geoid=?, primary_status=?, qualifier=?, kind=?, status=?, warning=?, merge_clause=?, " +
                         "output_column_sequence=?, nested_atoms_count=?",
                     sid, stmtGeoid, atomId, a.get("atom_text"), at.getKey(),
                     a.get("atom_context"), a.get("parent_context"), a.get("position"), a.get("sposition"),
                     a.get("is_complex"), a.get("is_column_reference"), a.get("is_function_call"),
                     a.get("is_constant"), a.get("is_routine_param"), a.get("is_routine_var"),
                     a.get("table_name"), a.get("column_name"),
-                    a.get("table_geoid"), a.get("primary_status"), a.get("qualifier"),
+                    a.get("table_geoid"), a.get("primary_status"), a.get("qualifier"), a.get("kind"),
                     a.get("status"), a.get("warning"), a.get("merge_clause"),
                     a.get("output_column_sequence"), a.get("nested_atoms_count"));
             }

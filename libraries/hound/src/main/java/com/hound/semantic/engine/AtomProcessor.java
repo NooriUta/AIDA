@@ -414,6 +414,11 @@ public class AtomProcessor {
             appendLog(statementGeoid, atomData, resolution);
         }
 
+        // HAL-02: derive kind from boolean flags + reference_type
+        for (var atomData : stmtAtoms.values()) {
+            atomData.put("kind", deriveKind(atomData));
+        }
+
         // B2.AR3 — atom resolution audit
         logger.info("DIAG Atoms [{}]: total={} resolved={} const={} func={} failed={}",
                 statementGeoid, total, resolved, constants, functions, failed);
@@ -1213,6 +1218,30 @@ public class AtomProcessor {
         entry.put("column_name", atomData.get("column_name"));
         entry.put("position",    atomData.get("position"));
         resolutionLog.add(entry);
+    }
+
+    static String deriveKind(Map<String, Object> atomData) {
+        if (Boolean.TRUE.equals(atomData.get("is_constant")))      return AtomInfo.KIND_CONSTANT;
+        if (Boolean.TRUE.equals(atomData.get("is_function_call"))) return AtomInfo.KIND_FUNCTION_CALL;
+        if (Boolean.TRUE.equals(atomData.get("is_routine_var")))   return AtomInfo.KIND_VARIABLE;
+        if (Boolean.TRUE.equals(atomData.get("is_routine_param"))) return AtomInfo.KIND_PARAMETER;
+
+        String refType = (String) atomData.get("reference_type");
+        if (refType != null) {
+            return switch (refType) {
+                case "sequence"                            -> AtomInfo.KIND_SEQUENCE;
+                case "cursor_record", "cursor_record_expr" -> AtomInfo.KIND_CURSOR_RECORD;
+                case "routine_variable"                    -> AtomInfo.KIND_VARIABLE;
+                case "routine_parameter"                   -> AtomInfo.KIND_PARAMETER;
+                default                                    -> AtomInfo.KIND_COLUMN;
+            };
+        }
+
+        if (Boolean.TRUE.equals(atomData.get("is_column_reference"))) return AtomInfo.KIND_COLUMN;
+
+        String ps = (String) atomData.get("primary_status");
+        if (AtomInfo.STATUS_UNRESOLVED.equals(ps)) return AtomInfo.KIND_UNKNOWN;
+        return AtomInfo.KIND_UNKNOWN;
     }
 
     public void clear() {
