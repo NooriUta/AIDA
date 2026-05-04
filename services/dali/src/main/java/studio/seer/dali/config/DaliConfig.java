@@ -95,6 +95,15 @@ public interface DaliConfig {
         String cron();
     }
 
+    /** HAL2-03: PENDING_INJECT TTL configuration. */
+    Pending pending();
+
+    interface Pending {
+        @WithName("ttl-days")
+        @WithDefault("7")
+        int ttlDays();
+    }
+
     interface Source {
         /** Human-readable source name (used as YGG target schema after sanitisation). */
         String name();

@@ -1480,6 +1480,36 @@ public class AtomProcessor {
                 injected, total, resolved);
     }
 
+    /**
+     * HAL2-03: Expire PENDING_INJECT atoms older than the given TTL.
+     * Transitions them to UNRESOLVED and clears pending fields.
+     * @param ttlMs TTL in milliseconds (default: {@link AtomInfo#PENDING_TTL_MS})
+     * @return number of atoms expired
+     */
+    public int expirePendingAtoms(long ttlMs) {
+        long now = System.currentTimeMillis();
+        int expired = 0;
+        for (var stmtEntry : atomsByStatement.values()) {
+            for (Map<String, Object> a : stmtEntry.values()) {
+                if (!AtomInfo.STATUS_PENDING_INJECT.equals(a.get("primary_status"))) continue;
+                Object sinceObj = a.get("pending_since");
+                if (sinceObj instanceof Number since && (now - since.longValue()) > ttlMs) {
+                    a.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                    a.put("status", AtomInfo.STATUS_UNRESOLVED);
+                    a.put("pending_kind", null);
+                    a.put("pending_snapshot", null);
+                    a.put("kind", deriveKind(a));
+                    a.put("confidence", deriveConfidence(a));
+                    expired++;
+                }
+            }
+        }
+        if (expired > 0) {
+            logger.info("HAL2-03: expired {} PENDING_INJECT atoms (TTL={}ms)", expired, ttlMs);
+        }
+        return expired;
+    }
+
     /** S1.PRE: one entry per processed atom — used to write DaliResolutionLog. */
     public List<Map<String, Object>> getResolutionLog() {
         return Collections.unmodifiableList(resolutionLog);

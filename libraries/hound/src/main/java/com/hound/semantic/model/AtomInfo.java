@@ -47,6 +47,9 @@ public class AtomInfo {
     public static final String PENDING_KIND_ROWTYPE   = "ROWTYPE";
     public static final String PENDING_KIND_MULTISET  = "MULTISET";
 
+    /** HAL2-03: default TTL for PENDING_INJECT atoms (milliseconds). */
+    public static final long PENDING_TTL_MS = 7L * 24 * 60 * 60 * 1000;
+
     // ── Legacy constants (used only for data migration) ────────────────────────
     public static final String LEGACY_STATUS_RESOLVED   = "Обработано";
     public static final String LEGACY_STATUS_UNRESOLVED = "Не разобрано";
