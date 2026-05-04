@@ -6,6 +6,7 @@ import com.hound.semantic.model.AtomInfo;
 import com.hound.semantic.model.RecordInfo;
 import com.hound.semantic.model.RoutineInfo;
 import com.hound.semantic.model.StatementInfo;
+import com.hound.semantic.model.PlTypeInfo;
 import com.hound.semantic.model.TableInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1418,6 +1419,65 @@ public class AtomProcessor {
                 pendingQualifiedAtoms.size(), resolved, reconstructed,
                 pendingQualifiedAtoms.size() - resolved - reconstructed);
         pendingQualifiedAtoms.clear();
+    }
+
+    /**
+     * HAL2-02: Post-walk second pass — resolve PENDING_INJECT atoms.
+     * 1. Retry PIPELINED column injection (PlType registry now complete)
+     * 2. Re-resolve atoms with pending_kind against now-populated tables
+     */
+    public void resolvePendingInjectAtoms() {
+        if (builder == null) return;
+
+        // Phase 1: retry PIPELINED column injection
+        int injected = 0;
+        for (String tableGeoid : new ArrayList<>(builder.getPendingPipelinedTables())) {
+            for (RoutineInfo ri : builder.getRoutines().values()) {
+                if (!ri.isPipelined() || ri.getReturnType() == null) continue;
+                PlTypeInfo collType = builder.resolvePlTypeByName(ri.getReturnType(), null);
+                if (collType == null || !collType.isCollection()) continue;
+                PlTypeInfo elemType = builder.resolvePlTypeByName(
+                        collType.getElementTypeName(), null);
+                if (elemType != null && (elemType.isRecord() || elemType.isObject())) {
+                    builder.injectColumnsFromPlType(tableGeoid, elemType);
+                    builder.getPendingPipelinedTables().remove(tableGeoid);
+                    injected++;
+                    break;
+                }
+            }
+        }
+
+        // Phase 2: re-resolve PENDING_INJECT atoms
+        int resolved = 0, total = 0;
+        for (var stmtEntry : atomsByStatement.entrySet()) {
+            for (var atomEntry : stmtEntry.getValue().entrySet()) {
+                Map<String, Object> a = atomEntry.getValue();
+                String pk = (String) a.get("pending_kind");
+                if (pk == null) continue;
+                if (!AtomInfo.STATUS_PENDING_INJECT.equals(a.get("primary_status"))) continue;
+                total++;
+
+                String tableGeoid = (String) a.get("table_geoid");
+                String colName = (String) a.get("column_name");
+                if (tableGeoid == null || colName == null) continue;
+
+                String colGeoid = tableGeoid + "." + colName.toUpperCase();
+                if (builder.getColumns().containsKey(colGeoid)) {
+                    a.put("primary_status", AtomInfo.STATUS_RESOLVED);
+                    a.put("status", AtomInfo.STATUS_RESOLVED);
+                    a.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                    a.put("resolve_strategy", "pending_inject_second_pass");
+                    a.put("pending_kind", null);
+                    a.put("pending_snapshot", null);
+                    a.put("kind", deriveKind(a));
+                    a.put("confidence", deriveConfidence(a));
+                    resolved++;
+                }
+            }
+        }
+
+        logger.info("HAL2-02: PIPELINED injections={}, PENDING_INJECT atoms: {} total, {} resolved",
+                injected, total, resolved);
     }
 
     /** S1.PRE: one entry per processed atom — used to write DaliResolutionLog. */

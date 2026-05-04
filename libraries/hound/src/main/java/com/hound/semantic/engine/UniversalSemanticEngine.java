@@ -1256,6 +1256,9 @@ public class UniversalSemanticEngine {
             pendingRowtypes.clear();
         }
 
+        // HAL2-02: second pass — resolve PENDING_INJECT atoms via PlType registry
+        atomProcessor.resolvePendingInjectAtoms();
+
         // HAL-05: classify unattached atoms (CONSTANT_ORPHAN detection)
         atomProcessor.classifyUnattachedAtoms();
     }

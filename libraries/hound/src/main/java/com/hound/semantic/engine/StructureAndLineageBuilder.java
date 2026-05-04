@@ -578,6 +578,8 @@ public class StructureAndLineageBuilder {
     public boolean isPendingRowtype(String tableGeoid) { return pendingRowtypeTables.contains(tableGeoid); }
     public void markPendingMultiset(String stmtGeoid) { pendingMultisetStmts.add(stmtGeoid); }
     public boolean isPendingMultiset(String stmtGeoid) { return pendingMultisetStmts.contains(stmtGeoid); }
+    public Set<String> getPendingPipelinedTables() { return pendingPipelinedTables; }
+    public Set<String> getPendingRowtypeTables() { return pendingRowtypeTables; }
 
     // ═══════ Lineage ═══════
 
