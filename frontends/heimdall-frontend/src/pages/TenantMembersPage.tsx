@@ -60,7 +60,7 @@ export default function TenantMembersPage() {
   }
 
   return (
-    <div style={{ padding: '24px', maxWidth: 960 }}>
+    <div className="page-content" style={{ padding: '24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button className="btn btn-secondary" onClick={() => navigate(`/admin/tenants/${alias}`)}>
           ← {t('members.backToTenant', 'Tenant')}

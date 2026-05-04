@@ -33,6 +33,9 @@ export function useNodeInteractions(
   const drillFromNode = useCallback((node: LoomNode): boolean => {
     if (viewLevel === 'L1' && SCOPE_FILTER_TYPES.has(node.data.nodeType)) {
       pushL1Scope(node.id, node.data.label, node.data.nodeType);
+      emitHeimdall('LOOM_DRILL_DOWN', 'INFO', {
+        nodeId: node.id, nodeType: node.data.nodeType, nodeLabel: node.data.label, fromLevel: viewLevel,
+      });
       return true;
     }
     if (viewLevel === 'L3' && node.data.nodeType !== 'DaliStatement') return false;
@@ -60,8 +63,11 @@ export function useNodeInteractions(
 
     setTableFilter(null);
     drillDown(scope, node.data.label, nt);
+    emitHeimdall('LOOM_DRILL_DOWN', 'INFO', {
+      nodeId: node.id, nodeType: nt, nodeLabel: node.data.label, fromLevel: viewLevel, scope,
+    });
     return true;
-  }, [viewLevel, pushL1Scope, drillDown, setTableFilter]);
+  }, [viewLevel, pushL1Scope, drillDown, setTableFilter, emitHeimdall]);
 
   // Touch double-tap detection — React Flow's `onNodeDoubleClick` fires from
   // the browser's `dblclick`, which iOS / Android Chrome sometimes swallow
@@ -92,6 +98,9 @@ export function useNodeInteractions(
         const scope = `db-${node.data.label}`;
         setTableFilter(null);
         drillDown(scope, node.data.label, 'DaliDatabase');
+        emitHeimdall('LOOM_DRILL_DOWN', 'INFO', {
+          nodeId: node.id, nodeType: 'DaliDatabase', nodeLabel: node.data.label, fromLevel: 'L1', scope,
+        });
       } else if (node.type === 'l1SchemaNode' && node.parentId) {
         setL1HierarchyDb(node.parentId);
         setL1HierarchySchema(node.id);
@@ -103,7 +112,11 @@ export function useNodeInteractions(
 
     if (nt === 'DaliDatabase') {
       setTableFilter(null);
-      jumpTo('L2', `db-${node.data.label}`, node.data.label, 'DaliDatabase');
+      const scope = `db-${node.data.label}`;
+      jumpTo('L2', scope, node.data.label, 'DaliDatabase');
+      emitHeimdall('LOOM_DRILL_DOWN', 'INFO', {
+        nodeId: node.id, nodeType: 'DaliDatabase', nodeLabel: node.data.label, fromLevel: viewLevel, scope,
+      });
       return;
     }
 

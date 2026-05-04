@@ -1,8 +1,9 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLoomStore } from '../../stores/loomStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useHeimdallEmitter } from '../../hooks/useHeimdallEmitter';
 
 export const Breadcrumb = memo(() => {
   const {
@@ -17,6 +18,7 @@ export const Breadcrumb = memo(() => {
     clearL1Scope,
   } = useLoomStore();
   const { t } = useTranslation();
+  const { emit: emitHeimdall } = useHeimdallEmitter();
 
   const isMobile = useIsMobile();
   const hasL1Scope  = viewLevel === 'L1' && l1ScopeStack.length > 0;
@@ -50,6 +52,9 @@ export const Breadcrumb = memo(() => {
         label={t('breadcrumb.overview')}
         icon={<LayoutGrid size={12} />}
         onClick={() => {
+          emitHeimdall('LOOM_BREADCRUMB_NAV', 'INFO', {
+            target: 'overview', fromLevel: viewLevel,
+          });
           clearL1Scope();
           navigateToLevel('L1');
         }}
@@ -64,7 +69,13 @@ export const Breadcrumb = memo(() => {
             <ChevronRight size={11} color="var(--t3)" style={{ flexShrink: 0 }} />
             <BreadcrumbSegment
               label={item.label}
-              onClick={isLast ? undefined : () => popL1ScopeToIndex(idx + 1)}
+              onClick={isLast ? undefined : () => {
+                emitHeimdall('LOOM_BREADCRUMB_NAV', 'INFO', {
+                  target: 'l1Scope', scopeLabel: item.label, scopeIndex: idx,
+                  fromLevel: viewLevel,
+                });
+                popL1ScopeToIndex(idx + 1);
+              }}
               isCurrent={isLast}
             />
           </span>
@@ -77,7 +88,13 @@ export const Breadcrumb = memo(() => {
           <ChevronRight size={11} color="var(--t3)" style={{ flexShrink: 0 }} />
           <BreadcrumbSegment
             label={item.label}
-            onClick={() => navigateBack(idx)}
+            onClick={() => {
+              emitHeimdall('LOOM_BREADCRUMB_NAV', 'INFO', {
+                target: 'navStack', stackLabel: item.label, stackLevel: item.level,
+                stackIndex: idx, fromLevel: viewLevel,
+              });
+              navigateBack(idx);
+            }}
             isCurrent={false}
           />
         </span>

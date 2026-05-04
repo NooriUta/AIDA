@@ -258,9 +258,11 @@ export const FilterToolbar = memo(() => {
   const handleDepthChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const val = e.target.value;
-      setDepth(val === 'Infinity' ? Infinity : Number(val));
+      const newDepth = val === 'Infinity' ? Infinity : Number(val);
+      setDepth(newDepth);
+      emitHeimdall('LOOM_DEPTH_CHANGED', 'INFO', { depth: val });
     },
-    [setDepth],
+    [setDepth, emitHeimdall],
   );
   const handleClearFilter = useCallback(() => { clearFilter(); requestFitView(); }, [clearFilter, requestFitView]);
 
@@ -449,10 +451,10 @@ export const FilterToolbar = memo(() => {
         <ToolbarDivider />
 
         {/* ── Direction ──────────────────────────────────────────────────────── */}
-        <ToolbarToggleButton size="sm" active={upstream}   onClick={() => setDirection(!upstream, downstream)} title={t('toolbar.upstream')}>
+        <ToolbarToggleButton size="sm" active={upstream}   onClick={() => { setDirection(!upstream, downstream); emitHeimdall('LOOM_DIRECTION_CHANGED', 'INFO', { upstream: !upstream, downstream }); }} title={t('toolbar.upstream')}>
           &#x2191;{!compact && <> {t('toolbar.upstream')}</>}
         </ToolbarToggleButton>
-        <ToolbarToggleButton size="sm" active={downstream} onClick={() => setDirection(upstream, !downstream)} title={t('toolbar.downstream')}>
+        <ToolbarToggleButton size="sm" active={downstream} onClick={() => { setDirection(upstream, !downstream); emitHeimdall('LOOM_DIRECTION_CHANGED', 'INFO', { upstream, downstream: !downstream }); }} title={t('toolbar.downstream')}>
           &#x2193;{!compact && <> {t('toolbar.downstream')}</>}
         </ToolbarToggleButton>
 
