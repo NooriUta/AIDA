@@ -385,13 +385,14 @@ class RemoteWriter {
                 boolean colMaster = isMasterTable(c.getTableGeoid(), str);
                 String ds = colMaster ? MASTER : RECONSTRUCTED;
                 try {
-                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
                             sid, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                             c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                             c.getOrdinalPosition(),
                             toJson(new ArrayList<>(c.getUsedInStatements())),
                             ds, c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                            c.isInferred(), c.getSourcePass(), c.isSuspicious());
                     newColumnGeoids.add(e.getKey());
                 } catch (RuntimeException ex) {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
@@ -780,14 +781,15 @@ class RemoteWriter {
             if (pool != null) {
                 String cg = pool.canonicalCol(c.getTableGeoid(), c.getColumnName());
                 if (!pool.hasColumnRid(cg)) {
-                    rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                    rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
                             dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                             c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                             c.getOrdinalPosition(),
                             toJson(new ArrayList<>(c.getUsedInStatements())),
                             colMaster ? MASTER : RECONSTRUCTED,
                             c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                            c.isInferred(), c.getSourcePass(), c.isSuspicious());
                     pool.putColumnRid(cg, cg);
                     newColumnGeoids.add(e.getKey());
                 } else if (colMaster) {
@@ -797,13 +799,14 @@ class RemoteWriter {
             } else {
                 // Non-pool (ad-hoc) REMOTE path: handle duplicate gracefully
                 try {
-                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
                             sid, e.getKey(), c.getTableGeoid(), c.getColumnName(), c.getExpression(), c.getAlias(),
                             c.isOutput(), c.getOrder(), c.getOrdinalPosition(),
                             toJson(new ArrayList<>(c.getUsedInStatements())),
                             colMaster ? MASTER : RECONSTRUCTED,
                             c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                            c.isInferred(), c.getSourcePass(), c.isSuspicious());
                 } catch (RuntimeException ex) {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
@@ -1691,14 +1694,15 @@ class RemoteWriter {
                 if (!pool.hasColumnRid(cg)) {
                     boolean colMaster = isMasterTable(c.getTableGeoid(), str);
                     try {
-                        rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                        rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
                                 dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                                 c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                                 c.getOrdinalPosition(),
                                 toJson(new ArrayList<>(c.getUsedInStatements())),
                                 colMaster ? MASTER : RECONSTRUCTED,
                                 c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                                c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                                c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                                c.isInferred(), c.getSourcePass(), c.isSuspicious());
                         pool.putColumnRid(cg, cg);
                         newColumnGeoids.add(e.getKey());
                     } catch (RuntimeException ex) {

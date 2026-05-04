@@ -168,6 +168,22 @@ public class StructureAndLineageBuilder {
         addColumn(tableGeoid, columnName, expression, alias, null);
     }
 
+    public void addInferredColumn(String tableGeoid, String columnName, String sourcePass) {
+        String upperCol = columnName.toUpperCase();
+        String geoid = tableGeoid + "." + upperCol;
+        boolean[] created = {false};
+        columns.computeIfAbsent(geoid, k -> {
+            created[0] = true;
+            TableInfo t = tables.get(tableGeoid);
+            int ordinal = 0;
+            if (t != null) { t.incrementColumnCount(); ordinal = t.columnCount(); }
+            return new ColumnInfo(geoid, tableGeoid, upperCol, null, null, false, 0, ordinal, null, false, null);
+        });
+        if (created[0]) {
+            columns.get(geoid).markAsInferred(sourcePass);
+        }
+    }
+
     public void addColumn(String tableGeoid, String columnName, String expression, String alias,
                           String dataType) {
         addColumn(tableGeoid, columnName, expression, alias, dataType, false, null);

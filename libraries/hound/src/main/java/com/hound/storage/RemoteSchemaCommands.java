@@ -262,6 +262,9 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliColumn.is_fk IF NOT EXISTS BOOLEAN",         // T14: FOREIGN KEY column
                 "CREATE PROPERTY DaliColumn.fk_ref_table IF NOT EXISTS STRING",   // T14: FK referenced table geoid
                 "CREATE PROPERTY DaliColumn.fk_ref_column IF NOT EXISTS STRING",  // T14: FK referenced column name
+                "CREATE PROPERTY DaliColumn.inferred IF NOT EXISTS BOOLEAN",
+                "CREATE PROPERTY DaliColumn.source_pass IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliColumn.suspicious IF NOT EXISTS BOOLEAN",
                 // DaliRoutine (v23: +return_type, +line_start; v24: +data_source)
                 "CREATE PROPERTY DaliRoutine.routine_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRoutine.routine_name IF NOT EXISTS STRING",

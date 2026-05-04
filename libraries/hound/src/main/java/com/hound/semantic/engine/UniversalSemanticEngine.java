@@ -1121,9 +1121,8 @@ public class UniversalSemanticEngine {
             }
 
             if (tGeoid != null) {
-                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
                 if (!builder.getStatements().containsKey(tGeoid)) {
-                    builder.addColumn(tGeoid, cPart, null, null);
+                    builder.addInferredColumn(tGeoid, cPart, "L1");
                 }
                 resolvedNow++;
             } else {
@@ -1162,9 +1161,8 @@ public class UniversalSemanticEngine {
                 if (ref.isResolved()) tGeoid = ref.getGeoid();
             }
             if (tGeoid != null) {
-                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
                 if (!builder.getStatements().containsKey(tGeoid)) {
-                    builder.addColumn(tGeoid, cPart, null, null);
+                    builder.addInferredColumn(tGeoid, cPart, "L2");
                 }
                 resolved.add(i);
             }
@@ -1185,7 +1183,7 @@ public class UniversalSemanticEngine {
                 if (parts.length > 1) { stillAfterP3.add(p); continue; }
                 String tGeoid = resolveViaParentChain(ref, stmtGeoid);
                 if (tGeoid != null) {
-                    builder.addColumn(tGeoid, ref, null, null);
+                    builder.addInferredColumn(tGeoid, ref, "L3");
                     p3Resolved++;
                 } else {
                     stillAfterP3.add(p);
@@ -1212,7 +1210,7 @@ public class UniversalSemanticEngine {
                         .filter(g -> !builder.getStatements().containsKey(g))
                         .toList();
                 if (sources.size() != 1) { stillAfterP4.add(p); continue; }
-                builder.addColumn(sources.get(0), ref, null, null);
+                builder.addInferredColumn(sources.get(0), ref, "L4");
                 p4Resolved++;
             }
             pendingColumns.clear();

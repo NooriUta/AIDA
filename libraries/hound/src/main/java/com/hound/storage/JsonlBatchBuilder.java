@@ -278,7 +278,10 @@ public class JsonlBatchBuilder {
                     "is_pk", c.isPk(),
                     "is_fk", c.isFk(),
                     "fk_ref_table", c.getFkRefTable(),
-                    "fk_ref_column", c.getFkRefColumn()
+                    "fk_ref_column", c.getFkRefColumn(),
+                    "inferred", c.isInferred(),
+                    "source_pass", c.getSourcePass(),
+                    "suspicious", c.isSuspicious()
             ));
         }
 
