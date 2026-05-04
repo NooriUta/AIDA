@@ -1382,48 +1382,39 @@ class RemoteWriter {
             }
         }
 
-        // ── Constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, HAS_UNIQUE_KEY, HAS_CHECK,
-        //    IS_PK/FK/UNIQUE_COLUMN, REFERENCES_*) ──
+        // ── Constraint edges (F-1 folded: HAS_CONSTRAINT, CONSTRAINT_HAS_COLUMN, REFERENCES) ──
         for (var e : str.getConstraints().entrySet()) {
             ConstraintInfo c = e.getValue();
             String constraintRid = rid.constraints.get(e.getKey());
             if (constraintRid == null) continue;
+            String kind = c.getConstraintType();
 
-            // Table → Constraint edge
+            // Table ──HAS_CONSTRAINT(kind)──► Constraint
             String hostTableRid = rid.tables.get(c.getHostTableGeoid());
             if (hostTableRid != null) {
-                String tableEdge;
-                if      (c.isPrimaryKey())       tableEdge = "HAS_PRIMARY_KEY";
-                else if (c.isForeignKey())        tableEdge = "HAS_FOREIGN_KEY";
-                else if (c.isUniqueConstraint())  tableEdge = "HAS_UNIQUE_KEY";
-                else if (c.isCheckConstraint())   tableEdge = "HAS_CHECK";
-                else tableEdge = null;
-                if (tableEdge != null) edgeByRid(tableEdge, hostTableRid, constraintRid, sid);
+                edgeByRid("HAS_CONSTRAINT", hostTableRid, constraintRid, sid, "kind", kind);
             }
 
-            // Constraint → Column edges (PK, FK, UQ only)
-            String colEdge;
-            if      (c.isPrimaryKey())      colEdge = "IS_PK_COLUMN";
-            else if (c.isForeignKey())       colEdge = "IS_FK_COLUMN";
-            else if (c.isUniqueConstraint()) colEdge = "IS_UNIQUE_COLUMN";
-            else colEdge = null;
-            if (colEdge != null) {
+            // Constraint ──CONSTRAINT_HAS_COLUMN(kind, order_id)──► Column (PK, FK, UQ only)
+            if (!c.isCheckConstraint()) {
                 for (int i = 0; i < c.getColumnNames().size(); i++) {
                     String colGeoid = c.getHostTableGeoid() + "." + c.getColumnNames().get(i);
                     String colRid = rid.columns.get(colGeoid);
-                    if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                    if (colRid != null) edgeByRid("CONSTRAINT_HAS_COLUMN", constraintRid, colRid, sid,
+                            "kind", kind, "order_id", i + 1);
                 }
             }
 
-            // FK-specific: REFERENCES_TABLE + REFERENCES_COLUMN
+            // FK-specific: REFERENCES(target_kind, order_id)
             if (c.isForeignKey() && c.getRefTableGeoid() != null) {
                 String refTableRid = rid.tables.get(c.getRefTableGeoid());
-                if (refTableRid != null) edgeByRid("REFERENCES_TABLE", constraintRid, refTableRid, sid);
+                if (refTableRid != null) edgeByRid("REFERENCES", constraintRid, refTableRid, sid, "target_kind", "table");
 
                 for (int i = 0; i < c.getRefColumnNames().size(); i++) {
                     String refColGeoid = c.getRefTableGeoid() + "." + c.getRefColumnNames().get(i);
                     String refColRid = rid.columns.get(refColGeoid);
-                    if (refColRid != null) edgeByRid("REFERENCES_COLUMN", constraintRid, refColRid, sid, "order_id", i + 1);
+                    if (refColRid != null) edgeByRid("REFERENCES", constraintRid, refColRid, sid,
+                            "target_kind", "column", "order_id", i + 1);
                 }
             }
         }
@@ -1885,8 +1876,7 @@ class RemoteWriter {
                 builder.vertexCount(), builder.edgeCount(), builder.droppedEdgeCount(), payload.length());
         client.send(payload, sid);
 
-        // Post-batch: constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, IS_PK_COLUMN,
-        // IS_FK_COLUMN, REFERENCES_TABLE, REFERENCES_COLUMN).
+        // Post-batch: constraint edges (F-1 folded: HAS_CONSTRAINT, CONSTRAINT_HAS_COLUMN, REFERENCES).
         // Must run AFTER client.send() because DaliPrimaryKey/DaliForeignKey vertices
         // are inserted by the batch and their RIDs are only available afterward.
         if (str.getConstraints() != null && !str.getConstraints().isEmpty()) {
@@ -1901,36 +1891,29 @@ class RemoteWriter {
                 ConstraintInfo c = e.getValue();
                 String constraintRid = constraintRids.get(e.getKey());
                 if (constraintRid == null) continue;
-                // Table → Constraint edge
+                String kind = c.getConstraintType();
+
+                // Table ──HAS_CONSTRAINT(kind)──► Constraint
                 String hostRid = tblRids.get(c.getHostTableGeoid());
                 if (hostRid != null) {
-                    String tableEdge;
-                    if      (c.isPrimaryKey())       tableEdge = "HAS_PRIMARY_KEY";
-                    else if (c.isForeignKey())        tableEdge = "HAS_FOREIGN_KEY";
-                    else if (c.isUniqueConstraint())  tableEdge = "HAS_UNIQUE_KEY";
-                    else if (c.isCheckConstraint())   tableEdge = "HAS_CHECK";
-                    else tableEdge = null;
-                    if (tableEdge != null) edgeByRid(tableEdge, hostRid, constraintRid, sid);
+                    edgeByRid("HAS_CONSTRAINT", hostRid, constraintRid, sid, "kind", kind);
                 }
-                // Constraint → Column edges (PK, FK, UQ only)
-                String colEdge;
-                if      (c.isPrimaryKey())      colEdge = "IS_PK_COLUMN";
-                else if (c.isForeignKey())       colEdge = "IS_FK_COLUMN";
-                else if (c.isUniqueConstraint()) colEdge = "IS_UNIQUE_COLUMN";
-                else colEdge = null;
-                if (colEdge != null) {
+                // Constraint ──CONSTRAINT_HAS_COLUMN(kind, order_id)──► Column (PK, FK, UQ only)
+                if (!c.isCheckConstraint()) {
                     for (int i = 0; i < c.getColumnNames().size(); i++) {
                         String colRid = colRids.get(c.getHostTableGeoid() + "." + c.getColumnNames().get(i));
-                        if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                        if (colRid != null) edgeByRid("CONSTRAINT_HAS_COLUMN", constraintRid, colRid, sid,
+                                "kind", kind, "order_id", i + 1);
                     }
                 }
-                // REFERENCES_TABLE + REFERENCES_COLUMN (FK only)
+                // FK-specific: REFERENCES(target_kind, order_id)
                 if (c.isForeignKey() && c.getRefTableGeoid() != null) {
                     String refTblRid = tblRids.get(c.getRefTableGeoid());
-                    if (refTblRid != null) edgeByRid("REFERENCES_TABLE", constraintRid, refTblRid, sid);
+                    if (refTblRid != null) edgeByRid("REFERENCES", constraintRid, refTblRid, sid, "target_kind", "table");
                     for (int i = 0; i < c.getRefColumnNames().size(); i++) {
                         String refColRid = colRids.get(c.getRefTableGeoid() + "." + c.getRefColumnNames().get(i));
-                        if (refColRid != null) edgeByRid("REFERENCES_COLUMN", constraintRid, refColRid, sid, "order_id", i + 1);
+                        if (refColRid != null) edgeByRid("REFERENCES", constraintRid, refColRid, sid,
+                                "target_kind", "column", "order_id", i + 1);
                     }
                 }
             }

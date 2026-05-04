@@ -49,9 +49,26 @@ preference:
 |}
 
 Vertex types: DaliSchema, DaliTable, DaliColumn, DaliRoutine, DaliPackage, DaliView, DaliAtom,
-DaliStmt. Edge types: CONTAINS_SCHEMA, CONTAINS_TABLE, CONTAINS_ROUTINE, CONTAINS_STMT,
-READS_FROM, WRITES_TO, CALLS, DATA_FLOW, ATOM_REF_TABLE, ATOM_REF_COLUMN, etc. Field names are
-snake_case (table_name, schema_geoid, source_text).
+DaliStmt, DaliPrimaryKey, DaliForeignKey, DaliUniqueConstraint, DaliCheckConstraint.
+Edge types: CONTAINS_SCHEMA, CONTAINS_TABLE, CONTAINS_ROUTINE, CONTAINS_STMT,
+READS_FROM, WRITES_TO, CALLS, DATA_FLOW, ATOM_REF_TABLE, ATOM_REF_COLUMN,
+HAS_CONSTRAINT, CONSTRAINT_HAS_COLUMN, REFERENCES, etc.
+Field names are snake_case (table_name, schema_geoid, source_text).
+
+CONSTRAINTS — DaliPrimaryKey / DaliForeignKey / DaliUniqueConstraint / DaliCheckConstraint all
+extend DaliConstraint. Common fields: constraint_geoid, constraint_type (PK|FK|UQ|CH),
+constraint_name, table_geoid, column_names (JSON array). FK-specific: ref_table_geoid,
+ref_column_names, on_delete (CASCADE|SET NULL|null). CHECK-specific: check_expression.
+Edge properties: HAS_CONSTRAINT.kind (PK/FK/UQ/CH), CONSTRAINT_HAS_COLUMN.kind + .order_id,
+REFERENCES.target_kind (table/column) + .order_id.
+{|
+  — "What PKs does HR.EMPLOYEES have?"
+    MATCH (t:DaliTable {table_geoid:'HR.EMPLOYEES'})-[e:HAS_CONSTRAINT {kind:'PK'}]->(pk) RETURN pk.constraint_name, pk.column_names LIMIT 10
+  — "What tables reference HR.DEPARTMENTS via FK?"
+    MATCH (fk)-[r:REFERENCES {target_kind:'table'}]->(t:DaliTable {table_geoid:'HR.DEPARTMENTS'}) RETURN fk.constraint_name, fk.table_geoid LIMIT 50
+  — "Which columns form FK_EMP_DEPT?"
+    MATCH (fk:DaliForeignKey {constraint_name:'FK_EMP_DEPT'})-[e:CONSTRAINT_HAS_COLUMN]->(c:DaliColumn) RETURN c.column_name, e.order_id ORDER BY e.order_id LIMIT 20
+|}
 
 ALWAYS LIMIT N (N ≤ 100). Never inline user-supplied strings without escaping. State in the answer
 which dialect you used and why.

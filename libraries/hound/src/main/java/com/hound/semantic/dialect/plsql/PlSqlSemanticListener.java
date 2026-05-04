@@ -1988,7 +1988,7 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
     /**
      * Suppresses atoms inside REFERENCES ... (table + column list) — the FK target info is
-     * already captured structurally via ConstraintInfo / REFERENCES_TABLE / REFERENCES_COLUMN edges.
+     * already captured structurally via ConstraintInfo / REFERENCES edges.
      * Only active in DDL context to avoid suppressing SELECT-clause references.
      */
     @Override

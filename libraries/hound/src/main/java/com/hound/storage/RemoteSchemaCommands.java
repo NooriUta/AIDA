@@ -293,22 +293,18 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliForeignKey.on_delete IF NOT EXISTS STRING",         // CASCADE | SET NULL | null
                 // KI-DDL-1: operation property on DDL modifier edges (ADD | MODIFY | DROP)
                 "CREATE PROPERTY DaliDDLModifiesColumn.operation IF NOT EXISTS STRING",
-                // ── Constraint edge types ───────────────────────────────────────────────
-                // DaliTable ──HAS_PRIMARY_KEY──► DaliPrimaryKey
-                "CREATE EDGE TYPE HAS_PRIMARY_KEY IF NOT EXISTS",
-                // DaliTable ──HAS_FOREIGN_KEY──► DaliForeignKey
-                "CREATE EDGE TYPE HAS_FOREIGN_KEY IF NOT EXISTS",
-                // DaliPrimaryKey / DaliForeignKey ──IS_PK_COLUMN──► DaliColumn  (with order_id)
-                "CREATE EDGE TYPE IS_PK_COLUMN IF NOT EXISTS",
-                "CREATE PROPERTY IS_PK_COLUMN.order_id IF NOT EXISTS INTEGER",
-                // DaliForeignKey ──IS_FK_COLUMN──► DaliColumn  (with order_id)
-                "CREATE EDGE TYPE IS_FK_COLUMN IF NOT EXISTS",
-                "CREATE PROPERTY IS_FK_COLUMN.order_id IF NOT EXISTS INTEGER",
-                // DaliForeignKey ──REFERENCES_TABLE──► DaliTable
-                "CREATE EDGE TYPE REFERENCES_TABLE IF NOT EXISTS",
-                // DaliForeignKey ──REFERENCES_COLUMN──► DaliColumn  (with order_id)
-                "CREATE EDGE TYPE REFERENCES_COLUMN IF NOT EXISTS",
-                "CREATE PROPERTY REFERENCES_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // ── Constraint edge types (F-1 folded: 9 → 3) ────────────────────────
+                // DaliTable ──HAS_CONSTRAINT──► DaliConstraint (kind: PK/FK/UQ/CH)
+                "CREATE EDGE TYPE HAS_CONSTRAINT IF NOT EXISTS",
+                "CREATE PROPERTY HAS_CONSTRAINT.kind IF NOT EXISTS STRING",
+                // DaliConstraint ──CONSTRAINT_HAS_COLUMN──► DaliColumn (kind + order_id)
+                "CREATE EDGE TYPE CONSTRAINT_HAS_COLUMN IF NOT EXISTS",
+                "CREATE PROPERTY CONSTRAINT_HAS_COLUMN.kind IF NOT EXISTS STRING",
+                "CREATE PROPERTY CONSTRAINT_HAS_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // DaliForeignKey ──REFERENCES──► DaliTable or DaliColumn (target_kind: table/column)
+                "CREATE EDGE TYPE REFERENCES IF NOT EXISTS",
+                "CREATE PROPERTY REFERENCES.target_kind IF NOT EXISTS STRING",
+                "CREATE PROPERTY REFERENCES.order_id IF NOT EXISTS INTEGER",
                 // KI-PIPE-1: pipelined function flag
                 "CREATE PROPERTY DaliRoutine.is_pipelined IF NOT EXISTS BOOLEAN",
                 // KI-PRAGMA-1: autonomous transaction flag
@@ -334,8 +330,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliStatement.flashback_expr IF NOT EXISTS STRING",
                 // KI-DBMSSQL-1: DBMS_SQL dynamic SQL marker on DaliStatement
                 "CREATE PROPERTY DaliStatement.contains_dynamic_sql IF NOT EXISTS BOOLEAN",
-                // KI-005: UNIQUE / CHECK constraint properties
-                "CREATE PROPERTY IS_UNIQUE_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // KI-005: CHECK constraint expression
                 "CREATE PROPERTY DaliCheckConstraint.check_expression IF NOT EXISTS STRING",
         };
     }

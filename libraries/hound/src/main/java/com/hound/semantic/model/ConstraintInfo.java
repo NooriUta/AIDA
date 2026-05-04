@@ -29,15 +29,12 @@ import java.util.List;
  *   CH → CRM.EMPLOYEES#CH#CHK_EMP_AGE
  * </pre>
  *
- * <h3>Graph model</h3>
+ * <h3>Graph model (F-1 folded: 9 → 3 edge types)</h3>
  * <pre>
- *   DaliTable  ──HAS_PRIMARY_KEY──►  DaliPrimaryKey (extends DaliConstraint)
- *   DaliTable  ──HAS_FOREIGN_KEY──►  DaliForeignKey (extends DaliConstraint)
- *
- *   DaliPrimaryKey  ──IS_PK_COLUMN────►  DaliColumn  (order_id = 1, 2, …)
- *   DaliForeignKey  ──IS_FK_COLUMN────►  DaliColumn  (order_id = 1, 2, …)
- *   DaliForeignKey  ──REFERENCES_TABLE►  DaliTable   (referenced / parent table)
- *   DaliForeignKey  ──REFERENCES_COLUMN► DaliColumn  (referenced columns, order_id = 1, 2, …)
+ *   DaliTable  ──HAS_CONSTRAINT(kind)──►  DaliConstraint subtype
+ *   DaliConstraint  ──CONSTRAINT_HAS_COLUMN(kind, order_id)──►  DaliColumn
+ *   DaliForeignKey  ──REFERENCES(target_kind='table')──►  DaliTable
+ *   DaliForeignKey  ──REFERENCES(target_kind='column', order_id)──►  DaliColumn
  * </pre>
  */
 public class ConstraintInfo {
