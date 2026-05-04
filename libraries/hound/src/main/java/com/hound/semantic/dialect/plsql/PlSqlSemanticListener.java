@@ -7,6 +7,8 @@ import com.hound.parser.base.grammars.sql.plsql.PlSqlParserBaseListener;
 import com.hound.semantic.engine.CanonicalTokenType;
 import com.hound.semantic.listener.BaseSemanticListener;
 import com.hound.semantic.engine.UniversalSemanticEngine;
+import com.hound.semantic.model.CompensationStats;
+import com.hound.semantic.model.RoutineInfo;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -1456,6 +1458,72 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             base.engine.getScopeManager().registerCursorRecord(varName, stmtGeoid, true);
 
         logger.debug("G8 FETCH BULK COLLECT: {} → cursor stmt {}", varName, cursorSelectGeoid);
+    }
+
+    // =========================================================================
+    // HAL3-02: assignment_statement → ASSIGNS_TO_VARIABLE edge
+    // =========================================================================
+
+    @Override
+    public void exitAssignment_statement(PlSqlParser.Assignment_statementContext ctx) {
+        if (ctx == null) return;
+        PlSqlParser.General_elementContext ge = ctx.general_element();
+        if (ge == null) return;
+
+        var parts = ge.general_element_part();
+        if (parts == null || parts.isEmpty()) return;
+        String varName;
+        if (parts.get(0).id_expression() != null) {
+            varName = BaseSemanticListener.cleanIdentifier(
+                    parts.get(0).id_expression().getText()).toUpperCase();
+        } else {
+            varName = BaseSemanticListener.cleanIdentifier(ge.getText()).toUpperCase();
+            int dot = varName.indexOf('.');
+            if (dot > 0) varName = varName.substring(0, dot);
+            int paren = varName.indexOf('(');
+            if (paren > 0) varName = varName.substring(0, paren);
+        }
+
+        String routineGeoid = base.currentRoutine();
+        if (routineGeoid == null) return;
+
+        RoutineInfo ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+        if (ri == null) return;
+
+        String targetGeoid = null;
+        String targetKind = null;
+
+        int vIdx = 0;
+        for (RoutineInfo.VariableInfo v : ri.getTypedVariables()) {
+            if (varName.equalsIgnoreCase(v.name())) {
+                targetGeoid = routineGeoid + ":VAR:" + vIdx;
+                targetKind = CompensationStats.KIND_VARIABLE;
+                break;
+            }
+            vIdx++;
+        }
+        if (targetGeoid == null) {
+            int pIdx = 0;
+            for (RoutineInfo.ParameterInfo p : ri.getTypedParameters()) {
+                if (varName.equalsIgnoreCase(p.name())) {
+                    targetGeoid = routineGeoid + ":PARAM:" + pIdx;
+                    targetKind = CompensationStats.KIND_PARAMETER;
+                    break;
+                }
+                pIdx++;
+            }
+        }
+        if (targetGeoid == null) return;
+
+        String sourceGeoid = base.engine.getScopeManager().currentStatement();
+        if (sourceGeoid == null) sourceGeoid = routineGeoid;
+
+        base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                sourceGeoid,
+                CompensationStats.EDGE_ASSIGNS_TO_VARIABLE,
+                targetGeoid,
+                targetKind,
+                null));
     }
 
     // =========================================================================
