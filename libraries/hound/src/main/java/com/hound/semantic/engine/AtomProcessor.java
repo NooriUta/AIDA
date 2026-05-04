@@ -1472,6 +1472,12 @@ public class AtomProcessor {
                     a.put("kind", deriveKind(a));
                     a.put("confidence", deriveConfidence(a));
                     resolved++;
+                    // HAL2-05: emit recompute event for cascade propagation
+                    String atomGeoid = (String) a.get("atom_geoid");
+                    if (atomGeoid != null) {
+                        listener.onRecomputeNeeded(atomGeoid,
+                                AtomInfo.STATUS_RECONSTRUCT_INVERSE, null);
+                    }
                 }
             }
         }

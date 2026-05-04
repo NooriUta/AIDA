@@ -83,4 +83,9 @@ public class DaliHoundListener implements HoundEventListener {
         log.error("[{}] semantic error  file={} category={} msg={}", sessionId, file, category, message);
         emitter.semanticError(sessionId, tenantAlias, file, category, message);
     }
+
+    @Override
+    public void onRecomputeNeeded(String atomGeoid, String newPrimaryStatus, String sid) {
+        log.info("[{}] recompute needed atom={} newStatus={}", sessionId, atomGeoid, newPrimaryStatus);
+    }
 }

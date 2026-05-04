@@ -86,4 +86,14 @@ public interface HoundEventListener {
      * @param message  human-readable detail
      */
     default void onSemanticError(String file, String category, String message) {}
+
+    /**
+     * HAL2-05: Called when an atom transitions from PENDING_INJECT to a resolved state,
+     * signalling that parent statements may need cascade recomputation.
+     *
+     * @param atomGeoid        geoid of the resolved atom
+     * @param newPrimaryStatus new status (RECONSTRUCT_INVERSE, RESOLVED, etc.)
+     * @param sessionId        session performing the resolution
+     */
+    default void onRecomputeNeeded(String atomGeoid, String newPrimaryStatus, String sessionId) {}
 }
