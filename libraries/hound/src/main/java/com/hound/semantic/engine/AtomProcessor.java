@@ -327,6 +327,10 @@ public class AtomProcessor {
 
         logger.debug("Resolving {} atoms for statement {}", stmtAtoms.size(), statementGeoid);
 
+        // HAL-07: capture routine_geoid before scope pops
+        String routineGeoid = (scopeManager != null && scopeManager.currentRoutine() != null)
+                ? scopeManager.currentRoutine() : null;
+
         int total = 0, resolved = 0, constants = 0, functions = 0, failed = 0;
 
         for (var entry : stmtAtoms.entrySet()) {
@@ -449,6 +453,10 @@ public class AtomProcessor {
             }
 
             atomData.put("confidence", deriveConfidence(atomData));
+
+            // HAL-07: routine_geoid + pending_verification
+            if (routineGeoid != null) atomData.put("routine_geoid", routineGeoid);
+            atomData.put("pending_verification", true);
         }
 
         // B2.AR3 — atom resolution audit
