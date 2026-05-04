@@ -36,6 +36,12 @@ public class AtomInfo {
     public static final String QUALIFIER_FN_VERIFIED  = "FN_VERIFIED";
     public static final String QUALIFIER_FN_UNVERIFIED = "FN_UNVERIFIED";
 
+    // ── confidence enum (ADR-HND-003) ─────────────────────────────────────────
+    public static final String CONFIDENCE_HIGH   = "HIGH";
+    public static final String CONFIDENCE_MEDIUM = "MEDIUM";
+    public static final String CONFIDENCE_LOW    = "LOW";
+    public static final String CONFIDENCE_FUZZY  = "FUZZY";
+
     // ── Legacy constants (used only for data migration) ────────────────────────
     public static final String LEGACY_STATUS_RESOLVED   = "Обработано";
     public static final String LEGACY_STATUS_UNRESOLVED = "Не разобрано";

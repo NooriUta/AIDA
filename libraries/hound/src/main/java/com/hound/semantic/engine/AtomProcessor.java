@@ -368,14 +368,17 @@ public class AtomProcessor {
                 atomData.put("is_routine_var", Boolean.TRUE.equals(resolution.get("is_routine_var")));
 
                 // HAL-01: derive qualifier from resolution source
-                String resolveStrategy = (String) resolution.get("strategy");
+                String resolveStrategy = (String) resolution.get("resolve_strategy");
+                atomData.put("resolve_strategy", resolveStrategy);
                 if (resolveStrategy != null) {
                     switch (resolveStrategy) {
-                        case "cte"      -> atomData.put("qualifier", AtomInfo.QUALIFIER_CTE);
-                        case "subquery" -> atomData.put("qualifier", AtomInfo.QUALIFIER_SUBQUERY);
-                        case "inferred" -> atomData.put("qualifier", AtomInfo.QUALIFIER_INFERRED);
-                        case "fuzzy"    -> atomData.put("qualifier", AtomInfo.QUALIFIER_FUZZY);
-                        default         -> atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                        case "3_cte"             -> atomData.put("qualifier", AtomInfo.QUALIFIER_CTE);
+                        case "4_subquery_alias",
+                             "5_child_subquery",
+                             "6_source_subquery" -> atomData.put("qualifier", AtomInfo.QUALIFIER_SUBQUERY);
+                        case "resolveImplicitTable" -> atomData.put("qualifier", AtomInfo.QUALIFIER_INFERRED);
+                        case "cursorRecordAliases"  -> atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                        default                  -> atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
                     }
                 } else {
                     atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
@@ -415,8 +418,10 @@ public class AtomProcessor {
         }
 
         // HAL-02: derive kind from boolean flags + reference_type
+        // HAL-03: derive confidence from resolve_strategy + kind adjustment (ADR-HND-003)
         for (var atomData : stmtAtoms.values()) {
             atomData.put("kind", deriveKind(atomData));
+            atomData.put("confidence", deriveConfidence(atomData));
         }
 
         // B2.AR3 — atom resolution audit
@@ -666,6 +671,7 @@ public class AtomProcessor {
             if ("NEXTVAL".equalsIgnoreCase(tokens.get(tokens.size() - 1))) {
                 result.put("resolved", true);
                 result.put("reference_type", "sequence");
+                result.put("resolve_strategy", "sequence");
                 result.put("reason", "Выдача нового сиквенса");
                 return result;
             }
@@ -686,6 +692,7 @@ public class AtomProcessor {
                     result.put("column_name", columnName);
                     result.put("reference_type", "tables");
                     result.put("is_column_reference", true);
+                    result.put("resolve_strategy", resolved.getStrategy());
                     result.put("reason", "schema.table.column resolved: " + tableRef);
                     return result;
                 }
@@ -703,6 +710,7 @@ public class AtomProcessor {
                     result.put("column_name", columnName);
                     result.put("reference_type", resolved.getType().toLowerCase() + "s");
                     result.put("is_column_reference", true);
+                    result.put("resolve_strategy", resolved.getStrategy());
                     result.put("reason", "table.column resolved via " + resolved.getType());
                     return result;
                 }
@@ -719,6 +727,7 @@ public class AtomProcessor {
                             result.put("column_name", columnName);
                             result.put("reference_type", parentResolved.getType().toLowerCase() + "s");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", parentResolved.getStrategy());
                             result.put("reason", "table.column resolved via parent scope: " + tableAlias);
                             return result;
                         }
@@ -738,12 +747,13 @@ public class AtomProcessor {
                             result.put("column_name", columnName);
                             result.put("reference_type", "cursor_record");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", "cursorRecordAliases");
                             result.put("reason", "cursor record: " + tableAlias + "." + columnName);
                         } else {
-                            // Cursor exists but source table unknown (e.g., computed column)
                             result.put("resolved", true);
                             result.put("reference_type", "cursor_record_expr");
                             result.put("column_name", columnName);
+                            result.put("resolve_strategy", "cursorRecordAliases");
                             result.put("reason", "cursor record expr: " + tableAlias + "." + columnName);
                         }
                         return result;
@@ -761,6 +771,7 @@ public class AtomProcessor {
                 String firstText = tokenDetails.get(0).get("text");
                 if (firstText != null && "DATE".equalsIgnoreCase(firstText)) {
                     result.put("resolved", true);
+                    result.put("resolve_strategy", "constant");
                     result.put("reason", "Заглушка для константы ANSI Дата");
                     return result;
                 }
@@ -783,6 +794,7 @@ public class AtomProcessor {
                             result.put("resolved", true);
                             result.put("is_routine_var", true);
                             result.put("reference_type", "routine_variable");
+                            result.put("resolve_strategy", "hasVariable");
                             result.put("reason", "Variable of " + currentRoutine);
                             return result;
                         }
@@ -790,6 +802,7 @@ public class AtomProcessor {
                             result.put("resolved", true);
                             result.put("is_routine_param", true);
                             result.put("reference_type", "routine_parameter");
+                            result.put("resolve_strategy", "hasParameter");
                             result.put("reason", "Parameter of " + currentRoutine);
                             return result;
                         }
@@ -813,6 +826,7 @@ public class AtomProcessor {
                             result.put("column_name", colName);
                             result.put("reference_type", "tables");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", "source_table_direct");
                             result.put("reason", "Простая ссылка resolved: таблица " + tableInfo.tableName());
                             return result;
                         }
@@ -828,6 +842,7 @@ public class AtomProcessor {
                             result.put("column_name", colName);
                             result.put("reference_type", "tables");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", "target_table_direct");
                             result.put("reason", "Простая ссылка resolved: target таблица " + tableInfo.tableName());
                             return result;
                         }
@@ -843,6 +858,7 @@ public class AtomProcessor {
                 result.put("column_name", tokens.get(0).toUpperCase());
                 result.put("reference_type", "implicit");
                 result.put("is_column_reference", true);
+                result.put("resolve_strategy", "resolveImplicitTable");
                 result.put("reason", "Простая ссылка resolved через implicit table");
                 return result;
             }
@@ -854,6 +870,7 @@ public class AtomProcessor {
         // ═══ 3. CONSTANTS ═══
         if (!isComplex && tokens.size() == 1 && firstCanonical.isConstant()) {
             result.put("resolved", true);
+            result.put("resolve_strategy", "constant");
             result.put("reason", "Константа: " + firstCanonical);
             return result;
         }
@@ -861,6 +878,7 @@ public class AtomProcessor {
         // ═══ 4. SYSTEM PSEUDO-COLUMNS ═══
         if (tokens.size() == 1 && firstCanonical.isSystemPseudoColumn()) {
             result.put("resolved", true);
+            result.put("resolve_strategy", "system_pseudo");
             result.put("reason", "Системная псевдоколонка: " + tokens.get(0));
             return result;
         }
@@ -892,6 +910,7 @@ public class AtomProcessor {
                 result.put("column_name", columnPart);
                 result.put("reference_type", tableRef.getType());
                 result.put("is_column_reference", true);
+                result.put("resolve_strategy", tableRef.getStrategy());
                 return result;
             }
             // Walk parent statement scopes (e.g. SOURCE.* in MERGE WHEN UPDATE SET)
@@ -907,6 +926,7 @@ public class AtomProcessor {
                         result.put("column_name", columnPart);
                         result.put("reference_type", parentRef.getType());
                         result.put("is_column_reference", true);
+                        result.put("resolve_strategy", parentRef.getStrategy());
                         result.put("reason", "resolved via parent scope: " + parentGeoid);
                         return result;
                     }
@@ -925,11 +945,13 @@ public class AtomProcessor {
                         result.put("column_name", columnPart);
                         result.put("reference_type", "cursor_record");
                         result.put("is_column_reference", true);
+                        result.put("resolve_strategy", "cursorRecordAliases");
                         result.put("reason", "cursor record (text): " + tablePart + "." + columnPart);
                     } else {
                         result.put("resolved", true);
                         result.put("reference_type", "cursor_record_expr");
                         result.put("column_name", columnPart);
+                        result.put("resolve_strategy", "cursorRecordAliases");
                         result.put("reason", "cursor record expr (text): " + tablePart + "." + columnPart);
                     }
                     return result;
@@ -944,6 +966,7 @@ public class AtomProcessor {
             result.put("column_name", columnPart);
             result.put("reference_type", "implicit");
             result.put("is_column_reference", true);
+            result.put("resolve_strategy", "resolveImplicitTable");
             return result;
         }
 
@@ -1242,6 +1265,70 @@ public class AtomProcessor {
         String ps = (String) atomData.get("primary_status");
         if (AtomInfo.STATUS_UNRESOLVED.equals(ps)) return AtomInfo.KIND_UNKNOWN;
         return AtomInfo.KIND_UNKNOWN;
+    }
+
+    static String deriveConfidence(Map<String, Object> atomData) {
+        String ps = (String) atomData.get("primary_status");
+        if (ps == null) return AtomInfo.CONFIDENCE_LOW;
+
+        // Unresolved atoms have no confidence
+        if (AtomInfo.STATUS_UNRESOLVED.equals(ps)) return null;
+
+        // Constants and system pseudo-columns are always HIGH
+        if (AtomInfo.STATUS_CONSTANT.equals(ps)) return AtomInfo.CONFIDENCE_HIGH;
+
+        // Function calls: verified → HIGH, unverified → LOW
+        if (AtomInfo.STATUS_FUNCTION_CALL.equals(ps)) {
+            String q = (String) atomData.get("qualifier");
+            if (AtomInfo.QUALIFIER_FN_VERIFIED.equals(q)) return AtomInfo.CONFIDENCE_HIGH;
+            return AtomInfo.CONFIDENCE_LOW;
+        }
+
+        // Pass 1: strategy-based mapping for RESOLVED atoms
+        String strategy = (String) atomData.get("resolve_strategy");
+        String base;
+        if (strategy == null) {
+            base = AtomInfo.CONFIDENCE_LOW;
+        } else {
+            base = switch (strategy) {
+                case "1_exact_geoid", "2_alias_scope", "2b_table_name_only", "3_cte",
+                     "hasVariable", "hasParameter",
+                     "source_table_direct", "target_table_direct",
+                     "constant", "sequence", "system_pseudo"
+                        -> AtomInfo.CONFIDENCE_HIGH;
+                case "4_subquery_alias", "5_child_subquery", "6_source_subquery",
+                     "7_parent_recursive", "cursorRecordAliases"
+                        -> AtomInfo.CONFIDENCE_MEDIUM;
+                case "8_global_ddl_fallback", "resolveImplicitTable"
+                        -> AtomInfo.CONFIDENCE_LOW;
+                case "text_fallback"
+                        -> AtomInfo.CONFIDENCE_LOW;
+                default -> AtomInfo.CONFIDENCE_LOW;
+            };
+        }
+
+        // Pass 2: kind-adjustment (ADR-HND-003 §Pass 2)
+        String kind = (String) atomData.get("kind");
+        if (AtomInfo.KIND_AMBIGUOUS.equals(kind)) {
+            base = minConfidence(base, AtomInfo.CONFIDENCE_LOW);
+        }
+
+        return base;
+    }
+
+    private static String minConfidence(String a, String b) {
+        return confidenceRank(a) <= confidenceRank(b) ? a : b;
+    }
+
+    private static int confidenceRank(String c) {
+        if (c == null) return 0;
+        return switch (c) {
+            case "FUZZY"  -> 1;
+            case "LOW"    -> 2;
+            case "MEDIUM" -> 3;
+            case "HIGH"   -> 4;
+            default       -> 0;
+        };
     }
 
     public void clear() {

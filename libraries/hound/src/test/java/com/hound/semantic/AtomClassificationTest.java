@@ -227,4 +227,47 @@ class AtomClassificationTest {
             }
         }
     }
+
+    // ═══════════════════════════════════════════════════════
+    // HAL-03: confidence derivation (ADR-HND-003)
+    // ═══════════════════════════════════════════════════════
+
+    @Test
+    void confidence_constant_isHigh() {
+        var engine = parse("SELECT 42 FROM DUAL");
+        var atom = findAtomByText(engine, "42");
+        assertNotNull(atom);
+        assertEquals(AtomInfo.CONFIDENCE_HIGH, atom.get("confidence"));
+    }
+
+    @Test
+    void confidence_resolvedColumn_notNull() {
+        var engine = parse("SELECT id FROM employees");
+        for (var stmtEntry : engine.getBuilder().getStatements().entrySet()) {
+            for (var atom : engine.getAtomProcessor().getAtomsForStatement(stmtEntry.getKey()).values()) {
+                String ps = (String) atom.get("primary_status");
+                if (AtomInfo.STATUS_RESOLVED.equals(ps) || AtomInfo.STATUS_CONSTANT.equals(ps)) {
+                    assertNotNull(atom.get("confidence"),
+                            "resolved/constant atom must have confidence, atom_text=" + atom.get("atom_text"));
+                }
+            }
+        }
+    }
+
+    @Test
+    void confidence_validValues() {
+        var validValues = java.util.Set.of(
+                AtomInfo.CONFIDENCE_HIGH, AtomInfo.CONFIDENCE_MEDIUM,
+                AtomInfo.CONFIDENCE_LOW, AtomInfo.CONFIDENCE_FUZZY);
+        var engine = parse("SELECT a, 1, :p FROM t");
+        for (var stmtEntry : engine.getBuilder().getStatements().entrySet()) {
+            for (var atom : engine.getAtomProcessor().getAtomsForStatement(stmtEntry.getKey()).values()) {
+                String conf = (String) atom.get("confidence");
+                if (conf != null) {
+                    assertTrue(validValues.contains(conf),
+                            "confidence must be valid enum, got: " + conf + " for atom_text=" + atom.get("atom_text"));
+                }
+            }
+        }
+    }
 }
