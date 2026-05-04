@@ -1242,6 +1242,9 @@ public class UniversalSemanticEngine {
                     rowtypesFilled, pendingRowtypes.size());
             pendingRowtypes.clear();
         }
+
+        // HAL-05: classify unattached atoms (CONSTANT_ORPHAN detection)
+        atomProcessor.classifyUnattachedAtoms();
     }
 
     /**

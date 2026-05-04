@@ -1243,6 +1243,24 @@ public class AtomProcessor {
         return unattachedAtoms;
     }
 
+    public void classifyUnattachedAtoms() {
+        for (var atomData : unattachedAtoms.values()) {
+            if (Boolean.TRUE.equals(atomData.get("is_constant"))) {
+                atomData.put("primary_status", AtomInfo.STATUS_CONSTANT_ORPHAN);
+                atomData.put("status", AtomInfo.STATUS_CONSTANT_ORPHAN);
+            } else if (atomData.get("primary_status") == null) {
+                atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+            }
+            if (atomData.get("kind") == null) {
+                atomData.put("kind", deriveKind(atomData));
+            }
+            if (atomData.get("confidence") == null && atomData.get("primary_status") != null) {
+                atomData.put("confidence", deriveConfidence(atomData));
+            }
+        }
+    }
+
     /** S1.PRE: one entry per processed atom — used to write DaliResolutionLog. */
     public List<Map<String, Object>> getResolutionLog() {
         return Collections.unmodifiableList(resolutionLog);

@@ -63,6 +63,21 @@ public class YggStatsResource {
             result.put("atomsUnresolved", atomsUnresolved);
             result.put("atomsPending",    atomsByStatus.getOrDefault("PENDING_INJECT", 0L) + atomsByStatus.getOrDefault("pending", 0L));
 
+            // HAL-05: quality_true + quality_syntax (ADR-HND-005)
+            long qualityDenom = countAtoms(conn,
+                    "coalesce(primary_status, status) NOT IN ['CONSTANT_ORPHAN', 'PARTIAL'] AND coalesce(qualifier, '') != 'CTRL_FLOW'");
+            long qualityTrueNum = countAtoms(conn,
+                    "coalesce(primary_status, status) = 'RESOLVED' AND confidence IN ['HIGH', 'MEDIUM'] AND coalesce(qualifier, '') != 'CTRL_FLOW'");
+            long qualitySyntaxNum = countAtoms(conn,
+                    "coalesce(primary_status, status) IN ['RESOLVED', 'CONSTANT', 'FUNCTION_CALL', 'RECONSTRUCT_DIRECT', 'RECONSTRUCT_INVERSE'] AND coalesce(qualifier, '') NOT IN ['FN_UNVERIFIED', 'CTRL_FLOW']");
+
+            Map<String, Object> quality = new LinkedHashMap<>();
+            quality.put("atom_total_for_quality", qualityDenom);
+            quality.put("atom_resolved_high_medium", qualityTrueNum);
+            quality.put("quality_true", qualityDenom > 0 ? Math.round(qualityTrueNum * 10000.0 / qualityDenom) / 100.0 : 0.0);
+            quality.put("quality_syntax", qualityDenom > 0 ? Math.round(qualitySyntaxNum * 10000.0 / qualityDenom) / 100.0 : 0.0);
+            result.put("quality", quality);
+
             return Response.ok(result).build();
         } catch (Exception e) {
             log.warn("YGG stats failed for tenant {}: {}", tenantCtx.tenantAlias(), e.getMessage());
