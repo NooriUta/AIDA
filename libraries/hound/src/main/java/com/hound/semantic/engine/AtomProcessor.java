@@ -1463,8 +1463,8 @@ public class AtomProcessor {
 
                 String colGeoid = tableGeoid + "." + colName.toUpperCase();
                 if (builder.getColumns().containsKey(colGeoid)) {
-                    a.put("primary_status", AtomInfo.STATUS_RESOLVED);
-                    a.put("status", AtomInfo.STATUS_RESOLVED);
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
                     a.put("qualifier", AtomInfo.QUALIFIER_LINKED);
                     a.put("resolve_strategy", "pending_inject_second_pass");
                     a.put("pending_kind", null);

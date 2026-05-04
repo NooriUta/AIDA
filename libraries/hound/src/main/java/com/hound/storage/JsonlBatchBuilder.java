@@ -595,6 +595,15 @@ public class JsonlBatchBuilder {
                     a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                     a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                 }
+                // HAL2-06: detect RECONSTRUCT_INVERSE — atom resolved against VTABLE (PlType-backed)
+                if (AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
+                        && isColRef1 && atomTblForWarn1 != null) {
+                    TableInfo ti = str.getTables().get(atomTblForWarn1);
+                    if (ti != null && "VTABLE".equals(ti.tableType())) {
+                        a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                        a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    }
+                }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(
                         "session_id", sid,
@@ -1376,6 +1385,15 @@ public class JsonlBatchBuilder {
                         && !str.getColumns().containsKey(atomTblForWarn2 + "." + atomColForWarn2.toUpperCase())) {
                     a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                     a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                }
+                // HAL2-06: detect RECONSTRUCT_INVERSE — atom resolved against VTABLE (PlType-backed)
+                if (AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
+                        && isColRef2 && atomTblForWarn2 != null) {
+                    TableInfo ti = str.getTables().get(atomTblForWarn2);
+                    if (ti != null && "VTABLE".equals(ti.tableType())) {
+                        a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                        a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    }
                 }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(
