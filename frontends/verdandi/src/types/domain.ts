@@ -64,10 +64,12 @@ export type DaliEdgeType =
   // Если переоткроют — см. EDGE_TAXONOMY_ANALYSIS §15.1, §15.2, §15.6.
   | 'ATOM_PRODUCES'
   // Phase S2.4 — PL/SQL record edges
-  | 'HAS_RECORD_FIELD'     // DaliRecord → DaliRecordField (structural containment, suppressed as arrow)
-  | 'BULK_COLLECTS_INTO'   // DaliStatement → DaliRecord (BULK COLLECT INTO result)
-  | 'RETURNS_INTO'         // DaliStatement → DaliRecord/Field/Var/Param (RETURNING INTO)
-  | 'RECORD_USED_IN';      // DaliRecord → DaliStatement (record consumed by INSERT etc.)
+  // D-3 (Sprint 1.3): HAS_RECORD_FIELD split → RECORD_HAS_FIELD + PLTYPE_HAS_FIELD
+  | 'RECORD_HAS_FIELD'    // DaliRecord → DaliRecordField (structural containment, suppressed as arrow)
+  | 'PLTYPE_HAS_FIELD'    // DaliPlType → DaliPlTypeField (structural containment, suppressed as arrow)
+  | 'BULK_COLLECTS_INTO'  // DaliStatement → DaliRecord (BULK COLLECT INTO result)
+  | 'RETURNS_INTO';       // DaliStatement → DaliRecord/Field/Var/Param (RETURNING INTO)
+  // D-1 (Sprint 1.3): RECORD_USED_IN removed — reverse traversal via inE('BULK_COLLECTS_INTO')
 
 // ─── Visualisation levels ────────────────────────────────────────────────────
 //

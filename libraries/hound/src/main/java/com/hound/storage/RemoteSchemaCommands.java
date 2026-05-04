@@ -89,9 +89,12 @@ final class RemoteSchemaCommands {
                 //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.1, §15.2.
                 // Edge types — record (BULK COLLECT)
                 "CREATE EDGE TYPE BULK_COLLECTS_INTO IF NOT EXISTS",
-                "CREATE EDGE TYPE RECORD_USED_IN IF NOT EXISTS",
+                // D-1 (Sprint 1.3): RECORD_USED_IN removed — reverse traversal via inE('BULK_COLLECTS_INTO')
                 // KI-RETURN-1: record field membership + RETURNING INTO
-                "CREATE EDGE TYPE HAS_RECORD_FIELD IF NOT EXISTS",
+                // D-3 (Sprint 1.3): HAS_RECORD_FIELD split → RECORD_HAS_FIELD (DaliRecord→DaliRecordField)
+                //                                           + PLTYPE_HAS_FIELD (DaliPlType→DaliPlTypeField)
+                "CREATE EDGE TYPE RECORD_HAS_FIELD IF NOT EXISTS",
+                "CREATE EDGE TYPE PLTYPE_HAS_FIELD IF NOT EXISTS",
                 "CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS",
                 // Edge types — affected columns + join sources
                 "CREATE EDGE TYPE HAS_AFFECTED_COL IF NOT EXISTS",

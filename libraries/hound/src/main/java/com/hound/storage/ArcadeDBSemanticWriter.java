@@ -183,7 +183,7 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                 "USES_SUBQUERY","NESTED_IN","CONTAINS_STMT",
                 "HAS_PARAMETER","HAS_VARIABLE","CHILD_OF","CONTAINS_ROUTINE",
                 "CALLS",
-                "BULK_COLLECTS_INTO","RECORD_USED_IN","HAS_RECORD_FIELD","FIELD_MAPS_TO",
+                "BULK_COLLECTS_INTO","RECORD_HAS_FIELD","PLTYPE_HAS_FIELD","FIELD_MAPS_TO",
                 "DECLARES_TYPE","OF_TYPE","INSTANTIATES_TYPE",
                 "DDL_MODIFIES",
                 "HAS_COLUMN","CONTAINS_TABLE","CONTAINS_SCHEMA","BELONGS_TO_APP","BELONGS_TO_SESSION"

@@ -23,10 +23,12 @@ const NESTING_EDGES = new Set<string>([
   'CONTAINS_ROUTINE', 'CONTAINS_STMT', 'CONTAINS_PACKAGE',
   'CONTAINS_TABLE', 'BELONGS_TO_SESSION',
   'HAS_COLUMN', 'HAS_OUTPUT_COL', 'HAS_AFFECTED_COL', 'HAS_PARAMETER', 'HAS_VARIABLE',
-  // Phase S2.4 — PL/SQL record field containment: fields render as rows inside RecordNode,
+  // Phase S2.4 — PL/SQL record/pltype field containment: fields render as rows inside their parent node,
   // never as separate canvas nodes. RETURNS_INTO (stmt→record) is NOT suppressed — it renders
-  // as a visible edge. BULK_COLLECTS_INTO and RECORD_USED_IN are handled below in SUPPRESSED_EDGES.
-  'HAS_RECORD_FIELD',
+  // as a visible edge. BULK_COLLECTS_INTO is handled below in SUPPRESSED_EDGES.
+  // D-3 (Sprint 1.3): HAS_RECORD_FIELD split → RECORD_HAS_FIELD + PLTYPE_HAS_FIELD
+  'RECORD_HAS_FIELD',
+  'PLTYPE_HAS_FIELD',
 ]);
 
 // ─── Suppressed edges: ALL structural/containment edges hidden from arrows ───
@@ -454,7 +456,7 @@ export function transformGqlExplore(
   // (analogous to DaliColumn→TableNode and DaliOutputColumn→StatementNode)
   const fieldsByRecord = new Map<string, Array<{ id: string; name: string; type: string; isPrimaryKey: boolean; isForeignKey: boolean }>>();
   for (const e of result.edges) {
-    if (e.type !== 'HAS_RECORD_FIELD') continue;
+    if (e.type !== 'RECORD_HAS_FIELD') continue;
     const fieldNode = nodeById.get(e.target);
     if (!fieldNode || fieldNode.type !== 'DaliRecordField') continue;
     if (!fieldsByRecord.has(e.source)) fieldsByRecord.set(e.source, []);

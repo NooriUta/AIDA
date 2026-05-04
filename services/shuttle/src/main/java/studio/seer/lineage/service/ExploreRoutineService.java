@@ -118,12 +118,12 @@ public class ExploreRoutineService {
         String recordFieldsQ = """
             MATCH (r:DaliRoutine) WHERE id(r) = $rid
             MATCH (rec:DaliRecord) WHERE rec.routine_geoid = r.routine_geoid
-            MATCH (rec)-[:HAS_RECORD_FIELD]->(f:DaliRecordField)
+            MATCH (rec)-[:RECORD_HAS_FIELD]->(f:DaliRecordField)
             RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
                    '' AS srcScope, '' AS srcPackage, '' AS srcKind,
                    id(f) AS tgtId, coalesce(f.field_name, '') AS tgtLabel,
                    'DaliRecordField' AS tgtType, '' AS tgtScope,
-                   'HAS_RECORD_FIELD' AS edgeType, '' AS sourceHandle, '' AS targetHandle,
+                   'RECORD_HAS_FIELD' AS edgeType, '' AS sourceHandle, '' AS targetHandle,
                    coalesce(f.data_type, '') AS tgtDataType
             LIMIT 1000
             """;
@@ -154,18 +154,7 @@ public class ExploreRoutineService {
             LIMIT 500
             """;
 
-        String recordUsedInQ = """
-            MATCH (r:DaliRoutine) WHERE id(r) = $rid
-            MATCH (rec:DaliRecord) WHERE rec.routine_geoid = r.routine_geoid
-            MATCH (rec)-[:RECORD_USED_IN]->(s:DaliStatement)
-            WHERE coalesce(s.parent_statement, '') = ''
-            RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
-                   '' AS srcScope, '' AS srcPackage, '' AS srcKind,
-                   id(s) AS tgtId, coalesce(s.stmt_geoid, s.snippet, '') AS tgtLabel,
-                   'DaliStatement' AS tgtType, '' AS tgtScope,
-                   'RECORD_USED_IN' AS edgeType, '' AS sourceHandle, '' AS targetHandle, '' AS tgtDataType
-            LIMIT 500
-            """;
+        // D-1 (Sprint 1.3): RECORD_USED_IN removed — consumers use inE('BULK_COLLECTS_INTO') instead
 
         return Uni.combine().all()
             .unis(List.of(
@@ -176,8 +165,7 @@ public class ExploreRoutineService {
                 arcade.cypherIn(lineageDb(), recordSelfQ,   params).onFailure().recoverWithItem(List.of()),
                 arcade.cypherIn(lineageDb(), recordFieldsQ, params).onFailure().recoverWithItem(List.of()),
                 arcade.cypherIn(lineageDb(), bulkCollectsQ, params).onFailure().recoverWithItem(List.of()),
-                arcade.cypherIn(lineageDb(), returnsIntoQ,  params).onFailure().recoverWithItem(List.of()),
-                arcade.cypherIn(lineageDb(), recordUsedInQ, params).onFailure().recoverWithItem(List.of())
+                arcade.cypherIn(lineageDb(), returnsIntoQ,  params).onFailure().recoverWithItem(List.of())
             ))
             .combinedWith(results -> {
                 var all = new ArrayList<Map<String, Object>>();

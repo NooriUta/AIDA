@@ -142,10 +142,10 @@ public class ExploreStatementService {
             MATCH (p:DaliPackage {package_name: $pkg})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
             MATCH (rec:DaliRecord)
             WHERE rec.routine_geoid = r.routine_geoid
-            MATCH (rec)-[:HAS_RECORD_FIELD]->(f:DaliRecordField)
+            MATCH (rec)-[:RECORD_HAS_FIELD]->(f:DaliRecordField)
             RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
                    id(f) AS tgtId, coalesce(f.field_name, '') AS tgtLabel, '' AS tgtScope,
-                   'DaliRecordField' AS tgtType, 'HAS_RECORD_FIELD' AS edgeType
+                   'DaliRecordField' AS tgtType, 'RECORD_HAS_FIELD' AS edgeType
             LIMIT 2000
             """;
 

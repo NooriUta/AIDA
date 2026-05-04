@@ -207,13 +207,12 @@ class JsonlBatchBuilderTest {
     /**
      * G6 / REMOTE_BATCH flush-order guard:
      * DaliRecord vertex MUST appear in the NDJSON payload BEFORE any
-     * BULK_COLLECTS_INTO or RECORD_USED_IN edge that references it.
+     * BULK_COLLECTS_INTO or RECORD_HAS_FIELD edge that references it.
      * ArcadeDB rejects dangling edges, so vertex-before-edge is mandatory.
+     * D-1 (Sprint 1.3): RECORD_USED_IN removed; D-3: HAS_RECORD_FIELD → RECORD_HAS_FIELD.
      */
     @Test
     void g6_daliRecord_vertexBeforeEdges_inBatchPayload() throws Exception {
-        // Build a minimal SemanticResult that contains a BULK COLLECT scenario:
-        //   SELECT stmt (cursor) → l_tab → INSERT stmt
         Map<String, StatementInfo> statements = new LinkedHashMap<>();
 
         StatementInfo selectStmt = new StatementInfo(
@@ -230,7 +229,6 @@ class JsonlBatchBuilderTest {
                 "INSERT", "target", 1);
         statements.put("INSERT:2", insertStmt);
 
-        // RecordInfo binding: l_tab → SELECT:1
         RecordInfo rec = new RecordInfo("PROCEDURE:LOAD:RECORD:L_TAB", "L_TAB", "PROCEDURE:LOAD");
         rec.setSourceStatementGeoid("SELECT:1");
         rec.addField("ORDER_ID");
@@ -248,11 +246,10 @@ class JsonlBatchBuilderTest {
         JsonlBatchBuilder builder = JsonlBatchBuilder.buildFromResult("test-sid", result);
         String payload = builder.build();
 
-        // Parse lines and record positions
         String[] lines = payload.split("\n");
-        int daliRecordPos      = -1;
+        int daliRecordPos       = -1;
         int bulkCollectsIntoPos = -1;
-        int recordUsedInPos     = -1;
+        int recordHasFieldPos   = -1;
 
         for (int i = 0; i < lines.length; i++) {
             if (lines[i].isBlank()) continue;
@@ -261,19 +258,19 @@ class JsonlBatchBuilderTest {
             String type = node.has("@type")  ? node.get("@type").asText()  : "";
             if ("DaliRecord".equals(cls) && "vertex".equals(type)) daliRecordPos = i;
             if ("BULK_COLLECTS_INTO".equals(cls) && "edge".equals(type)) bulkCollectsIntoPos = i;
-            if ("RECORD_USED_IN".equals(cls)     && "edge".equals(type)) recordUsedInPos     = i;
+            if ("RECORD_HAS_FIELD".equals(cls)   && "edge".equals(type)) recordHasFieldPos   = i;
         }
 
         assertTrue(daliRecordPos >= 0,       "DaliRecord vertex must be present in payload");
         assertTrue(bulkCollectsIntoPos >= 0, "BULK_COLLECTS_INTO edge must be present in payload");
-        assertTrue(recordUsedInPos >= 0,     "RECORD_USED_IN edge must be present in payload");
+        assertTrue(recordHasFieldPos >= 0,   "RECORD_HAS_FIELD edge must be present in payload");
 
         assertTrue(daliRecordPos < bulkCollectsIntoPos,
                 "DaliRecord vertex (line " + daliRecordPos + ") must appear BEFORE " +
                 "BULK_COLLECTS_INTO edge (line " + bulkCollectsIntoPos + ")");
-        assertTrue(daliRecordPos < recordUsedInPos,
+        assertTrue(daliRecordPos < recordHasFieldPos,
                 "DaliRecord vertex (line " + daliRecordPos + ") must appear BEFORE " +
-                "RECORD_USED_IN edge (line " + recordUsedInPos + ")");
+                "RECORD_HAS_FIELD edge (line " + recordHasFieldPos + ")");
     }
 
     // ── HOUND-DB-001: DaliSchema must carry db_name resolved from the database map ──

@@ -46,9 +46,9 @@ class RemoteWriter {
         Map<String, String> ocByOrder  = new HashMap<>();
         /** key = "stmtGeoid:column_ref" → RID  (DATA_FLOW → DaliAffectedColumn) */
         Map<String, String> affCols    = new HashMap<>();
-        /** key = record_geoid → RID (BULK_COLLECTS_INTO / RECORD_USED_IN) */
+        /** key = record_geoid → RID (BULK_COLLECTS_INTO) */
         Map<String, String> records = new HashMap<>();
-        /** key = field_geoid → RID (HAS_RECORD_FIELD) */
+        /** key = field_geoid → RID (RECORD_HAS_FIELD) */
         Map<String, String> recordFields = new HashMap<>();
         /** constraint_geoid → RID  (DaliPrimaryKey / DaliForeignKey) */
         Map<String, String> constraints = new HashMap<>();
@@ -1460,7 +1460,7 @@ class RemoteWriter {
             }
         }
 
-        // ── KI-RETURN-1: HAS_RECORD_FIELD ──
+        // ── KI-RETURN-1: RECORD_HAS_FIELD (D-3: was HAS_RECORD_FIELD) ──
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recRid = rid.records.get(e.getKey());
@@ -1468,7 +1468,7 @@ class RemoteWriter {
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = rec.getGeoid() + ":" + fi.name();
                 String rfRid = rid.recordFields.get(fieldGeoid);
-                if (rfRid != null) edgeByRid("HAS_RECORD_FIELD", recRid, rfRid, sid);
+                if (rfRid != null) edgeByRid("RECORD_HAS_FIELD", recRid, rfRid, sid);
             }
         }
 
@@ -1539,7 +1539,7 @@ class RemoteWriter {
         }
 
 
-        // ── BULK_COLLECTS_INTO / RECORD_USED_IN / HAS_RECORD_FIELD (G6: DaliRecord edges) ──
+        // ── BULK_COLLECTS_INTO / RECORD_HAS_FIELD (G6: DaliRecord edges) ──
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recRid = rid.records.get(rec.getGeoid());
@@ -1548,27 +1548,14 @@ class RemoteWriter {
             String srcStmtRid = rid.statements.get(rec.getSourceStatementGeoid());
             if (srcStmtRid != null)
                 edgeByRid("BULK_COLLECTS_INTO", srcStmtRid, recRid, sid);
-            // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (one per named field)
+            // DaliRecord → RECORD_HAS_FIELD → DaliRecordField (D-3: was HAS_RECORD_FIELD)
             for (String fieldName : rec.getFields()) {
                 String fieldGeoid = rec.getGeoid() + ":" + fieldName;
                 String fieldRid = rid.recordFields.get(fieldGeoid);
                 if (fieldRid != null)
-                    edgeByRid("HAS_RECORD_FIELD", recRid, fieldRid, sid);
+                    edgeByRid("RECORD_HAS_FIELD", recRid, fieldRid, sid);
             }
-            // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT) for each INSERT
-            // that references this record via an AffectedColumn with matching dataset_alias
-            for (var stmtEntry : str.getStatements().entrySet()) {
-                StatementInfo si = stmtEntry.getValue();
-                if (!"INSERT".equals(si.getType())) continue;
-                boolean usesRecord = si.getAffectedColumns().stream().anyMatch(
-                        ac -> rec.getVarName().equals(ac.get("dataset_alias")))
-                    || si.getBulkCollectSources().contains(rec.getVarName().toUpperCase());
-                if (usesRecord) {
-                    String insertRid = rid.statements.get(stmtEntry.getKey());
-                    if (insertRid != null)
-                        edgeByRid("RECORD_USED_IN", recRid, insertRid, sid);
-                }
-            }
+            // D-1 (Sprint 1.3): RECORD_USED_IN removed — reverse traversal via inE('BULK_COLLECTS_INTO')
         }
 
         // ── CALLS edges ──

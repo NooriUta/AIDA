@@ -45,7 +45,6 @@ public class StatementInfo {
     private final List<String> insertTargetColumns = new ArrayList<>();
 
     // G6-EXT: collection variable names referenced in VALUES even when explicit column list present
-    // Used by RemoteWriter/EmbeddedWriter to build RECORD_USED_IN edge for FORALL INSERT patterns
     private final Set<String> bulkCollectSources = new LinkedHashSet<>();
 
     // KI-DDL-1: columns affected by ALTER TABLE ADD/MODIFY/DROP — used to build DDL_MODIFIES edges (target_kind='column'; F-2 Sprint 0.1)

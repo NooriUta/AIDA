@@ -437,8 +437,7 @@ public class AtomProcessor {
         if (si == null || !"INSERT".equals(si.getType())) return;
         if (!si.getInsertTargetColumns().isEmpty()) {
             // G5 explicit col list: column bindings already handled, but we still need to
-            // record which collection variables appear in VALUES so that RemoteWriter can
-            // create RECORD_USED_IN edges for FORALL INSERT patterns (G6-EXT).
+            // record which collection variables appear in VALUES for FORALL INSERT patterns (G6-EXT).
             Set<String> collsFound = new java.util.LinkedHashSet<>();
             for (Map<String, Object> a : stmtAtoms.values()) {
                 if (!Boolean.TRUE.equals(a.get("is_collection_field_access"))) continue;
@@ -508,7 +507,7 @@ public class AtomProcessor {
             }
 
             String columnRef = targetGeoid != null ? targetGeoid + "." + targetColName : targetColName;
-            // dataset_alias = collection variable name → used by RemoteWriter to build RECORD_USED_IN edge
+            // dataset_alias = collection variable name → used for FORALL INSERT column mapping
             si.addAffectedColumn(columnRef, targetColName, targetGeoid, collName,
                                  "INSERT", "target", slot);
             logger.debug("G6 INSERT_VALUES [{}] slot={} field(s)={} coll={} → target_col={}",

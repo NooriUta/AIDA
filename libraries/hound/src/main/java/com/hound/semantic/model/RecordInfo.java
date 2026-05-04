@@ -13,8 +13,7 @@ import java.util.stream.Collectors;
  *
  * Связи (создаются RemoteWriter):
  *   DaliStatement(cursor SELECT) ─── BULK_COLLECTS_INTO ──► DaliRecord
- *   DaliRecord                   ─── HAS_RECORD_FIELD   ──► DaliRecordField
- *   DaliRecord                   ─── RECORD_USED_IN     ──► DaliStatement(INSERT)
+ *   DaliRecord                   ─── RECORD_HAS_FIELD   ──► DaliRecordField
  */
 public class RecordInfo {
 

@@ -87,8 +87,8 @@ done
 for t in READS_FROM WRITES_TO; do
   run_sql "ALTER TYPE ${t} SUPERTYPE +TABLE_DATA_FLOW"
 done
-# RECORD_FLOW (2 — RECORD_USED_IN/HAS_RECORD_FIELD remain singletons)
-for t in BULK_COLLECTS_INTO RETURNS_INTO; do
+# RECORD_FLOW (D-1: RECORD_USED_IN removed; D-3: HAS_RECORD_FIELD → RECORD_HAS_FIELD + PLTYPE_HAS_FIELD)
+for t in BULK_COLLECTS_INTO RETURNS_INTO RECORD_HAS_FIELD PLTYPE_HAS_FIELD; do
   run_sql "ALTER TYPE ${t} SUPERTYPE +RECORD_FLOW"
 done
 # JOIN_REF (2)
@@ -110,7 +110,23 @@ done
 run_sql "CREATE PROPERTY ATOM_REF_PARAMETER.param_mode IF NOT EXISTS STRING"
 
 echo
-echo "▸ Step 5: Verify hierarchy"
+echo "▸ Step 5: Sprint 1.3 D-1/D-3 — remove RECORD_USED_IN, split HAS_RECORD_FIELD"
+# D-1: Drop RECORD_USED_IN (0 active writers after Sprint 1.3)
+run_sql "DELETE FROM RECORD_USED_IN"
+run_sql "DROP TYPE RECORD_USED_IN IF EXISTS UNSAFE"
+# D-3: Create RECORD_HAS_FIELD + PLTYPE_HAS_FIELD; migrate existing HAS_RECORD_FIELD edges
+run_sql "CREATE EDGE TYPE RECORD_HAS_FIELD IF NOT EXISTS"
+run_sql "CREATE EDGE TYPE PLTYPE_HAS_FIELD IF NOT EXISTS"
+# Migrate: DaliRecord→DaliRecordField edges → RECORD_HAS_FIELD
+run_sql "CREATE EDGE RECORD_HAS_FIELD FROM (SELECT expand(@out) FROM HAS_RECORD_FIELD WHERE @out.@class = 'DaliRecord') TO (SELECT expand(@in) FROM HAS_RECORD_FIELD WHERE @out.@class = 'DaliRecord')"
+# Migrate: DaliPlType→DaliPlTypeField edges → PLTYPE_HAS_FIELD
+run_sql "CREATE EDGE PLTYPE_HAS_FIELD FROM (SELECT expand(@out) FROM HAS_RECORD_FIELD WHERE @out.@class = 'DaliPlType') TO (SELECT expand(@in) FROM HAS_RECORD_FIELD WHERE @out.@class = 'DaliPlType')"
+# Drop old type after migration
+run_sql "DELETE FROM HAS_RECORD_FIELD"
+run_sql "DROP TYPE HAS_RECORD_FIELD IF EXISTS UNSAFE"
+
+echo
+echo "▸ Step 6: Verify hierarchy"
 echo "  Total edge types:"
 curl -s -u "${AB_USER}:${AB_PASS}" -H "Content-Type: application/json" -X POST \
   "http://${AB_HOST}/api/v1/command/${DB_NAME}" \
@@ -122,4 +138,4 @@ curl -s -u "${AB_USER}:${AB_PASS}" -H "Content-Type: application/json" -X POST \
   -d "{\"language\":\"sql\",\"command\":\"SELECT name FROM schema:types WHERE customFields.abstract = 'true' ORDER BY name\"}"
 echo
 
-echo "✅ Sprint 1.1 EDGE_TAXONOMY_V1 migration complete for ${DB_NAME}"
+echo "✅ Sprint 1.1 + 1.3 EDGE_TAXONOMY migration complete for ${DB_NAME}"

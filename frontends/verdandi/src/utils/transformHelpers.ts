@@ -72,15 +72,13 @@ export function getEdgeStyle(type: DaliEdgeType): CSSProperties {
     case 'BELONGS_TO_SESSION': return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '6 3' };
     // Routine-to-routine call flow (CALLS edge — procedure invocations)
     case 'CALLS':              return { stroke: '#D4922A', strokeWidth: 1.5, strokeDasharray: '5 4' };
-    // Phase S2.4 — PL/SQL record edges
-    // HAS_RECORD_FIELD is structural (fields render inside RecordNode) — suppressed as arrow, style unused
-    case 'HAS_RECORD_FIELD':      return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 3' };
+    // Phase S2.4 — PL/SQL record edges (D-3: HAS_RECORD_FIELD split → RECORD_HAS_FIELD + PLTYPE_HAS_FIELD)
+    case 'RECORD_HAS_FIELD':      return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 3' };
+    case 'PLTYPE_HAS_FIELD':      return { stroke: '#665c48', strokeWidth: 1, strokeDasharray: '4 3' };
     // BULK_COLLECTS_INTO: cursor SELECT → Record (amber, same family as WRITES_TO)
     case 'BULK_COLLECTS_INTO':    return { stroke: '#D4922A', strokeWidth: 1.5, strokeDasharray: '5 3' };
     // RETURNS_INTO: Statement → Record/Field/Var (mauve, data flow)
     case 'RETURNS_INTO':          return { stroke: '#B87AA8', strokeWidth: 1.5 };
-    // RECORD_USED_IN: Record → Statement (teal, consumption — inverse of BULK_COLLECTS_INTO)
-    case 'RECORD_USED_IN':        return { stroke: '#88B8A8', strokeWidth: 1.5, strokeDasharray: '5 3' };
     default:                  return { stroke: '#42382a', strokeWidth: 1, strokeDasharray: '4 3' };
   }
 }

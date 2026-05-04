@@ -740,19 +740,12 @@ public class JsonlBatchBuilder {
             // DaliStatement(cursor SELECT) → BULK_COLLECTS_INTO → DaliRecord
             if (rec.getSourceStatementGeoid() != null)
                 b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
-            // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (mirrors RemoteWriter.java:1448-1453)
+            // DaliRecord → RECORD_HAS_FIELD → DaliRecordField (D-3: was HAS_RECORD_FIELD)
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = recGeoid + ":" + fi.name();
-                b.appendEdge("HAS_RECORD_FIELD", recGeoid, fieldGeoid, sidProps);
+                b.appendEdge("RECORD_HAS_FIELD", recGeoid, fieldGeoid, sidProps);
             }
-            // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT)
-            for (var stmtEntry : str.getStatements().entrySet()) {
-                if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
-                boolean usesRecord = stmtEntry.getValue().getAffectedColumns().stream().anyMatch(
-                        ac -> rec.getVarName().equals(ac.get("dataset_alias")));
-                if (usesRecord)
-                    b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
-            }
+            // D-1 (Sprint 1.3): RECORD_USED_IN removed — reverse traversal via inE('BULK_COLLECTS_INTO')
             // DaliRecord → INSTANTIATES_TYPE → DaliPlType (HND-05)
             if (rec.getPlTypeGeoid() != null)
                 b.appendEdge("INSTANTIATES_TYPE", recGeoid, rec.getPlTypeGeoid(), sidProps);
@@ -774,11 +767,11 @@ public class JsonlBatchBuilder {
             // DaliPlType(COLLECTION/VARRAY) → OF_TYPE → DaliPlType element type
             if (pt.hasElementType() && pt.getElementTypeGeoid() != null)
                 b.appendEdge("OF_TYPE", pt.getGeoid(), pt.getElementTypeGeoid(), sidProps);
-            // DaliPlType(RECORD/OBJECT) → HAS_RECORD_FIELD → DaliPlTypeField
+            // DaliPlType(RECORD/OBJECT) → PLTYPE_HAS_FIELD → DaliPlTypeField (D-3: was HAS_RECORD_FIELD)
             if (pt.hasFields()) {
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":" + pf.name();
-                    b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
+                    b.appendEdge("PLTYPE_HAS_FIELD", pt.getGeoid(), fGeoid, sidProps);
                 }
             }
         }
@@ -1487,7 +1480,8 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // BULK_COLLECTS_INTO, HAS_RECORD_FIELD, RECORD_USED_IN, INSTANTIATES_TYPE (G6: DaliRecord edges)
+        // BULK_COLLECTS_INTO, RECORD_HAS_FIELD, INSTANTIATES_TYPE (G6: DaliRecord edges)
+        // D-1 (Sprint 1.3): RECORD_USED_IN removed; D-3: HAS_RECORD_FIELD → RECORD_HAS_FIELD
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recGeoid = rec.getGeoid();
@@ -1495,14 +1489,7 @@ public class JsonlBatchBuilder {
                 b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = recGeoid + ":" + fi.name();
-                b.appendEdge("HAS_RECORD_FIELD", recGeoid, fieldGeoid, sidProps);
-            }
-            for (var stmtEntry : str.getStatements().entrySet()) {
-                if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
-                boolean usesRecord = stmtEntry.getValue().getAffectedColumns().stream().anyMatch(
-                        ac -> rec.getVarName().equals(ac.get("dataset_alias")));
-                if (usesRecord)
-                    b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
+                b.appendEdge("RECORD_HAS_FIELD", recGeoid, fieldGeoid, sidProps);
             }
             if (rec.getPlTypeGeoid() != null)
                 b.appendEdge("INSTANTIATES_TYPE", recGeoid, rec.getPlTypeGeoid(), sidProps);
@@ -1515,9 +1502,8 @@ public class JsonlBatchBuilder {
                 b.appendEdge("INSTANTIATES_TYPE", e.getKey(), vt.getPlTypeGeoid(), sidProps);
         }
 
-        // HND-05: DaliPlType edges (DECLARES_TYPE, OF_TYPE, HAS_RECORD_FIELD)
-        // PlType/PlTypeField in canonicalRids → resolveEndpoint() returns actual @rids
-        // Package scope geoids in vertexIds → resolveEndpoint() returns batch temp IDs
+        // HND-05: DaliPlType edges (DECLARES_TYPE, OF_TYPE, PLTYPE_HAS_FIELD)
+        // D-3: HAS_RECORD_FIELD → PLTYPE_HAS_FIELD for PlType→PlTypeField
         for (var e : str.getPlTypes().entrySet()) {
             com.hound.semantic.model.PlTypeInfo pt = e.getValue();
             if (pt.getScopeGeoid() != null)
@@ -1527,7 +1513,7 @@ public class JsonlBatchBuilder {
             if (pt.hasFields()) {
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":" + pf.name();
-                    b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
+                    b.appendEdge("PLTYPE_HAS_FIELD", pt.getGeoid(), fGeoid, sidProps);
                 }
             }
         }
