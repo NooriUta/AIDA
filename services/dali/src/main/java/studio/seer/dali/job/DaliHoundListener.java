@@ -71,4 +71,16 @@ public class DaliHoundListener implements HoundEventListener {
         log.error("[{}] parse error     file={} error={}", sessionId, file, error.getMessage(), error);
         emitter.fileParsingFailed(sessionId, tenantAlias, file, error.getMessage());
     }
+
+    @Override
+    public void onSemanticWarning(String file, String category, String message) {
+        log.warn("[{}] semantic warn   file={} category={} msg={}", sessionId, file, category, message);
+        emitter.semanticWarning(sessionId, tenantAlias, file, category, message);
+    }
+
+    @Override
+    public void onSemanticError(String file, String category, String message) {
+        log.error("[{}] semantic error  file={} category={} msg={}", sessionId, file, category, message);
+        emitter.semanticError(sessionId, tenantAlias, file, category, message);
+    }
 }

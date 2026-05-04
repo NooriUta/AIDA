@@ -112,6 +112,9 @@ public class StructureAndLineageBuilder {
                 );
                 logger.warn("STAB: suspicious table name: '{}' (func={}, special={})",
                         upperName, isFunc, hasSpecial);
+                listener.onSemanticWarning(file, "STAB_SUSPICIOUS",
+                        "Suspicious table name: '" + upperName
+                                + "' (func=" + isFunc + ", special=" + hasSpecial + ")");
             }
         }
 
@@ -590,6 +593,8 @@ public class StructureAndLineageBuilder {
                         "invalid_schema_name: " + name
                     );
                     logger.warn("STAB: invalid schema name: '{}'", name);
+                    listener.onSemanticWarning(file, "STAB_INVALID_SCHEMA",
+                            "Invalid schema name: '" + name + "'");
                 }
             }
             // S1.SCH: always log suspicious schema names to DB (quotes, $, :, parens, etc.)
@@ -600,6 +605,8 @@ public class StructureAndLineageBuilder {
                 entry.put("backtrace",  captureHoundBacktrace());
                 schemaRegistrationLog.add(entry);
                 logger.warn("S1.SCH: suspicious schema name registered: '{}' reason={}", name, entry.get("reason"));
+                listener.onSemanticWarning(file, "STAB_SUSPICIOUS_SCHEMA",
+                        "Suspicious schema name: '" + name + "' reason=" + entry.get("reason"));
             }
             Map<String, Object> schemaData = new LinkedHashMap<>();
             schemaData.put("name", name.toUpperCase());

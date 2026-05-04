@@ -171,6 +171,22 @@ public class HoundHeimdallListener implements HoundEventListener {
                 "error", error != null ? truncate(error.getMessage(), 400) : "unknown"));
     }
 
+    @Override
+    public void onSemanticWarning(String file, String category, String message) {
+        send("SEMANTIC_WARNING", "WARN", 0, Map.of(
+                "file",     relPath(file),
+                "category", category,
+                "msg",      truncate(message, 400)));
+    }
+
+    @Override
+    public void onSemanticError(String file, String category, String message) {
+        send("SEMANTIC_ERROR", "ERROR", 0, Map.of(
+                "file",     relPath(file),
+                "category", category,
+                "msg",      truncate(message, 400)));
+    }
+
     // ── Internal ──────────────────────────────────────────────────────────────
 
     private void send(String eventType, String level,
