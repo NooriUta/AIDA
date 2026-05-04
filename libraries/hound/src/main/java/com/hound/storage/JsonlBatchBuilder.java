@@ -387,9 +387,8 @@ public class JsonlBatchBuilder {
         }
 
         // 8c. DaliPrimaryKey / DaliForeignKey / DaliUniqueConstraint / DaliCheckConstraint
-        // Note: edges (HAS_PRIMARY_KEY, IS_PK_COLUMN, HAS_FOREIGN_KEY, IS_FK_COLUMN,
-        //       REFERENCES_TABLE, REFERENCES_COLUMN, HAS_UNIQUE_KEY, IS_UNIQUE_COLUMN,
-        //       HAS_CHECK) are written by RemoteWriter post-batch.
+        // Note: constraint edges (HAS_CONSTRAINT, CONSTRAINT_HAS_COLUMN, REFERENCES)
+        //       are written by RemoteWriter post-batch (F-1 folded from 9 → 3 types).
         for (var e : str.getConstraints().entrySet()) {
             ConstraintInfo c = e.getValue();
             String colNamesJson = WriteHelpers.toJson(c.getColumnNames());
