@@ -305,6 +305,60 @@ class JsonlBatchBuilderTest {
     }
 
     @Test
+    void hal3_01_compensationStats_edgesWrittenToBatch() throws Exception {
+        Map<String, StatementInfo> statements = new LinkedHashMap<>();
+        StatementInfo stmt = new StatementInfo(
+                "STMT:1", "PLSQL_BLOCK", "v_name := emp_rec.name", 5, 5, null, "PROC:LOAD");
+        statements.put("STMT:1", stmt);
+
+        Map<String, RoutineInfo> routines = new LinkedHashMap<>();
+        RoutineInfo routine = new RoutineInfo("PROC:LOAD", "LOAD", "PROCEDURE", null, null);
+        routine.addTypedVariable("v_name", "VARCHAR2");
+        routine.addTypedParameter("p_out", "NUMBER", "OUT");
+        routines.put("PROC:LOAD", routine);
+
+        List<CompensationStats> compStats = List.of(
+                new CompensationStats("STMT:1", "ASSIGNS_TO_VARIABLE",
+                        "PROC:LOAD:VAR:0", "VARIABLE", "test-sid"),
+                new CompensationStats("STMT:1", "WRITES_TO_PARAMETER",
+                        "PROC:LOAD:PARAM:0", "PARAMETER", "test-sid")
+        );
+
+        Structure str = new Structure(
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), routines,
+                statements, Map.of(), Set.of(), Map.of(), Map.of(), compStats);
+
+        SemanticResult result = new SemanticResult(
+                "test-sid", "/test.sql", "plsql", 0,
+                str, List.of(), Map.of(), List.of(), Map.of(), List.of());
+
+        JsonlBatchBuilder builder = JsonlBatchBuilder.buildFromResult("test-sid", result);
+        String payload = builder.build();
+
+        int assignsCount = 0;
+        int writesCount = 0;
+        for (String line : payload.split("\n")) {
+            if (line.isBlank()) continue;
+            JsonNode node = MAPPER.readTree(line);
+            String cls = node.has("@class") ? node.get("@class").asText() : "";
+            if ("ASSIGNS_TO_VARIABLE".equals(cls)) {
+                assignsCount++;
+                assertEquals("STMT:1", node.get("@from").asText());
+                assertEquals("PROC:LOAD:VAR:0", node.get("@to").asText());
+                assertEquals("VARIABLE", node.get("target_kind").asText());
+            }
+            if ("WRITES_TO_PARAMETER".equals(cls)) {
+                writesCount++;
+                assertEquals("STMT:1", node.get("@from").asText());
+                assertEquals("PROC:LOAD:PARAM:0", node.get("@to").asText());
+                assertEquals("PARAMETER", node.get("target_kind").asText());
+            }
+        }
+        assertEquals(1, assignsCount, "Exactly 1 ASSIGNS_TO_VARIABLE edge expected");
+        assertEquals(1, writesCount, "Exactly 1 WRITES_TO_PARAMETER edge expected");
+    }
+
+    @Test
     void daliSchema_dbNameFallsBackToGeoid_whenDatabaseNotInMap() throws Exception {
         // Schema references a db geoid that is not in the databases map (edge case)
         Map<String, Object> schemas = new LinkedHashMap<>();

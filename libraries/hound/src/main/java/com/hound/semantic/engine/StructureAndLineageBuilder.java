@@ -46,6 +46,9 @@ public class StructureAndLineageBuilder {
     /** HND-02: PL/SQL TYPE IS RECORD / TABLE OF templates. Key = type geoid. */
     private final Map<String, PlTypeInfo> plTypes = new LinkedHashMap<>();
 
+    /** HAL3-01: write-side edges accumulated during parse, written after main batch. */
+    private final List<CompensationStats> compensationStats = new ArrayList<>();
+
     /** HAL2-01: synthetic table geoids where PIPELINED column injection failed (PlType not yet available). */
     private final Set<String> pendingPipelinedTables = new LinkedHashSet<>();
 
@@ -564,6 +567,10 @@ public class StructureAndLineageBuilder {
 
     public Map<String, PlTypeInfo> getPlTypes() { return plTypes; }
 
+    // ═══════ HAL3-01: CompensationStats (write-side edges) ═══════
+    public void addCompensationStat(CompensationStats stat) { compensationStats.add(stat); }
+    public List<CompensationStats> getCompensationStats() { return compensationStats; }
+
     // ═══════ HAL2-01: Pending INJECT tracking ═══════
     public void markPendingPipelined(String syntheticTableGeoid) { pendingPipelinedTables.add(syntheticTableGeoid); }
     public boolean isPendingPipelined(String tableGeoid) { return pendingPipelinedTables.contains(tableGeoid); }
@@ -588,7 +595,8 @@ public class StructureAndLineageBuilder {
         return new Structure(databases, schemas, packages, tables, columns, routines, statements, records,
                 Collections.unmodifiableSet(ddlTableGeoids),
                 Collections.unmodifiableMap(constraints),
-                Collections.unmodifiableMap(plTypes));
+                Collections.unmodifiableMap(plTypes),
+                Collections.unmodifiableList(compensationStats));
     }
 
     // ═══════ Schemas / Databases ═══════

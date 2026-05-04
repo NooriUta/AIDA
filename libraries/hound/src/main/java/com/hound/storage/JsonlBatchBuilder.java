@@ -1046,6 +1046,12 @@ public class JsonlBatchBuilder {
         // edges (lineage: table→stmt; structural: stmt→table) with different field sets.
         // saveRemote() also does not write lineage edges, so omitting here keeps REMOTE vs BATCH parity.
 
+        // HAL3-01: WRITE_SIDE edges (Bucket B — CompensationStats)
+        for (CompensationStats cs : str.getCompensationStats()) {
+            b.appendEdge(cs.edgeType(), cs.statementGeoid(), cs.targetGeoid(),
+                    mapOf("session_id", sid, "target_kind", cs.targetKind()));
+        }
+
         return b;
     }
 
@@ -1777,6 +1783,12 @@ public class JsonlBatchBuilder {
                             "line_start", call.get("line")
                     ));
             }
+        }
+
+        // HAL3-01: WRITE_SIDE edges (Bucket B — CompensationStats)
+        for (CompensationStats cs : str.getCompensationStats()) {
+            b.appendEdge(cs.edgeType(), cs.statementGeoid(), cs.targetGeoid(),
+                    mapOf("session_id", sid, "target_kind", cs.targetKind()));
         }
 
         return b;

@@ -170,6 +170,10 @@ final class RemoteSchemaCommands {
                 "ALTER TYPE RECORD_FLOW CUSTOM abstract = true",
                 "CREATE EDGE TYPE WRITE_SIDE IF NOT EXISTS EXTENDS LINEAGE_FLOW",
                 "ALTER TYPE WRITE_SIDE CUSTOM abstract = true",
+                // HAL3-01: concrete WRITE_SIDE subtypes (Bucket B)
+                "CREATE EDGE TYPE ASSIGNS_TO_VARIABLE IF NOT EXISTS EXTENDS WRITE_SIDE",
+                "CREATE EDGE TYPE WRITES_TO_PARAMETER IF NOT EXISTS EXTENDS WRITE_SIDE",
+                "CREATE EDGE TYPE READS_FROM_CURSOR IF NOT EXISTS EXTENDS WRITE_SIDE",
 
                 // ─── ALTER existing types: assign supertype ──────────────────────
                 // ATOM_REF subtypes (5)

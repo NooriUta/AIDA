@@ -1,6 +1,7 @@
 // src/main/java/com/hound/semantic/model/Structure.java
 package com.hound.semantic.model;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,6 +31,8 @@ public class Structure {
     private final Map<String, ConstraintInfo> constraints;
     /** HND-02: PL/SQL TYPE IS RECORD / TABLE OF templates. Key = type geoid. */
     private final Map<String, PlTypeInfo> plTypes;
+    /** HAL3-01: write-side lineage edges (Bucket B). */
+    private final List<CompensationStats> compensationStats;
 
     /** Backward-compatible constructor — records, ddlTableGeoids, constraints default to empty. */
     public Structure(Map<String, Object> databases,
@@ -91,6 +94,21 @@ public class Structure {
                      Set<String> ddlTableGeoids,
                      Map<String, ConstraintInfo> constraints,
                      Map<String, PlTypeInfo> plTypes) {
+        this(databases, schemas, packages, tables, columns, routines, statements, records, ddlTableGeoids, constraints, plTypes, null);
+    }
+
+    public Structure(Map<String, Object> databases,
+                     Map<String, Object> schemas,
+                     Map<String, Object> packages,
+                     Map<String, TableInfo> tables,
+                     Map<String, ColumnInfo> columns,
+                     Map<String, RoutineInfo> routines,
+                     Map<String, StatementInfo> statements,
+                     Map<String, RecordInfo> records,
+                     Set<String> ddlTableGeoids,
+                     Map<String, ConstraintInfo> constraints,
+                     Map<String, PlTypeInfo> plTypes,
+                     List<CompensationStats> compensationStats) {
         this.databases      = databases      != null ? databases      : Map.of();
         this.schemas        = schemas        != null ? schemas        : Map.of();
         this.packages       = packages       != null ? packages       : Map.of();
@@ -102,6 +120,7 @@ public class Structure {
         this.ddlTableGeoids = ddlTableGeoids != null ? ddlTableGeoids : Set.of();
         this.constraints    = constraints    != null ? constraints    : Map.of();
         this.plTypes        = plTypes        != null ? plTypes        : Map.of();
+        this.compensationStats = compensationStats != null ? compensationStats : List.of();
     }
 
     public Map<String, Object> getDatabases()              { return databases; }
@@ -118,4 +137,6 @@ public class Structure {
     public Map<String, ConstraintInfo> getConstraints()    { return constraints; }
     /** HND-02: PL/SQL TYPE templates (RECORD / COLLECTION) declared in this session. */
     public Map<String, PlTypeInfo> getPlTypes()            { return plTypes; }
+    /** HAL3-01: write-side lineage edges (Bucket B). */
+    public List<CompensationStats> getCompensationStats()  { return compensationStats; }
 }
