@@ -213,7 +213,7 @@ export const TableNode = memo(({ data, selected, id }: NodeProps<TableNodeType>)
             {data.label}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            {(data._columnCount ?? columns.length)} {t('nodes.columns')}
+            {((data._columnCount as number | undefined) ?? columns.length)} {t('nodes.columns')}
             {!!data.metadata?.dataSource && (
               <span style={{
                 fontSize: 8, padding: '1px 4px', borderRadius: 2, flexShrink: 0,

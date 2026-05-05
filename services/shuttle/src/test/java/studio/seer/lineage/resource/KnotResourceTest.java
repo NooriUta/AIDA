@@ -68,21 +68,21 @@ class KnotResourceTest {
     @Test
     void knotReport_delegatesWithSessionId() {
         KnotReport report = mock(KnotReport.class);
-        when(knotService.knotReport("sess-1")).thenReturn(Uni.createFrom().item(report));
+        when(knotService.knotReport("sess-1", null)).thenReturn(Uni.createFrom().item(report));
 
-        KnotReport result = resource.knotReport("sess-1").await().indefinitely();
+        KnotReport result = resource.knotReport("sess-1", "").await().indefinitely();
 
         assertSame(report, result);
-        verify(knotService).knotReport("sess-1");
+        verify(knotService).knotReport("sess-1", null);
         verify(heimdall, times(2)).emit(any(EventType.class), any(), any(), any(), anyLong(), anyMap());
     }
 
     @Test
     void knotReport_nullSessionId_noNpe() {
-        when(knotService.knotReport(null)).thenReturn(Uni.createFrom().nullItem());
+        when(knotService.knotReport(null, null)).thenReturn(Uni.createFrom().nullItem());
 
         // Should not throw even with null sessionId
-        assertDoesNotThrow(() -> resource.knotReport(null).await().indefinitely());
+        assertDoesNotThrow(() -> resource.knotReport(null, "").await().indefinitely());
     }
 
     // ── knotSnippet ───────────────────────────────────────────────────────────
