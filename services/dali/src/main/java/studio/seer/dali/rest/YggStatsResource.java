@@ -47,9 +47,9 @@ public class YggStatsResource {
             Map<String, Long> atomsByStatus = atomCounts(conn);
 
             long atomsResolved   = countAtoms(conn,
-                    "coalesce(primary_status, status) in ('RESOLVED', 'CONSTANT', 'Обработано', 'constant')");
+                    "coalesce(primary_status, status) in ('RESOLVED', 'CONSTANT', 'CONSTANT_ORPHAN', 'Обработано', 'constant')");
             long atomsUnresolved = countAtoms(conn,
-                    "primary_status is null AND status is null OR coalesce(primary_status, status) NOT IN ['RESOLVED', 'CONSTANT', 'Обработано', 'constant'] OR statement_geoid = 'unattached'");
+                    "coalesce(primary_status, status) NOT IN ['RESOLVED', 'CONSTANT', 'CONSTANT_ORPHAN', 'FUNCTION_CALL', 'Обработано', 'constant', 'RECONSTRUCT_DIRECT', 'RECONSTRUCT_INVERSE', 'PARTIAL'] AND (primary_status IS NOT NULL OR status IS NOT NULL)");
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("tables",          tables);

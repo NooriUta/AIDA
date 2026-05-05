@@ -204,6 +204,14 @@ public class KnotColumnLineageService {
     Uni<List<KnotAtom>>           loadAtoms(Map<String, Object> p)           { return bulkLoaders.loadAtoms(p);          }
     Uni<List<KnotCall>>           loadCalls(Map<String, Object> p)           { return bulkLoaders.loadCalls(p);          }
 
+    // G4: source_file-filtered overloads — delegate to KnotBulkLoaders with sourceFile
+    Uni<List<KnotOutputColumn>>   loadOutputColumns(Map<String, Object> p, String sf)  { return bulkLoaders.loadOutputColumns(p, sf);  }
+    Uni<List<KnotAffectedColumn>> loadAffectedColumns(Map<String, Object> p, String sf){ return bulkLoaders.loadAffectedColumns(p, sf);}
+    Uni<KnotParamVars>            loadParamsAndVars(Map<String, Object> p, String sf)   { return bulkLoaders.loadParamsAndVars(p, sf);  }
+    Uni<List<KnotSnippet>>        loadSnippets(Map<String, Object> p, String sf)        { return bulkLoaders.loadSnippets(p, sf);       }
+    Uni<List<KnotAtom>>           loadAtoms(Map<String, Object> p, String sf)           { return bulkLoaders.loadAtoms(p, sf);          }
+    Uni<List<KnotCall>>           loadCalls(Map<String, Object> p, String sf)           { return bulkLoaders.loadCalls(p, sf);          }
+
     // ── Statement extras (descendants + atom stats, lazy from Inspector) ──────
     //
     // Powers the LOOM Inspector "Дополнительно" tab. Returns:

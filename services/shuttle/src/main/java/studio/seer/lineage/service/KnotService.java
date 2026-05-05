@@ -110,18 +110,29 @@ public class KnotService {
 
     // ── Full report ───────────────────────────────────────────────────────────
 
+    /** Backward-compat overload — no file filter. */
     public Uni<KnotReport> knotReport(String sessionId) {
-        Map<String, Object> params = Map.of("sid", sessionId);
+        return knotReport(sessionId, null);
+    }
 
-        Uni<KnotSession>                 sessionUni    = loadSession(sessionId, params);
-        Uni<List<KnotTable>>             tablesUni     = loadTables(params);
-        Uni<List<KnotStatement>>         statementsUni = knotStatementLoader.loadStatements(params);
-        Uni<List<KnotSnippet>>           snippetsUni   = columnLineageService.loadSnippets(params);
-        Uni<List<KnotAtom>>              atomsUni      = columnLineageService.loadAtoms(params);
-        Uni<List<KnotOutputColumn>>      outColsUni    = columnLineageService.loadOutputColumns(params);
-        Uni<List<KnotAffectedColumn>>    affColsUni    = columnLineageService.loadAffectedColumns(params);
-        Uni<List<KnotCall>>              callsUni      = columnLineageService.loadCalls(params);
-        Uni<KnotParamVars> paramVarsUni = columnLineageService.loadParamsAndVars(params);
+    /**
+     * G4: knotReport with optional source_file filter for per-file view in batch sessions.
+     * When sourceFile is null/blank, returns data from ALL files in the session (original behaviour).
+     */
+    public Uni<KnotReport> knotReport(String sessionId, String sourceFile) {
+        Map<String, Object> params = sourceFile != null
+                ? Map.of("sid", sessionId, "sf", sourceFile)
+                : Map.of("sid", sessionId);
+
+        Uni<KnotSession>                 sessionUni    = loadSession(sessionId, params, sourceFile);
+        Uni<List<KnotTable>>             tablesUni     = loadTables(params, sourceFile);
+        Uni<List<KnotStatement>>         statementsUni = knotStatementLoader.loadStatements(params, sourceFile);
+        Uni<List<KnotSnippet>>           snippetsUni   = columnLineageService.loadSnippets(params, sourceFile);
+        Uni<List<KnotAtom>>              atomsUni      = columnLineageService.loadAtoms(params, sourceFile);
+        Uni<List<KnotOutputColumn>>      outColsUni    = columnLineageService.loadOutputColumns(params, sourceFile);
+        Uni<List<KnotAffectedColumn>>    affColsUni    = columnLineageService.loadAffectedColumns(params, sourceFile);
+        Uni<List<KnotCall>>              callsUni      = columnLineageService.loadCalls(params, sourceFile);
+        Uni<KnotParamVars> paramVarsUni = columnLineageService.loadParamsAndVars(params, sourceFile);
 
         return Uni.combine().all()
             .unis(sessionUni, tablesUni, statementsUni, snippetsUni, atomsUni, outColsUni, affColsUni, callsUni, paramVarsUni)
@@ -138,10 +149,28 @@ public class KnotService {
 
     // ── Session summary ───────────────────────────────────────────────────────
 
+    /** Backward-compat: no source_file filter. */
     private Uni<KnotSession> loadSession(String sessionId, Map<String, Object> params) {
+        return loadSession(sessionId, params, null);
+    }
+
+    private Uni<KnotSession> loadSession(String sessionId, Map<String, Object> params, String sourceFile) {
+
+        // G4: source_file filter — appended to SQL WHERE when sourceFile is non-null.
+        String sfSql = sourceFile != null ? " AND source_file = :sf" : "";
 
         // ArcadeDB SQL uses :param syntax; Cypher uses $param
-        String sqlMeta = """
+        // DaliSession has file_path (not source_file) — use file_path for meta lookup
+        String sqlMeta = sourceFile != null
+            ? """
+            SELECT @rid AS id, session_id, session_name,
+                   coalesce(dialect,'plsql') AS dialect,
+                   coalesce(file_path,'')    AS file_path,
+                   coalesce(processing_ms,0) AS processing_ms
+            FROM DaliSession WHERE session_id = :sid AND file_path = :sf
+            LIMIT 1
+            """
+            : """
             SELECT @rid AS id, session_id, session_name,
                    coalesce(dialect,'plsql') AS dialect,
                    coalesce(file_path,'')    AS file_path,
@@ -155,15 +184,15 @@ public class KnotService {
         String sqlRoutineCount = """
             SELECT count(*) AS routineCount
             FROM DaliRoutine
-            WHERE session_id = :sid
-            """;
+            WHERE session_id = :sid""" + sfSql + "\n";
 
         // Stmt geoids — uses DaliStatement(session_id) NOTUNIQUE index directly.
         // Was: in('CONTAINS_STMT').in('BELONGS_TO_SESSION')[...].size() > 0 — 2-hop reverse scan.
         String sqlStmtGeoids = """
             SELECT stmt_geoid
             FROM DaliStatement
-            WHERE session_id = :sid
+            WHERE session_id = :sid""" + sfSql + """
+
               AND outE('CHILD_OF').size() = 0
             """;
 
@@ -172,7 +201,8 @@ public class KnotService {
         String sqlAtoms = """
             SELECT coalesce(primary_status, status) AS ps, count(*) AS cnt
             FROM DaliAtom
-            WHERE session_id = :sid
+            WHERE session_id = :sid""" + sfSql + """
+
             GROUP BY coalesce(primary_status, status)
             """;
 
@@ -246,12 +276,21 @@ public class KnotService {
 
     // ── Tables ────────────────────────────────────────────────────────────────
 
+    /** Backward-compat: no source_file filter. */
     private Uni<List<KnotTable>> loadTables(Map<String, Object> params) {
+        return loadTables(params, null);
+    }
+
+    private Uni<List<KnotTable>> loadTables(Map<String, Object> params, String sourceFile) {
         // Both queries start from DaliStatement(session_id) NOTUNIQUE index.
         // Avoids 3-hop traversal Session→Routine→Statement used in the original code.
         // Column details are lazy-loaded via knotTableDetail — only count here.
+        // G4: source_file filter — when sourceFile is non-null, add property to narrow scope.
+        String sfProp = sourceFile != null ? ", source_file: $sf" : "";
+
         String cypherMain = """
-            MATCH (stmt:DaliStatement {session_id: $sid})-[:READS_FROM|WRITES_TO]-(t:DaliTable)
+            MATCH (stmt:DaliStatement {session_id: $sid""" + sfProp + """
+            })-[:READS_FROM|WRITES_TO]-(t:DaliTable)
             OPTIONAL MATCH (t)-[:HAS_COLUMN]->(c:DaliColumn)
             WITH t, count(DISTINCT c) AS colCount
             RETURN DISTINCT
@@ -270,7 +309,8 @@ public class KnotService {
         // READS_FROM and WRITES_TO counts in a single query — split by edgeType in Java.
         // Was: 2 separate Cypher queries with 3-hop traversal each (3 total → now 2).
         String cypherCounts = """
-            MATCH (stmt:DaliStatement {session_id: $sid})-[e:READS_FROM|WRITES_TO]-(t:DaliTable)
+            MATCH (stmt:DaliStatement {session_id: $sid""" + sfProp + """
+            })-[e:READS_FROM|WRITES_TO]-(t:DaliTable)
             RETURN t.table_name AS tableName, type(e) AS edgeType, count(*) AS cnt
             """;
 
