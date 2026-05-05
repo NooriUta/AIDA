@@ -87,8 +87,15 @@ public class AtomProcessor {
         if (text == null || text.isBlank()) return;
 
         if (statementGeoid == null) {
-            registerUnattachedAtom(text, buildAtomData(text, line, col, endLine, endCol,
-                    context, null, parentContext, isComplex, tokens, tokenDetails, nestedAtomCount));
+            Map<String, Object> unattData = buildAtomData(text, line, col, endLine, endCol,
+                    context, null, parentContext, isComplex, tokens, tokenDetails, nestedAtomCount);
+            // G3-FIX: classify unattached atoms (constant detection) — previously skipped
+            classifyAtom(unattData);
+            // G3-FIX: attach routine_geoid so unattached atoms are traceable to their routine
+            if (scopeManager != null && scopeManager.currentRoutine() != null) {
+                unattData.put("routine_geoid", scopeManager.currentRoutine());
+            }
+            registerUnattachedAtom(text, unattData);
             return;
         }
 
