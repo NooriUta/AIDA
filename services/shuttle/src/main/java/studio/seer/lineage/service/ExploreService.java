@@ -173,7 +173,7 @@ public class ExploreService {
             """;
 
         String hoistReadsQ = """
-            MATCH (sub:DaliStatement)-[:READS_FROM]->(n)
+            MATCH (n)-[:READS_FROM]->(sub:DaliStatement)
             WHERE id(n) = $rid
               AND coalesce(sub.parent_statement, '') <> ''
             MATCH (sub)-[:CHILD_OF*1..30]->(root:DaliStatement)

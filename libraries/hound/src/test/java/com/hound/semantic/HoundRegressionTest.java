@@ -2,6 +2,7 @@ package com.hound.semantic;
 
 import com.hound.semantic.engine.UniversalSemanticEngine;
 import com.hound.semantic.dialect.plsql.PlSqlSemanticListener;
+import com.hound.semantic.model.AtomInfo;
 import com.hound.semantic.model.StatementInfo;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
@@ -64,9 +65,9 @@ class HoundRegressionTest {
     /** Computes atom quality: (resolved + constants + functions) / total. */
     static double quality(List<Map<String, Object>> log) {
         if (log.isEmpty()) return 1.0;
-        long resolved  = log.stream().filter(e -> "Обработано".equals(e.get("result_kind"))).count();
-        long constants = log.stream().filter(e -> "constant"  .equals(e.get("result_kind"))).count();
-        long functions = log.stream().filter(e -> "function_call".equals(e.get("result_kind"))).count();
+        long resolved  = log.stream().filter(e -> "RESOLVED".equals(e.get("result_kind"))).count();
+        long constants = log.stream().filter(e -> "CONSTANT"  .equals(e.get("result_kind"))).count();
+        long functions = log.stream().filter(e -> "FUNCTION_CALL".equals(e.get("result_kind"))).count();
         return (resolved + constants + functions) / (double) log.size();
     }
 
@@ -132,7 +133,7 @@ class HoundRegressionTest {
                 "%s: quality %.2f below threshold %.2f  (total=%d, unresolved=%d)"
                         .formatted(file.getFileName(), q, QUALITY_THRESHOLD,
                                 log.size(),
-                                log.stream().filter(e -> "unresolved".equals(e.get("result_kind"))).count()));
+                                log.stream().filter(e -> "UNRESOLVED".equals(e.get("result_kind"))).count()));
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -154,7 +155,7 @@ class HoundRegressionTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toUpperCase().startsWith("SOURCE.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedSourceAlias,
@@ -291,7 +292,7 @@ class HoundRegressionTest {
             StatementInfo s = e.getValue();
             if (!"SELECT".equals(s.getType())) continue;
             for (var atom : engine.getAtomProcessor().getAtomsForStatement(s.getGeoid()).values()) {
-                if ("Обработано".equals(atom.get("status"))
+                if (AtomInfo.STATUS_RESOLVED.equals(atom.get("status"))
                         && atom.get("output_column_sequence") != null) {
                     found = true;
                     break;

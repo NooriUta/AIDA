@@ -43,7 +43,7 @@ class ExploreRoutineAggregateService {
             cypher = """
                 MATCH (p:DaliPackage {package_name: $scope})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
                 OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
-                OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
+                OPTIONAL MATCH (tR:DaliTable)-[:READS_FROM]->(stmt)
                 OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
                 WITH p, r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
                 RETURN id(p) AS pkgId, p.package_name AS pkgName,
@@ -64,7 +64,7 @@ class ExploreRoutineAggregateService {
                 WITH s, CASE WHEN n1:DaliRoutine THEN n1 ELSE nested END AS r
                 WHERE r IS NOT NULL
                 OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
-                OPTIONAL MATCH (stmt)-[:READS_FROM]->(tR:DaliTable)
+                OPTIONAL MATCH (tR:DaliTable)-[:READS_FROM]->(stmt)
                 OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
                 WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
                 RETURN id(r) AS src, r.routine_name AS srcLabel,
@@ -85,7 +85,7 @@ class ExploreRoutineAggregateService {
         Uni<List<Map<String, Object>>> extQuery = finalIsPackage
             ? Uni.createFrom().item(List.of())
             : arcade.cypherIn(lineageDb(), """
-                MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(stmt:DaliStatement)-[:READS_FROM]->(tR:DaliTable)
+                MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(stmt:DaliStatement), (tR:DaliTable)-[:READS_FROM]->(stmt)
                 WHERE extR.schema_geoid <> $scope
                   AND tR.schema_geoid = $scope
                 WITH extR, collect(DISTINCT tR) AS reads

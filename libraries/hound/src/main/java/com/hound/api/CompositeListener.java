@@ -66,6 +66,18 @@ public class CompositeListener implements HoundEventListener {
         invoke(() -> secondary.onParseWarning(file, line, charPos, msg), "onParseWarning/secondary");
     }
 
+    @Override
+    public void onSemanticWarning(String file, String category, String message) {
+        invoke(() -> primary.onSemanticWarning(file, category, message),   "onSemanticWarning/primary");
+        invoke(() -> secondary.onSemanticWarning(file, category, message), "onSemanticWarning/secondary");
+    }
+
+    @Override
+    public void onSemanticError(String file, String category, String message) {
+        invoke(() -> primary.onSemanticError(file, category, message),   "onSemanticError/primary");
+        invoke(() -> secondary.onSemanticError(file, category, message), "onSemanticError/secondary");
+    }
+
     // ── Internal ──────────────────────────────────────────────────────────────
 
     private void invoke(Runnable action, String label) {

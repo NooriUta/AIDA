@@ -167,13 +167,14 @@ public class DiagnosticRunner {
         }
 
         // Edge counts
+        // Sprint 0.1 SCHEMA_CLEANUP (§13.5): removed JOIN_FLOW, UNION_FLOW, ROUTINE_USES_TABLE.
         String[] edgTypes = {"BELONGS_TO_SESSION","CONTAINS_SCHEMA","CONTAINS_TABLE",
                 "CONTAINS_ROUTINE","BELONGS_TO_APP",
                 "HAS_COLUMN","HAS_PARAMETER","HAS_VARIABLE","CHILD_OF","CONTAINS_STMT",
                 "HAS_OUTPUT_COL","HAS_ATOM","HAS_JOIN","READS_FROM","WRITES_TO",
-                "USES_SUBQUERY","ROUTINE_USES_TABLE","CALLS","ATOM_REF_TABLE",
+                "USES_SUBQUERY","CALLS","ATOM_REF_TABLE",
                 "ATOM_REF_COLUMN","ATOM_PRODUCES","DATA_FLOW","FILTER_FLOW",
-                "JOIN_FLOW","UNION_FLOW","NESTED_IN"};
+                "NESTED_IN"};
         println("");
         println("  ▸ Edge counts по типам");
         totalQueries++;
@@ -215,12 +216,12 @@ public class DiagnosticRunner {
 
         query("Топ-20 нерешённых атомов",
                 "SELECT atom_text, parent_context, count(*) as cnt FROM DaliAtom " +
-                "WHERE status != 'Обработано' AND status != 'constant' AND status != 'function_call' " +
+                "WHERE coalesce(primary_status, status) NOT IN ['RESOLVED', 'CONSTANT', 'FUNCTION_CALL', 'Обработано', 'constant', 'function_call'] " +
                 "GROUP BY atom_text, parent_context ORDER BY cnt DESC LIMIT 20");
 
         query("Нерешённые атомы по контексту",
                 "SELECT parent_context, count(*) as failed_cnt FROM DaliAtom " +
-                "WHERE status NOT IN ['Обработано', 'constant', 'function_call'] " +
+                "WHERE coalesce(primary_status, status) NOT IN ['RESOLVED', 'CONSTANT', 'FUNCTION_CALL', 'Обработано', 'constant', 'function_call'] " +
                 "GROUP BY parent_context ORDER BY failed_cnt DESC");
 
         query("SOURCE.* / TARGET.* — MERGE bug",
@@ -230,7 +231,7 @@ public class DiagnosticRunner {
         query("Atoms без output_column_sequence (SELECT resolved)",
                 "SELECT count(*) as no_output_col FROM DaliAtom " +
                 "WHERE output_column_sequence IS NULL AND parent_context = 'SELECT' " +
-                "AND status = 'Обработано'");
+                "AND coalesce(primary_status, status) IN ['RESOLVED', 'Обработано']");
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -378,13 +379,13 @@ public class DiagnosticRunner {
 
         // Drop alias prefix 'a.' — embedded doesn't support alias + out() combo
         query("Resolved atoms БЕЗ ATOM_REF edges (should be 0)",
-                "SELECT atom_text, status, table_geoid FROM DaliAtom " +
-                "WHERE status = 'Обработано' AND table_geoid IS NOT NULL " +
+                "SELECT atom_text, coalesce(primary_status, status) as ps, table_geoid FROM DaliAtom " +
+                "WHERE coalesce(primary_status, status) IN ['RESOLVED', 'Обработано'] AND table_geoid IS NOT NULL " +
                 "AND table_geoid != 'null' AND out('ATOM_REF_TABLE').size() = 0 LIMIT 20");
 
         query("FILTER_FLOW candidates (WHERE/HAVING resolved)",
                 "SELECT count(*) as filter_flow_candidates FROM DaliAtom " +
-                "WHERE parent_context IN ['WHERE', 'HAVING'] AND status = 'Обработано' " +
+                "WHERE parent_context IN ['WHERE', 'HAVING'] AND coalesce(primary_status, status) IN ['RESOLVED', 'Обработано'] " +
                 "AND table_geoid IS NOT NULL");
     }
 
@@ -433,8 +434,8 @@ public class DiagnosticRunner {
         metrics.put("tables",           "SELECT count(*) as v FROM DaliTable");
         metrics.put("columns",          "SELECT count(*) as v FROM DaliColumn");
         metrics.put("atoms_total",      "SELECT count(*) as v FROM DaliAtom");
-        metrics.put("atoms_resolved",   "SELECT count(*) as v FROM DaliAtom WHERE status = 'Обработано'");
-        metrics.put("atoms_failed",     "SELECT count(*) as v FROM DaliAtom WHERE status NOT IN ['Обработано','constant','function_call']");
+        metrics.put("atoms_resolved",   "SELECT count(*) as v FROM DaliAtom WHERE coalesce(primary_status, status) IN ['RESOLVED', 'Обработано']");
+        metrics.put("atoms_failed",     "SELECT count(*) as v FROM DaliAtom WHERE coalesce(primary_status, status) NOT IN ['RESOLVED', 'CONSTANT', 'FUNCTION_CALL', 'Обработано', 'constant', 'function_call']");
         metrics.put("output_cols",      "SELECT count(*) as v FROM DaliOutputColumn");
         metrics.put("joins",            "SELECT count(*) as v FROM DaliJoin");
         metrics.put("parameters",       "SELECT count(*) as v FROM DaliParameter");
@@ -467,9 +468,9 @@ public class DiagnosticRunner {
         // Resolution percentage
         try {
             long total = countQuery("SELECT count(*) as v FROM DaliAtom");
-            long resolved = countQuery("SELECT count(*) as v FROM DaliAtom WHERE status = 'Обработано'");
-            long constants = countQuery("SELECT count(*) as v FROM DaliAtom WHERE status = 'constant'");
-            long funcCalls = countQuery("SELECT count(*) as v FROM DaliAtom WHERE status = 'function_call'");
+            long resolved = countQuery("SELECT count(*) as v FROM DaliAtom WHERE coalesce(primary_status, status) IN ['RESOLVED', 'Обработано']");
+            long constants = countQuery("SELECT count(*) as v FROM DaliAtom WHERE coalesce(primary_status, status) IN ['CONSTANT', 'constant']");
+            long funcCalls = countQuery("SELECT count(*) as v FROM DaliAtom WHERE coalesce(primary_status, status) IN ['FUNCTION_CALL', 'function_call']");
             long failed = total - resolved - constants - funcCalls;
 
             if (total > 0) {

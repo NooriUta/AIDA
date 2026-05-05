@@ -49,11 +49,11 @@ class YggStatsResourceTest {
                 if (query.contains("DaliStatement")) return List.of(Map.of("cnt", statements));
                 if (query.contains("DaliRoutine"))   return List.of(Map.of("cnt", routines));
                 // atomCounts GROUP BY
-                if (query.contains("GROUP BY status")) return atomsByStatus;
-                // countAtoms resolved — "status in ('Обработано'..." — NOT IN check comes last
-                if (query.contains("status in ("))   return List.of(Map.of("cnt", atomsResolved));
-                // countAtoms unresolved — "status is null OR..."
-                if (query.contains("status is null")) return List.of(Map.of("cnt", atomsUnresolved));
+                if (query.contains("GROUP BY")) return atomsByStatus;
+                // countAtoms resolved — coalesce(primary_status, status) in (...)
+                if (query.contains("'RESOLVED'") && !query.contains("NOT IN")) return List.of(Map.of("cnt", atomsResolved));
+                // countAtoms unresolved
+                if (query.contains("NOT IN")) return List.of(Map.of("cnt", atomsUnresolved));
                 return List.of();
             }
             @Override
@@ -71,8 +71,8 @@ class YggStatsResourceTest {
                 5L, 20L, 3L, 15L, 7L,
                 10L, 2L,
                 List.of(
-                        Map.of("status", "Обработано", "cnt", 8L),
-                        Map.of("status", "constant",   "cnt", 2L)
+                        Map.of("ps", "RESOLVED", "cnt", 8L),
+                        Map.of("ps", "CONSTANT",   "cnt", 2L)
                 ));
         when(lineageRegistry.resourceFor("default")).thenReturn(conn);
     }

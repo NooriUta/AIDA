@@ -64,4 +64,36 @@ public interface HoundEventListener {
 
     /** Called if an unrecoverable error occurs while processing {@code file}. */
     default void onError(String file, Throwable error) {}
+
+    /**
+     * Called for semantic-level warnings detected during the AST walk or
+     * post-walk resolution passes (e.g. unresolved atoms, orphan scopes,
+     * suspicious table names).
+     *
+     * @param file     file currently being parsed
+     * @param category short tag such as {@code "ATOM_UNRESOLVED"}, {@code "SCOPE_ORPHAN"},
+     *                 {@code "STAB_SUSPICIOUS"}, {@code "JOIN_UNRESOLVED"}
+     * @param message  human-readable detail
+     */
+    default void onSemanticWarning(String file, String category, String message) {}
+
+    /**
+     * Called for semantic-level errors detected during the AST walk
+     * (e.g. depth overflow, critical builder failures).
+     *
+     * @param file     file currently being parsed
+     * @param category short tag such as {@code "DEPTH_OVERFLOW"}, {@code "BUILDER_ERROR"}
+     * @param message  human-readable detail
+     */
+    default void onSemanticError(String file, String category, String message) {}
+
+    /**
+     * HAL2-05: Called when an atom transitions from PENDING_INJECT to a resolved state,
+     * signalling that parent statements may need cascade recomputation.
+     *
+     * @param atomGeoid        geoid of the resolved atom
+     * @param newPrimaryStatus new status (RECONSTRUCT_INVERSE, RESOLVED, etc.)
+     * @param sessionId        session performing the resolution
+     */
+    default void onRecomputeNeeded(String atomGeoid, String newPrimaryStatus, String sessionId) {}
 }

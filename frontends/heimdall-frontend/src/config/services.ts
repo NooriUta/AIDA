@@ -76,8 +76,15 @@ export const SERVICES: ServiceSpec[] = [
     deps: ['heimdall-backend', 'frigg', 'ygg'],
     depLabels: ['events', 'write', 'write'] },
 
-  // External integrations (none deployed in current docker-compose).
-  // When re-introduced add portDocker + layer to make them topology-visible.
+  // AI / Analysis services
+  { id: 'mimir',              label: 'mimir',              category: 'platform', portDev: 9094, portDocker: 19094, devUrl: 'http://localhost:9094/q/dev-ui',                dockerUrl: 'http://localhost:19094/q/health',
+    layer: 4, color: 'var(--suc)',
+    deps: ['anvil', 'shuttle', 'ygg'],
+    depLabels: ['impact', 'lineage', 'metadata'] },
+  { id: 'anvil',              label: 'anvil',              category: 'platform', portDev: 9095, portDocker: 19095, devUrl: 'http://localhost:9095/q/dev-ui',                dockerUrl: 'http://localhost:19095/api/health',
+    layer: 4, color: 'var(--suc)',
+    deps: ['ygg'],
+    depLabels: ['graph'] },
 ];
 
 // Storage — not services (no health poll), but they're topology nodes.

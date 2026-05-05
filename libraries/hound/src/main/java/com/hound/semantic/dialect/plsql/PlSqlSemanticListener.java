@@ -7,6 +7,8 @@ import com.hound.parser.base.grammars.sql.plsql.PlSqlParserBaseListener;
 import com.hound.semantic.engine.CanonicalTokenType;
 import com.hound.semantic.listener.BaseSemanticListener;
 import com.hound.semantic.engine.UniversalSemanticEngine;
+import com.hound.semantic.model.CompensationStats;
+import com.hound.semantic.model.RoutineInfo;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -698,7 +700,14 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         // Register cursor name → statement geoid BEFORE the statement scope is popped
         if (ctx.identifier() != null) {
             String cursorName = BaseSemanticListener.cleanIdentifier(ctx.identifier().getText());
+            String stmtGeoid = base.engine.getScopeManager().currentStatement();
             base.onCursorDeclared(cursorName);
+            // HAL3-04: register cursor in RoutineInfo for DaliCursor vertex creation
+            String routineGeoid = base.currentRoutine();
+            if (routineGeoid != null) {
+                RoutineInfo ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+                if (ri != null) ri.addCursor(cursorName, stmtGeoid);
+            }
         }
         base.onStatementExit();
         base.setIsFirstSubq(null);
@@ -1433,11 +1442,13 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
         // Cursor name — resolve its SELECT statement geoid
         String cursorSelectGeoid = null;
+        String cursorNameUpper = null;
         if (ctx.cursor_name() != null) {
             String rawCursor = ctx.cursor_name().getText();
             int paren = rawCursor.indexOf('(');
             String cursorName = BaseSemanticListener.cleanIdentifier(
                     paren >= 0 ? rawCursor.substring(0, paren) : rawCursor);
+            cursorNameUpper = cursorName.toUpperCase();
             cursorSelectGeoid = base.engine.getScopeManager().getCursorStmtGeoid(cursorName);
         }
 
@@ -1455,7 +1466,86 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
         if (stmtGeoid != null)
             base.engine.getScopeManager().registerCursorRecord(varName, stmtGeoid, true);
 
+        // HAL3-04: emit READS_FROM_CURSOR edge (DaliStatement → DaliCursor)
+        if (cursorNameUpper != null && routineGeoid != null) {
+            String cursorGeoid = routineGeoid + ":CURSOR:" + cursorNameUpper;
+            String sourceGeoid = base.engine.getScopeManager().currentStatement();
+            if (sourceGeoid == null) sourceGeoid = routineGeoid;
+            base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                    sourceGeoid,
+                    CompensationStats.EDGE_READS_FROM_CURSOR,
+                    cursorGeoid,
+                    CompensationStats.KIND_CURSOR,
+                    null));
+        }
+
         logger.debug("G8 FETCH BULK COLLECT: {} → cursor stmt {}", varName, cursorSelectGeoid);
+    }
+
+    // =========================================================================
+    // HAL3-02: assignment_statement → ASSIGNS_TO_VARIABLE edge
+    // =========================================================================
+
+    @Override
+    public void exitAssignment_statement(PlSqlParser.Assignment_statementContext ctx) {
+        if (ctx == null) return;
+        PlSqlParser.General_elementContext ge = ctx.general_element();
+        if (ge == null) return;
+
+        var parts = ge.general_element_part();
+        if (parts == null || parts.isEmpty()) return;
+        String varName;
+        if (parts.get(0).id_expression() != null) {
+            varName = BaseSemanticListener.cleanIdentifier(
+                    parts.get(0).id_expression().getText()).toUpperCase();
+        } else {
+            varName = BaseSemanticListener.cleanIdentifier(ge.getText()).toUpperCase();
+            int dot = varName.indexOf('.');
+            if (dot > 0) varName = varName.substring(0, dot);
+            int paren = varName.indexOf('(');
+            if (paren > 0) varName = varName.substring(0, paren);
+        }
+
+        String routineGeoid = base.currentRoutine();
+        if (routineGeoid == null) return;
+
+        RoutineInfo ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+        if (ri == null) return;
+
+        String targetGeoid = null;
+        String targetKind = null;
+
+        int vIdx = 0;
+        for (RoutineInfo.VariableInfo v : ri.getTypedVariables()) {
+            if (varName.equalsIgnoreCase(v.name())) {
+                targetGeoid = routineGeoid + ":VAR:" + vIdx;
+                targetKind = CompensationStats.KIND_VARIABLE;
+                break;
+            }
+            vIdx++;
+        }
+        if (targetGeoid == null) {
+            int pIdx = 0;
+            for (RoutineInfo.ParameterInfo p : ri.getTypedParameters()) {
+                if (varName.equalsIgnoreCase(p.name())) {
+                    targetGeoid = routineGeoid + ":PARAM:" + pIdx;
+                    targetKind = CompensationStats.KIND_PARAMETER;
+                    break;
+                }
+                pIdx++;
+            }
+        }
+        if (targetGeoid == null) return;
+
+        String sourceGeoid = base.engine.getScopeManager().currentStatement();
+        if (sourceGeoid == null) sourceGeoid = routineGeoid;
+
+        base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                sourceGeoid,
+                CompensationStats.EDGE_ASSIGNS_TO_VARIABLE,
+                targetGeoid,
+                targetKind,
+                null));
     }
 
     // =========================================================================
@@ -1473,6 +1563,11 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
                 String typeName = BaseSemanticListener.cleanIdentifier(ctx.type_spec().getText());
                 com.hound.semantic.model.PlTypeInfo pt =
                         base.engine.getBuilder().resolvePlTypeByName(typeName, null);
+                if (pt == null) {
+                    base.engine.getBuilder().markPendingMultiset(stmtGeoid);
+                    logger.debug("HAL2-01: MULTISET pending — type {} not resolved, stmt {}",
+                            typeName, stmtGeoid);
+                }
                 String targetGeoid = pt != null ? pt.getGeoid() : typeName;
                 base.engine.getBuilder().addLineageEdge(stmtGeoid, targetGeoid, "MULTISET_INTO", stmtGeoid);
                 logger.debug("HND-15b MULTISET_INTO {} → {}", stmtGeoid, targetGeoid);
@@ -1594,6 +1689,60 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
         if (calledName != null && !calledName.isBlank()) {
             base.onCallStatement(calledName, getStartLine(ctx));
+        }
+    }
+
+    // =========================================================================
+    // HAL3-03: WRITES_TO_PARAMETER — OUT params at call sites
+    // =========================================================================
+
+    @Override
+    public void exitCall_statement(PlSqlParser.Call_statementContext ctx) {
+        if (ctx == null) return;
+        String callerRoutineGeoid = base.currentRoutine();
+        if (callerRoutineGeoid == null) return;
+
+        String calledName = null;
+        var routineNames = ctx.routine_name();
+        if (routineNames != null && !routineNames.isEmpty()) {
+            calledName = BaseSemanticListener.cleanIdentifier(routineNames.get(0).getText());
+        }
+        if (calledName == null || calledName.isBlank()) {
+            String raw = ctx.getText();
+            int paren = raw.indexOf('(');
+            calledName = BaseSemanticListener.cleanIdentifier(
+                    paren > 0 ? raw.substring(0, paren) : raw);
+        }
+        if (calledName == null || calledName.isBlank()) return;
+
+        String calledUpper = calledName.toUpperCase();
+        RoutineInfo calledRoutine = null;
+        String calledGeoid = null;
+        for (var entry : base.engine.getBuilder().getRoutines().entrySet()) {
+            String rg = entry.getKey().toUpperCase();
+            if (rg.endsWith(":" + calledUpper) || rg.equals(calledUpper)) {
+                calledRoutine = entry.getValue();
+                calledGeoid = entry.getKey();
+                break;
+            }
+        }
+        if (calledRoutine == null) return;
+
+        String sourceGeoid = base.engine.getScopeManager().currentStatement();
+        if (sourceGeoid == null) sourceGeoid = callerRoutineGeoid;
+
+        int pIdx = 0;
+        for (RoutineInfo.ParameterInfo p : calledRoutine.getTypedParameters()) {
+            if ("OUT".equalsIgnoreCase(p.mode()) || "INOUT".equalsIgnoreCase(p.mode())
+                    || "IN OUT".equalsIgnoreCase(p.mode())) {
+                base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                        sourceGeoid,
+                        CompensationStats.EDGE_WRITES_TO_PARAMETER,
+                        calledGeoid + ":PARAM:" + pIdx,
+                        CompensationStats.KIND_PARAMETER,
+                        null));
+            }
+            pIdx++;
         }
     }
 
@@ -1860,6 +2009,59 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             if (!varName.isBlank())
                 base.onReturningTarget(varName, retExprs, stmtGeoid, false);
         }
+
+        // HAL3-04: emit write-side CompensationStats for RETURNING INTO targets
+        String routineGeoid = base.currentRoutine();
+        if (routineGeoid != null) {
+            RoutineInfo ri = base.engine.getBuilder().getRoutines().get(routineGeoid);
+            if (ri != null) {
+                for (var ge : into.general_element()) {
+                    String varName = BaseSemanticListener.cleanIdentifier(ge.getText()).toUpperCase();
+                    int dot = varName.indexOf('.');
+                    if (dot > 0) varName = varName.substring(0, dot);
+                    emitReturningIntoCompensation(ri, routineGeoid, stmtGeoid, varName);
+                }
+                for (var bv : into.bind_variable()) {
+                    String varName = BaseSemanticListener.cleanIdentifier(
+                            bv.getText().replace(":", "")).toUpperCase();
+                    emitReturningIntoCompensation(ri, routineGeoid, stmtGeoid, varName);
+                }
+            }
+        }
+    }
+
+    private void emitReturningIntoCompensation(RoutineInfo ri, String routineGeoid,
+                                                String stmtGeoid, String varName) {
+        if (varName == null || varName.isBlank()) return;
+        String targetGeoid = null;
+        String targetKind = null;
+        int vIdx = 0;
+        for (RoutineInfo.VariableInfo v : ri.getTypedVariables()) {
+            if (varName.equalsIgnoreCase(v.name())) {
+                targetGeoid = routineGeoid + ":VAR:" + vIdx;
+                targetKind = CompensationStats.KIND_VARIABLE;
+                break;
+            }
+            vIdx++;
+        }
+        if (targetGeoid == null) {
+            int pIdx = 0;
+            for (RoutineInfo.ParameterInfo p : ri.getTypedParameters()) {
+                if (varName.equalsIgnoreCase(p.name())) {
+                    targetGeoid = routineGeoid + ":PARAM:" + pIdx;
+                    targetKind = CompensationStats.KIND_PARAMETER;
+                    break;
+                }
+                pIdx++;
+            }
+        }
+        if (targetGeoid == null) return;
+        base.engine.getBuilder().addCompensationStat(new CompensationStats(
+                stmtGeoid,
+                CompensationStats.EDGE_ASSIGNS_TO_VARIABLE,
+                targetGeoid,
+                targetKind,
+                null));
     }
 
     // ── KI-DDL-1: ALTER TABLE column change tracking ─────────────────────────
@@ -1988,7 +2190,7 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
 
     /**
      * Suppresses atoms inside REFERENCES ... (table + column list) — the FK target info is
-     * already captured structurally via ConstraintInfo / REFERENCES_TABLE / REFERENCES_COLUMN edges.
+     * already captured structurally via ConstraintInfo / REFERENCES edges.
      * Only active in DDL context to avoid suppressing SELECT-clause references.
      */
     @Override
@@ -2300,11 +2502,21 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
                 base.engine.getBuilder().getRoutines().values().stream()
                         .filter(r -> r.getName().equalsIgnoreCase(bareName))
                         .findFirst().orElse(null);
-        if (ri == null || ri.getReturnType() == null) return;
+        if (ri == null || ri.getReturnType() == null) {
+            base.engine.getBuilder().markPendingPipelined(syntheticTableGeoid);
+            logger.debug("HAL2-01: PIPELINED pending — routine {} not resolved, table {}",
+                    bareName, syntheticTableGeoid);
+            return;
+        }
 
         com.hound.semantic.model.PlTypeInfo collType =
                 base.engine.getBuilder().resolvePlTypeByName(ri.getReturnType(), null);
-        if (collType == null || !collType.isCollection()) return;
+        if (collType == null || !collType.isCollection()) {
+            base.engine.getBuilder().markPendingPipelined(syntheticTableGeoid);
+            logger.debug("HAL2-01: PIPELINED pending — collection type {} not resolved, table {}",
+                    ri.getReturnType(), syntheticTableGeoid);
+            return;
+        }
 
         com.hound.semantic.model.PlTypeInfo elemType =
                 base.engine.getBuilder().resolvePlTypeByName(collType.getElementTypeName(), null);
@@ -2312,6 +2524,10 @@ public class PlSqlSemanticListener extends PlSqlParserBaseListener {
             base.engine.getBuilder().injectColumnsFromPlType(syntheticTableGeoid, elemType);
             logger.debug("HND-14: injected {} cols from {} into {}",
                     elemType.getFields().size(), elemType.getName(), syntheticTableGeoid);
+        } else {
+            base.engine.getBuilder().markPendingPipelined(syntheticTableGeoid);
+            logger.debug("HAL2-01: PIPELINED pending — element type {} not resolved, table {}",
+                    collType.getElementTypeName(), syntheticTableGeoid);
         }
     }
 

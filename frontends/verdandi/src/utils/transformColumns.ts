@@ -71,6 +71,24 @@ export function applyStmtColumns(
     }
   }
 
+  // DEBUG: trace enrichment matching
+  {
+    const parentIds = [...colsByParent.keys()];
+    const nodeIds = nodes.map((n) => n.id);
+    const matched = nodeIds.filter((id) => colsByParent.has(id));
+    const unmatched = parentIds.filter((id) => !nodeIds.includes(id));
+    // Show table nodes that requested enrichment but got 0 columns back
+    const tableNodes = nodes.filter((n) => (n.data.nodeType === 'DaliTable' || n.type === 'tableNode'));
+    const tablesWithout = tableNodes.filter((n) => !colsByParent.has(n.id));
+    console.info(`[LOOM] applyStmtColumns — colsByParent: ${colsByParent.size} parents, nodes: ${nodes.length}, matched: ${matched.length}, tables total: ${tableNodes.length}, tables WITHOUT columns: ${tablesWithout.length}`);
+    if (tablesWithout.length > 0) {
+      console.warn(`[LOOM] tables missing columns: [${tablesWithout.slice(0, 10).map((n) => `${n.id}="${n.data.label}"`).join(', ')}]`);
+    }
+    if (matched.length === 0 && colsByParent.size > 0) {
+      console.warn(`[LOOM] ID MISMATCH — sample colsByParent keys: [${parentIds.slice(0, 3).join(', ')}]  sample node IDs: [${nodeIds.slice(0, 3).join(', ')}]`);
+    }
+  }
+
   const enrichedNodes = colsByParent.size === 0
     ? nodes
     : nodes.map((n) => {
@@ -79,8 +97,9 @@ export function applyStmtColumns(
       });
 
   // ── Column-level flow edges ────────────────────────────────────────────────
+  // Sprint 1.2 inversion: edges are now in canonical DB direction, no flip needed.
   // baseEdges has WRITES_TO  (source=stmtId,  target=tableId)
-  //           and READS_FROM (source=tableId, target=stmtId) — flipped for display.
+  //           and READS_FROM (source=tableId, target=stmtId) — natural after inversion.
   const renderedIds = new Set(nodes.map((n) => n.id));
   const cfEdges: LoomEdge[] = [];
   const cfSeen  = new Set<string>();
@@ -97,6 +116,7 @@ export function applyStmtColumns(
     const edgeType = e.data?.edgeType as string | undefined;
     if (edgeType !== 'WRITES_TO' && edgeType !== 'READS_FROM') continue;
 
+    // Both edges now natural direction — WRITES_TO stmt→table, READS_FROM table→stmt.
     const stmtId  = edgeType === 'WRITES_TO' ? e.source : e.target;
     const tableId = edgeType === 'WRITES_TO' ? e.target : e.source;
     if (!renderedIds.has(stmtId) || !renderedIds.has(tableId)) continue;

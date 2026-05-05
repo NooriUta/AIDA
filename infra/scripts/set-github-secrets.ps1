@@ -37,7 +37,21 @@ Write-Host ""
 # ── Read Terraform outputs ────────────────────────────────────────────────────
 Write-Host "[1/4] Reading Terraform outputs..."
 
-$VM_IP        = terraform output -raw vm_external_ip
+# ⚠ Terraform state может быть рассинхронизирован с реальностью, если VM
+#   пересоздавали вручную в YC console (см. SPRINT_INFRA_V3 § divergence).
+#   Если задана $env:PROD_VM_IP — она перебивает terraform output.
+$VM_IP_TF     = terraform output -raw vm_external_ip
+if ($env:PROD_VM_IP) {
+    Write-Host "  [override] using `$env:PROD_VM_IP=$env:PROD_VM_IP (terraform shows $VM_IP_TF)"
+    $VM_IP = $env:PROD_VM_IP
+} elseif ($VM_IP_TF -eq "111.88.242.194") {
+    Write-Host "  [WARNING] terraform vm_external_ip = $VM_IP_TF — это СТАРЫЙ адрес (replaced 03.05.2026)."
+    Write-Host "            Текущий prod-VM: 111.88.243.247. Прерываю чтобы не сломать DEPLOY_HOST."
+    Write-Host "            Запусти: `$env:PROD_VM_IP='111.88.243.247'; .\set-github-secrets.ps1"
+    exit 1
+} else {
+    $VM_IP = $VM_IP_TF
+}
 $REGISTRY_ID  = terraform output -raw registry_id
 $CI_SA_KEY    = terraform output -raw ci_sa_key_json
 $S3_ACCESS    = terraform output -raw s3_access_key

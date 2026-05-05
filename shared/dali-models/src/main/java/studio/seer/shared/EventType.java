@@ -12,6 +12,8 @@ public enum EventType {
     FILE_PARSING_FAILED,
     PARSE_ERROR,
     PARSE_WARNING,
+    SEMANTIC_WARNING,       // {file, category, msg} — semantic walk / resolution warnings
+    SEMANTIC_ERROR,         // {file, category, msg} — semantic walk critical errors
     ATOM_EXTRACTED,
     RESOLUTION_COMPLETED,
 

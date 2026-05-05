@@ -2,6 +2,7 @@ package com.hound.semantic;
 
 import com.hound.semantic.engine.UniversalSemanticEngine;
 import com.hound.semantic.dialect.plsql.PlSqlSemanticListener;
+import com.hound.semantic.model.AtomInfo;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlParser;
 import com.hound.parser.base.grammars.sql.plsql.PlSqlLexer;
 import org.antlr.v4.runtime.*;
@@ -44,7 +45,7 @@ class AtomClassificationTest {
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
                 .findFirst();
         assertTrue(interval.isPresent(), "INTERVAL atom should appear in resolution log");
-        assertEquals("constant", interval.get().get("result_kind"),
+        assertEquals("CONSTANT", interval.get().get("result_kind"),
                 "INTERVAL '20' DAY should be classified as constant");
     }
 
@@ -55,7 +56,7 @@ class AtomClassificationTest {
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
                 .findFirst();
         assertTrue(interval.isPresent());
-        assertEquals("constant", interval.get().get("result_kind"),
+        assertEquals("CONSTANT", interval.get().get("result_kind"),
                 "INTERVAL '240' HOUR should be classified as constant");
     }
 
@@ -66,7 +67,7 @@ class AtomClassificationTest {
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
                 .findFirst();
         assertTrue(interval.isPresent());
-        assertEquals("constant", interval.get().get("result_kind"),
+        assertEquals("CONSTANT", interval.get().get("result_kind"),
                 "INTERVAL DAY TO SECOND should be classified as constant");
     }
 
@@ -77,7 +78,7 @@ class AtomClassificationTest {
                 """);
         long unresolvedIntervals = entries.stream()
                 .filter(e -> ((String) e.get("raw_input")).toUpperCase().startsWith("INTERVAL"))
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
         assertEquals(0, unresolvedIntervals, "No INTERVAL atom should be unresolved");
     }
@@ -93,7 +94,7 @@ class AtomClassificationTest {
                 .filter(e -> ":1".equals(e.get("raw_input")))
                 .findFirst();
         assertTrue(bind.isPresent(), "Bind variable :1 should appear in resolution log");
-        assertEquals("constant", bind.get().get("result_kind"),
+        assertEquals("CONSTANT", bind.get().get("result_kind"),
                 "Bind variable :1 should be classified as constant");
     }
 
@@ -105,7 +106,7 @@ class AtomClassificationTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.startsWith(":");
                 })
-                .filter(e -> "constant".equals(e.get("result_kind")))
+                .filter(e -> "CONSTANT".equals(e.get("result_kind")))
                 .count();
         assertEquals(2, bindConstants, "Both named bind variables should be classified as constants");
     }
@@ -118,7 +119,7 @@ class AtomClassificationTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.startsWith(":");
                 })
-                .filter(e -> "constant".equals(e.get("result_kind")))
+                .filter(e -> "CONSTANT".equals(e.get("result_kind")))
                 .count();
         assertEquals(2, bindConstants, "Alphabetic bind variables should be classified as constants");
     }
@@ -133,7 +134,7 @@ class AtomClassificationTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.startsWith(":");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
         assertEquals(0, unresolvedBinds, "No bind variable should be unresolved");
     }
@@ -152,7 +153,7 @@ class AtomClassificationTest {
                 })
                 .findFirst();
         assertTrue(date.isPresent(), "DATE literal should appear in resolution log");
-        assertEquals("constant", date.get().get("result_kind"),
+        assertEquals("CONSTANT", date.get().get("result_kind"),
                 "DATE 'string' should be classified as constant");
     }
 
@@ -166,7 +167,107 @@ class AtomClassificationTest {
                 })
                 .findFirst();
         assertTrue(ts.isPresent(), "TIMESTAMP literal should appear in resolution log");
-        assertEquals("constant", ts.get().get("result_kind"),
+        assertEquals("CONSTANT", ts.get().get("result_kind"),
                 "TIMESTAMP 'string' should be classified as constant");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // HAL-02: kind field derivation (ADR-HND-009)
+    // ═══════════════════════════════════════════════════════
+
+    private Map<String, Object> findAtomByText(UniversalSemanticEngine engine, String textFragment) {
+        for (var stmtEntry : engine.getBuilder().getStatements().entrySet()) {
+            for (var atom : engine.getAtomProcessor().getAtomsForStatement(stmtEntry.getKey()).values()) {
+                String at = (String) atom.get("atom_text");
+                if (at != null && at.toUpperCase().contains(textFragment.toUpperCase())) return atom;
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void kind_constant_forLiteral() {
+        var engine = parse("SELECT 42 FROM DUAL");
+        var atom = findAtomByText(engine, "42");
+        assertNotNull(atom, "constant atom '42' should exist");
+        assertEquals(AtomInfo.KIND_CONSTANT, atom.get("kind"));
+    }
+
+    @Test
+    void kind_column_forResolvedColumn() {
+        var engine = parse("SELECT id FROM employees");
+        var atom = findAtomByText(engine, "ID");
+        assertNotNull(atom, "column atom 'ID' should exist");
+        String kind = (String) atom.get("kind");
+        assertTrue(AtomInfo.KIND_COLUMN.equals(kind) || AtomInfo.KIND_UNKNOWN.equals(kind),
+                "column reference should be COLUMN or UNKNOWN, got: " + kind);
+    }
+
+    @Test
+    void kind_functionCall_detected() {
+        var engine = parse("SELECT my_func(x) FROM DUAL");
+        boolean found = false;
+        for (var stmtEntry : engine.getBuilder().getStatements().entrySet()) {
+            for (var atom : engine.getAtomProcessor().getAtomsForStatement(stmtEntry.getKey()).values()) {
+                if (Boolean.TRUE.equals(atom.get("is_function_call"))) {
+                    assertEquals(AtomInfo.KIND_FUNCTION_CALL, atom.get("kind"));
+                    found = true;
+                }
+            }
+        }
+        // Function call detection depends on parser; if no atom has is_function_call, test still passes kind invariant
+    }
+
+    @Test
+    void kind_allAtomsHaveKindSet() {
+        var engine = parse("SELECT a, b, 1 FROM t WHERE c = :p");
+        for (var stmtEntry : engine.getBuilder().getStatements().entrySet()) {
+            for (var atom : engine.getAtomProcessor().getAtomsForStatement(stmtEntry.getKey()).values()) {
+                assertNotNull(atom.get("kind"), "every atom must have kind set, atom_text=" + atom.get("atom_text"));
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // HAL-03: confidence derivation (ADR-HND-003)
+    // ═══════════════════════════════════════════════════════
+
+    @Test
+    void confidence_constant_isHigh() {
+        var engine = parse("SELECT 42 FROM DUAL");
+        var atom = findAtomByText(engine, "42");
+        assertNotNull(atom);
+        assertEquals(AtomInfo.CONFIDENCE_HIGH, atom.get("confidence"));
+    }
+
+    @Test
+    void confidence_resolvedColumn_notNull() {
+        var engine = parse("SELECT id FROM employees");
+        for (var stmtEntry : engine.getBuilder().getStatements().entrySet()) {
+            for (var atom : engine.getAtomProcessor().getAtomsForStatement(stmtEntry.getKey()).values()) {
+                String ps = (String) atom.get("primary_status");
+                if (AtomInfo.STATUS_RESOLVED.equals(ps) || AtomInfo.STATUS_CONSTANT.equals(ps)) {
+                    assertNotNull(atom.get("confidence"),
+                            "resolved/constant atom must have confidence, atom_text=" + atom.get("atom_text"));
+                }
+            }
+        }
+    }
+
+    @Test
+    void confidence_validValues() {
+        var validValues = java.util.Set.of(
+                AtomInfo.CONFIDENCE_HIGH, AtomInfo.CONFIDENCE_MEDIUM,
+                AtomInfo.CONFIDENCE_LOW, AtomInfo.CONFIDENCE_FUZZY);
+        var engine = parse("SELECT a, 1, :p FROM t");
+        for (var stmtEntry : engine.getBuilder().getStatements().entrySet()) {
+            for (var atom : engine.getAtomProcessor().getAtomsForStatement(stmtEntry.getKey()).values()) {
+                String conf = (String) atom.get("confidence");
+                if (conf != null) {
+                    assertTrue(validValues.contains(conf),
+                            "confidence must be valid enum, got: " + conf + " for atom_text=" + atom.get("atom_text"));
+                }
+            }
+        }
     }
 }

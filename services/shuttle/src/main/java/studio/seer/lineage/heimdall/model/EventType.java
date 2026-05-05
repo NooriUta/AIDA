@@ -10,6 +10,7 @@ package studio.seer.lineage.heimdall.model;
 public enum EventType {
     // Hound
     FILE_PARSING_STARTED, FILE_PARSING_COMPLETED, FILE_PARSING_FAILED,
+    PARSE_ERROR, PARSE_WARNING, SEMANTIC_WARNING, SEMANTIC_ERROR,
     ATOM_EXTRACTED, RESOLUTION_COMPLETED,
 
     // Dali

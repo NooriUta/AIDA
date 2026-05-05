@@ -1,5 +1,5 @@
 -- G6 fixture: BULK COLLECT INTO + FORALL INSERT without column list
--- Tests DaliRecord vertex creation and BULK_COLLECTS_INTO / RECORD_USED_IN edges
+-- Tests DaliRecord vertex creation and BULK_COLLECTS_INTO / RECORD_HAS_FIELD edges
 CREATE OR REPLACE PACKAGE BODY TEST_PKG.PKG_BULK_COLLECT AS
 
     -- Case A: Simple BULK COLLECT + FORALL INSERT (no column list)

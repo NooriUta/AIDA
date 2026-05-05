@@ -133,7 +133,7 @@ class CorpusBatchIT {
         System.out.printf("%n=== hound DB counts ===%n");
         for (String type : new String[]{
                 "DaliSession", "DaliStatement", "DaliTable", "DaliRecord",
-                "DaliRecordField", "BULK_COLLECTS_INTO", "RECORD_USED_IN", "HAS_RECORD_FIELD"}) {
+                "DaliRecordField", "BULK_COLLECTS_INTO", "RECORD_HAS_FIELD", "PLTYPE_HAS_FIELD"}) {
             long cnt = dbCount(type);
             System.out.printf("  %-25s %d%n", type, cnt);
         }

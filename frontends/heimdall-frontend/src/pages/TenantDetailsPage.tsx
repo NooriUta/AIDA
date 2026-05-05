@@ -47,7 +47,7 @@ export default function TenantDetailsPage() {
   const { canManageUsers, isSuperAdmin }     = useTenantContext();
 
   return (
-    <div style={{ padding: '24px', maxWidth: 960 }}>
+    <div className="page-content" style={{ padding: '24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button className="btn btn-secondary" onClick={() => navigate('/admin/tenants')}>← {t('tenants.back', 'Tenants')}</button>
         <h2 style={{ margin: 0, fontFamily: 'monospace' }}>{alias}</h2>

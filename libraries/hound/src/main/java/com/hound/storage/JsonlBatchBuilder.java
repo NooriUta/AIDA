@@ -171,6 +171,8 @@ public class JsonlBatchBuilder {
         Structure str = result.getStructure();
         if (str == null) return b;
 
+        // G4: source_file for per-file denormalization in batch sessions
+        final String sourceFile = result.getFilePath();
         Map<String, Object> sidProps = Map.of("session_id", sid);
 
         // ─────────────────────────────────────────────────────
@@ -211,6 +213,7 @@ public class JsonlBatchBuilder {
                     : dbGeoid;
             b.appendVertex("DaliSchema", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "schema_geoid", e.getKey(),
                     "schema_name", sc.get("name"),
                     "db_name",   dbName,
@@ -224,6 +227,7 @@ public class JsonlBatchBuilder {
             Map<String, Object> pkg = (Map<String, Object>) e.getValue();
             b.appendVertex("DaliPackage", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "package_geoid", e.getKey(),
                     "package_name", pkg.get("package_name"),
                     "schema_geoid", pkg.get("schema_geoid"),
@@ -244,6 +248,7 @@ public class JsonlBatchBuilder {
             String effectiveType = WriteHelpers.isViewTable(e.getKey(), str) ? "VIEW" : t.tableType();
             b.appendVertex("DaliTable", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "table_geoid", e.getKey(),
                     "table_name", t.tableName(),
                     "schema_geoid", t.schemaGeoid(),
@@ -263,6 +268,7 @@ public class JsonlBatchBuilder {
                     ? WriteHelpers.MASTER : WriteHelpers.RECONSTRUCTED;
             b.appendVertex("DaliColumn", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "column_geoid", e.getKey(),
                     "table_geoid", c.getTableGeoid(),
                     "column_name", c.getColumnName(),
@@ -278,7 +284,10 @@ public class JsonlBatchBuilder {
                     "is_pk", c.isPk(),
                     "is_fk", c.isFk(),
                     "fk_ref_table", c.getFkRefTable(),
-                    "fk_ref_column", c.getFkRefColumn()
+                    "fk_ref_column", c.getFkRefColumn(),
+                    "inferred", c.isInferred(),
+                    "source_pass", c.getSourcePass(),
+                    "suspicious", c.isSuspicious()
             ));
         }
 
@@ -290,6 +299,7 @@ public class JsonlBatchBuilder {
             if (packageGeoids.contains(e.getKey())) continue;
             b.appendVertex("DaliRoutine", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "routine_geoid", e.getKey(),
                     "routine_name", r.getName(),
                     "routine_type", r.getRoutineType(),
@@ -309,6 +319,7 @@ public class JsonlBatchBuilder {
             for (RoutineInfo.ParameterInfo p : r.getTypedParameters()) {
                 b.appendVertex("DaliParameter", e.getKey() + ":PARAM:" + pIdx, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "routine_geoid", e.getKey(),
                         "param_name", p.name(),
                         "param_type", p.type(),
@@ -320,11 +331,23 @@ public class JsonlBatchBuilder {
             for (RoutineInfo.VariableInfo v : r.getTypedVariables()) {
                 b.appendVertex("DaliVariable", e.getKey() + ":VAR:" + vIdx, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "routine_geoid", e.getKey(),
                         "var_name", v.name(),
                         "var_type", v.type()
                 ));
                 vIdx++;
+            }
+            // HAL3-04: DaliCursor vertices
+            for (RoutineInfo.CursorInfo c : r.getCursors()) {
+                b.appendVertex("DaliCursor", e.getKey() + ":CURSOR:" + c.name(), mapOf(
+                        "session_id", sid,
+                        "source_file", sourceFile,
+                        "routine_geoid", e.getKey(),
+                        "cursor_name", c.name(),
+                        "cursor_geoid", e.getKey() + ":CURSOR:" + c.name(),
+                        "select_stmt_geoid", c.selectStmtGeoid()
+                ));
             }
         }
 
@@ -334,6 +357,7 @@ public class JsonlBatchBuilder {
             if (isDdl(s.getType())) continue;  // DDL → DaliDDLStatement, not DaliStatement
             b.appendVertex("DaliStatement", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "stmt_geoid", e.getKey(),
                     "type", s.getType(),
                     "subtype", s.getSubtype(),
@@ -364,6 +388,7 @@ public class JsonlBatchBuilder {
             if (!isDdl(s.getType())) continue;
             b.appendVertex("DaliDDLStatement", "DDL_" + e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "stmt_geoid", e.getKey(),
                     "type", s.getType(),
                     "line_start", s.getLineStart(),
@@ -374,9 +399,8 @@ public class JsonlBatchBuilder {
         }
 
         // 8c. DaliPrimaryKey / DaliForeignKey / DaliUniqueConstraint / DaliCheckConstraint
-        // Note: edges (HAS_PRIMARY_KEY, IS_PK_COLUMN, HAS_FOREIGN_KEY, IS_FK_COLUMN,
-        //       REFERENCES_TABLE, REFERENCES_COLUMN, HAS_UNIQUE_KEY, IS_UNIQUE_COLUMN,
-        //       HAS_CHECK) are written by RemoteWriter post-batch.
+        // Note: constraint edges (HAS_CONSTRAINT, CONSTRAINT_HAS_COLUMN, REFERENCES)
+        //       are written by RemoteWriter post-batch (F-1 folded from 9 → 3 types).
         for (var e : str.getConstraints().entrySet()) {
             ConstraintInfo c = e.getValue();
             String colNamesJson = WriteHelpers.toJson(c.getColumnNames());
@@ -431,6 +455,7 @@ public class JsonlBatchBuilder {
                 String ocExtId = e.getKey() + ":OC:" + oc.getKey();
                 b.appendVertex("DaliOutputColumn", ocExtId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", e.getKey(),
                         "col_key", oc.getKey(),
                         "name", col.get("name"),
@@ -459,6 +484,7 @@ public class JsonlBatchBuilder {
                 String acExtId = e.getKey() + ":AC:" + acIdx;
                 b.appendVertex("DaliAffectedColumn", acExtId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", e.getKey(),
                         "column_ref", ac.get("column_ref"),
                         "column_name", ac.get("column_name"),
@@ -478,6 +504,7 @@ public class JsonlBatchBuilder {
             RecordInfo rec = e.getValue();
             b.appendVertex("DaliRecord", rec.getGeoid(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "record_geoid", rec.getGeoid(),
                     "record_name", rec.getVarName(),
                     "routine_geoid", rec.getRoutineGeoid(),
@@ -499,6 +526,7 @@ public class JsonlBatchBuilder {
                     if (!insertedFieldGeoids.add(fieldGeoid)) continue; // dedup
                     b.appendVertex("DaliRecordField", fieldGeoid, mapOf(
                             "session_id",        sid,
+                            "source_file",       sourceFile,
                             "field_geoid",       fieldGeoid,
                             "field_name",        fi.name(),
                             "field_order",       fi.ordinalPosition(),
@@ -523,6 +551,7 @@ public class JsonlBatchBuilder {
                     pt.getGeoid(), pt.getKind(), pt.getFields().size());
             b.appendVertex("DaliPlType", pt.getGeoid(), mapOf(
                     "session_id",          sid,
+                    "source_file",         sourceFile,
                     "type_geoid",          pt.getGeoid(),
                     "type_name",           pt.getName(),
                     "kind",                pt.getKind().name(),
@@ -548,6 +577,7 @@ public class JsonlBatchBuilder {
                     }
                     b.appendVertex("DaliPlTypeField", fGeoid, mapOf(
                             "session_id",  sid,
+                            "source_file", sourceFile,
                             "field_geoid", fGeoid,
                             "type_geoid",  pt.getGeoid(),
                             "field_name",  pf.name(),
@@ -580,26 +610,35 @@ public class JsonlBatchBuilder {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
                 atomIdMap.put(stmtGeoid + ":" + at.getKey(), atomId);
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema.
-                // Only applies to physical-table atoms: SubQuery/CTE/MERGE-USING SELECT atoms resolve via
-                // ATOM_REF_OUTPUT_COL (not DaliColumn), so absence from str.getColumns() is expected.
+                // HAL-04: detect RECONSTRUCT_DIRECT — table found but column absent from DDL schema
                 String atomColForWarn1 = (String) a.get("column_name");
                 String atomTblForWarn1 = (String) a.get("table_geoid");
                 boolean isColRef1 = Boolean.TRUE.equals(a.get("is_column_reference"));
                 String atomWarning1 = (String) a.get("warning");
-                if (atomWarning1 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
+                if (atomWarning1 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
                         && isColRef1 && atomTblForWarn1 != null && atomColForWarn1 != null
                         && str.getTables().containsKey(atomTblForWarn1)
                         && !str.getColumns().containsKey(atomTblForWarn1 + "." + atomColForWarn1.toUpperCase())) {
-                    atomWarning1 = AtomInfo.STATUS_UNBOUND;
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                }
+                // HAL2-06: detect RECONSTRUCT_INVERSE — atom resolved against VTABLE (PlType-backed)
+                if (AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
+                        && isColRef1 && atomTblForWarn1 != null) {
+                    TableInfo ti = str.getTables().get(atomTblForWarn1);
+                    if (ti != null && "VTABLE".equals(ti.tableType())) {
+                        a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                        a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    }
                 }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", stmtGeoid,
                         "atom_id", atomId,
-                        "atom_text", a.get("atom_text"),  // raw text (e.g. "ITEM_ID")
-                        "atom_geoid",  at.getKey(),         // composite uniqueness key "TEXT~line:col"
+                        "atom_text", a.get("atom_text"),
+                        "atom_geoid",  at.getKey(),
                         "atom_context", a.get("atom_context"),
                         "parent_context", a.get("parent_context"),
                         "position", a.get("position"),
@@ -613,6 +652,16 @@ public class JsonlBatchBuilder {
                         "table_name", a.get("table_name"),
                         "column_name", a.get("column_name"),
                         "table_geoid", a.get("table_geoid"),
+                        "primary_status", a.get("primary_status"),
+                        "qualifier", a.get("qualifier"),
+                        "kind", a.get("kind"),
+                        "confidence", a.get("confidence"),
+                        "resolve_strategy", a.get("resolve_strategy"),
+                        "routine_geoid", a.get("routine_geoid"),
+                        "pending_verification", a.get("pending_verification"),
+                        "pending_kind", a.get("pending_kind"),
+                        "pending_snapshot", a.get("pending_snapshot"),
+                        "pending_since", a.get("pending_since"),
                         "status", a.get("status"),
                         "warning", atomWarning1,
                         "merge_clause", a.get("merge_clause"),
@@ -629,6 +678,7 @@ public class JsonlBatchBuilder {
                 String joinExtId = e.getKey() + ":JOIN:" + j.lineStart() + ":" + joinIdx;
                 b.appendVertex("DaliJoin", joinExtId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", e.getKey(),
                         "join_type", j.joinType(),
                         "source_table_geoid", j.sourceTableGeoid(),
@@ -740,19 +790,12 @@ public class JsonlBatchBuilder {
             // DaliStatement(cursor SELECT) → BULK_COLLECTS_INTO → DaliRecord
             if (rec.getSourceStatementGeoid() != null)
                 b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
-            // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (mirrors RemoteWriter.java:1448-1453)
+            // DaliRecord → RECORD_HAS_FIELD → DaliRecordField (D-3: was HAS_RECORD_FIELD)
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = recGeoid + ":" + fi.name();
-                b.appendEdge("HAS_RECORD_FIELD", recGeoid, fieldGeoid, sidProps);
+                b.appendEdge("RECORD_HAS_FIELD", recGeoid, fieldGeoid, sidProps);
             }
-            // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT)
-            for (var stmtEntry : str.getStatements().entrySet()) {
-                if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
-                boolean usesRecord = stmtEntry.getValue().getAffectedColumns().stream().anyMatch(
-                        ac -> rec.getVarName().equals(ac.get("dataset_alias")));
-                if (usesRecord)
-                    b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
-            }
+            // D-1 (Sprint 1.3): RECORD_USED_IN removed — reverse traversal via inE('BULK_COLLECTS_INTO')
             // DaliRecord → INSTANTIATES_TYPE → DaliPlType (HND-05)
             if (rec.getPlTypeGeoid() != null)
                 b.appendEdge("INSTANTIATES_TYPE", recGeoid, rec.getPlTypeGeoid(), sidProps);
@@ -774,11 +817,11 @@ public class JsonlBatchBuilder {
             // DaliPlType(COLLECTION/VARRAY) → OF_TYPE → DaliPlType element type
             if (pt.hasElementType() && pt.getElementTypeGeoid() != null)
                 b.appendEdge("OF_TYPE", pt.getGeoid(), pt.getElementTypeGeoid(), sidProps);
-            // DaliPlType(RECORD/OBJECT) → HAS_RECORD_FIELD → DaliPlTypeField
+            // DaliPlType(RECORD/OBJECT) → PLTYPE_HAS_FIELD → DaliPlTypeField (D-3: was HAS_RECORD_FIELD)
             if (pt.hasFields()) {
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":" + pf.name();
-                    b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
+                    b.appendEdge("PLTYPE_HAS_FIELD", pt.getGeoid(), fGeoid, sidProps);
                 }
             }
         }
@@ -840,7 +883,8 @@ public class JsonlBatchBuilder {
                         ? (List<String>) st.getValue().get("table_alias") : List.of();
                 Map<String, Object> rfProps = new java.util.HashMap<>(sidProps);
                 rfProps.put("aliases", new ArrayList<>(stAl));
-                b.appendEdge("READS_FROM", e.getKey(), st.getKey(), rfProps);
+                // Sprint 1.2 READS_FROM inversion (Round 7 §11): tableGeoid → stmtGeoid
+                b.appendEdge("READS_FROM", st.getKey(), e.getKey(), rfProps);
             }
             for (var tt : e.getValue().getTargetTables().entrySet()) {
                 @SuppressWarnings("unchecked")
@@ -1013,6 +1057,26 @@ public class JsonlBatchBuilder {
             }
         }
 
+        // CONTAINS_ATOM: DaliRoutine → DaliAtom (unattached orphans with routine_geoid)
+        @SuppressWarnings("unchecked")
+        Map<String, Object> unattachedCont = (Map<String, Object>) result.getAtoms().get("unattached");
+        if (unattachedCont != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> uAtoms =
+                    (Map<String, Map<String, Object>>) unattachedCont.get("atoms");
+            if (uAtoms != null) {
+                for (var at : uAtoms.entrySet()) {
+                    Map<String, Object> a = at.getValue();
+                    String routineGeoid = (String) a.get("routine_geoid");
+                    if (routineGeoid == null) continue;
+                    if (!str.getRoutines().containsKey(routineGeoid)) continue;
+                    String atomId = atomIdMap.get("unattached:" + at.getKey());
+                    if (atomId != null)
+                        b.appendEdge("CONTAINS_ATOM", routineGeoid, atomId, sidProps);
+                }
+            }
+        }
+
         // CALLS: routine → routine
         Map<String, String> routineBySimpleName = new HashMap<>();
         for (String rg : str.getRoutines().keySet()) {
@@ -1039,6 +1103,12 @@ public class JsonlBatchBuilder {
         // result.getLineage() uses READS_FROM/WRITES_TO in the *opposite* direction to structural
         // edges (lineage: table→stmt; structural: stmt→table) with different field sets.
         // saveRemote() also does not write lineage edges, so omitting here keeps REMOTE vs BATCH parity.
+
+        // HAL3-01: WRITE_SIDE edges (Bucket B — CompensationStats)
+        for (CompensationStats cs : str.getCompensationStats()) {
+            b.appendEdge(cs.edgeType(), cs.statementGeoid(), cs.targetGeoid(),
+                    mapOf("session_id", sid, "target_kind", cs.targetKind()));
+        }
 
         return b;
     }
@@ -1085,6 +1155,8 @@ public class JsonlBatchBuilder {
         Structure str = result.getStructure();
         if (str == null) return b;
 
+        // G4: source_file for per-file denormalization in batch sessions
+        final String sourceFile = result.getFilePath();
         Map<String, Object> sidProps = Map.of("session_id", sid);
 
         // ─────────────────────────────────────────────────────
@@ -1111,6 +1183,7 @@ public class JsonlBatchBuilder {
             Map<String, Object> pkg = (Map<String, Object>) e.getValue();
             b.appendVertex("DaliPackage", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "package_geoid", e.getKey(),
                     "package_name", pkg.get("package_name"),
                     "schema_geoid", pkg.get("schema_geoid"),
@@ -1127,6 +1200,7 @@ public class JsonlBatchBuilder {
             if (packageGeoids.contains(e.getKey())) continue;
             b.appendVertex("DaliRoutine", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "routine_geoid", e.getKey(),
                     "routine_name", r.getName(),
                     "routine_type", r.getRoutineType(),
@@ -1146,6 +1220,7 @@ public class JsonlBatchBuilder {
             for (RoutineInfo.ParameterInfo p : r.getTypedParameters()) {
                 b.appendVertex("DaliParameter", e.getKey() + ":PARAM:" + pIdx, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "routine_geoid", e.getKey(),
                         "param_name", p.name(),
                         "param_type", p.type(),
@@ -1157,11 +1232,23 @@ public class JsonlBatchBuilder {
             for (RoutineInfo.VariableInfo v : r.getTypedVariables()) {
                 b.appendVertex("DaliVariable", e.getKey() + ":VAR:" + vIdx, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "routine_geoid", e.getKey(),
                         "var_name", v.name(),
                         "var_type", v.type()
                 ));
                 vIdx++;
+            }
+            // HAL3-04: DaliCursor vertices
+            for (RoutineInfo.CursorInfo c : r.getCursors()) {
+                b.appendVertex("DaliCursor", e.getKey() + ":CURSOR:" + c.name(), mapOf(
+                        "session_id", sid,
+                        "source_file", sourceFile,
+                        "routine_geoid", e.getKey(),
+                        "cursor_name", c.name(),
+                        "cursor_geoid", e.getKey() + ":CURSOR:" + c.name(),
+                        "select_stmt_geoid", c.selectStmtGeoid()
+                ));
             }
         }
 
@@ -1171,6 +1258,7 @@ public class JsonlBatchBuilder {
             if (isDdl(s.getType())) continue;  // DDL → DaliDDLStatement, not DaliStatement
             b.appendVertex("DaliStatement", e.getKey(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "stmt_geoid", e.getKey(),
                     "type", s.getType(),
                     "subtype", s.getSubtype(),
@@ -1201,6 +1289,7 @@ public class JsonlBatchBuilder {
                 String ocExtId = e.getKey() + ":OC:" + oc.getKey();
                 b.appendVertex("DaliOutputColumn", ocExtId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", e.getKey(),
                         "col_key", oc.getKey(),
                         "name", col.get("name"),
@@ -1229,6 +1318,7 @@ public class JsonlBatchBuilder {
                 String acExtId = e.getKey() + ":AC:" + acIdx;
                 b.appendVertex("DaliAffectedColumn", acExtId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", e.getKey(),
                         "column_ref", ac.get("column_ref"),
                         "column_name", ac.get("column_name"),
@@ -1248,6 +1338,7 @@ public class JsonlBatchBuilder {
             RecordInfo rec = e.getValue();
             b.appendVertex("DaliRecord", rec.getGeoid(), mapOf(
                     "session_id", sid,
+                    "source_file", sourceFile,
                     "record_geoid", rec.getGeoid(),
                     "record_name", rec.getVarName(),
                     "routine_geoid", rec.getRoutineGeoid(),
@@ -1263,6 +1354,7 @@ public class JsonlBatchBuilder {
             if (!"VTABLE".equals(t.tableType())) continue;
             b.appendVertex("DaliTable", e.getKey(), mapOf(
                     "session_id",    sid,
+                    "source_file",   sourceFile,
                     "table_geoid",   e.getKey(),
                     "table_name",    t.tableName(),
                     "schema_geoid",  t.schemaGeoid(),
@@ -1282,6 +1374,7 @@ public class JsonlBatchBuilder {
             }
             b.appendVertex("DaliPlType", pt.getGeoid(), mapOf(
                     "session_id",         sid,
+                    "source_file",        sourceFile,
                     "type_geoid",         pt.getGeoid(),
                     "type_name",          pt.getName(),
                     "kind",               pt.getKind().name(),
@@ -1304,6 +1397,7 @@ public class JsonlBatchBuilder {
                     }
                     b.appendVertex("DaliPlTypeField", fGeoid, mapOf(
                             "session_id",  sid,
+                            "source_file", sourceFile,
                             "field_geoid", fGeoid,
                             "type_geoid",  pt.getGeoid(),
                             "field_name",  pf.name(),
@@ -1324,6 +1418,7 @@ public class JsonlBatchBuilder {
                     if (!seenRecFields.add(fieldGeoid)) continue;
                     b.appendVertex("DaliRecordField", fieldGeoid, mapOf(
                             "session_id",          sid,
+                            "source_file",         sourceFile,
                             "field_geoid",         fieldGeoid,
                             "field_name",          fi.name(),
                             "field_order",         fi.ordinalPosition(),
@@ -1353,26 +1448,35 @@ public class JsonlBatchBuilder {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
                 atomIdMap.put(stmtGeoid + ":" + at.getKey(), atomId);
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema.
-                // Only applies to physical-table atoms: SubQuery/CTE/MERGE-USING SELECT atoms resolve via
-                // ATOM_REF_OUTPUT_COL (not DaliColumn), so absence from str.getColumns() is expected.
+                // HAL-04: detect RECONSTRUCT_DIRECT — table found but column absent from DDL schema
                 String atomColForWarn2 = (String) a.get("column_name");
                 String atomTblForWarn2 = (String) a.get("table_geoid");
                 boolean isColRef2 = Boolean.TRUE.equals(a.get("is_column_reference"));
                 String atomWarning2 = (String) a.get("warning");
-                if (atomWarning2 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
+                if (atomWarning2 == null && AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
                         && isColRef2 && atomTblForWarn2 != null && atomColForWarn2 != null
                         && str.getTables().containsKey(atomTblForWarn2)
                         && !str.getColumns().containsKey(atomTblForWarn2 + "." + atomColForWarn2.toUpperCase())) {
-                    atomWarning2 = AtomInfo.STATUS_UNBOUND;
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                }
+                // HAL2-06: detect RECONSTRUCT_INVERSE — atom resolved against VTABLE (PlType-backed)
+                if (AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
+                        && isColRef2 && atomTblForWarn2 != null) {
+                    TableInfo ti = str.getTables().get(atomTblForWarn2);
+                    if (ti != null && "VTABLE".equals(ti.tableType())) {
+                        a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                        a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    }
                 }
 
                 b.appendVertex("DaliAtom", atomId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", stmtGeoid,
                         "atom_id", atomId,
-                        "atom_text", a.get("atom_text"),  // raw text (e.g. "ITEM_ID")
-                        "atom_geoid",  at.getKey(),         // composite uniqueness key "TEXT~line:col"
+                        "atom_text", a.get("atom_text"),
+                        "atom_geoid",  at.getKey(),
                         "atom_context", a.get("atom_context"),
                         "parent_context", a.get("parent_context"),
                         "position", a.get("position"),
@@ -1386,6 +1490,16 @@ public class JsonlBatchBuilder {
                         "table_name", a.get("table_name"),
                         "column_name", a.get("column_name"),
                         "table_geoid", a.get("table_geoid"),
+                        "primary_status", a.get("primary_status"),
+                        "qualifier", a.get("qualifier"),
+                        "kind", a.get("kind"),
+                        "confidence", a.get("confidence"),
+                        "resolve_strategy", a.get("resolve_strategy"),
+                        "routine_geoid", a.get("routine_geoid"),
+                        "pending_verification", a.get("pending_verification"),
+                        "pending_kind", a.get("pending_kind"),
+                        "pending_snapshot", a.get("pending_snapshot"),
+                        "pending_since", a.get("pending_since"),
                         "status", a.get("status"),
                         "warning", atomWarning2,
                         "merge_clause", a.get("merge_clause"),
@@ -1402,6 +1516,7 @@ public class JsonlBatchBuilder {
                 String joinExtId = e.getKey() + ":JOIN:" + j.lineStart() + ":" + joinIdx;
                 b.appendVertex("DaliJoin", joinExtId, mapOf(
                         "session_id", sid,
+                        "source_file", sourceFile,
                         "statement_geoid", e.getKey(),
                         "join_type", j.joinType(),
                         "source_table_geoid", j.sourceTableGeoid(),
@@ -1486,7 +1601,8 @@ public class JsonlBatchBuilder {
             }
         }
 
-        // BULK_COLLECTS_INTO, HAS_RECORD_FIELD, RECORD_USED_IN, INSTANTIATES_TYPE (G6: DaliRecord edges)
+        // BULK_COLLECTS_INTO, RECORD_HAS_FIELD, INSTANTIATES_TYPE (G6: DaliRecord edges)
+        // D-1 (Sprint 1.3): RECORD_USED_IN removed; D-3: HAS_RECORD_FIELD → RECORD_HAS_FIELD
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recGeoid = rec.getGeoid();
@@ -1494,14 +1610,7 @@ public class JsonlBatchBuilder {
                 b.appendEdge("BULK_COLLECTS_INTO", rec.getSourceStatementGeoid(), recGeoid, sidProps);
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = recGeoid + ":" + fi.name();
-                b.appendEdge("HAS_RECORD_FIELD", recGeoid, fieldGeoid, sidProps);
-            }
-            for (var stmtEntry : str.getStatements().entrySet()) {
-                if (!"INSERT".equals(stmtEntry.getValue().getType())) continue;
-                boolean usesRecord = stmtEntry.getValue().getAffectedColumns().stream().anyMatch(
-                        ac -> rec.getVarName().equals(ac.get("dataset_alias")));
-                if (usesRecord)
-                    b.appendEdge("RECORD_USED_IN", recGeoid, stmtEntry.getKey(), sidProps);
+                b.appendEdge("RECORD_HAS_FIELD", recGeoid, fieldGeoid, sidProps);
             }
             if (rec.getPlTypeGeoid() != null)
                 b.appendEdge("INSTANTIATES_TYPE", recGeoid, rec.getPlTypeGeoid(), sidProps);
@@ -1514,9 +1623,8 @@ public class JsonlBatchBuilder {
                 b.appendEdge("INSTANTIATES_TYPE", e.getKey(), vt.getPlTypeGeoid(), sidProps);
         }
 
-        // HND-05: DaliPlType edges (DECLARES_TYPE, OF_TYPE, HAS_RECORD_FIELD)
-        // PlType/PlTypeField in canonicalRids → resolveEndpoint() returns actual @rids
-        // Package scope geoids in vertexIds → resolveEndpoint() returns batch temp IDs
+        // HND-05: DaliPlType edges (DECLARES_TYPE, OF_TYPE, PLTYPE_HAS_FIELD)
+        // D-3: HAS_RECORD_FIELD → PLTYPE_HAS_FIELD for PlType→PlTypeField
         for (var e : str.getPlTypes().entrySet()) {
             com.hound.semantic.model.PlTypeInfo pt = e.getValue();
             if (pt.getScopeGeoid() != null)
@@ -1526,7 +1634,7 @@ public class JsonlBatchBuilder {
             if (pt.hasFields()) {
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":" + pf.name();
-                    b.appendEdge("HAS_RECORD_FIELD", pt.getGeoid(), fGeoid, sidProps);
+                    b.appendEdge("PLTYPE_HAS_FIELD", pt.getGeoid(), fGeoid, sidProps);
                 }
             }
         }
@@ -1575,7 +1683,8 @@ public class JsonlBatchBuilder {
                         ? (List<String>) st.getValue().get("table_alias") : List.of();
                 Map<String, Object> rfProps = new java.util.HashMap<>(sidProps);
                 rfProps.put("aliases", new ArrayList<>(stAl));
-                b.appendEdge("READS_FROM", e.getKey(), st.getKey(), rfProps);
+                // Sprint 1.2 READS_FROM inversion (Round 7 §11): tableGeoid → stmtGeoid
+                b.appendEdge("READS_FROM", st.getKey(), e.getKey(), rfProps);
             }
             for (var tt : e.getValue().getTargetTables().entrySet()) {
                 @SuppressWarnings("unchecked")
@@ -1745,6 +1854,26 @@ public class JsonlBatchBuilder {
             }
         }
 
+        // CONTAINS_ATOM: DaliRoutine → DaliAtom (unattached orphans with routine_geoid)
+        @SuppressWarnings("unchecked")
+        Map<String, Object> unattCont2 = (Map<String, Object>) result.getAtoms().get("unattached");
+        if (unattCont2 != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> uAtoms2 =
+                    (Map<String, Map<String, Object>>) unattCont2.get("atoms");
+            if (uAtoms2 != null) {
+                for (var at : uAtoms2.entrySet()) {
+                    Map<String, Object> a = at.getValue();
+                    String routineGeoid = (String) a.get("routine_geoid");
+                    if (routineGeoid == null) continue;
+                    if (!str.getRoutines().containsKey(routineGeoid)) continue;
+                    String atomId = atomIdMap.get("unattached:" + at.getKey());
+                    if (atomId != null)
+                        b.appendEdge("CONTAINS_ATOM", routineGeoid, atomId, sidProps);
+                }
+            }
+        }
+
         // CALLS: routine → routine
         for (var callerEntry : result.getCalledRoutines().entrySet()) {
             String callerGeoid = callerEntry.getKey();
@@ -1768,6 +1897,12 @@ public class JsonlBatchBuilder {
                             "line_start", call.get("line")
                     ));
             }
+        }
+
+        // HAL3-01: WRITE_SIDE edges (Bucket B — CompensationStats)
+        for (CompensationStats cs : str.getCompensationStats()) {
+            b.appendEdge(cs.edgeType(), cs.statementGeoid(), cs.targetGeoid(),
+                    mapOf("session_id", sid, "target_kind", cs.targetKind()));
         }
 
         return b;

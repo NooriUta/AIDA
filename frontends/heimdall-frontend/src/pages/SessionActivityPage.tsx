@@ -42,7 +42,7 @@ export default function SessionActivityPage() {
   }, []);
 
   return (
-    <div style={{ padding: '24px', maxWidth: 960 }}>
+    <div className="page-content" style={{ padding: '24px' }}>
       <h2 style={{ margin: 0, marginBottom: 8 }}>{t('nav.sessionActivity', 'Активность сессий')}</h2>
       <p style={{ color: 'var(--t3)', marginTop: 0, marginBottom: 20 }}>
         {t('sessionActivity.desc', 'История аутентификаций (login/logout/refresh) последние 180 дней.')}

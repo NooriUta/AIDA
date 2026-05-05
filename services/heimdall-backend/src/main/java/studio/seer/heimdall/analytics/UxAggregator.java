@@ -49,6 +49,9 @@ public class UxAggregator {
     /** Top-N hot nodes returned in summary. */
     static final int HOT_NODES_TOP_N = 10;
 
+    /** Top-N event types returned in summary. */
+    static final int EVENT_TYPES_TOP_N = 15;
+
     private final ConcurrentLinkedDeque<HeimdallEvent> window = new ConcurrentLinkedDeque<>();
     private final AtomicInteger size = new AtomicInteger(0);
 
@@ -93,6 +96,9 @@ public class UxAggregator {
         // -- Active sessions (distinct) ------------------------------------------
         HashSet<String> activeSessions = new HashSet<>();
 
+        // -- Event type distribution (all Verdandi events) ----------------------
+        Map<String, Integer> eventTypeCounts = new HashMap<>();
+
         for (HeimdallEvent e : recent) {
             // Level distribution
             if (e.level() != null) {
@@ -107,18 +113,26 @@ public class UxAggregator {
             if (e.sessionId() != null) activeSessions.add(e.sessionId());
 
             if (e.eventType() == null) continue;
+
+            // Event type counts — track all Verdandi events for the activity widget
+            if ("verdandi".equals(e.sourceComponent())) {
+                eventTypeCounts.merge(e.eventType(), 1, Integer::sum);
+            }
+
             switch (e.eventType()) {
                 case "LOOM_NODE_SELECTED" -> {
                     Map<String, Object> p = e.payload() != null ? e.payload() : Map.of();
-                    String nodeId   = String.valueOf(p.getOrDefault("node_id",   "?"));
-                    String nodeType = String.valueOf(p.getOrDefault("node_type", "unknown"));
+                    // Verdandi sends camelCase keys (nodeId, nodeType)
+                    String nodeId   = String.valueOf(p.getOrDefault("nodeId",   "?"));
+                    String nodeType = String.valueOf(p.getOrDefault("nodeType", "unknown"));
                     nodeClicks.merge(nodeId, 1, Integer::sum);
                     nodeTypes.putIfAbsent(nodeId, nodeType);
                 }
                 case "LOOM_VIEW_SLOW" -> {
                     Map<String, Object> p = e.payload() != null ? e.payload() : Map.of();
-                    long renderMs   = toLong(p.getOrDefault("render_time_ms", 0));
-                    int  nodesCount = toInt(p.getOrDefault("nodes_count", 0));
+                    // renderMs lives in top-level durationMs; nodeCount in payload (camelCase)
+                    long renderMs   = e.durationMs() > 0 ? e.durationMs() : toLong(p.getOrDefault("render_time_ms", 0));
+                    int  nodesCount = toInt(p.getOrDefault("nodeCount", p.getOrDefault("nodes_count", 0)));
                     String sessionId = e.sessionId() != null ? e.sessionId() : "";
                     slowRenders.add(new SlowRender(e.timestamp(), nodesCount, renderMs, sessionId));
                 }
@@ -139,10 +153,18 @@ public class UxAggregator {
                 .limit(SLOW_RENDER_MAX)
                 .toList();
 
+        // -- Event type counts sorted by frequency --------------------------------
+        List<EventTypeCount> eventTypes = eventTypeCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder()))
+                .limit(EVENT_TYPES_TOP_N)
+                .map(entry -> new EventTypeCount(entry.getKey(), entry.getValue()))
+                .toList();
+
         return new UxSummary(
                 hotNodes,
                 new LevelDistribution(infoCount, warnCount, errorCount),
                 recentSlowRenders,
+                eventTypes,
                 activeSessions.size(),
                 recent.size(),
                 WINDOW_MS
@@ -157,10 +179,13 @@ public class UxAggregator {
 
     public record SlowRender(long timestamp, int nodesCount, long renderMs, String sessionId) {}
 
+    public record EventTypeCount(String eventType, int count) {}
+
     public record UxSummary(
             List<HotNode>        hotNodes,
             LevelDistribution    levelDistribution,
             List<SlowRender>     slowRenders,
+            List<EventTypeCount> eventTypeCounts,
             int                  activeSessionCount,
             int                  totalEventsInWindow,
             long                 windowMs

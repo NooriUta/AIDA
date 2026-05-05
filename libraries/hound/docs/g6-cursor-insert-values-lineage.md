@@ -41,11 +41,11 @@ DaliStatement(SELECT BULK COLLECT)
         │
         ▼
 DaliRecord(l_tab)
-  ├── HAS_RECORD_FIELD → DaliRecordField(order_id)
-  ├── HAS_RECORD_FIELD → DaliRecordField(line_num)
-  └── HAS_RECORD_FIELD → DaliRecordField(customer_id)
+  ├── RECORD_HAS_FIELD → DaliRecordField(order_id)
+  ├── RECORD_HAS_FIELD → DaliRecordField(line_num)
+  └── RECORD_HAS_FIELD → DaliRecordField(customer_id)
         │
-  RECORD_USED_IN
+  RECORD_USED_IN [REMOVED Sprint 1.3 D-1]
         │
         ▼
 DaliStatement(FORALL INSERT)
@@ -108,13 +108,13 @@ buildInsertValuesAffectedColumns
        │      populateRecordFields(rec, cursorStmtGeoid)
        │
        ▼
-return (AffectedColumns заполнены через G5, RECORD_USED_IN будет построен
+return (AffectedColumns заполнены через G5, RECORD_USED_IN [REMOVED Sprint 1.3 D-1] будет построен
         на основе bulkCollectSources в RemoteWriter/EmbeddedWriter)
 ```
 
 **Ключевое отличие**: G6-EXT не дублирует AffectedColumns (G5 уже сделал это),
 но записывает имена коллекций в `StatementInfo.bulkCollectSources` — чтобы
-`RemoteWriter` мог построить ребро `RECORD_USED_IN`.
+`RemoteWriter` мог построить ребро `RECORD_USED_IN [REMOVED Sprint 1.3 D-1]`.
 
 ### 2.3 G8: FETCH cursor BULK COLLECT INTO (новый путь)
 
@@ -159,7 +159,7 @@ processAtomsOnStatementExit (FORALL INSERT)
 RemoteWriter:
   DaliRecord(L_BUFFER) + DaliRecordField(CONTACT_ID) + DaliRecordField(AMOUNT)
   BULK_COLLECTS_INTO: cur_data SELECT → DaliRecord(L_BUFFER)
-  RECORD_USED_IN:     DaliRecord(L_BUFFER) → INSERT stmt
+  RECORD_USED_IN [REMOVED Sprint 1.3 D-1]:     DaliRecord(L_BUFFER) → INSERT stmt
 ```
 
 ---
@@ -209,7 +209,7 @@ RemoteWriter:
 
 | Ребро | Откуда | Куда | Статус |
 |-------|--------|------|--------|
-| `HAS_RECORD_FIELD` | DaliRecord | DaliRecordField | ✅ реализовано |
+| `RECORD_HAS_FIELD` | DaliRecord | DaliRecordField | ✅ реализовано |
 | `FIELD_MAPS_TO` | DaliRecordField | DaliColumn | ⏳ G11, не реализовано |
 
 ---
@@ -250,7 +250,7 @@ private void populateRecordFields(RecordInfo rec, String cursorStmtGeoid) {
 
 Хранит имена коллекций, чьи поля встречаются в VALUES-выражениях INSERT,
 когда INSERT имеет явный column list (G5). Используется `RemoteWriter` и
-`EmbeddedWriter` для построения `RECORD_USED_IN` без дублирования AffectedColumns.
+`EmbeddedWriter` для построения `RECORD_USED_IN [REMOVED Sprint 1.3 D-1]` без дублирования AffectedColumns.
 
 ```java
 // StatementInfo.java
@@ -415,14 +415,14 @@ for (var e : str.getRecords().entrySet()) {
         if (srcRid != null) edgeByRid("BULK_COLLECTS_INTO", srcRid, recRid, sid);
     }
 
-    // HAS_RECORD_FIELD: DaliRecord → DaliRecordField
+    // RECORD_HAS_FIELD: DaliRecord → DaliRecordField
     for (String fieldName : rec.getFields()) {
         String fieldGeoid = rec.getGeoid() + ":FIELD:" + fieldName;
         String fieldRid = rid.recordFields.get(fieldGeoid);
-        if (fieldRid != null) edgeByRid("HAS_RECORD_FIELD", recRid, fieldRid, sid);
+        if (fieldRid != null) edgeByRid("RECORD_HAS_FIELD", recRid, fieldRid, sid);
     }
 
-    // RECORD_USED_IN: DaliRecord → INSERT stmt
+    // RECORD_USED_IN [REMOVED Sprint 1.3 D-1]: DaliRecord → INSERT stmt
     //   G6: dataset_alias check (VALUES без column list)
     //   G6-EXT: bulkCollectSources check (VALUES с явным column list)
     for (var stmtEntry : str.getStatements().entrySet()) {
@@ -435,7 +435,7 @@ for (var e : str.getRecords().entrySet()) {
 
         if (usesRecord) {
             String stmtRid = rid.statements.get(stmtEntry.getKey());
-            if (stmtRid != null) edgeByRid("RECORD_USED_IN", recRid, stmtRid, sid);
+            if (stmtRid != null) edgeByRid("RECORD_USED_IN [REMOVED Sprint 1.3 D-1]", recRid, stmtRid, sid);
         }
     }
 }
@@ -470,7 +470,7 @@ public String build() {
 | 7c / 9c | vertex | **DaliRecord** |
 | 7d / 9d | vertex | **DaliRecordField** |
 | 8 / 10  | vertex | DaliAtom |
-| Phase 2 | edge | BULK_COLLECTS_INTO, HAS_RECORD_FIELD, RECORD_USED_IN |
+| Phase 2 | edge | BULK_COLLECTS_INTO, RECORD_HAS_FIELD, RECORD_USED_IN [REMOVED Sprint 1.3 D-1] |
 
 `DaliRecord` и `DaliRecordField` вставляются **перед** DaliAtom и **перед** рёбрами
 в обоих вариантах (`buildFromResult(sid, result)` и `buildFromResult(sid, result, tableRids, ...)`).
@@ -551,7 +551,7 @@ public String getCursorRecordStmt(String recordVar) {
 |---------|-------|----------|-----------------|
 | DaliRecord | 0 | 9 | **54** |
 | BULK_COLLECTS_INTO | 0 | 9 | **42** |
-| RECORD_USED_IN | 0 | 0 | **3** |
+| RECORD_USED_IN [REMOVED Sprint 1.3 D-1] | 0 | 0 | **3** |
 | DaliRecordField | — | — | ✅ (новый тип) |
 
 Файлы с DaliRecord:
@@ -569,8 +569,8 @@ public String getCursorRecordStmt(String recordVar) {
 | `collection(i).field` — один уровень вложенности | ✅ поддержано |
 | `SELECT col1, col2 BULK COLLECT INTO` — поля заполнены | ✅ G6/G8 |
 | FETCH cursor BULK COLLECT INTO → RecordInfo | ✅ G8 |
-| FORALL INSERT с явным column list → RECORD_USED_IN | ✅ G6-EXT |
-| DaliRecordField vertices (per field) | ✅ HAS_RECORD_FIELD |
+| FORALL INSERT с явным column list → RECORD_USED_IN [REMOVED Sprint 1.3 D-1] | ✅ G6-EXT |
+| DaliRecordField vertices (per field) | ✅ RECORD_HAS_FIELD |
 | `SELECT * BULK COLLECT INTO` — wildcard | ❌ G7: поля из DDL не восстанавливаются |
 | `FOR rec IN (SELECT ...) LOOP` — inline cursor loop | ❌ G10: RecordInfo не создаётся |
 | FIELD_MAPS_TO: DaliRecordField → DaliColumn | ❌ G11: не реализовано |
@@ -703,7 +703,7 @@ DaliStatement(UPDATE BULK COLLECT)
         ▼
 DaliRecord(L_TAB)
   ├── record_geoid = "HR.PROC_CLOSE:RECORD:L_TAB"
-  └── HAS_RECORD_FIELD ──► DaliRecordField(ORDER_ID)
+  └── RECORD_HAS_FIELD ──► DaliRecordField(ORDER_ID)
                       └──► DaliRecordField(STATUS)
 ```
 
@@ -771,8 +771,8 @@ ReturningTargetKind classify(String varName, String routineGeoid) {
 | `ScopeManager.cursorRegistry` | cursor name → cursor SELECT geoid |
 | `ScopeManager.cursorRecordAliases` | record var → cursor SELECT geoid (G6/G8) |
 | `RecordInfo.fields` | Список полей (из cursor SELECT columnsOutput, без `*`) |
-| `DaliRecord` (ArcadeDB vertex) | Коллекция PL/SQL; BULK_COLLECTS_INTO + RECORD_USED_IN |
-| `DaliRecordField` (ArcadeDB vertex) | Поле коллекции; HAS_RECORD_FIELD; FIELD_MAPS_TO (G11) |
+| `DaliRecord` (ArcadeDB vertex) | Коллекция PL/SQL; BULK_COLLECTS_INTO + RECORD_USED_IN [REMOVED Sprint 1.3 D-1] |
+| `DaliRecordField` (ArcadeDB vertex) | Поле коллекции; RECORD_HAS_FIELD; FIELD_MAPS_TO (G11) |
 | `SchemaInitializer` | DDL для DaliRecord, DaliRecordField, новых edge-типов |
 | `RemoteWriter` | REMOTE path: вставляет DaliRecord+DaliRecordField, рёбра через `edgeByRid` |
 | `EmbeddedWriter` | EMBEDDED path: аналогичная логика |

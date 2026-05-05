@@ -109,7 +109,7 @@ class BulkCollectForallTest {
 
         long unresolvedCustomerId = entries.stream()
                 .filter(e -> "customer_id".equalsIgnoreCase((String) e.get("raw_input")))
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedCustomerId,
@@ -140,7 +140,7 @@ class BulkCollectForallTest {
                             || raw.equalsIgnoreCase("email")
                             || raw.equalsIgnoreCase("department_id"));
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedEmployeeCols,

@@ -148,10 +148,11 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
                     (Map<String, Map<String, Object>>) cont.get("atoms");
             if (atoms == null) continue;
             for (var at : atoms.entrySet()) {
-                String status = (String) at.getValue().get("status");
-                if (AtomInfo.STATUS_RESOLVED.equals(status))         atomResolvedTmp++;
-                else if ("constant".equals(status))      atomConstTmp++;
-                else if ("function_call".equals(status)) atomFuncTmp++;
+                String ps = (String) at.getValue().get("primary_status");
+                if (ps == null) ps = (String) at.getValue().get("status");
+                if (AtomInfo.STATUS_RESOLVED.equals(ps) || AtomInfo.STATUS_RECONSTRUCT_DIRECT.equals(ps)) atomResolvedTmp++;
+                else if (AtomInfo.STATUS_CONSTANT.equals(ps) || AtomInfo.STATUS_CONSTANT_ORPHAN.equals(ps)) atomConstTmp++;
+                else if (AtomInfo.STATUS_FUNCTION_CALL.equals(ps)) atomFuncTmp++;
                 else                                     atomFailedTmp++;
             }
         }
@@ -171,17 +172,21 @@ public class ArcadeDBSemanticWriter implements AutoCloseable {
     // ═══════════════════════════════════════════════════════════════
 
     public void cleanAll() {
+        // Sprint 0.1 SCHEMA_CLEANUP (§13.5): removed JOIN_FLOW, UNION_FLOW, ROUTINE_USES_TABLE.
+        // Sprint 0.1 F-2 folding: DaliDDLModifies* → DDL_MODIFIES.
+        // FIELD_MAPS_TO retained (planned reintroduction Q3 2026 — ArcadeDB 27.x + ANTLR ≥ 4.13).
         String[] edgeTypes = {
                 "ATOM_REF_TABLE","ATOM_REF_COLUMN","ATOM_REF_STMT","ATOM_REF_OUTPUT_COL","ATOM_PRODUCES",
-                "DATA_FLOW","FILTER_FLOW","JOIN_FLOW","UNION_FLOW",
+                "DATA_FLOW","FILTER_FLOW",
                 "JOIN_SOURCE_TABLE","JOIN_TARGET_TABLE",
                 "HAS_AFFECTED_COL","AFFECTED_COL_REF_TABLE",
                 "HAS_ATOM","HAS_OUTPUT_COL","HAS_JOIN","READS_FROM","WRITES_TO",
                 "USES_SUBQUERY","NESTED_IN","CONTAINS_STMT",
                 "HAS_PARAMETER","HAS_VARIABLE","CHILD_OF","CONTAINS_ROUTINE",
-                "ROUTINE_USES_TABLE","CALLS",
-                "BULK_COLLECTS_INTO","RECORD_USED_IN","HAS_RECORD_FIELD","FIELD_MAPS_TO",
+                "CALLS",
+                "BULK_COLLECTS_INTO","RECORD_HAS_FIELD","PLTYPE_HAS_FIELD","FIELD_MAPS_TO",
                 "DECLARES_TYPE","OF_TYPE","INSTANTIATES_TYPE",
+                "DDL_MODIFIES",
                 "HAS_COLUMN","CONTAINS_TABLE","CONTAINS_SCHEMA","BELONGS_TO_APP","BELONGS_TO_SESSION"
         };
         String[] vtxTypes = {

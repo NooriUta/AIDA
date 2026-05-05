@@ -46,9 +46,9 @@ class RemoteWriter {
         Map<String, String> ocByOrder  = new HashMap<>();
         /** key = "stmtGeoid:column_ref" → RID  (DATA_FLOW → DaliAffectedColumn) */
         Map<String, String> affCols    = new HashMap<>();
-        /** key = record_geoid → RID (BULK_COLLECTS_INTO / RECORD_USED_IN) */
+        /** key = record_geoid → RID (BULK_COLLECTS_INTO) */
         Map<String, String> records = new HashMap<>();
-        /** key = field_geoid → RID (HAS_RECORD_FIELD) */
+        /** key = field_geoid → RID (RECORD_HAS_FIELD) */
         Map<String, String> recordFields = new HashMap<>();
         /** constraint_geoid → RID  (DaliPrimaryKey / DaliForeignKey) */
         Map<String, String> constraints = new HashMap<>();
@@ -283,6 +283,12 @@ class RemoteWriter {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                         logger.debug("[ad-hoc] DaliSchema '{}' already exists — reusing", e.getKey());
+                        try {
+                            rcmd("UPDATE DaliSchema SET session_id=? WHERE db_name IS NULL AND schema_geoid=?",
+                                    sid, e.getKey());
+                        } catch (Exception upEx) {
+                            logger.warn("[ad-hoc] Failed to update DaliSchema '{}' session_id: {}", e.getKey(), upEx.getMessage());
+                        }
                     } else {
                         throw ex;
                     }
@@ -333,14 +339,16 @@ class RemoteWriter {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                         logger.debug("[ad-hoc] DaliTable '{}' already exists — reusing", e.getKey());
-                        // Upgrade reconstructed → master if DDL now defines this table
-                        if (tblMaster) {
-                            try {
-                                rcmd("UPDATE DaliTable SET data_source=? WHERE db_name IS NULL AND table_geoid=? AND (data_source IS NULL OR data_source <> ?)",
-                                        MASTER, e.getKey(), MASTER);
-                            } catch (Exception upEx) {
-                                logger.warn("[ad-hoc] Failed to upgrade DaliTable '{}' to master: {}", e.getKey(), upEx.getMessage());
+                        try {
+                            if (tblMaster) {
+                                rcmd("UPDATE DaliTable SET session_id=?, data_source=? WHERE db_name IS NULL AND table_geoid=?",
+                                        sid, MASTER, e.getKey());
+                            } else {
+                                rcmd("UPDATE DaliTable SET session_id=? WHERE db_name IS NULL AND table_geoid=?",
+                                        sid, e.getKey());
                             }
+                        } catch (Exception upEx) {
+                            logger.warn("[ad-hoc] Failed to update DaliTable '{}': {}", e.getKey(), upEx.getMessage());
                         }
                     } else {
                         throw ex;
@@ -377,30 +385,32 @@ class RemoteWriter {
                 boolean colMaster = isMasterTable(c.getTableGeoid(), str);
                 String ds = colMaster ? MASTER : RECONSTRUCTED;
                 try {
-                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
                             sid, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                             c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                             c.getOrdinalPosition(),
                             toJson(new ArrayList<>(c.getUsedInStatements())),
                             ds, c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                            c.isInferred(), c.getSourcePass(), c.isSuspicious());
                     newColumnGeoids.add(e.getKey());
                 } catch (RuntimeException ex) {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
                         logger.debug("[ad-hoc] DaliColumn '{}' already exists — reusing", e.getKey());
-                        // Upgrade reconstructed → master if DDL now defines this column's table
                         try {
-                            String upd = colMaster
-                                ? "UPDATE DaliColumn SET data_source=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=?"
-                                : "UPDATE DaliColumn SET is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=? AND (is_pk = false AND is_fk = false)";
                             if (colMaster) {
-                                rcmd(upd, MASTER, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                                rcmd("UPDATE DaliColumn SET session_id=?, data_source=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=?",
+                                        sid, MASTER, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
                             } else if (c.isPk() || c.isFk()) {
-                                rcmd(upd, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                                rcmd("UPDATE DaliColumn SET session_id=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=? WHERE db_name IS NULL AND column_geoid=? AND (is_pk = false AND is_fk = false)",
+                                        sid, c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(), e.getKey());
+                            } else {
+                                rcmd("UPDATE DaliColumn SET session_id=? WHERE db_name IS NULL AND column_geoid=?",
+                                        sid, e.getKey());
                             }
                         } catch (Exception upEx) {
-                            logger.warn("[ad-hoc] Failed to upgrade DaliColumn '{}': {}", e.getKey(), upEx.getMessage());
+                            logger.warn("[ad-hoc] Failed to update DaliColumn '{}': {}", e.getKey(), upEx.getMessage());
                         }
                     } else {
                         throw ex;
@@ -620,6 +630,9 @@ class RemoteWriter {
         Structure str = result.getStructure();
         if (str == null) return;
 
+        // G4: source_file for per-file denormalization in batch sessions
+        final String sourceFile = result.getFilePath();
+
         timer.start("write.vtx");
 
         rcmd("INSERT INTO DaliSession SET session_id=?, db_name=?, file_path=?, dialect=?, processing_time_ms=?, created_at=?",
@@ -684,8 +697,8 @@ class RemoteWriter {
                         ? (String) ((Map<String, Object>) str.getDatabases().get(schDbGeoid)).get("name")
                         : dbName;
                 try {
-                    rcmd("INSERT INTO DaliSchema SET session_id=?, schema_geoid=?, schema_name=?, db_name=?, db_geoid=?",
-                            sid, e.getKey(), sc.get("name"),
+                    rcmd("INSERT INTO DaliSchema SET session_id=?, source_file=?, schema_geoid=?, schema_name=?, db_name=?, db_geoid=?",
+                            sid, sourceFile, e.getKey(), sc.get("name"),
                             schDbName, schDbGeoid != null ? schDbGeoid : schDbName);
                     newSchemaGeoids.add(e.getKey());
                 } catch (RuntimeException ex) {
@@ -701,9 +714,9 @@ class RemoteWriter {
         for (var e : str.getPackages().entrySet()) {
             @SuppressWarnings("unchecked")
             Map<String, Object> pkg = (Map<String, Object>) e.getValue();
-            rcmd("INSERT INTO DaliPackage SET session_id=?, package_geoid=?, package_name=?, schema_geoid=?, " +
+            rcmd("INSERT INTO DaliPackage SET session_id=?, source_file=?, package_geoid=?, package_name=?, schema_geoid=?, " +
                             "routine_geoid=?, routine_name=?, routine_type=?",
-                    sid, e.getKey(), pkg.get("package_name"), pkg.get("schema_geoid"),
+                    sid, sourceFile, e.getKey(), pkg.get("package_name"), pkg.get("schema_geoid"),
                     e.getKey(), pkg.get("package_name"), "PACKAGE");
         }
 
@@ -745,8 +758,8 @@ class RemoteWriter {
             } else {
                 // Non-pool (ad-hoc) REMOTE path: handle duplicate gracefully
                 try {
-                    rcmd("INSERT INTO DaliTable SET session_id=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
-                            sid, e.getKey(), t.tableName(), t.schemaGeoid(), effectiveType,
+                    rcmd("INSERT INTO DaliTable SET session_id=?, source_file=?, table_geoid=?, table_name=?, schema_geoid=?, table_type=?, aliases=?, column_count=?, data_source=?",
+                            sid, sourceFile, e.getKey(), t.tableName(), t.schemaGeoid(), effectiveType,
                             toJson(new ArrayList<>(t.aliases())), t.columnCount(),
                             tblMaster ? MASTER : RECONSTRUCTED);
                 } catch (RuntimeException ex) {
@@ -771,14 +784,15 @@ class RemoteWriter {
             if (pool != null) {
                 String cg = pool.canonicalCol(c.getTableGeoid(), c.getColumnName());
                 if (!pool.hasColumnRid(cg)) {
-                    rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                    rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
                             dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                             c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                             c.getOrdinalPosition(),
                             toJson(new ArrayList<>(c.getUsedInStatements())),
                             colMaster ? MASTER : RECONSTRUCTED,
                             c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                            c.isInferred(), c.getSourcePass(), c.isSuspicious());
                     pool.putColumnRid(cg, cg);
                     newColumnGeoids.add(e.getKey());
                 } else if (colMaster) {
@@ -788,13 +802,14 @@ class RemoteWriter {
             } else {
                 // Non-pool (ad-hoc) REMOTE path: handle duplicate gracefully
                 try {
-                    rcmd("INSERT INTO DaliColumn SET session_id=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
-                            sid, e.getKey(), c.getTableGeoid(), c.getColumnName(), c.getExpression(), c.getAlias(),
+                    rcmd("INSERT INTO DaliColumn SET session_id=?, source_file=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
+                            sid, sourceFile, e.getKey(), c.getTableGeoid(), c.getColumnName(), c.getExpression(), c.getAlias(),
                             c.isOutput(), c.getOrder(), c.getOrdinalPosition(),
                             toJson(new ArrayList<>(c.getUsedInStatements())),
                             colMaster ? MASTER : RECONSTRUCTED,
                             c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                            c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                            c.isInferred(), c.getSourcePass(), c.isSuspicious());
                 } catch (RuntimeException ex) {
                     String msg = ex.getMessage() != null ? ex.getMessage() : "";
                     if (msg.contains("DuplicatedKeyException") || msg.contains("Found duplicate key") || msg.contains("Duplicated key")) {
@@ -821,8 +836,8 @@ class RemoteWriter {
         // ── DaliRoutine ──
         for (var e : str.getRoutines().entrySet()) {
             RoutineInfo r = e.getValue();
-            rcmd("INSERT INTO DaliRoutine SET session_id=?, routine_geoid=?, routine_name=?, routine_type=?, return_type=?, line_start=?, package_geoid=?, schema_geoid=?, data_source=?, is_pipelined=?, autonomous_transaction=?, has_spec=?, has_body=?",
-                    sid, e.getKey(), r.getName(), r.getRoutineType(), r.getReturnType(),
+            rcmd("INSERT INTO DaliRoutine SET session_id=?, source_file=?, routine_geoid=?, routine_name=?, routine_type=?, return_type=?, line_start=?, package_geoid=?, schema_geoid=?, data_source=?, is_pipelined=?, autonomous_transaction=?, has_spec=?, has_body=?",
+                    sid, sourceFile, e.getKey(), r.getName(), r.getRoutineType(), r.getReturnType(),
                     r.getLineStart() > 0 ? r.getLineStart() : null,
                     r.getPackageGeoid(), r.getSchemaGeoid(), MASTER,
                     r.isPipelined() ? true : null,
@@ -833,18 +848,18 @@ class RemoteWriter {
         for (var e : str.getRoutines().entrySet()) {
             RoutineInfo r = e.getValue();
             for (RoutineInfo.ParameterInfo p : r.getTypedParameters())
-                rcmd("INSERT INTO DaliParameter SET session_id=?, routine_geoid=?, param_name=?, param_type=?, param_mode=?",
-                        sid, e.getKey(), p.name(), p.type(), p.mode());
+                rcmd("INSERT INTO DaliParameter SET session_id=?, source_file=?, routine_geoid=?, param_name=?, param_type=?, param_mode=?",
+                        sid, sourceFile, e.getKey(), p.name(), p.type(), p.mode());
             for (RoutineInfo.VariableInfo v : r.getTypedVariables())
-                rcmd("INSERT INTO DaliVariable SET session_id=?, routine_geoid=?, var_name=?, var_type=?",
-                        sid, e.getKey(), v.name(), v.type());
+                rcmd("INSERT INTO DaliVariable SET session_id=?, source_file=?, routine_geoid=?, var_name=?, var_type=?",
+                        sid, sourceFile, e.getKey(), v.name(), v.type());
         }
 
         // ── DaliStatement ──
         for (var e : str.getStatements().entrySet()) {
             StatementInfo s = e.getValue();
             rcmd("INSERT INTO DaliStatement SET " +
-                    "session_id=?, stmt_geoid=?, type=?, subtype=?, " +
+                    "session_id=?, source_file=?, stmt_geoid=?, type=?, subtype=?, " +
                     "line_start=?, line_end=?, " +
                     "parent_statement=?, parent_statement_type=?, " +
                     "routine_geoid=?, short_name=?, " +
@@ -855,7 +870,7 @@ class RemoteWriter {
                     "has_aggregation=?, has_window=?, has_cte=?, " +
                     "join_count=?, col_count_output=?, col_count_input=?, " +
                     "depth=?, quality=?",
-                sid, e.getKey(), s.getType(), s.getSubtype(),
+                sid, sourceFile, e.getKey(), s.getType(), s.getSubtype(),
                 s.getLineStart(), s.getLineEnd(),
                 s.getParentStatementGeoid(), parentType(s.getParentStatementGeoid(), str.getStatements()),
                 s.getRoutineGeoid(), s.getShortName(),
@@ -886,8 +901,8 @@ class RemoteWriter {
                             dbName, e.getKey(), s.getType(), s.getLineStart(), s.getLineEnd(),
                             toJson(new ArrayList<>(s.getTargetTables().keySet())), s.getShortName());
                 } else {
-                    rcmd("INSERT INTO DaliDDLStatement SET session_id=?, stmt_geoid=?, type=?, line_start=?, line_end=?, target_table_geoids=?, short_name=?",
-                            sid, e.getKey(), s.getType(), s.getLineStart(), s.getLineEnd(),
+                    rcmd("INSERT INTO DaliDDLStatement SET session_id=?, source_file=?, stmt_geoid=?, type=?, line_start=?, line_end=?, target_table_geoids=?, short_name=?",
+                            sid, sourceFile, e.getKey(), s.getType(), s.getLineStart(), s.getLineEnd(),
                             toJson(new ArrayList<>(s.getTargetTables().keySet())), s.getShortName());
                 }
             } catch (RuntimeException ex) {
@@ -908,8 +923,8 @@ class RemoteWriter {
                             dbName, e.getKey(), c.getConstraintType(), c.getConstraintName(),
                             c.getHostTableGeoid(), colNamesJson);
                 } else {
-                    rcmd("INSERT INTO DaliPrimaryKey SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
-                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                    rcmd("INSERT INTO DaliPrimaryKey SET session_id=?, source_file=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
+                            sid, sourceFile, e.getKey(), c.getConstraintType(), c.getConstraintName(),
                             c.getHostTableGeoid(), colNamesJson);
                 }
             } else if (c.isForeignKey()) {
@@ -920,8 +935,8 @@ class RemoteWriter {
                             c.getHostTableGeoid(), colNamesJson,
                             c.getRefTableGeoid(), refColNamesJson, c.getOnDelete());
                 } else {
-                    rcmd("INSERT INTO DaliForeignKey SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?, ref_table_geoid=?, ref_column_names=?, on_delete=?",
-                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                    rcmd("INSERT INTO DaliForeignKey SET session_id=?, source_file=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?, ref_table_geoid=?, ref_column_names=?, on_delete=?",
+                            sid, sourceFile, e.getKey(), c.getConstraintType(), c.getConstraintName(),
                             c.getHostTableGeoid(), colNamesJson,
                             c.getRefTableGeoid(), refColNamesJson, c.getOnDelete());
                 }
@@ -932,8 +947,8 @@ class RemoteWriter {
                             dbName, e.getKey(), c.getConstraintType(), c.getConstraintName(),
                             c.getHostTableGeoid(), colNamesJson);
                 } else {
-                    rcmd("INSERT INTO DaliUniqueConstraint SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
-                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                    rcmd("INSERT INTO DaliUniqueConstraint SET session_id=?, source_file=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, column_names=?",
+                            sid, sourceFile, e.getKey(), c.getConstraintType(), c.getConstraintName(),
                             c.getHostTableGeoid(), colNamesJson);
                 }
             } else if (c.isCheckConstraint()) {
@@ -943,8 +958,8 @@ class RemoteWriter {
                             dbName, e.getKey(), c.getConstraintType(), c.getConstraintName(),
                             c.getHostTableGeoid(), c.getCheckExpression());
                 } else {
-                    rcmd("INSERT INTO DaliCheckConstraint SET session_id=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, check_expression=?",
-                            sid, e.getKey(), c.getConstraintType(), c.getConstraintName(),
+                    rcmd("INSERT INTO DaliCheckConstraint SET session_id=?, source_file=?, constraint_geoid=?, constraint_type=?, constraint_name=?, table_geoid=?, check_expression=?",
+                            sid, sourceFile, e.getKey(), c.getConstraintType(), c.getConstraintName(),
                             c.getHostTableGeoid(), c.getCheckExpression());
                 }
             }
@@ -962,10 +977,10 @@ class RemoteWriter {
                     Object oa   = poliage.get(0).get("order_affect");
                     orderAffect = oa instanceof Number n ? n.intValue() : null;
                 }
-                rcmd("INSERT INTO DaliAffectedColumn SET session_id=?, statement_geoid=?, " +
+                rcmd("INSERT INTO DaliAffectedColumn SET session_id=?, source_file=?, statement_geoid=?, " +
                         "column_ref=?, column_name=?, table_geoid=?, dataset_alias=?, " +
                         "source_type=?, resolution_status=?, type_affect=?, order_affect=?",
-                    sid, e.getKey(),
+                    sid, sourceFile, e.getKey(),
                     ac.get("column_ref"), ac.get("column_name"), ac.get("table_geoid"),
                     ac.get("dataset_alias"), ac.get("source_type"), ac.get("resolution_status"),
                     typeAffect, orderAffect);
@@ -977,18 +992,18 @@ class RemoteWriter {
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String fieldsJson = String.join(",", rec.getFields());
-            rcmd("INSERT INTO DaliRecord SET session_id=?, record_geoid=?, record_name=?, " +
+            rcmd("INSERT INTO DaliRecord SET session_id=?, source_file=?, record_geoid=?, record_name=?, " +
                     "routine_geoid=?, source_stmt_geoid=?, fields=?, pl_type_geoid=?",
-                sid, rec.getGeoid(), rec.getVarName(),
+                sid, sourceFile, rec.getGeoid(), rec.getVarName(),
                 rec.getRoutineGeoid(), rec.getSourceStatementGeoid(), fieldsJson,
                 rec.getPlTypeGeoid());
             // DaliRecordField — one vertex per named field (dedup across batch)
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = rec.getGeoid() + ":" + fi.name();
                 if (!insertedFieldGeoids.add(fieldGeoid)) continue; // already inserted
-                rcmd("INSERT INTO DaliRecordField SET session_id=?, field_geoid=?, field_name=?, " +
+                rcmd("INSERT INTO DaliRecordField SET session_id=?, source_file=?, field_geoid=?, field_name=?, " +
                         "field_order=?, record_geoid=?, data_type=?, ordinal_position=?, source_column_geoid=?",
-                    sid, fieldGeoid, fi.name(), fi.ordinalPosition(), rec.getGeoid(),
+                    sid, sourceFile, fieldGeoid, fi.name(), fi.ordinalPosition(), rec.getGeoid(),
                     fi.dataType(), fi.ordinalPosition(), fi.sourceColumnGeoid());
             }
         }
@@ -997,18 +1012,18 @@ class RemoteWriter {
         Set<String> insertedPlFieldGeoids = new HashSet<>();
         for (var e : str.getPlTypes().entrySet()) {
             com.hound.semantic.model.PlTypeInfo pt = e.getValue();
-            rcmd("INSERT INTO DaliPlType SET session_id=?, type_geoid=?, type_name=?, kind=?, " +
+            rcmd("INSERT INTO DaliPlType SET session_id=?, source_file=?, type_geoid=?, type_name=?, kind=?, " +
                     "element_type_geoid=?, scope_geoid=?, declared_at_line=?",
-                sid, pt.getGeoid(), pt.getName(), pt.getKind().name(),
+                sid, sourceFile, pt.getGeoid(), pt.getName(), pt.getKind().name(),
                 pt.getElementTypeGeoid(), pt.getScopeGeoid(),
                 pt.getDeclaredAtLine() > 0 ? pt.getDeclaredAtLine() : null);
             if (pt.hasFields()) { // RECORD and OBJECT both carry named fields
                 for (com.hound.semantic.model.PlTypeFieldInfo pf : pt.getFields()) {
                     String fGeoid = pt.getGeoid() + ":" + pf.name();
                     if (!insertedPlFieldGeoids.add(fGeoid)) continue;
-                    rcmd("INSERT INTO DaliPlTypeField SET session_id=?, field_geoid=?, type_geoid=?, " +
+                    rcmd("INSERT INTO DaliPlTypeField SET session_id=?, source_file=?, field_geoid=?, type_geoid=?, " +
                             "field_name=?, field_type=?, position=?",
-                        sid, fGeoid, pt.getGeoid(), pf.name(), pf.dataType(), pf.position());
+                        sid, sourceFile, fGeoid, pt.getGeoid(), pf.name(), pf.dataType(), pf.position());
                 }
             }
         }
@@ -1024,9 +1039,9 @@ class RemoteWriter {
             if (raw == null) continue;
             String stmtGeoid  = e.getKey();
             String elementRid = snippetStmtRids.get(stmtGeoid);
-            rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?," +
+            rcmd("INSERT INTO DaliSnippet SET session_id=?, source_file=?, stmt_geoid=?, snippet=?, snippet_hash=?," +
                     " line_start=?, line_end=?, element_rid=?, element_type=?",
-                    sid, stmtGeoid, raw, md5(raw),
+                    sid, sourceFile, stmtGeoid, raw, md5(raw),
                     e.getValue().getLineStart(), e.getValue().getLineEnd(),
                     elementRid, elementRid != null ? "DaliStatement" : null);
         }
@@ -1035,9 +1050,9 @@ class RemoteWriter {
         for (var e : str.getStatements().entrySet()) {
             for (var oc : e.getValue().getColumnsOutput().entrySet()) {
                 Map<String, Object> col = oc.getValue();
-                rcmd("INSERT INTO DaliOutputColumn SET session_id=?, statement_geoid=?, col_key=?, " +
+                rcmd("INSERT INTO DaliOutputColumn SET session_id=?, source_file=?, statement_geoid=?, col_key=?, " +
                         "name=?, expression=?, alias=?, col_order=?, source_type=?, table_ref=?",
-                    sid, e.getKey(), oc.getKey(), col.get("name"), col.get("expression"),
+                    sid, sourceFile, e.getKey(), oc.getKey(), col.get("name"), col.get("expression"),
                     col.get("alias"), col.get("order"), col.get("source_type"), col.get("table_ref"));
             }
         }
@@ -1056,27 +1071,32 @@ class RemoteWriter {
             for (var at : atoms.entrySet()) {
                 Map<String, Object> a = at.getValue();
                 String atomId = md5(stmtGeoid + ":" + at.getKey());
-                // Detect AtomInfo.STATUS_UNBOUND for column-reference atoms whose DaliColumn is absent from schema
+                // HAL-04: detect RECONSTRUCT_DIRECT — table found but column absent from DDL schema
                 String atomColForWarn = (String) a.get("column_name");
                 String atomTblForWarn = (String) a.get("table_geoid");
                 boolean isColRefRw = Boolean.TRUE.equals(a.get("is_column_reference"));
-                if (a.get("warning") == null && AtomInfo.STATUS_RESOLVED.equals(a.get("status"))
+                if (a.get("warning") == null && AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))
                         && isColRefRw && atomTblForWarn != null && atomColForWarn != null
                         && !str.getColumns().containsKey(atomTblForWarn + "." + atomColForWarn.toUpperCase())) {
-                    a.put("warning", AtomInfo.STATUS_UNBOUND);
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                 }
 
-                rcmd("INSERT INTO DaliAtom SET session_id=?, statement_geoid=?, atom_id=?, atom_text=?, atom_geoid=?, " +
+                rcmd("INSERT INTO DaliAtom SET session_id=?, source_file=?, statement_geoid=?, atom_id=?, atom_text=?, atom_geoid=?, " +
                         "atom_context=?, parent_context=?, position=?, sposition=?, " +
                         "is_complex=?, is_column_reference=?, is_function_call=?, is_constant=?, " +
                         "is_routine_param=?, is_routine_var=?, table_name=?, column_name=?, " +
-                        "table_geoid=?, status=?, warning=?, merge_clause=?, output_column_sequence=?, nested_atoms_count=?",
-                    sid, stmtGeoid, atomId, a.get("atom_text"), at.getKey(),
+                        "table_geoid=?, primary_status=?, qualifier=?, kind=?, confidence=?, resolve_strategy=?, routine_geoid=?, pending_verification=?, status=?, warning=?, merge_clause=?, " +
+                        "output_column_sequence=?, nested_atoms_count=?",
+                    sid, sourceFile, stmtGeoid, atomId, a.get("atom_text"), at.getKey(),
                     a.get("atom_context"), a.get("parent_context"), a.get("position"), a.get("sposition"),
                     a.get("is_complex"), a.get("is_column_reference"), a.get("is_function_call"),
                     a.get("is_constant"), a.get("is_routine_param"), a.get("is_routine_var"),
                     a.get("table_name"), a.get("column_name"),
-                    a.get("table_geoid"), a.get("status"), a.get("warning"), a.get("merge_clause"),
+                    a.get("table_geoid"), a.get("primary_status"), a.get("qualifier"), a.get("kind"),
+                    a.get("confidence"), a.get("resolve_strategy"),
+                    a.get("routine_geoid"), a.get("pending_verification"),
+                    a.get("status"), a.get("warning"), a.get("merge_clause"),
                     a.get("output_column_sequence"), a.get("nested_atoms_count"));
             }
         }
@@ -1084,11 +1104,11 @@ class RemoteWriter {
         // ── DaliJoin ──
         for (var e : str.getStatements().entrySet()) {
             for (JoinInfo j : e.getValue().getJoins()) {
-                rcmd("INSERT INTO DaliJoin SET session_id=?, statement_geoid=?, join_type=?, " +
+                rcmd("INSERT INTO DaliJoin SET session_id=?, source_file=?, statement_geoid=?, join_type=?, " +
                         "source_table_geoid=?, source_alias=?, source_type=?, " +
                         "target_table_geoid=?, target_alias=?, target_type=?, " +
                         "conditions=?, line_start=?",
-                    sid, e.getKey(), j.joinType(),
+                    sid, sourceFile, e.getKey(), j.joinType(),
                     j.sourceTableGeoid(), j.sourceTableAlias(), j.sourceType(),
                     j.targetTableGeoid(), j.targetTableAlias(), j.targetType(),
                     j.conditions(), j.lineStart());
@@ -1360,6 +1380,28 @@ class RemoteWriter {
             }
         }
 
+        // ── CONTAINS_ATOM: DaliRoutine → DaliAtom (unattached orphans with routine_geoid) ──
+        @SuppressWarnings("unchecked")
+        Map<String, Object> unattachedCont = (Map<String, Object>) result.getAtoms().get("unattached");
+        if (unattachedCont != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> uAtoms =
+                    (Map<String, Map<String, Object>>) unattachedCont.get("atoms");
+            if (uAtoms != null) {
+                for (var at : uAtoms.entrySet()) {
+                    Map<String, Object> a = at.getValue();
+                    String routineGeoid = (String) a.get("routine_geoid");
+                    if (routineGeoid == null) continue;
+                    String routineRid = rid.routines.get(routineGeoid);
+                    String atomId = md5("unattached:" + at.getKey());
+                    String atomRid = rid.atoms.get(atomId);
+                    if (routineRid != null && atomRid != null) {
+                        edgeByRid("CONTAINS_ATOM", routineRid, atomRid, sid);
+                    }
+                }
+            }
+        }
+
         // ── HAS_JOIN ──
         for (var e : str.getStatements().entrySet()) {
             for (JoinInfo j : e.getValue().getJoins()) {
@@ -1382,53 +1424,45 @@ class RemoteWriter {
             }
         }
 
-        // ── Constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, HAS_UNIQUE_KEY, HAS_CHECK,
-        //    IS_PK/FK/UNIQUE_COLUMN, REFERENCES_*) ──
+        // ── Constraint edges (F-1 folded: HAS_CONSTRAINT, CONSTRAINT_HAS_COLUMN, REFERENCES) ──
         for (var e : str.getConstraints().entrySet()) {
             ConstraintInfo c = e.getValue();
             String constraintRid = rid.constraints.get(e.getKey());
             if (constraintRid == null) continue;
+            String kind = c.getConstraintType();
 
-            // Table → Constraint edge
+            // Table ──HAS_CONSTRAINT(kind)──► Constraint
             String hostTableRid = rid.tables.get(c.getHostTableGeoid());
             if (hostTableRid != null) {
-                String tableEdge;
-                if      (c.isPrimaryKey())       tableEdge = "HAS_PRIMARY_KEY";
-                else if (c.isForeignKey())        tableEdge = "HAS_FOREIGN_KEY";
-                else if (c.isUniqueConstraint())  tableEdge = "HAS_UNIQUE_KEY";
-                else if (c.isCheckConstraint())   tableEdge = "HAS_CHECK";
-                else tableEdge = null;
-                if (tableEdge != null) edgeByRid(tableEdge, hostTableRid, constraintRid, sid);
+                edgeByRid("HAS_CONSTRAINT", hostTableRid, constraintRid, sid, "kind", kind);
             }
 
-            // Constraint → Column edges (PK, FK, UQ only)
-            String colEdge;
-            if      (c.isPrimaryKey())      colEdge = "IS_PK_COLUMN";
-            else if (c.isForeignKey())       colEdge = "IS_FK_COLUMN";
-            else if (c.isUniqueConstraint()) colEdge = "IS_UNIQUE_COLUMN";
-            else colEdge = null;
-            if (colEdge != null) {
+            // Constraint ──CONSTRAINT_HAS_COLUMN(kind, order_id)──► Column (PK, FK, UQ only)
+            if (!c.isCheckConstraint()) {
                 for (int i = 0; i < c.getColumnNames().size(); i++) {
                     String colGeoid = c.getHostTableGeoid() + "." + c.getColumnNames().get(i);
                     String colRid = rid.columns.get(colGeoid);
-                    if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                    if (colRid != null) edgeByRid("CONSTRAINT_HAS_COLUMN", constraintRid, colRid, sid,
+                            "kind", kind, "order_id", i + 1);
                 }
             }
 
-            // FK-specific: REFERENCES_TABLE + REFERENCES_COLUMN
+            // FK-specific: REFERENCES(target_kind, order_id)
             if (c.isForeignKey() && c.getRefTableGeoid() != null) {
                 String refTableRid = rid.tables.get(c.getRefTableGeoid());
-                if (refTableRid != null) edgeByRid("REFERENCES_TABLE", constraintRid, refTableRid, sid);
+                if (refTableRid != null) edgeByRid("REFERENCES", constraintRid, refTableRid, sid, "target_kind", "table");
 
                 for (int i = 0; i < c.getRefColumnNames().size(); i++) {
                     String refColGeoid = c.getRefTableGeoid() + "." + c.getRefColumnNames().get(i);
                     String refColRid = rid.columns.get(refColGeoid);
-                    if (refColRid != null) edgeByRid("REFERENCES_COLUMN", constraintRid, refColRid, sid, "order_id", i + 1);
+                    if (refColRid != null) edgeByRid("REFERENCES", constraintRid, refColRid, sid,
+                            "target_kind", "column", "order_id", i + 1);
                 }
             }
         }
 
-        // ── KI-DDL-1: DaliDDLModifiesTable / DaliDDLModifiesColumn ──
+        // ── KI-DDL-1: DDL_MODIFIES (F-2 folding, Sprint 0.1 — see EDGE_TAXONOMY_ANALYSIS §13.8 F-2) ──
+        // Was: DaliDDLModifiesTable, DaliDDLModifiesColumn — folded into DDL_MODIFIES with target_kind property.
         for (var e : str.getStatements().entrySet()) {
             StatementInfo ddlSi = e.getValue();
             if (!isDdl(ddlSi.getType())) continue;
@@ -1437,18 +1471,20 @@ class RemoteWriter {
             // DaliDDLStatement → DaliTable (target table of ALTER)
             for (String tGeoid : ddlSi.getTargetTables().keySet()) {
                 String tRid = rid.tables.get(tGeoid);
-                if (tRid != null) edgeByRid("DaliDDLModifiesTable", ddlRid, tRid, sid);
+                if (tRid != null) edgeByRid("DDL_MODIFIES", ddlRid, tRid, sid,
+                                             "target_kind", "table");
             }
             // DaliDDLStatement → DaliColumn (each ADD/MODIFY/DROP column)
             for (StatementInfo.AffectedColumnGeoid pair : ddlSi.getAffectedColumnGeoids()) {
                 String cRid = rid.columns.get(pair.geoid());
                 if (cRid != null)
-                    edgeByRid("DaliDDLModifiesColumn", ddlRid, cRid, sid,
+                    edgeByRid("DDL_MODIFIES", ddlRid, cRid, sid,
+                              "target_kind", "column",
                               "operation", pair.operation());
             }
         }
 
-        // ── KI-RETURN-1: HAS_RECORD_FIELD ──
+        // ── KI-RETURN-1: RECORD_HAS_FIELD (D-3: was HAS_RECORD_FIELD) ──
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recRid = rid.records.get(e.getKey());
@@ -1456,7 +1492,7 @@ class RemoteWriter {
             for (RecordInfo.FieldInfo fi : rec.getFieldInfos()) {
                 String fieldGeoid = rec.getGeoid() + ":" + fi.name();
                 String rfRid = rid.recordFields.get(fieldGeoid);
-                if (rfRid != null) edgeByRid("HAS_RECORD_FIELD", recRid, rfRid, sid);
+                if (rfRid != null) edgeByRid("RECORD_HAS_FIELD", recRid, rfRid, sid);
             }
         }
 
@@ -1527,7 +1563,7 @@ class RemoteWriter {
         }
 
 
-        // ── BULK_COLLECTS_INTO / RECORD_USED_IN / HAS_RECORD_FIELD (G6: DaliRecord edges) ──
+        // ── BULK_COLLECTS_INTO / RECORD_HAS_FIELD (G6: DaliRecord edges) ──
         for (var e : str.getRecords().entrySet()) {
             RecordInfo rec = e.getValue();
             String recRid = rid.records.get(rec.getGeoid());
@@ -1536,27 +1572,14 @@ class RemoteWriter {
             String srcStmtRid = rid.statements.get(rec.getSourceStatementGeoid());
             if (srcStmtRid != null)
                 edgeByRid("BULK_COLLECTS_INTO", srcStmtRid, recRid, sid);
-            // DaliRecord → HAS_RECORD_FIELD → DaliRecordField (one per named field)
+            // DaliRecord → RECORD_HAS_FIELD → DaliRecordField (D-3: was HAS_RECORD_FIELD)
             for (String fieldName : rec.getFields()) {
                 String fieldGeoid = rec.getGeoid() + ":" + fieldName;
                 String fieldRid = rid.recordFields.get(fieldGeoid);
                 if (fieldRid != null)
-                    edgeByRid("HAS_RECORD_FIELD", recRid, fieldRid, sid);
+                    edgeByRid("RECORD_HAS_FIELD", recRid, fieldRid, sid);
             }
-            // DaliRecord → RECORD_USED_IN → DaliStatement(INSERT) for each INSERT
-            // that references this record via an AffectedColumn with matching dataset_alias
-            for (var stmtEntry : str.getStatements().entrySet()) {
-                StatementInfo si = stmtEntry.getValue();
-                if (!"INSERT".equals(si.getType())) continue;
-                boolean usesRecord = si.getAffectedColumns().stream().anyMatch(
-                        ac -> rec.getVarName().equals(ac.get("dataset_alias")))
-                    || si.getBulkCollectSources().contains(rec.getVarName().toUpperCase());
-                if (usesRecord) {
-                    String insertRid = rid.statements.get(stmtEntry.getKey());
-                    if (insertRid != null)
-                        edgeByRid("RECORD_USED_IN", recRid, insertRid, sid);
-                }
-            }
+            // D-1 (Sprint 1.3): RECORD_USED_IN removed — reverse traversal via inE('BULK_COLLECTS_INTO')
         }
 
         // ── CALLS edges ──
@@ -1577,8 +1600,8 @@ class RemoteWriter {
                 // insert a reconstructed stub so the CALLS edge has a target.
                 if (calleeRid == null) {
                     String stubGeoid = "EXT:" + calleeName.toUpperCase();
-                    rcmd("INSERT INTO DaliRoutine SET session_id=?, routine_geoid=?, routine_name=?, routine_type=?, data_source=?",
-                            sid, stubGeoid, calleeName.toUpperCase(), "UNKNOWN", RECONSTRUCTED);
+                    rcmd("INSERT INTO DaliRoutine SET session_id=?, source_file=?, routine_geoid=?, routine_name=?, routine_type=?, data_source=?",
+                            sid, sourceFile, stubGeoid, calleeName.toUpperCase(), "UNKNOWN", RECONSTRUCTED);
                     try {
                         var rsStub = db.query("sql",
                                 "SELECT @rid AS rid FROM DaliRoutine WHERE routine_geoid = :g AND session_id = :s LIMIT 1",
@@ -1688,14 +1711,15 @@ class RemoteWriter {
                 if (!pool.hasColumnRid(cg)) {
                     boolean colMaster = isMasterTable(c.getTableGeoid(), str);
                     try {
-                        rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?",
+                        rcmd("INSERT INTO DaliColumn SET db_name=?, column_geoid=?, table_geoid=?, column_name=?, expression=?, alias=?, is_output=?, col_order=?, ordinal_position=?, used_in_statements=?, data_source=?, data_type=?, is_required=?, default_value=?, is_pk=?, is_fk=?, fk_ref_table=?, fk_ref_column=?, inferred=?, source_pass=?, suspicious=?",
                                 dbName, e.getKey(), c.getTableGeoid(), c.getColumnName(),
                                 c.getExpression(), c.getAlias(), c.isOutput(), c.getOrder(),
                                 c.getOrdinalPosition(),
                                 toJson(new ArrayList<>(c.getUsedInStatements())),
                                 colMaster ? MASTER : RECONSTRUCTED,
                                 c.getDataType(), c.isRequired(), c.getDefaultValue(),
-                                c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn());
+                                c.isPk(), c.isFk(), c.getFkRefTable(), c.getFkRefColumn(),
+                                c.isInferred(), c.getSourcePass(), c.isSuspicious());
                         pool.putColumnRid(cg, cg);
                         newColumnGeoids.add(e.getKey());
                     } catch (RuntimeException ex) {
@@ -1831,6 +1855,7 @@ class RemoteWriter {
                     if (schRid != null && tblRid != null)
                         edgeByRid("CONTAINS_TABLE", schRid, tblRid, sid);
                 }
+                // Step 1: New columns — standard path.
                 for (String colGeoid : adHoc.newColumnGeoids()) {
                     ColumnInfo c = str.getColumns().get(colGeoid);
                     if (c == null) continue;
@@ -1838,6 +1863,25 @@ class RemoteWriter {
                     String colRid = adHocRids.get(colGeoid);
                     if (tblRid != null && colRid != null)
                         edgeByRid("HAS_COLUMN", tblRid, colRid, sid);
+                }
+                // Step 2: Existing columns of newly-created tables.
+                // Mirrors namespace-mode Phase 3 Step 2: when a table is new but its
+                // columns already existed (DuplicatedKeyException), the batch factory
+                // skips them (canonicalRids contains the colGeoid) and Step 1 above
+                // also skips them (not in newColumnGeoids). Without this, those columns
+                // get NO HAS_COLUMN edge — the bug that repairHierarchyEdges() fixes.
+                if (!adHoc.newTableGeoids().isEmpty()) {
+                    Set<String> skipGeoids = new HashSet<>(adHoc.newColumnGeoids());
+                    for (String tblGeoid : adHoc.newTableGeoids()) {
+                        String tblRid = adHocRids.get(tblGeoid);
+                        if (tblRid == null) continue;
+                        String prefix = tblGeoid + ".";
+                        for (var e : adHocRids.entrySet()) {
+                            if (!skipGeoids.contains(e.getKey()) && e.getKey().startsWith(prefix)
+                                    && str.getColumns().containsKey(e.getKey()))
+                                edgeByRid("HAS_COLUMN", tblRid, e.getValue(), sid);
+                        }
+                    }
                 }
             }
 
@@ -1885,8 +1929,7 @@ class RemoteWriter {
                 builder.vertexCount(), builder.edgeCount(), builder.droppedEdgeCount(), payload.length());
         client.send(payload, sid);
 
-        // Post-batch: constraint edges (HAS_PRIMARY_KEY, HAS_FOREIGN_KEY, IS_PK_COLUMN,
-        // IS_FK_COLUMN, REFERENCES_TABLE, REFERENCES_COLUMN).
+        // Post-batch: constraint edges (F-1 folded: HAS_CONSTRAINT, CONSTRAINT_HAS_COLUMN, REFERENCES).
         // Must run AFTER client.send() because DaliPrimaryKey/DaliForeignKey vertices
         // are inserted by the batch and their RIDs are only available afterward.
         if (str.getConstraints() != null && !str.getConstraints().isEmpty()) {
@@ -1901,36 +1944,29 @@ class RemoteWriter {
                 ConstraintInfo c = e.getValue();
                 String constraintRid = constraintRids.get(e.getKey());
                 if (constraintRid == null) continue;
-                // Table → Constraint edge
+                String kind = c.getConstraintType();
+
+                // Table ──HAS_CONSTRAINT(kind)──► Constraint
                 String hostRid = tblRids.get(c.getHostTableGeoid());
                 if (hostRid != null) {
-                    String tableEdge;
-                    if      (c.isPrimaryKey())       tableEdge = "HAS_PRIMARY_KEY";
-                    else if (c.isForeignKey())        tableEdge = "HAS_FOREIGN_KEY";
-                    else if (c.isUniqueConstraint())  tableEdge = "HAS_UNIQUE_KEY";
-                    else if (c.isCheckConstraint())   tableEdge = "HAS_CHECK";
-                    else tableEdge = null;
-                    if (tableEdge != null) edgeByRid(tableEdge, hostRid, constraintRid, sid);
+                    edgeByRid("HAS_CONSTRAINT", hostRid, constraintRid, sid, "kind", kind);
                 }
-                // Constraint → Column edges (PK, FK, UQ only)
-                String colEdge;
-                if      (c.isPrimaryKey())      colEdge = "IS_PK_COLUMN";
-                else if (c.isForeignKey())       colEdge = "IS_FK_COLUMN";
-                else if (c.isUniqueConstraint()) colEdge = "IS_UNIQUE_COLUMN";
-                else colEdge = null;
-                if (colEdge != null) {
+                // Constraint ──CONSTRAINT_HAS_COLUMN(kind, order_id)──► Column (PK, FK, UQ only)
+                if (!c.isCheckConstraint()) {
                     for (int i = 0; i < c.getColumnNames().size(); i++) {
                         String colRid = colRids.get(c.getHostTableGeoid() + "." + c.getColumnNames().get(i));
-                        if (colRid != null) edgeByRid(colEdge, constraintRid, colRid, sid, "order_id", i + 1);
+                        if (colRid != null) edgeByRid("CONSTRAINT_HAS_COLUMN", constraintRid, colRid, sid,
+                                "kind", kind, "order_id", i + 1);
                     }
                 }
-                // REFERENCES_TABLE + REFERENCES_COLUMN (FK only)
+                // FK-specific: REFERENCES(target_kind, order_id)
                 if (c.isForeignKey() && c.getRefTableGeoid() != null) {
                     String refTblRid = tblRids.get(c.getRefTableGeoid());
-                    if (refTblRid != null) edgeByRid("REFERENCES_TABLE", constraintRid, refTblRid, sid);
+                    if (refTblRid != null) edgeByRid("REFERENCES", constraintRid, refTblRid, sid, "target_kind", "table");
                     for (int i = 0; i < c.getRefColumnNames().size(); i++) {
                         String refColRid = colRids.get(c.getRefTableGeoid() + "." + c.getRefColumnNames().get(i));
-                        if (refColRid != null) edgeByRid("REFERENCES_COLUMN", constraintRid, refColRid, sid, "order_id", i + 1);
+                        if (refColRid != null) edgeByRid("REFERENCES", constraintRid, refColRid, sid,
+                                "target_kind", "column", "order_id", i + 1);
                     }
                 }
             }
@@ -1943,14 +1979,15 @@ class RemoteWriter {
         // v28: element_rid = @rid of DaliStatement — resolve after batch commit (vertices are in DB).
         // One bulk RID query resolves all stmt_geoid → @rid before the per-snippet loop.
         Map<String, String> batchSnippetRids = buildRidMap("DaliStatement", "stmt_geoid", sid);
+        final String batchSourceFile = result.getFilePath();
         for (var e : str.getStatements().entrySet()) {
             String raw = truncate(e.getValue().getSnippet(), SNIPPET_MAX);
             if (raw == null) continue;
             String stmtGeoid  = e.getKey();
             String elementRid = batchSnippetRids.get(stmtGeoid);
-            rcmd("INSERT INTO DaliSnippet SET session_id=?, stmt_geoid=?, snippet=?, snippet_hash=?," +
+            rcmd("INSERT INTO DaliSnippet SET session_id=?, source_file=?, stmt_geoid=?, snippet=?, snippet_hash=?," +
                     " line_start=?, line_end=?, element_rid=?, element_type=?",
-                    sid, stmtGeoid, raw, md5(raw),
+                    sid, batchSourceFile, stmtGeoid, raw, md5(raw),
                     e.getValue().getLineStart(), e.getValue().getLineEnd(),
                     elementRid, elementRid != null ? "DaliStatement" : null);
         }

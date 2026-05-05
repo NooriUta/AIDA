@@ -50,6 +50,14 @@ class AnalyticsResourceTest {
                 level, sessionId, null, null, 0, payload);
     }
 
+    private static HeimdallEvent eventWithDuration(String eventType, EventLevel level,
+                                                   String sessionId, long durationMs,
+                                                   Map<String, Object> payload) {
+        return new HeimdallEvent(
+                System.currentTimeMillis(), "verdandi", eventType,
+                level, sessionId, null, null, durationMs, payload);
+    }
+
     // ── tests ─────────────────────────────────────────────────────────────────
 
     /** Empty aggregator → 200 with all-zero summary. */
@@ -72,11 +80,11 @@ class AnalyticsResourceTest {
     /** Events recorded → 200 with correct level counts and session count. */
     @Test
     void withEvents_returns200WithCorrectCounts() {
-        // 2 LOOM_NODE_SELECTED clicks on same node
+        // 2 LOOM_NODE_SELECTED clicks on same node (Verdandi sends camelCase keys)
         aggregator.record(event("LOOM_NODE_SELECTED", EventLevel.INFO, "s1",
-                Map.of("node_id", "table_xyz", "node_type", "DaliTable")));
+                Map.of("nodeId", "table_xyz", "nodeType", "DaliTable")));
         aggregator.record(event("LOOM_NODE_SELECTED", EventLevel.INFO, "s1",
-                Map.of("node_id", "table_xyz", "node_type", "DaliTable")));
+                Map.of("nodeId", "table_xyz", "nodeType", "DaliTable")));
         // 1 WARN + 1 ERROR from different sessions
         aggregator.record(event("CYPHER_QUERY_SLOW", EventLevel.WARN, "s2",
                 Map.of("duration_ms", 700L)));
@@ -100,8 +108,9 @@ class AnalyticsResourceTest {
     /** LOOM_VIEW_SLOW event → appears in slowRenders list. */
     @Test
     void slowRenderEvent_appearsInSummary() {
-        aggregator.record(event("LOOM_VIEW_SLOW", EventLevel.WARN, "s1",
-                Map.of("nodes_count", 2000, "render_time_ms", 1500L)));
+        // Verdandi sends nodeCount in payload, renderMs as top-level durationMs
+        aggregator.record(eventWithDuration("LOOM_VIEW_SLOW", EventLevel.WARN, "s1",
+                1500L, Map.of("nodeCount", 2000)));
 
         Response resp = resource.getUxSummary();
 

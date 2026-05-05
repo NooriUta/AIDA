@@ -113,7 +113,7 @@ class EmbeddedVsBatchIT {
     private static final String[] EDGE_TYPES_TOLERANCE = {
         "READS_FROM", "WRITES_TO", "HAS_COLUMN", "HAS_ATOM", "FILTER_FLOW",
         "BELONGS_TO_SESSION",
-        "BULK_COLLECTS_INTO", "RECORD_USED_IN"
+        "BULK_COLLECTS_INTO"
     };
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -280,7 +280,7 @@ class EmbeddedVsBatchIT {
 
     /**
      * Verifies that a BULK COLLECT INTO pattern produces a DaliRecord vertex
-     * and the BULK_COLLECTS_INTO / RECORD_USED_IN edges in both REMOTE and REMOTE_BATCH.
+     * and the BULK_COLLECTS_INTO edge in both REMOTE and REMOTE_BATCH.
      */
     @Test
     void g6_daliRecord_appearsInBothRemoteAndBatch() throws Exception {
@@ -330,13 +330,13 @@ class EmbeddedVsBatchIT {
         assertEquals(remoteRec, batchRec,
                 "REMOTE and REMOTE_BATCH must produce the same DaliRecord count");
 
-        // Verify BULK_COLLECTS_INTO and RECORD_USED_IN edges exist in BATCH DB
+        // Verify BULK_COLLECTS_INTO and RECORD_HAS_FIELD edges exist in BATCH DB
         long bulkEdge = scalarRemote(DB_BATCH, "SELECT count(*) AS cnt FROM BULK_COLLECTS_INTO");
-        long usedEdge = scalarRemote(DB_BATCH, "SELECT count(*) AS cnt FROM RECORD_USED_IN");
-        System.out.printf("G6 edges (BATCH): BULK_COLLECTS_INTO=%d  RECORD_USED_IN=%d%n",
-                bulkEdge, usedEdge);
+        long recFieldEdge = scalarRemote(DB_BATCH, "SELECT count(*) AS cnt FROM RECORD_HAS_FIELD");
+        System.out.printf("G6 edges (BATCH): BULK_COLLECTS_INTO=%d  RECORD_HAS_FIELD=%d%n",
+                bulkEdge, recFieldEdge);
         assertTrue(bulkEdge > 0, "REMOTE_BATCH: BULK_COLLECTS_INTO edge must be present");
-        assertTrue(usedEdge > 0, "REMOTE_BATCH: RECORD_USED_IN edge must be present");
+        assertTrue(recFieldEdge > 0, "REMOTE_BATCH: RECORD_HAS_FIELD edge must be present");
     }
 
     // ─── Write helpers ───────────────────────────────────────────────────────

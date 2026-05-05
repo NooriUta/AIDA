@@ -41,7 +41,7 @@ export default function TenantsPage() {
   const handleStatus = (v: TenantStatus | '') => { setStatus(v); setPage(0); };
 
   return (
-    <div style={{ padding: '24px', maxWidth: 960 }}>
+    <div className="page-content" style={{ padding: '24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
         <h2 style={{ margin: 0 }}>{t('tenants.heading', 'Tenants')}</h2>
         <div style={{ display: 'flex', gap: 8 }}>

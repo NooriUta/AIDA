@@ -329,6 +329,60 @@ class PlTypeObjectPipelinedTest {
         assertTrue(hasPrice,  "UNIT_PRICE must be injected");
     }
 
+    // ── TC-HOUND-PT-13b: same-package bare TABLE(func()) — mirrors E2E fixture ───���────
+
+    private static final String TABLE_FUNC_SAME_PACKAGE = """
+            CREATE OR REPLACE TYPE TESTSCHEMA.T_LINE_REC AS OBJECT (
+                item_id    NUMBER(10),
+                qty        NUMBER(12,3),
+                unit_price NUMBER(18,4)
+            );
+            /
+            CREATE OR REPLACE TYPE TESTSCHEMA.T_LINE_LIST AS TABLE OF TESTSCHEMA.T_LINE_REC;
+            /
+            CREATE OR REPLACE PACKAGE PKG_PIPE_TEST AS
+                FUNCTION GET_LINES(p_order_id IN NUMBER) RETURN TESTSCHEMA.T_LINE_LIST PIPELINED;
+            END PKG_PIPE_TEST;
+            /
+            CREATE OR REPLACE PACKAGE BODY PKG_PIPE_TEST AS
+                FUNCTION GET_LINES(p_order_id IN NUMBER) RETURN TESTSCHEMA.T_LINE_LIST PIPELINED
+                IS
+                    CURSOR c IS SELECT item_id, qty, unit_price FROM ORDER_LINES WHERE order_id = p_order_id;
+                BEGIN
+                    FOR r IN c LOOP
+                        PIPE ROW (TESTSCHEMA.T_LINE_REC(item_id => r.item_id, qty => r.qty, unit_price => r.unit_price));
+                    END LOOP;
+                END GET_LINES;
+
+                PROCEDURE LOAD_SUMMARY(p_order_id IN NUMBER) IS
+                BEGIN
+                    INSERT INTO ORDER_SUMMARY (item_id, total_qty, total_price)
+                    SELECT t.item_id, SUM(t.qty), SUM(t.unit_price)
+                      FROM TABLE(GET_LINES(p_order_id)) t
+                     GROUP BY t.item_id;
+                END LOAD_SUMMARY;
+            END PKG_PIPE_TEST;
+            """;
+
+    @Test
+    void tc13b_tableFunction_samePackageBare_injectsColumns() {
+        var engine = parse(TABLE_FUNC_SAME_PACKAGE);
+        Map<String, ColumnInfo> cols = engine.getBuilder().getColumns();
+
+        boolean hasItemId = cols.containsKey("FUNC_TABLE__GET_LINES.ITEM_ID");
+        boolean hasQty    = cols.containsKey("FUNC_TABLE__GET_LINES.QTY");
+        boolean hasPrice  = cols.containsKey("FUNC_TABLE__GET_LINES.UNIT_PRICE");
+
+        if (!hasItemId) {
+            // Dump all column keys for debugging
+            System.err.println("ALL COLUMNS: " + cols.keySet());
+        }
+
+        assertTrue(hasItemId, "ITEM_ID must be injected into FUNC_TABLE__GET_LINES from PIPELINED return type");
+        assertTrue(hasQty,    "QTY must be injected into FUNC_TABLE__GET_LINES");
+        assertTrue(hasPrice,  "UNIT_PRICE must be injected into FUNC_TABLE__GET_LINES");
+    }
+
     // ── TC-HOUND-PT-14: CAST(COLLECT(col) AS type) → RETURNS_INTO edge ──────────────────
 
     private static final String CAST_COLLECT_SQL = """
