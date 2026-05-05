@@ -18,11 +18,11 @@ repositories { mavenCentral() }
 // CVE-2025-67030 (plexus-utils HIGH), jackson DoS advisory, logback CVE-2025-11226 + CVE-2026-1225.
 configurations.all {
     resolutionStrategy {
-        force 'org.codehaus.plexus:plexus-utils:4.0.2'
+        force 'org.codehaus.plexus:plexus-utils:4.0.3'
         force 'com.fasterxml.jackson.core:jackson-databind:2.21.2'
         force 'com.fasterxml.jackson.core:jackson-core:2.21.2'
-        force 'ch.qos.logback:logback-core:1.5.19'
-        force 'ch.qos.logback:logback-classic:1.5.19'
+        force 'ch.qos.logback:logback-core:1.5.25'
+        force 'ch.qos.logback:logback-classic:1.5.25'
     }
 }
 
