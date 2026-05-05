@@ -1830,6 +1830,7 @@ class RemoteWriter {
                     if (schRid != null && tblRid != null)
                         edgeByRid("CONTAINS_TABLE", schRid, tblRid, sid);
                 }
+                // Step 1: New columns — standard path.
                 for (String colGeoid : adHoc.newColumnGeoids()) {
                     ColumnInfo c = str.getColumns().get(colGeoid);
                     if (c == null) continue;
@@ -1837,6 +1838,25 @@ class RemoteWriter {
                     String colRid = adHocRids.get(colGeoid);
                     if (tblRid != null && colRid != null)
                         edgeByRid("HAS_COLUMN", tblRid, colRid, sid);
+                }
+                // Step 2: Existing columns of newly-created tables.
+                // Mirrors namespace-mode Phase 3 Step 2: when a table is new but its
+                // columns already existed (DuplicatedKeyException), the batch factory
+                // skips them (canonicalRids contains the colGeoid) and Step 1 above
+                // also skips them (not in newColumnGeoids). Without this, those columns
+                // get NO HAS_COLUMN edge — the bug that repairHierarchyEdges() fixes.
+                if (!adHoc.newTableGeoids().isEmpty()) {
+                    Set<String> skipGeoids = new HashSet<>(adHoc.newColumnGeoids());
+                    for (String tblGeoid : adHoc.newTableGeoids()) {
+                        String tblRid = adHocRids.get(tblGeoid);
+                        if (tblRid == null) continue;
+                        String prefix = tblGeoid + ".";
+                        for (var e : adHocRids.entrySet()) {
+                            if (!skipGeoids.contains(e.getKey()) && e.getKey().startsWith(prefix)
+                                    && str.getColumns().containsKey(e.getKey()))
+                                edgeByRid("HAS_COLUMN", tblRid, e.getValue(), sid);
+                        }
+                    }
                 }
             }
 

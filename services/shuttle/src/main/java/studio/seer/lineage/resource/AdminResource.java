@@ -3,7 +3,10 @@ package studio.seer.lineage.resource;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.graphql.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import studio.seer.lineage.client.ArcadeGateway;
+import studio.seer.lineage.model.RepairResult;
 import studio.seer.lineage.model.SearchResult;
 import studio.seer.lineage.model.TenantStats;
 import studio.seer.lineage.security.SeerIdentity;
@@ -22,6 +25,7 @@ import java.util.Map;
 @GraphQLApi
 public class AdminResource {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminResource.class);
     private static final String FRIGG_TENANTS_DB = "frigg-tenants";
 
     @Inject SeerIdentity       identity;
@@ -88,6 +92,116 @@ public class AdminResource {
                 });
     }
 
+    // ── repairHierarchyEdges ─────────────────────────────────────────────────
+
+    @Mutation("repairHierarchyEdges")
+    @Description("Repair missing CONTAINS_TABLE and HAS_COLUMN edges for the caller's tenant. " +
+                 "dryRun=true only counts orphans without creating edges. Role: super-admin")
+    public Uni<RepairResult> repairHierarchyEdges(
+            @Name("dryRun") @DefaultValue("true") boolean dryRun)
+            throws GraphQLException {
+
+        requireSuperadmin();
+
+        String alias = identity.tenantAlias();
+        String db    = lineageRegistry.resourceFor(alias).databaseName();
+        log.info("[ADMIN] repairHierarchyEdges(dryRun={}) for tenant={} db={}", dryRun, alias, db);
+
+        List<String> errors = new ArrayList<>();
+
+        // ── 1. CONTAINS_TABLE: find DaliTable without incoming CONTAINS_TABLE edge
+        Uni<Integer> containsTableUni = arcade.sqlIn(db,
+                "SELECT @rid.asString() AS trid, schema_geoid FROM DaliTable " +
+                "WHERE IN('CONTAINS_TABLE').size() = 0", Map.of())
+            .flatMap(orphanTables -> {
+                if (orphanTables.isEmpty()) return Uni.createFrom().item(0);
+
+                List<Uni<Integer>> repairs = new ArrayList<>();
+                for (Map<String, Object> row : orphanTables) {
+                    String tRid     = str(row, "trid");
+                    String schGeoid = str(row, "schema_geoid");
+                    if (tRid == null || schGeoid == null) continue;
+
+                    if (dryRun) {
+                        repairs.add(Uni.createFrom().item(1));
+                    } else {
+                        repairs.add(
+                            arcade.sqlIn(db,
+                                "SELECT @rid.asString() AS srid FROM DaliSchema WHERE schema_geoid = :sg",
+                                Map.of("sg", schGeoid))
+                            .flatMap(schemas -> {
+                                if (schemas.isEmpty()) return Uni.createFrom().item(0);
+                                String sRid = str(schemas.get(0), "srid");
+                                if (sRid == null) return Uni.createFrom().item(0);
+                                return arcade.sqlIn(db,
+                                    "CREATE EDGE CONTAINS_TABLE FROM " + sRid + " TO " + tRid +
+                                    " SET session_id = 'admin-repair'", Map.of())
+                                    .map(__ -> 1)
+                                    .onFailure().recoverWithUni(ex -> {
+                                        errors.add("CONTAINS_TABLE " + sRid + "→" + tRid + ": " + ex.getMessage());
+                                        return Uni.createFrom().item(0);
+                                    });
+                            })
+                        );
+                    }
+                }
+                if (repairs.isEmpty()) return Uni.createFrom().item(0);
+                return Uni.join().all(repairs).andFailFast()
+                        .map(list -> list.stream().mapToInt(Integer::intValue).sum());
+            });
+
+        // ── 2. HAS_COLUMN: find DaliColumn without incoming HAS_COLUMN edge
+        Uni<Integer> hasColumnUni = arcade.sqlIn(db,
+                "SELECT @rid.asString() AS crid, table_geoid FROM DaliColumn " +
+                "WHERE IN('HAS_COLUMN').size() = 0", Map.of())
+            .flatMap(orphanCols -> {
+                if (orphanCols.isEmpty()) return Uni.createFrom().item(0);
+
+                List<Uni<Integer>> repairs = new ArrayList<>();
+                for (Map<String, Object> row : orphanCols) {
+                    String cRid     = str(row, "crid");
+                    String tblGeoid = str(row, "table_geoid");
+                    if (cRid == null || tblGeoid == null) continue;
+
+                    if (dryRun) {
+                        repairs.add(Uni.createFrom().item(1));
+                    } else {
+                        repairs.add(
+                            arcade.sqlIn(db,
+                                "SELECT @rid.asString() AS trid FROM DaliTable WHERE table_geoid = :tg",
+                                Map.of("tg", tblGeoid))
+                            .flatMap(tables -> {
+                                if (tables.isEmpty()) return Uni.createFrom().item(0);
+                                String tRid = str(tables.get(0), "trid");
+                                if (tRid == null) return Uni.createFrom().item(0);
+                                return arcade.sqlIn(db,
+                                    "CREATE EDGE HAS_COLUMN FROM " + tRid + " TO " + cRid +
+                                    " SET session_id = 'admin-repair'", Map.of())
+                                    .map(__ -> 1)
+                                    .onFailure().recoverWithUni(ex -> {
+                                        errors.add("HAS_COLUMN " + tRid + "→" + cRid + ": " + ex.getMessage());
+                                        return Uni.createFrom().item(0);
+                                    });
+                            })
+                        );
+                    }
+                }
+                if (repairs.isEmpty()) return Uni.createFrom().item(0);
+                return Uni.join().all(repairs).andFailFast()
+                        .map(list -> list.stream().mapToInt(Integer::intValue).sum());
+            });
+
+        return Uni.combine().all().unis(containsTableUni, hasColumnUni)
+                .asTuple()
+                .map(t -> {
+                    int ct = t.getItem1();
+                    int hc = t.getItem2();
+                    log.info("[ADMIN] repairHierarchyEdges done — CONTAINS_TABLE: {}, HAS_COLUMN: {}, dryRun={}",
+                             ct, hc, dryRun);
+                    return new RepairResult(dryRun, ct, hc, ct + hc, errors);
+                });
+    }
+
     // ── internal ──────────────────────────────────────────────────────────────
 
     private void requireSuperadmin() throws GraphQLException {
@@ -134,5 +248,10 @@ public class AdminResource {
         if (v == null) return 0L;
         if (v instanceof Number n) return n.longValue();
         try { return Long.parseLong(v.toString()); } catch (NumberFormatException e) { return 0L; }
+    }
+
+    private static String str(Map<String, Object> row, String key) {
+        Object v = row.get(key);
+        return v == null ? null : v.toString();
     }
 }

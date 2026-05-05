@@ -1270,15 +1270,32 @@ public abstract class BaseSemanticListener {
         String tableGeoid = (String) current.get("ddl_table_geoid");
         if (tableGeoid == null) return;
 
-        // Resolve referenced table geoid using the same logic as initTable
+        // Resolve referenced table geoid — reconstruct the referenced table (and columns)
+        // just like DML statements do, so FK targets appear as DaliTable/DaliColumn in the graph.
         String refTableGeoid = null;
         if (refTableRaw != null && !refTableRaw.isBlank()) {
             String clean = cleanIdentifier(refTableRaw);
             if (clean != null) {
-                if (!clean.contains(".") && currentSchema() != null) {
-                    clean = currentSchema() + "." + clean;
+                String schemaForRef = null;
+                String tableNameForRef = clean;
+                if (clean.contains(".")) {
+                    int dot = clean.lastIndexOf('.');
+                    schemaForRef = clean.substring(0, dot);
+                    tableNameForRef = clean.substring(dot + 1);
+                } else if (currentSchema() != null) {
+                    schemaForRef = currentSchema();
                 }
-                refTableGeoid = clean;
+                // Reconstruct the referenced table (creates DaliTable if absent)
+                refTableGeoid = engine.getBuilder().ensureTable(tableNameForRef, schemaForRef);
+            }
+        }
+
+        // Reconstruct referenced columns on the target table
+        if (refTableGeoid != null && refColumns != null) {
+            for (String refCol : refColumns) {
+                if (refCol != null && !refCol.isBlank()) {
+                    engine.getBuilder().addColumn(refTableGeoid, refCol.toUpperCase(), null, null);
+                }
             }
         }
 
