@@ -99,7 +99,11 @@ export function applyTableLevelView(
 ): Graph {
   if (!tableLevelView || viewLevel === 'L1') return graph;
   return {
-    nodes: graph.nodes.map((n) => ({ ...n, data: { ...n.data, columns: [] } })),
+    nodes: graph.nodes.map((n) => {
+      const cols = n.data.columns;
+      if (!cols || cols.length === 0) return n;
+      return { ...n, data: { ...n.data, columns: [], _columnCount: cols.length } };
+    }),
     edges: graph.edges.filter((e) => !COLUMN_EDGE_TYPES.has(e.data?.edgeType as string)),
   };
 }

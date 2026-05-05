@@ -83,6 +83,7 @@ public abstract class BaseSemanticListener {
         current.put("is_union", false);
         current.put("Merge_insert_part", false);
         current.put("Merge_update_part", false);
+        current.put("merge_insert_col_list_active", false);
         current.put("Values_clause", false);
         current.put("Values_clause_cnt", 0);
         current.put("in_join_context", false);
@@ -120,6 +121,7 @@ public abstract class BaseSemanticListener {
     public boolean isInJoinContext() { return Boolean.TRUE.equals(current.get("in_join_context")); }
     public boolean isMergeInsert()   { return Boolean.TRUE.equals(current.get("Merge_insert_part")); }
     public boolean isMergeUpdate()   { return Boolean.TRUE.equals(current.get("Merge_update_part")); }
+    public boolean isMergeInsertColListActive() { return Boolean.TRUE.equals(current.get("merge_insert_col_list_active")); }
     public boolean isValuesClause()  { return Boolean.TRUE.equals(current.get("Values_clause")); }
 
     // Методы-сеттеры для PlSqlSemanticListener (вместо прямого current.put)
@@ -686,10 +688,20 @@ public abstract class BaseSemanticListener {
     }
 
     public void onColumnRef(String columnName, int line, int col, int endLine) {
+        // G3-FIX: MERGE INSERT column list — resolve to target table, not as unattached atom
+        if (isMergeInsertColListActive()) {
+            engine.onMergeInsertColRef(columnName, line, col, endLine);
+            return;
+        }
         engine.onColumnRef(columnName, line, col, endLine);
     }
 
     public void onColumnRef(String columnName, int line, int endLine) {
+        // G3-FIX: MERGE INSERT column list — resolve to target table
+        if (isMergeInsertColListActive()) {
+            engine.onMergeInsertColRef(columnName, line, 0, endLine);
+            return;
+        }
         engine.onColumnRef(columnName, line, 0, endLine);
     }
 
@@ -787,7 +799,10 @@ public abstract class BaseSemanticListener {
     public void onAnalyticEnter()        { engine.flagCurrentStatementWindow(); }
 
     public void onMergeInsertEnter() { current.put("Merge_insert_part", true); }
-    public void onMergeInsertExit()  { current.put("Merge_insert_part", false); }
+    public void onMergeInsertExit()  {
+        current.put("Merge_insert_part", false);
+        current.put("merge_insert_col_list_active", false);  // safety reset
+    }
     public void onMergeUpdateEnter() { current.put("Merge_update_part", true); }
     public void onMergeUpdateExit()  { current.put("Merge_update_part", false); }
 
@@ -839,14 +854,20 @@ public abstract class BaseSemanticListener {
     /**
      * G3: Called at enterMerge_insert_clause when a column list (col1, col2, …) is present.
      * Registers each column as a MERGE_INSERT_TARGET affected column.
+     * Also activates merge_insert_col_list_active flag so that subsequent column_name nodes
+     * (walked by ANTLR inside paren_column_list) are auto-resolved to the MERGE target table.
      */
     public void onMergeInsertColumns(List<String> columnNames) {
         engine.onMergeInsertColumns(columnNames);
+        // Activate flag: column_name nodes inside paren_column_list will be resolved to target table
+        current.put("merge_insert_col_list_active", true);
     }
 
     public void onValuesClauseEnter() {
         current.put("Values_clause", true);
         current.put("Values_clause_cnt", 0);
+        // Deactivate merge insert column list flag — VALUES clause follows paren_column_list
+        current.put("merge_insert_col_list_active", false);
         engine.setValuesClause(true);   // propagate to ScopeContext so atoms get parent_context="VALUES"
     }
     public void onValuesClauseExit() {
@@ -1270,15 +1291,32 @@ public abstract class BaseSemanticListener {
         String tableGeoid = (String) current.get("ddl_table_geoid");
         if (tableGeoid == null) return;
 
-        // Resolve referenced table geoid using the same logic as initTable
+        // Resolve referenced table geoid — reconstruct the referenced table (and columns)
+        // just like DML statements do, so FK targets appear as DaliTable/DaliColumn in the graph.
         String refTableGeoid = null;
         if (refTableRaw != null && !refTableRaw.isBlank()) {
             String clean = cleanIdentifier(refTableRaw);
             if (clean != null) {
-                if (!clean.contains(".") && currentSchema() != null) {
-                    clean = currentSchema() + "." + clean;
+                String schemaForRef = null;
+                String tableNameForRef = clean;
+                if (clean.contains(".")) {
+                    int dot = clean.lastIndexOf('.');
+                    schemaForRef = clean.substring(0, dot);
+                    tableNameForRef = clean.substring(dot + 1);
+                } else if (currentSchema() != null) {
+                    schemaForRef = currentSchema();
                 }
-                refTableGeoid = clean;
+                // Reconstruct the referenced table (creates DaliTable if absent)
+                refTableGeoid = engine.getBuilder().ensureTable(tableNameForRef, schemaForRef);
+            }
+        }
+
+        // Reconstruct referenced columns on the target table
+        if (refTableGeoid != null && refColumns != null) {
+            for (String refCol : refColumns) {
+                if (refCol != null && !refCol.isBlank()) {
+                    engine.getBuilder().addColumn(refTableGeoid, refCol.toUpperCase(), null, null);
+                }
             }
         }
 

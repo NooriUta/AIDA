@@ -61,6 +61,10 @@ export function useDisplayGraph(rawGraph: Graph | null) {
     g = applyHiddenNodes(g, hiddenNodeIds);
     // M-5: auto-enable tableLevelView for large graphs (hides ~17K cf-edges → ~3.5K)
     const effectiveTLV = g.nodes.length > LAYOUT.TABLE_LEVEL_THRESHOLD ? true : filter.tableLevelView;
+    if (effectiveTLV && viewLevel !== 'L1') {
+      const withCols = g.nodes.filter((n) => n.data.columns && (n.data.columns as unknown[]).length > 0).length;
+      console.info(`[LOOM] displayGraph TLV active — nodeCount=${g.nodes.length} threshold=${LAYOUT.TABLE_LEVEL_THRESHOLD} filter.tableLevelView=${filter.tableLevelView} nodesWithColumns=${withCols}`);
+    }
     g = applyTableLevelView(g, viewLevel, effectiveTLV);
     g = applyDirectionFilter(g, viewLevel, filter.upstream, filter.downstream);
     g = applyCfEdgeToggle(g, viewLevel, filter.showCfEdges, effectiveTLV);

@@ -20,8 +20,11 @@ public class StatementInfo {
     private final Map<String, Map<String, Object>> sourceTables = new LinkedHashMap<>();
     private final Map<String, Map<String, Object>> targetTables = new LinkedHashMap<>();
 
-    // Source subqueries (geoid → SubqueryUsage)
+    // Source subqueries (geoid → SubqueryUsage) — includes ALL CTEs defined + referenced
     private final Map<String, SubqueryUsage> sourceSubqueries = new LinkedHashMap<>();
+
+    // G3-FIX: Only subqueries/CTEs actually referenced in FROM clause (not CTE definitions)
+    private final Set<String> fromReferencedSources = new LinkedHashSet<>();
 
     // Child statements (subqueries, CTEs)
     private final List<String> childStatements = new ArrayList<>();
@@ -176,6 +179,14 @@ public class StatementInfo {
             sourceSubqueries.put(subqueryGeoid, new SubqueryUsage(subqueryStmt, alias, "SUBQUERY"));
         }
     }
+
+    /** G3-FIX: Mark a subquery/CTE as actually referenced in the FROM clause. */
+    public void addFromReferencedSource(String subqueryGeoid) {
+        if (subqueryGeoid != null) fromReferencedSources.add(subqueryGeoid);
+    }
+
+    /** G3-FIX: Get only the subqueries/CTEs that appear in FROM (not all CTE definitions). */
+    public Set<String> getFromReferencedSources() { return fromReferencedSources; }
 
     public void addChildStatement(String childGeoid) {
         if (!childStatements.contains(childGeoid)) {

@@ -74,6 +74,7 @@ export function useGraphData() {
     for (const n of expansionGqlNodes) {
       if (ENRICHABLE.has(n.type)) ids.add(n.id);
     }
+    console.info(`[LOOM] stmtIds collection — ${ids.size} enrichable IDs from ${srcData?.nodes?.length ?? 0} total nodes`);
     return [...ids];
   }, [needsEnrichment, viewLevel, filter.routineAggregate, aggQ.data, exploreQ.data, expansionGqlNodes]);
 
@@ -134,8 +135,11 @@ export function useGraphData() {
 
     // Second-pass stmt column enrichment: apply before ELK so node heights are correct.
     // Applies at L2 (both AGG and EXP) and L3 EXP (routineAggregate=false).
+    console.info(`[LOOM] stmtCols gate — needsEnrichment=${needsEnrichment} hasData=${!!stmtColsQ.data} edges=${stmtColsQ.data?.edges?.length ?? 'n/a'} nodes=${stmtColsQ.data?.nodes?.length ?? 'n/a'} isLoading=${stmtColsQ.isLoading} isFetching=${stmtColsQ.isFetching} stmtIds=${stmtIds.length}`);
     if (needsEnrichment && stmtColsQ.data && stmtColsQ.data.edges.length > 0) {
       const { nodes: enrichedNodes, cfEdges } = applyStmtColumns(base.nodes, base.edges, stmtColsQ.data);
+      const withCols = enrichedNodes.filter((n) => n.data.columns && (n.data.columns as unknown[]).length > 0).length;
+      console.info(`[LOOM] stmtColumns enrichment — base: ${base.edges.length} edges, +${cfEdges.length} cfEdges = ${base.edges.length + cfEdges.length} total, nodesWithColumns=${withCols}`);
       base = { nodes: enrichedNodes, edges: [...base.edges, ...cfEdges] };
     }
 
