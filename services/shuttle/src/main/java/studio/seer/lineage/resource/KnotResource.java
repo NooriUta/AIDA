@@ -43,14 +43,19 @@ public class KnotResource {
     public Uni<KnotReport> knotReport(
         @Name("sessionId")
         @Description("session_id property of the DaliSession vertex")
-        String sessionId
+        String sessionId,
+        @Name("sourceFile") @DefaultValue("")
+        @Description("Optional source_file filter for per-file view in batch sessions (G4). Empty = all files.")
+        String sourceFile
     ) {
         long start = System.currentTimeMillis();
+        String effectiveFile = (sourceFile != null && !sourceFile.isBlank()) ? sourceFile : null;
         heimdall.emit(EventType.REQUEST_RECEIVED, EventLevel.INFO,
                 null, null, 0,
                 Map.of("op", "knotReport", "sessionId", sessionId != null ? sessionId : "",
+                       "sourceFile", effectiveFile != null ? effectiveFile : "",
                        "call", "knotReport(sessionId=" + (sessionId != null ? sessionId : "") + ")"));
-        return knotService.knotReport(sessionId)
+        return knotService.knotReport(sessionId, effectiveFile)
                 .invoke(__ -> heimdall.emit(EventType.REQUEST_COMPLETED, EventLevel.INFO,
                         null, null, System.currentTimeMillis() - start,
                         Map.of("op", "knotReport",

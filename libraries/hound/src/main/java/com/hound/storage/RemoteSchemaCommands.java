@@ -241,12 +241,15 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliSchema.db_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSchema.schema_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSchema.schema_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSchema.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSchema.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliTable
                 "CREATE PROPERTY DaliTable.db_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.table_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.table_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.table_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliTable.source_file IF NOT EXISTS STRING",  // G4: per-file denorm for batch sessions
                 "CREATE PROPERTY DaliTable.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliTable.dblink IF NOT EXISTS STRING",        // KI-DBLINK-1
                 "CREATE PROPERTY DaliTable.pl_type_geoid IF NOT EXISTS STRING",  // HND-04: VTABLE → DaliPlType
@@ -257,6 +260,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliColumn.expression IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.alias IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliColumn.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliColumn.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliColumn.ordinal_position IF NOT EXISTS INTEGER", // T13
                 "CREATE PROPERTY DaliColumn.data_type IF NOT EXISTS STRING",    // T14: DDL-declared type
@@ -276,11 +280,14 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRoutine.return_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRoutine.line_start IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliRoutine.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRoutine.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliRoutine.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliRoutine.has_spec IF NOT EXISTS BOOLEAN",   // spec+body merge
                 "CREATE PROPERTY DaliRoutine.has_body IF NOT EXISTS BOOLEAN",   // spec+body merge
                 // DaliPackage
                 "CREATE PROPERTY DaliPackage.package_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPackage.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPackage.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliSession
                 "CREATE PROPERTY DaliSession.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSession.db_name IF NOT EXISTS STRING",
@@ -291,6 +298,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliStatement.type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliStatement.short_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliStatement.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliStatement.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliAtom (HAL-01 ADR-HND-002: primary_status + qualifier replace status)
                 "CREATE PROPERTY DaliAtom.atom_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.atom_text IF NOT EXISTS STRING",
@@ -312,31 +320,38 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliAtom.warning IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.merge_clause IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliOutputColumn
                 "CREATE PROPERTY DaliOutputColumn.name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliOutputColumn.expression IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliOutputColumn.alias IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliOutputColumn.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliOutputColumn.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliJoin
                 "CREATE PROPERTY DaliJoin.join_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliJoin.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliJoin.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliParameter
                 "CREATE PROPERTY DaliParameter.param_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliParameter.param_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliParameter.param_mode IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliParameter.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliParameter.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliVariable
                 "CREATE PROPERTY DaliVariable.var_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliVariable.var_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliVariable.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliVariable.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliCursor (HAL3-04, ADR-HND-011)
                 "CREATE PROPERTY DaliCursor.cursor_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliCursor.cursor_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliCursor.routine_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliCursor.select_stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliCursor.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliAffectedColumn
                 "CREATE PROPERTY DaliAffectedColumn.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAffectedColumn.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliAffectedColumn.statement_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAffectedColumn.column_ref IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAffectedColumn.column_name IF NOT EXISTS STRING",
@@ -348,6 +363,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliAffectedColumn.order_affect IF NOT EXISTS INTEGER",
                 // DaliRecord (G6: BULK COLLECT target)
                 "CREATE PROPERTY DaliRecord.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecord.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliRecord.record_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.record_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.routine_geoid IF NOT EXISTS STRING",
@@ -355,6 +371,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRecord.fields IF NOT EXISTS STRING",
                 // DaliRecordField (KI-RETURN-1)
                 "CREATE PROPERTY DaliRecordField.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecordField.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliRecordField.field_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecordField.field_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecordField.field_order IF NOT EXISTS INTEGER",
@@ -366,6 +383,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY RETURNS_INTO.returning_exprs IF NOT EXISTS STRING",
                 // DaliDDLStatement (v27: ALTER / CREATE / DROP)
                 "CREATE PROPERTY DaliDDLStatement.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliDDLStatement.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliDDLStatement.db_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliDDLStatement.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliDDLStatement.type IF NOT EXISTS STRING",
@@ -376,6 +394,7 @@ final class RemoteSchemaCommands {
                 // DaliSnippet (v22: +line_start/end; v28: +element_rid/element_type — direct @rid link)
                 "CREATE PROPERTY DaliSnippet.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSnippet.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliSnippet.snippet IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.snippet_hash IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.line_start IF NOT EXISTS INTEGER",
@@ -402,6 +421,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliConstraint.table_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliConstraint.column_names IF NOT EXISTS STRING",      // JSON array
                 "CREATE PROPERTY DaliConstraint.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliConstraint.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliPrimaryKey extends DaliConstraint
                 "CREATE VERTEX TYPE DaliPrimaryKey IF NOT EXISTS EXTENDS DaliConstraint",
                 // DaliForeignKey extends DaliConstraint — FK-specific fields
@@ -436,12 +456,14 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliPlType.scope_geoid IF NOT EXISTS STRING",   // declaring package or routine
                 "CREATE PROPERTY DaliPlType.declared_at_line IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliPlType.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlType.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliPlTypeField.field_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.type_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.field_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.field_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.position IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliPlTypeField.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlTypeField.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // HND-01: DaliRecord back-ref to the PlType template it was instantiated from
                 "CREATE PROPERTY DaliRecord.pl_type_geoid IF NOT EXISTS STRING",
                 // KI-FLASHBACK-1: AS OF TIMESTAMP/SCN on DaliStatement

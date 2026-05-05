@@ -29,7 +29,15 @@ class KnotStatementLoader {
         return lineageRegistry.resourceFor(identity.tenantAlias()).databaseName();
     }
 
-    // ── Statements ────────────────────────────────────────────────────────────
+    // ── Statements ──────────────────────────��──────────────────────────��──────
+
+    /** G4: overload with source_file filter for batch sessions. */
+    Uni<List<KnotStatement>> loadStatements(Map<String, Object> params, String sourceFile) {
+        if (sourceFile == null) return loadStatements(params);
+        // Inject source_file into Cypher property maps
+        String sfProp = ", source_file: $sf";
+        return loadStatementsFiltered(params, sfProp);
+    }
 
     Uni<List<KnotStatement>> loadStatements(Map<String, Object> params) {
         // Fetch ALL statements for the session (not just roots).
@@ -92,6 +100,78 @@ class KnotStatementLoader {
         // Query 4: CHILD_OF direction: child -[CHILD_OF]-> parent
         String cypherEdges = """
             MATCH (child:DaliStatement {session_id: $sid})-[:CHILD_OF]->(parent:DaliStatement)
+            RETURN id(child) AS childId, id(parent) AS parentId
+            """;
+
+        return Uni.combine().all()
+            .unis(
+                arcade.cypherIn(lineageDb(), cypherStmts,   params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherTables,  params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherStmtSrc, params).onFailure().recoverWithItem(List.of()),
+                arcade.cypherIn(lineageDb(), cypherEdges,   params).onFailure().recoverWithItem(List.of())
+            )
+            .asTuple()
+            .map(t -> buildStatementTree(t.getItem1(), t.getItem2(), t.getItem3(), t.getItem4()));
+    }
+
+    /**
+     * G4: filtered variant — appends source_file to all Cypher property maps.
+     * Duplicated queries with sfProp injected (DaliStatement nodes carry source_file after G4 schema migration).
+     */
+    private Uni<List<KnotStatement>> loadStatementsFiltered(Map<String, Object> params, String sfProp) {
+        String cypherStmts = """
+            MATCH (stmt:DaliStatement {session_id: $sid""" + sfProp + """
+            })
+            MATCH (r:DaliRoutine)-[:CONTAINS_STMT]->(stmt)
+            OPTIONAL MATCH (stmt)-[:HAS_ATOM]->(a:DaliAtom)
+            RETURN id(stmt)                                                         AS sid,
+                   stmt.stmt_geoid                                                  AS geoid,
+                   coalesce(stmt.type, '')                                          AS stmtType,
+                   coalesce(stmt.line_start, 0)                                     AS lineStart,
+                   r.routine_name                                                   AS routineName,
+                   coalesce(r.routine_type, '')                                     AS routineType,
+                   stmt.aliases                                                     AS stmtAliases,
+                   count(a)                                                         AS atomTotal,
+                   count(CASE WHEN a.primary_status='RESOLVED'      THEN 1
+                              WHEN toLower(a.status)='обработано' THEN 1 END)     AS atomResolved,
+                   count(CASE WHEN a.primary_status='UNRESOLVED'   THEN 1
+                              WHEN toLower(a.status)='unresolved'  THEN 1 END)     AS atomFailed,
+                   count(CASE WHEN a.primary_status='CONSTANT'     THEN 1
+                              WHEN toLower(a.status)='constant'    THEN 1 END)     AS atomConst,
+                   count(CASE WHEN a.primary_status='FUNCTION_CALL' THEN 1
+                              WHEN toLower(a.status)='function_call' THEN 1 END)   AS atomFunc
+            ORDER BY r.routine_name, geoid
+            LIMIT 1000
+            """;
+
+        String cypherTables = """
+            MATCH (stmt:DaliStatement {session_id: $sid""" + sfProp + """
+            })
+            OPTIONAL MATCH (src:DaliTable)-[rf:READS_FROM]->(stmt)
+            OPTIONAL MATCH (stmt)-[wt:WRITES_TO]->(tgt:DaliTable)
+            RETURN id(stmt)                             AS sid,
+                   src.table_name                       AS srcName,
+                   coalesce(src.table_geoid, '')        AS srcGeoid,
+                   rf.aliases                           AS srcAliases,
+                   tgt.table_name                       AS tgtName,
+                   coalesce(tgt.table_geoid, '')        AS tgtGeoid,
+                   wt.aliases                           AS tgtAliases
+            LIMIT 5000
+            """;
+
+        String cypherStmtSrc = """
+            MATCH (stmt:DaliStatement {session_id: $sid""" + sfProp + """
+            })
+            MATCH (stmt)-[rf:USES_SUBQUERY]->(src:DaliStatement)
+            RETURN id(stmt)                             AS sid,
+                   src.stmt_geoid                       AS srcGeoid,
+                   rf.aliases                           AS srcAliases
+            LIMIT 5000
+            """;
+
+        String cypherEdges = """
+            MATCH (child:DaliStatement {session_id: $sid""" + sfProp + """
+            })-[:CHILD_OF]->(parent:DaliStatement)
             RETURN id(child) AS childId, id(parent) AS parentId
             """;
 
