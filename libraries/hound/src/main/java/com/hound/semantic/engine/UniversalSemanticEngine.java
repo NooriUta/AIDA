@@ -375,6 +375,7 @@ public class UniversalSemanticEngine {
                 var stmtInfo = builder.getStatements().get(currentStmt);
                 if (stmtInfo != null) {
                     stmtInfo.addSourceSubquery(cteRef.getGeoid(), alias, cteRef.getGeoid());
+                    stmtInfo.addFromReferencedSource(cteRef.getGeoid());  // G3-FIX: explicit FROM reference
                     builder.addLineageEdge(cteRef.getGeoid(), currentStmt, "READS_FROM", currentStmt);
                 }
                 if (alias != null && !alias.isBlank()) {
@@ -502,6 +503,39 @@ public class UniversalSemanticEngine {
 
     public void onColumnRef(String fullRef) {
         onColumnRef(fullRef, 0, 0, 0);
+    }
+
+    /**
+     * G3-FIX: Column reference inside MERGE INSERT column list (paren_column_list).
+     * These columns are DML target identifiers — resolve them directly to the MERGE target table.
+     * Creates a resolved atom (not unresolved) and adds the column to the target table's structure.
+     */
+    public void onMergeInsertColRef(String fullRef, int line, int col, int endLine) {
+        if (fullRef == null || fullRef.isBlank()) return;
+
+        String currentStmt = scopeManager.currentStatement();
+        String targetTableGeoid = resolveTargetTableGeoid(currentStmt);
+
+        // Parse column name (strip table prefix if any, though unlikely in INSERT col list)
+        String columnPart = fullRef.contains(".")
+                ? fullRef.substring(fullRef.lastIndexOf('.') + 1)
+                : fullRef;
+
+        // Add column to target table structure (ensures DaliColumn vertex exists)
+        if (targetTableGeoid != null) {
+            if (!builder.getStatements().containsKey(targetTableGeoid)) {
+                builder.addColumn(targetTableGeoid, columnPart, null, null);
+            }
+        }
+
+        // Register atom as RESOLVED with target table binding
+        atomProcessor.registerAtom(fullRef, line, col, endLine, 0,
+                "COLUMN", currentStmt, "MERGE_INSERT");
+        // Immediately resolve it to the target table
+        if (targetTableGeoid != null) {
+            String atomKey = fullRef.toUpperCase() + "~" + line + ":" + col;
+            atomProcessor.resolveAtomToTable(currentStmt, atomKey, targetTableGeoid, columnPart);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

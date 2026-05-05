@@ -500,6 +500,16 @@ public class NameResolver {
             return new ResolvedRef("implicit", "SUBQUERY", sourceSubqueries.get(0));
         }
 
+        // G3-FIX: Multiple sourceSubqueries (e.g. 12 CTEs), but only ONE actual FROM reference.
+        // CTE definitions register as sourceSubqueries at scope exit, inflating the count.
+        // Use fromReferencedSources (populated only from actual FROM clause references).
+        if (sourceSubqueries.size() > 1 && sourceTables.isEmpty()) {
+            var fromRefs = stmt.getFromReferencedSources();
+            if (fromRefs.size() == 1) {
+                return new ResolvedRef("implicit", "SUBQUERY", fromRefs.iterator().next());
+            }
+        }
+
         // Единственный target (для UPDATE/DELETE)
         if (targetTables.size() == 1 && sourceTables.isEmpty() && sourceSubqueries.isEmpty()) {
             return new ResolvedRef("implicit", "TABLE", targetTables.get(0));

@@ -710,6 +710,28 @@ public class AtomProcessor {
     }
 
     /**
+     * G3-FIX: Immediately marks an already-registered atom as RESOLVED, binding it to the given
+     * target table and column. Used for MERGE INSERT column list atoms which are DML targets,
+     * not source references.
+     */
+    public void resolveAtomToTable(String statementGeoid, String atomKey,
+                                    String targetTableGeoid, String columnName) {
+        Map<String, Map<String, Object>> stmtAtoms = atomsByStatement.get(statementGeoid);
+        if (stmtAtoms == null) return;
+        Map<String, Object> atomData = stmtAtoms.get(atomKey);
+        if (atomData == null) return;
+
+        atomData.put("status", AtomInfo.STATUS_RESOLVED);
+        atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
+        atomData.put("is_column_reference", true);
+        atomData.put("table_geoid", targetTableGeoid);
+        atomData.put("table_name", targetTableGeoid);
+        atomData.put("column_name", columnName.toUpperCase());
+        atomData.put("resolve_strategy", "merge_insert_target");
+        atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+    }
+
+    /**
      * Порт Python: PlSqlAnalyzerListener._resolve_atom_reference()
      * ПОЛНАЯ логика разрешения атомов.
      */
