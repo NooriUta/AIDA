@@ -24,6 +24,8 @@ public class UniversalSemanticEngine {
     private final StructureAndLineageBuilder builder;
     private final AtomProcessor atomProcessor;
     private final JoinProcessor joinProcessor;
+    private final HoundEventListener listener;
+    private final String file;
 
     /** No-arg constructor — uses NoOp listener (backward-compatible). */
     public UniversalSemanticEngine() {
@@ -33,10 +35,12 @@ public class UniversalSemanticEngine {
     /**
      * Constructor with event listener.
      *
-     * @param listener receives onAtomExtracted / onRecordRegistered events
+     * @param listener receives onAtomExtracted / onRecordRegistered / onSemanticWarning events
      * @param file     file path forwarded to listener callbacks
      */
     public UniversalSemanticEngine(HoundEventListener listener, String file) {
+        this.listener = listener;
+        this.file = file;
         this.scopeManager = new ScopeManager();
         this.nameResolver = new NameResolver();
         this.builder = new StructureAndLineageBuilder(listener, file);
@@ -371,6 +375,7 @@ public class UniversalSemanticEngine {
                 var stmtInfo = builder.getStatements().get(currentStmt);
                 if (stmtInfo != null) {
                     stmtInfo.addSourceSubquery(cteRef.getGeoid(), alias, cteRef.getGeoid());
+                    stmtInfo.addFromReferencedSource(cteRef.getGeoid());  // G3-FIX: explicit FROM reference
                     builder.addLineageEdge(cteRef.getGeoid(), currentStmt, "READS_FROM", currentStmt);
                 }
                 if (alias != null && !alias.isBlank()) {
@@ -500,6 +505,39 @@ public class UniversalSemanticEngine {
         onColumnRef(fullRef, 0, 0, 0);
     }
 
+    /**
+     * G3-FIX: Column reference inside MERGE INSERT column list (paren_column_list).
+     * These columns are DML target identifiers — resolve them directly to the MERGE target table.
+     * Creates a resolved atom (not unresolved) and adds the column to the target table's structure.
+     */
+    public void onMergeInsertColRef(String fullRef, int line, int col, int endLine) {
+        if (fullRef == null || fullRef.isBlank()) return;
+
+        String currentStmt = scopeManager.currentStatement();
+        String targetTableGeoid = resolveTargetTableGeoid(currentStmt);
+
+        // Parse column name (strip table prefix if any, though unlikely in INSERT col list)
+        String columnPart = fullRef.contains(".")
+                ? fullRef.substring(fullRef.lastIndexOf('.') + 1)
+                : fullRef;
+
+        // Add column to target table structure (ensures DaliColumn vertex exists)
+        if (targetTableGeoid != null) {
+            if (!builder.getStatements().containsKey(targetTableGeoid)) {
+                builder.addColumn(targetTableGeoid, columnPart, null, null);
+            }
+        }
+
+        // Register atom as RESOLVED with target table binding
+        atomProcessor.registerAtom(fullRef, line, col, endLine, 0,
+                "COLUMN", currentStmt, "MERGE_INSERT");
+        // Immediately resolve it to the target table
+        if (targetTableGeoid != null) {
+            String atomKey = fullRef.toUpperCase() + "~" + line + ":" + col;
+            atomProcessor.resolveAtomToTable(currentStmt, atomKey, targetTableGeoid, columnPart);
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // JOIN
     // ═══════════════════════════════════════════════════════════════
@@ -581,6 +619,8 @@ public class UniversalSemanticEngine {
             }
             logger.warn("Routine EXIT: auto-closing orphan statement scope [{}]",
                     popped.getStatementGeoid());
+            listener.onSemanticWarning(file, "SCOPE_ORPHAN",
+                    "Auto-closing orphan statement scope: " + popped.getStatementGeoid());
         }
         // Clear cursor state — cursors and record vars are routine-scoped
         scopeManager.clearCursorState();
@@ -921,6 +961,9 @@ public class UniversalSemanticEngine {
                 } else {
                     logger.warn("JOIN source UNRESOLVED: alias='{}' stmt='{}'",
                             j.sourceTableAlias(), stmtGeoid);
+                    listener.onSemanticWarning(file, "JOIN_UNRESOLVED",
+                            "JOIN source unresolved: alias=" + j.sourceTableAlias()
+                                    + " stmt=" + stmtGeoid);
                 }
             }
 
@@ -1121,9 +1164,8 @@ public class UniversalSemanticEngine {
             }
 
             if (tGeoid != null) {
-                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
                 if (!builder.getStatements().containsKey(tGeoid)) {
-                    builder.addColumn(tGeoid, cPart, null, null);
+                    builder.addInferredColumn(tGeoid, cPart, "L1");
                 }
                 resolvedNow++;
             } else {
@@ -1162,9 +1204,8 @@ public class UniversalSemanticEngine {
                 if (ref.isResolved()) tGeoid = ref.getGeoid();
             }
             if (tGeoid != null) {
-                // Guard: skip statement geoids (SubQuery/CTE/MERGE Select).
                 if (!builder.getStatements().containsKey(tGeoid)) {
-                    builder.addColumn(tGeoid, cPart, null, null);
+                    builder.addInferredColumn(tGeoid, cPart, "L2");
                 }
                 resolved.add(i);
             }
@@ -1185,7 +1226,7 @@ public class UniversalSemanticEngine {
                 if (parts.length > 1) { stillAfterP3.add(p); continue; }
                 String tGeoid = resolveViaParentChain(ref, stmtGeoid);
                 if (tGeoid != null) {
-                    builder.addColumn(tGeoid, ref, null, null);
+                    builder.addInferredColumn(tGeoid, ref, "L3");
                     p3Resolved++;
                 } else {
                     stillAfterP3.add(p);
@@ -1212,7 +1253,7 @@ public class UniversalSemanticEngine {
                         .filter(g -> !builder.getStatements().containsKey(g))
                         .toList();
                 if (sources.size() != 1) { stillAfterP4.add(p); continue; }
-                builder.addColumn(sources.get(0), ref, null, null);
+                builder.addInferredColumn(sources.get(0), ref, "L4");
                 p4Resolved++;
             }
             pendingColumns.clear();
@@ -1221,7 +1262,10 @@ public class UniversalSemanticEngine {
                     p4Resolved, pendingColumns.size());
         }
 
-        // Pass 5 (KI-ROWTYPE-1): populate %ROWTYPE record fields from resolved table columns
+        // Pass 5Q: resolve deferred alias.column atoms → table + inferred column
+        atomProcessor.resolvePendingQualifiedAtoms();
+
+        // Pass 6 (KI-ROWTYPE-1): populate %ROWTYPE record fields from resolved table columns
         if (!pendingRowtypes.isEmpty()) {  // previously Pass 3, renumbered after KI-PENDING-1 passes
             int rowtypesFilled = 0;
             for (PendingRowtype pr : pendingRowtypes) {
@@ -1235,13 +1279,25 @@ public class UniversalSemanticEngine {
                                 col.getOrdinalPosition(), col.getGeoid()))
                         .count();
                 if (count > 0) rowtypesFilled++;
-                else logger.debug("KI-ROWTYPE-1: no columns found for table {} (record {})",
-                        pr.tableGeoid(), pr.recGeoid());
+                else {
+                    builder.markPendingRowtype(pr.tableGeoid());
+                    logger.debug("HAL2-01: ROWTYPE pending — no columns for table {} (record {})",
+                            pr.tableGeoid(), pr.recGeoid());
+                }
             }
             logger.info("KI-ROWTYPE-1: {} of {} %ROWTYPE records populated with column fields",
                     rowtypesFilled, pendingRowtypes.size());
             pendingRowtypes.clear();
         }
+
+        // HAL2-02: second pass — resolve PENDING_INJECT atoms via PlType registry
+        atomProcessor.resolvePendingInjectAtoms();
+
+        // HAL2-06: classify atoms resolved against VTABLE as RECONSTRUCT_INVERSE
+        atomProcessor.classifyVtableAtoms();
+
+        // HAL-05: classify unattached atoms (CONSTANT_ORPHAN detection)
+        atomProcessor.classifyUnattachedAtoms();
     }
 
     /**

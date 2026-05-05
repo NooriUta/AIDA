@@ -46,6 +46,18 @@ public class StructureAndLineageBuilder {
     /** HND-02: PL/SQL TYPE IS RECORD / TABLE OF templates. Key = type geoid. */
     private final Map<String, PlTypeInfo> plTypes = new LinkedHashMap<>();
 
+    /** HAL3-01: write-side edges accumulated during parse, written after main batch. */
+    private final List<CompensationStats> compensationStats = new ArrayList<>();
+
+    /** HAL2-01: synthetic table geoids where PIPELINED column injection failed (PlType not yet available). */
+    private final Set<String> pendingPipelinedTables = new LinkedHashSet<>();
+
+    /** HAL2-01: table geoids referenced by %ROWTYPE where DDL columns were not found at parse time. */
+    private final Set<String> pendingRowtypeTables = new LinkedHashSet<>();
+
+    /** HAL2-01: statement geoids containing CAST(MULTISET) where target type is unresolved. */
+    private final Set<String> pendingMultisetStmts = new LinkedHashSet<>();
+
     // STAB-2: диагностический логгер (null = prod-режим, no-op)
     private ResolutionLogger resolutionLogger;
 
@@ -112,6 +124,9 @@ public class StructureAndLineageBuilder {
                 );
                 logger.warn("STAB: suspicious table name: '{}' (func={}, special={})",
                         upperName, isFunc, hasSpecial);
+                listener.onSemanticWarning(file, "STAB_SUSPICIOUS",
+                        "Suspicious table name: '" + upperName
+                                + "' (func=" + isFunc + ", special=" + hasSpecial + ")");
             }
         }
 
@@ -166,6 +181,22 @@ public class StructureAndLineageBuilder {
 
     public void addColumn(String tableGeoid, String columnName, String expression, String alias) {
         addColumn(tableGeoid, columnName, expression, alias, null);
+    }
+
+    public void addInferredColumn(String tableGeoid, String columnName, String sourcePass) {
+        String upperCol = columnName.toUpperCase();
+        String geoid = tableGeoid + "." + upperCol;
+        boolean[] created = {false};
+        columns.computeIfAbsent(geoid, k -> {
+            created[0] = true;
+            TableInfo t = tables.get(tableGeoid);
+            int ordinal = 0;
+            if (t != null) { t.incrementColumnCount(); ordinal = t.columnCount(); }
+            return new ColumnInfo(geoid, tableGeoid, upperCol, null, null, false, 0, ordinal, null, false, null);
+        });
+        if (created[0]) {
+            columns.get(geoid).markAsInferred(sourcePass);
+        }
     }
 
     public void addColumn(String tableGeoid, String columnName, String expression, String alias,
@@ -532,9 +563,29 @@ public class StructureAndLineageBuilder {
         for (com.hound.semantic.model.PlTypeFieldInfo f : recordType.getFields()) {
             addColumnWithOrdinal(tableGeoid, f.name(), null, null, pos++, f.dataType());
         }
+        // HAL2-06: mark injected table as VTABLE for RECONSTRUCT_INVERSE classification
+        TableInfo ti = tables.get(tableGeoid);
+        if (ti != null) {
+            ti.setTableType("VTABLE");
+            if (ti.getPlTypeGeoid() == null) ti.setPlTypeGeoid(recordType.getGeoid());
+        }
     }
 
     public Map<String, PlTypeInfo> getPlTypes() { return plTypes; }
+
+    // ═══════ HAL3-01: CompensationStats (write-side edges) ═══════
+    public void addCompensationStat(CompensationStats stat) { compensationStats.add(stat); }
+    public List<CompensationStats> getCompensationStats() { return compensationStats; }
+
+    // ═══════ HAL2-01: Pending INJECT tracking ═══════
+    public void markPendingPipelined(String syntheticTableGeoid) { pendingPipelinedTables.add(syntheticTableGeoid); }
+    public boolean isPendingPipelined(String tableGeoid) { return pendingPipelinedTables.contains(tableGeoid); }
+    public void markPendingRowtype(String tableGeoid) { pendingRowtypeTables.add(tableGeoid); }
+    public boolean isPendingRowtype(String tableGeoid) { return pendingRowtypeTables.contains(tableGeoid); }
+    public void markPendingMultiset(String stmtGeoid) { pendingMultisetStmts.add(stmtGeoid); }
+    public boolean isPendingMultiset(String stmtGeoid) { return pendingMultisetStmts.contains(stmtGeoid); }
+    public Set<String> getPendingPipelinedTables() { return pendingPipelinedTables; }
+    public Set<String> getPendingRowtypeTables() { return pendingRowtypeTables; }
 
     // ═══════ Lineage ═══════
 
@@ -552,7 +603,8 @@ public class StructureAndLineageBuilder {
         return new Structure(databases, schemas, packages, tables, columns, routines, statements, records,
                 Collections.unmodifiableSet(ddlTableGeoids),
                 Collections.unmodifiableMap(constraints),
-                Collections.unmodifiableMap(plTypes));
+                Collections.unmodifiableMap(plTypes),
+                Collections.unmodifiableList(compensationStats));
     }
 
     // ═══════ Schemas / Databases ═══════
@@ -574,6 +626,8 @@ public class StructureAndLineageBuilder {
                         "invalid_schema_name: " + name
                     );
                     logger.warn("STAB: invalid schema name: '{}'", name);
+                    listener.onSemanticWarning(file, "STAB_INVALID_SCHEMA",
+                            "Invalid schema name: '" + name + "'");
                 }
             }
             // S1.SCH: always log suspicious schema names to DB (quotes, $, :, parens, etc.)
@@ -584,6 +638,8 @@ public class StructureAndLineageBuilder {
                 entry.put("backtrace",  captureHoundBacktrace());
                 schemaRegistrationLog.add(entry);
                 logger.warn("S1.SCH: suspicious schema name registered: '{}' reason={}", name, entry.get("reason"));
+                listener.onSemanticWarning(file, "STAB_SUSPICIOUS_SCHEMA",
+                        "Suspicious schema name: '" + name + "' reason=" + entry.get("reason"));
             }
             Map<String, Object> schemaData = new LinkedHashMap<>();
             schemaData.put("name", name.toUpperCase());

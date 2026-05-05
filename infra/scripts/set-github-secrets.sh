@@ -37,7 +37,21 @@ echo ""
 # ── Read Terraform outputs ────────────────────────────────────────────────────
 echo "[1/4] Reading Terraform outputs..."
 
-VM_IP=$(terraform output -raw vm_external_ip)
+# ⚠ Terraform state может быть рассинхронизирован с реальностью если VM
+#   пересоздавали вручную в YC console (см. SPRINT_INFRA_V3 § divergence).
+#   Если задан $PROD_VM_IP — он перебивает terraform output.
+VM_IP_TF=$(terraform output -raw vm_external_ip)
+if [[ -n "${PROD_VM_IP:-}" ]]; then
+  echo "  [override] using \$PROD_VM_IP=${PROD_VM_IP} (terraform shows ${VM_IP_TF})"
+  VM_IP="${PROD_VM_IP}"
+elif [[ "${VM_IP_TF}" == "111.88.242.194" ]]; then
+  echo "  [WARNING] terraform vm_external_ip = ${VM_IP_TF} — это СТАРЫЙ адрес (replaced 03.05.2026)."
+  echo "            Текущий prod-VM: 111.88.243.247. Прерываю чтобы не сломать DEPLOY_HOST."
+  echo "            Запусти: PROD_VM_IP='111.88.243.247' ../scripts/set-github-secrets.sh"
+  exit 1
+else
+  VM_IP="${VM_IP_TF}"
+fi
 REGISTRY_ID=$(terraform output -raw registry_id)
 CI_SA_KEY=$(terraform output -raw ci_sa_key_json)
 S3_ACCESS_KEY=$(terraform output -raw s3_access_key)

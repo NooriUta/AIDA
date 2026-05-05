@@ -52,6 +52,8 @@ final class RemoteSchemaCommands {
                 // HND-01: PL/SQL user-defined TYPE templates (RECORD / COLLECTION)
                 "CREATE VERTEX TYPE DaliPlType IF NOT EXISTS",
                 "CREATE VERTEX TYPE DaliPlTypeField IF NOT EXISTS",
+                // HAL3-04 (ADR-HND-011): explicit cursor vertex
+                "CREATE VERTEX TYPE DaliCursor IF NOT EXISTS",
 
                 // Edge types — namespace hierarchy
                 "CREATE EDGE TYPE BELONGS_TO_APP IF NOT EXISTS",
@@ -67,13 +69,15 @@ final class RemoteSchemaCommands {
                 // Edge types — statement structure
                 "CREATE EDGE TYPE HAS_OUTPUT_COL IF NOT EXISTS",
                 "CREATE EDGE TYPE HAS_ATOM IF NOT EXISTS",
+                "CREATE EDGE TYPE CONTAINS_ATOM IF NOT EXISTS",  // G3: DaliRoutine → DaliAtom (unattached orphans)
                 "CREATE EDGE TYPE HAS_JOIN IF NOT EXISTS",
                 "CREATE EDGE TYPE READS_FROM IF NOT EXISTS",
                 "CREATE EDGE TYPE WRITES_TO IF NOT EXISTS",
                 "CREATE EDGE TYPE USES_SUBQUERY IF NOT EXISTS",
                 "CREATE EDGE TYPE NESTED_IN IF NOT EXISTS",
-                "CREATE EDGE TYPE ROUTINE_USES_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE CALLS IF NOT EXISTS",
+                // ROUTINE_USES_TABLE removed (Sprint 0.1 SCHEMA_CLEANUP, EDGE_TAXONOMY_ANALYSIS §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.6.
                 // Edge types — atom resolution
                 "CREATE EDGE TYPE ATOM_REF_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE ATOM_REF_COLUMN IF NOT EXISTS",
@@ -84,39 +88,40 @@ final class RemoteSchemaCommands {
                 // Edge types — data flow / lineage
                 "CREATE EDGE TYPE DATA_FLOW IF NOT EXISTS",
                 "CREATE EDGE TYPE FILTER_FLOW IF NOT EXISTS",
-                "CREATE EDGE TYPE JOIN_FLOW IF NOT EXISTS",
-                "CREATE EDGE TYPE UNION_FLOW IF NOT EXISTS",
+                // JOIN_FLOW, UNION_FLOW removed (Sprint 0.1 SCHEMA_CLEANUP, §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.1, §15.2.
                 // Edge types — record (BULK COLLECT)
                 "CREATE EDGE TYPE BULK_COLLECTS_INTO IF NOT EXISTS",
-                "CREATE EDGE TYPE RECORD_USED_IN IF NOT EXISTS",
+                // D-1 (Sprint 1.3): RECORD_USED_IN removed — reverse traversal via inE('BULK_COLLECTS_INTO')
                 // KI-RETURN-1: record field membership + RETURNING INTO
-                "CREATE EDGE TYPE HAS_RECORD_FIELD IF NOT EXISTS",
+                // D-3 (Sprint 1.3): HAS_RECORD_FIELD split → RECORD_HAS_FIELD (DaliRecord→DaliRecordField)
+                //                                           + PLTYPE_HAS_FIELD (DaliPlType→DaliPlTypeField)
+                "CREATE EDGE TYPE RECORD_HAS_FIELD IF NOT EXISTS",
+                "CREATE EDGE TYPE PLTYPE_HAS_FIELD IF NOT EXISTS",
                 "CREATE EDGE TYPE RETURNS_INTO IF NOT EXISTS",
                 // Edge types — affected columns + join sources
                 "CREATE EDGE TYPE HAS_AFFECTED_COL IF NOT EXISTS",
                 "CREATE EDGE TYPE AFFECTED_COL_REF_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_SOURCE_TABLE IF NOT EXISTS",
                 "CREATE EDGE TYPE JOIN_TARGET_TABLE IF NOT EXISTS",
-                // KI-DDL-1: DDL modifier edges (ALTER TABLE ADD/MODIFY/DROP)
-                "CREATE EDGE TYPE DaliDDLModifiesTable IF NOT EXISTS",
-                "CREATE EDGE TYPE DaliDDLModifiesColumn IF NOT EXISTS",
-                // KI-PIPE-1: pipelined function edges
-                "CREATE EDGE TYPE PIPES_FROM IF NOT EXISTS",
-                "CREATE EDGE TYPE READS_PIPELINED IF NOT EXISTS",
+                // KI-DDL-1: DDL modifier edge — F-2 folding (Sprint 0.1, §13.8 F-2).
+                //   Was: DaliDDLModifiesTable (DDL→Table), DaliDDLModifiesColumn (DDL→Column).
+                //   Now: DDL_MODIFIES with target_kind property: 'table' | 'column'.
+                //   Также переименование PascalCase → UPPER_SNAKE (см. §5.5).
+                "CREATE EDGE TYPE DDL_MODIFIES IF NOT EXISTS",
+                // KI-PIPE-1 removed: PIPES_FROM, READS_PIPELINED (Sprint 0.1 SCHEMA_CLEANUP, §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.3, §15.4.
                 // HND-01: PL/SQL TYPE edges (EXTENDS E not supported by ArcadeDB; plain edge type is the base)
                 "CREATE EDGE TYPE DECLARES_TYPE IF NOT EXISTS",
                 "CREATE EDGE TYPE OF_TYPE IF NOT EXISTS",
                 "CREATE EDGE TYPE INSTANTIATES_TYPE IF NOT EXISTS",
-                // HND-13: REF CURSOR → return type (DaliTable or %ROWTYPE resolved table)
-                "CREATE EDGE TYPE CURSOR_RETURNS IF NOT EXISTS",
+                // HND-13 removed: CURSOR_RETURNS (Sprint 0.1 SCHEMA_CLEANUP, §13.5).
+                //   Reason: 0 writer + 0 consumer + не запланирован. Redesign-план в §15.5.
                 // HND-15: CAST(MULTISET(SELECT...) AS t_list) → DaliPlType
                 "CREATE EDGE TYPE MULTISET_INTO IF NOT EXISTS",
-                // KI-005: UNIQUE and CHECK constraint vertex + edge types
+                // KI-005: UNIQUE and CHECK constraint vertex types
                 "CREATE VERTEX TYPE DaliUniqueConstraint IF NOT EXISTS EXTENDS DaliConstraint",
                 "CREATE VERTEX TYPE DaliCheckConstraint IF NOT EXISTS EXTENDS DaliConstraint",
-                "CREATE EDGE TYPE HAS_UNIQUE_KEY IF NOT EXISTS",
-                "CREATE EDGE TYPE IS_UNIQUE_COLUMN IF NOT EXISTS",
-                "CREATE EDGE TYPE HAS_CHECK IF NOT EXISTS",
 
                 // DaliSnippet — DOCUMENT type (large SQL texts; bulk payload risk if promoted to VERTEX)
                 // Linked to DaliStatement via stmt_geoid text field + NOTUNIQUE index (fast O(1) lookup).
@@ -124,6 +129,99 @@ final class RemoteSchemaCommands {
                 // adds memory pressure on TRAVERSE and risks batch-endpoint payload overflow.
                 "CREATE DOCUMENT TYPE DaliSnippet IF NOT EXISTS",
                 "CREATE DOCUMENT TYPE DaliSnippetScript IF NOT EXISTS",
+
+                // ═══════════════════════════════════════════════════════════════════
+                // Sprint 1.1 EDGE_TAXONOMY_V1 (ADR-HND-009) — ABSTRACT hierarchy
+                // ═══════════════════════════════════════════════════════════════════
+                //
+                // Round 9 finding: ArcadeDB 26.4.2 не поддерживает 'EXTENDS E ABSTRACT'
+                // и 'ALTER TYPE X ABSTRACT TRUE'. Используем pattern:
+                //   1) CREATE EDGE TYPE parent (без ABSTRACT keyword)
+                //   2) ALTER TYPE parent CUSTOM abstract = true (logical marker)
+                //   3) CREATE EDGE TYPE child EXTENDS parent  (новые типы)
+                //   4) ALTER TYPE existing SUPERTYPE +parent  (существующие — добавляем родителя)
+                // Convention-level enforcement: writers НИКОГДА не вызывают
+                // appendEdge('parentName', ...) — только конкретные подтипы.
+                //
+                // ─── 8 top-level logical-abstract types ──────────────────────────
+                "CREATE EDGE TYPE ATOM_REF IF NOT EXISTS",
+                "ALTER TYPE ATOM_REF CUSTOM abstract = true",
+                "CREATE EDGE TYPE NAMESPACE IF NOT EXISTS",
+                "ALTER TYPE NAMESPACE CUSTOM abstract = true",
+                "CREATE EDGE TYPE STMT_HAS IF NOT EXISTS",
+                "ALTER TYPE STMT_HAS CUSTOM abstract = true",
+                "CREATE EDGE TYPE LINEAGE_FLOW IF NOT EXISTS",  // super-group для всех flow
+                "ALTER TYPE LINEAGE_FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE DDL_OP IF NOT EXISTS",
+                "ALTER TYPE DDL_OP CUSTOM abstract = true",
+                "CREATE EDGE TYPE JOIN_REF IF NOT EXISTS",
+                "ALTER TYPE JOIN_REF CUSTOM abstract = true",
+                "CREATE EDGE TYPE PLTYPE_REF IF NOT EXISTS",
+                "ALTER TYPE PLTYPE_REF CUSTOM abstract = true",
+                "CREATE EDGE TYPE CONSTRAINT_REF IF NOT EXISTS",
+                "ALTER TYPE CONSTRAINT_REF CUSTOM abstract = true",
+
+                // ─── 4 nested under LINEAGE_FLOW (multi-level inheritance) ───────
+                "CREATE EDGE TYPE FLOW IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE TABLE_DATA_FLOW IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE TABLE_DATA_FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE RECORD_FLOW IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE RECORD_FLOW CUSTOM abstract = true",
+                "CREATE EDGE TYPE WRITE_SIDE IF NOT EXISTS EXTENDS LINEAGE_FLOW",
+                "ALTER TYPE WRITE_SIDE CUSTOM abstract = true",
+                // HAL3-01: concrete WRITE_SIDE subtypes (Bucket B)
+                "CREATE EDGE TYPE ASSIGNS_TO_VARIABLE IF NOT EXISTS EXTENDS WRITE_SIDE",
+                "CREATE EDGE TYPE WRITES_TO_PARAMETER IF NOT EXISTS EXTENDS WRITE_SIDE",
+                "CREATE EDGE TYPE READS_FROM_CURSOR IF NOT EXISTS EXTENDS WRITE_SIDE",
+
+                // ─── ALTER existing types: assign supertype ──────────────────────
+                // ATOM_REF subtypes (5)
+                "ALTER TYPE ATOM_REF_TABLE SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_COLUMN SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_STMT SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_OUTPUT_COL SUPERTYPE +ATOM_REF",
+                "ALTER TYPE ATOM_REF_PLTYPE_FIELD SUPERTYPE +ATOM_REF",
+                // NAMESPACE subtypes (9)
+                "ALTER TYPE BELONGS_TO_APP SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_SCHEMA SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_TABLE SUPERTYPE +NAMESPACE",
+                "ALTER TYPE HAS_COLUMN SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_ROUTINE SUPERTYPE +NAMESPACE",
+                "ALTER TYPE BELONGS_TO_SESSION SUPERTYPE +NAMESPACE",
+                "ALTER TYPE CONTAINS_STMT SUPERTYPE +NAMESPACE",
+                "ALTER TYPE HAS_PARAMETER SUPERTYPE +NAMESPACE",
+                "ALTER TYPE HAS_VARIABLE SUPERTYPE +NAMESPACE",
+                // STMT_HAS subtypes (3)
+                "ALTER TYPE HAS_OUTPUT_COL SUPERTYPE +STMT_HAS",
+                "ALTER TYPE HAS_JOIN SUPERTYPE +STMT_HAS",
+                "ALTER TYPE HAS_AFFECTED_COL SUPERTYPE +STMT_HAS",
+                // FLOW subtypes (2 — JOIN_FLOW, UNION_FLOW удалены в Sprint 0.1)
+                "ALTER TYPE DATA_FLOW SUPERTYPE +FLOW",
+                "ALTER TYPE FILTER_FLOW SUPERTYPE +FLOW",
+                // TABLE_DATA_FLOW subtypes (2; READS_FROM direction inverted in Sprint 1.2)
+                "ALTER TYPE READS_FROM SUPERTYPE +TABLE_DATA_FLOW",
+                "ALTER TYPE WRITES_TO SUPERTYPE +TABLE_DATA_FLOW",
+                // RECORD_FLOW subtypes (2 — RECORD_USED_IN/HAS_RECORD_FIELD остаются singletons)
+                "ALTER TYPE BULK_COLLECTS_INTO SUPERTYPE +RECORD_FLOW",
+                "ALTER TYPE RETURNS_INTO SUPERTYPE +RECORD_FLOW",
+                // JOIN_REF subtypes (2)
+                "ALTER TYPE JOIN_SOURCE_TABLE SUPERTYPE +JOIN_REF",
+                "ALTER TYPE JOIN_TARGET_TABLE SUPERTYPE +JOIN_REF",
+                // PLTYPE_REF subtypes (3 + MULTISET_INTO как singleton lineage-skip)
+                "ALTER TYPE DECLARES_TYPE SUPERTYPE +PLTYPE_REF",
+                "ALTER TYPE OF_TYPE SUPERTYPE +PLTYPE_REF",
+                "ALTER TYPE INSTANTIATES_TYPE SUPERTYPE +PLTYPE_REF",
+                // DDL_OP subtypes (1 — DDL_MODIFIES после F-2 folding в Sprint 0.1)
+                "ALTER TYPE DDL_MODIFIES SUPERTYPE +DDL_OP",
+                // CONSTRAINT_REF subtypes assigned in Phase 3 (after reality-check + folding F-1)
+
+                // ─── 4 new ATOM_REF subtypes (DDL only — writers in Phase 2 atom pipeline) ───
+                "CREATE EDGE TYPE ATOM_REF_VARIABLE IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE EDGE TYPE ATOM_REF_PARAMETER IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE EDGE TYPE ATOM_REF_FUNCTION IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE EDGE TYPE ATOM_REF_SEQUENCE IF NOT EXISTS EXTENDS ATOM_REF",
+                "CREATE PROPERTY ATOM_REF_PARAMETER.param_mode IF NOT EXISTS STRING",  // IN | OUT | INOUT (specific to PARAMETER)
         };
     }
 
@@ -143,12 +241,15 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliSchema.db_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSchema.schema_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSchema.schema_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSchema.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSchema.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliTable
                 "CREATE PROPERTY DaliTable.db_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.table_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.table_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.table_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliTable.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliTable.source_file IF NOT EXISTS STRING",  // G4: per-file denorm for batch sessions
                 "CREATE PROPERTY DaliTable.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliTable.dblink IF NOT EXISTS STRING",        // KI-DBLINK-1
                 "CREATE PROPERTY DaliTable.pl_type_geoid IF NOT EXISTS STRING",  // HND-04: VTABLE → DaliPlType
@@ -159,6 +260,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliColumn.expression IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.alias IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliColumn.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliColumn.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliColumn.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliColumn.ordinal_position IF NOT EXISTS INTEGER", // T13
                 "CREATE PROPERTY DaliColumn.data_type IF NOT EXISTS STRING",    // T14: DDL-declared type
@@ -168,6 +270,9 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliColumn.is_fk IF NOT EXISTS BOOLEAN",         // T14: FOREIGN KEY column
                 "CREATE PROPERTY DaliColumn.fk_ref_table IF NOT EXISTS STRING",   // T14: FK referenced table geoid
                 "CREATE PROPERTY DaliColumn.fk_ref_column IF NOT EXISTS STRING",  // T14: FK referenced column name
+                "CREATE PROPERTY DaliColumn.inferred IF NOT EXISTS BOOLEAN",
+                "CREATE PROPERTY DaliColumn.source_pass IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliColumn.suspicious IF NOT EXISTS BOOLEAN",
                 // DaliRoutine (v23: +return_type, +line_start; v24: +data_source)
                 "CREATE PROPERTY DaliRoutine.routine_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRoutine.routine_name IF NOT EXISTS STRING",
@@ -175,11 +280,14 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRoutine.return_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRoutine.line_start IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliRoutine.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRoutine.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliRoutine.data_source IF NOT EXISTS STRING",  // v24
                 "CREATE PROPERTY DaliRoutine.has_spec IF NOT EXISTS BOOLEAN",   // spec+body merge
                 "CREATE PROPERTY DaliRoutine.has_body IF NOT EXISTS BOOLEAN",   // spec+body merge
                 // DaliPackage
                 "CREATE PROPERTY DaliPackage.package_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPackage.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPackage.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliSession
                 "CREATE PROPERTY DaliSession.session_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSession.db_name IF NOT EXISTS STRING",
@@ -190,35 +298,60 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliStatement.type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliStatement.short_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliStatement.session_id IF NOT EXISTS STRING",
-                // DaliAtom
+                "CREATE PROPERTY DaliStatement.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
+                // DaliAtom (HAL-01 ADR-HND-002: primary_status + qualifier replace status)
                 "CREATE PROPERTY DaliAtom.atom_id IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.atom_text IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.atom_geoid IF NOT EXISTS STRING",   // composite uniqueness key text~line:col
                 "CREATE PROPERTY DaliAtom.atom_context IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.parent_context IF NOT EXISTS STRING",
-                "CREATE PROPERTY DaliAtom.status IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.primary_status IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.qualifier IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.kind IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.confidence IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.resolve_strategy IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.routine_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.pending_verification IF NOT EXISTS BOOLEAN",
+                "CREATE PROPERTY DaliAtom.last_verified_session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.pending_kind IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.pending_snapshot IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.pending_since IF NOT EXISTS LONG",
+                "CREATE PROPERTY DaliAtom.status IF NOT EXISTS STRING",       // legacy — kept for migration, removed in V2
                 "CREATE PROPERTY DaliAtom.warning IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.merge_clause IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAtom.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAtom.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliOutputColumn
                 "CREATE PROPERTY DaliOutputColumn.name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliOutputColumn.expression IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliOutputColumn.alias IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliOutputColumn.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliOutputColumn.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliJoin
                 "CREATE PROPERTY DaliJoin.join_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliJoin.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliJoin.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliParameter
                 "CREATE PROPERTY DaliParameter.param_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliParameter.param_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliParameter.param_mode IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliParameter.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliParameter.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliVariable
                 "CREATE PROPERTY DaliVariable.var_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliVariable.var_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliVariable.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliVariable.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
+                // DaliCursor (HAL3-04, ADR-HND-011)
+                "CREATE PROPERTY DaliCursor.cursor_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.cursor_name IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.routine_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.select_stmt_geoid IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliCursor.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliAffectedColumn
                 "CREATE PROPERTY DaliAffectedColumn.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliAffectedColumn.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliAffectedColumn.statement_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAffectedColumn.column_ref IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliAffectedColumn.column_name IF NOT EXISTS STRING",
@@ -230,6 +363,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliAffectedColumn.order_affect IF NOT EXISTS INTEGER",
                 // DaliRecord (G6: BULK COLLECT target)
                 "CREATE PROPERTY DaliRecord.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecord.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliRecord.record_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.record_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecord.routine_geoid IF NOT EXISTS STRING",
@@ -237,6 +371,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliRecord.fields IF NOT EXISTS STRING",
                 // DaliRecordField (KI-RETURN-1)
                 "CREATE PROPERTY DaliRecordField.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliRecordField.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliRecordField.field_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecordField.field_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliRecordField.field_order IF NOT EXISTS INTEGER",
@@ -248,6 +383,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY RETURNS_INTO.returning_exprs IF NOT EXISTS STRING",
                 // DaliDDLStatement (v27: ALTER / CREATE / DROP)
                 "CREATE PROPERTY DaliDDLStatement.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliDDLStatement.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliDDLStatement.db_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliDDLStatement.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliDDLStatement.type IF NOT EXISTS STRING",
@@ -258,6 +394,7 @@ final class RemoteSchemaCommands {
                 // DaliSnippet (v22: +line_start/end; v28: +element_rid/element_type — direct @rid link)
                 "CREATE PROPERTY DaliSnippet.stmt_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliSnippet.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliSnippet.snippet IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.snippet_hash IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliSnippet.line_start IF NOT EXISTS INTEGER",
@@ -284,6 +421,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliConstraint.table_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliConstraint.column_names IF NOT EXISTS STRING",      // JSON array
                 "CREATE PROPERTY DaliConstraint.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliConstraint.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // DaliPrimaryKey extends DaliConstraint
                 "CREATE VERTEX TYPE DaliPrimaryKey IF NOT EXISTS EXTENDS DaliConstraint",
                 // DaliForeignKey extends DaliConstraint — FK-specific fields
@@ -291,24 +429,21 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliForeignKey.ref_table_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliForeignKey.ref_column_names IF NOT EXISTS STRING",  // JSON array
                 "CREATE PROPERTY DaliForeignKey.on_delete IF NOT EXISTS STRING",         // CASCADE | SET NULL | null
-                // KI-DDL-1: operation property on DDL modifier edges (ADD | MODIFY | DROP)
-                "CREATE PROPERTY DaliDDLModifiesColumn.operation IF NOT EXISTS STRING",
-                // ── Constraint edge types ───────────────────────────────────────────────
-                // DaliTable ──HAS_PRIMARY_KEY──► DaliPrimaryKey
-                "CREATE EDGE TYPE HAS_PRIMARY_KEY IF NOT EXISTS",
-                // DaliTable ──HAS_FOREIGN_KEY──► DaliForeignKey
-                "CREATE EDGE TYPE HAS_FOREIGN_KEY IF NOT EXISTS",
-                // DaliPrimaryKey / DaliForeignKey ──IS_PK_COLUMN──► DaliColumn  (with order_id)
-                "CREATE EDGE TYPE IS_PK_COLUMN IF NOT EXISTS",
-                "CREATE PROPERTY IS_PK_COLUMN.order_id IF NOT EXISTS INTEGER",
-                // DaliForeignKey ──IS_FK_COLUMN──► DaliColumn  (with order_id)
-                "CREATE EDGE TYPE IS_FK_COLUMN IF NOT EXISTS",
-                "CREATE PROPERTY IS_FK_COLUMN.order_id IF NOT EXISTS INTEGER",
-                // DaliForeignKey ──REFERENCES_TABLE──► DaliTable
-                "CREATE EDGE TYPE REFERENCES_TABLE IF NOT EXISTS",
-                // DaliForeignKey ──REFERENCES_COLUMN──► DaliColumn  (with order_id)
-                "CREATE EDGE TYPE REFERENCES_COLUMN IF NOT EXISTS",
-                "CREATE PROPERTY REFERENCES_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // KI-DDL-1: properties on DDL_MODIFIES (folded — Sprint 0.1, §13.8 F-2)
+                "CREATE PROPERTY DDL_MODIFIES.target_kind IF NOT EXISTS STRING",  // 'table' | 'column'
+                "CREATE PROPERTY DDL_MODIFIES.operation IF NOT EXISTS STRING",     // ADD | MODIFY | DROP (column ops only)
+                // ── Constraint edge types (F-1 folded: 9 → 3) ────────────────────────
+                // DaliTable ──HAS_CONSTRAINT──► DaliConstraint (kind: PK/FK/UQ/CH)
+                "CREATE EDGE TYPE HAS_CONSTRAINT IF NOT EXISTS",
+                "CREATE PROPERTY HAS_CONSTRAINT.kind IF NOT EXISTS STRING",
+                // DaliConstraint ──CONSTRAINT_HAS_COLUMN──► DaliColumn (kind + order_id)
+                "CREATE EDGE TYPE CONSTRAINT_HAS_COLUMN IF NOT EXISTS",
+                "CREATE PROPERTY CONSTRAINT_HAS_COLUMN.kind IF NOT EXISTS STRING",
+                "CREATE PROPERTY CONSTRAINT_HAS_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // DaliForeignKey ──REFERENCES──► DaliTable or DaliColumn (target_kind: table/column)
+                "CREATE EDGE TYPE REFERENCES IF NOT EXISTS",
+                "CREATE PROPERTY REFERENCES.target_kind IF NOT EXISTS STRING",
+                "CREATE PROPERTY REFERENCES.order_id IF NOT EXISTS INTEGER",
                 // KI-PIPE-1: pipelined function flag
                 "CREATE PROPERTY DaliRoutine.is_pipelined IF NOT EXISTS BOOLEAN",
                 // KI-PRAGMA-1: autonomous transaction flag
@@ -321,12 +456,14 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliPlType.scope_geoid IF NOT EXISTS STRING",   // declaring package or routine
                 "CREATE PROPERTY DaliPlType.declared_at_line IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliPlType.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlType.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 "CREATE PROPERTY DaliPlTypeField.field_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.type_geoid IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.field_name IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.field_type IF NOT EXISTS STRING",
                 "CREATE PROPERTY DaliPlTypeField.position IF NOT EXISTS INTEGER",
                 "CREATE PROPERTY DaliPlTypeField.session_id IF NOT EXISTS STRING",
+                "CREATE PROPERTY DaliPlTypeField.source_file IF NOT EXISTS STRING",  // G4: per-file denorm
                 // HND-01: DaliRecord back-ref to the PlType template it was instantiated from
                 "CREATE PROPERTY DaliRecord.pl_type_geoid IF NOT EXISTS STRING",
                 // KI-FLASHBACK-1: AS OF TIMESTAMP/SCN on DaliStatement
@@ -334,8 +471,7 @@ final class RemoteSchemaCommands {
                 "CREATE PROPERTY DaliStatement.flashback_expr IF NOT EXISTS STRING",
                 // KI-DBMSSQL-1: DBMS_SQL dynamic SQL marker on DaliStatement
                 "CREATE PROPERTY DaliStatement.contains_dynamic_sql IF NOT EXISTS BOOLEAN",
-                // KI-005: UNIQUE / CHECK constraint properties
-                "CREATE PROPERTY IS_UNIQUE_COLUMN.order_id IF NOT EXISTS INTEGER",
+                // KI-005: CHECK constraint expression
                 "CREATE PROPERTY DaliCheckConstraint.check_expression IF NOT EXISTS STRING",
         };
     }

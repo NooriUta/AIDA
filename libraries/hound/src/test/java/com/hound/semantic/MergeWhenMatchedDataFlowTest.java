@@ -63,7 +63,7 @@ class MergeWhenMatchedDataFlowTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toLowerCase().startsWith("src.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedSrc,
@@ -92,7 +92,7 @@ class MergeWhenMatchedDataFlowTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toLowerCase().startsWith("src.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedSrc,
@@ -131,7 +131,7 @@ class MergeWhenMatchedDataFlowTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toLowerCase().contains("effective_from");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedSrcEffective,
@@ -155,7 +155,7 @@ class MergeWhenMatchedDataFlowTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toLowerCase().startsWith("src.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedSrc,
@@ -190,7 +190,7 @@ class MergeWhenMatchedDataFlowTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toLowerCase().contains("product_id");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedProductId,

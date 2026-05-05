@@ -27,6 +27,17 @@ public class ColumnInfo {
     private final Set<String> usedInStatements = new HashSet<>();
     private final Set<String> usedInRoutines = new HashSet<>();
 
+    // ── inferred / suspicious markers (ADR-HND-006) — set post-construction ──
+    private boolean inferred = false;
+    private String sourcePass = null;
+    private boolean suspicious = false;
+
+    public void markAsInferred(String sourcePass) { this.inferred = true; this.sourcePass = sourcePass; }
+    public void markAsSuspicious() { this.suspicious = true; }
+    public boolean isInferred() { return inferred; }
+    public String getSourcePass() { return sourcePass; }
+    public boolean isSuspicious() { return suspicious; }
+
     // ── PK / FK markers — set post-construction by StructureAndLineageBuilder.addConstraint() ──
     /** True if this column is part of the table's PRIMARY KEY. Mutable — set after parsing out_of_line_constraint. */
     private boolean isPk = false;

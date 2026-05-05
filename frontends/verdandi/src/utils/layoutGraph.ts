@@ -53,9 +53,10 @@ function applyGridLayout(nodes: LoomNode[]): LoomNode[] {
 // CALLS is included so routine→routine call relationships inform ELK positioning
 // at L2 AGG (routines that only call each other, with no shared table, would
 // otherwise appear as unconnected components and be placed far apart).
+// Sprint 0.1 SCHEMA_CLEANUP: JOIN_FLOW, UNION_FLOW removed (§13.5).
 const DATA_FLOW_FOR_LAYOUT = new Set([
   'READS_FROM', 'WRITES_TO', 'DATA_FLOW',
-  'FILTER_FLOW', 'JOIN_FLOW', 'UNION_FLOW', 'ATOM_PRODUCES', 'CALLS',
+  'FILTER_FLOW', 'ATOM_PRODUCES', 'CALLS',
 ]);
 
 // ─── ELK types (minimal, avoids dependency on @types/elkjs) ──────────────────

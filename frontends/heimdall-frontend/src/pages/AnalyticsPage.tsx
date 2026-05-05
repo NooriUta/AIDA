@@ -17,6 +17,7 @@ import { HotNodesChart }                   from '../components/analytics/HotNode
 import { LevelDistributionPie }            from '../components/analytics/LevelDistributionPie';
 import { SlowRendersList }                 from '../components/analytics/SlowRendersList';
 import { ActiveUsersWidget }               from '../components/analytics/ActiveUsersWidget';
+import { EventTypesWidget }                from '../components/analytics/EventTypesWidget';
 import type { UxSummary }                  from '../api/analytics';
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -103,8 +104,14 @@ export default function AnalyticsPage() {
           <LevelDistributionPie distribution={summary.levelDistribution} />
         </section>
 
+        {/* Verdandi event types */}
+        <section className="analytics-card" data-testid="event-types-section">
+          <h2 className="analytics-card-title">{t('analytics.eventTypes', 'Verdandi Activity')}</h2>
+          <EventTypesWidget eventTypes={summary.eventTypeCounts ?? []} />
+        </section>
+
         {/* Hot nodes */}
-        <section className="analytics-card analytics-card--wide" data-testid="hot-nodes-section">
+        <section className="analytics-card analytics-card--full" data-testid="hot-nodes-section">
           <h2 className="analytics-card-title">{t('analytics.hotNodes', 'Most-Clicked Nodes')}</h2>
           <HotNodesChart nodes={summary.hotNodes} />
         </section>

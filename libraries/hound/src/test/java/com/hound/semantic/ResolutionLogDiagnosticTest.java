@@ -101,10 +101,10 @@ class ResolutionLogDiagnosticTest {
                         Collectors.counting()));
 
         long total     = allLog.size();
-        long unresolved = byKind.getOrDefault("unresolved", 0L);
-        long resolved  = byKind.getOrDefault("Обработано", 0L);
-        long constants = byKind.getOrDefault("constant", 0L);
-        long functions = byKind.getOrDefault("function_call", 0L);
+        long unresolved = byKind.getOrDefault("UNRESOLVED", 0L);
+        long resolved  = byKind.getOrDefault("RESOLVED", 0L);
+        long constants = byKind.getOrDefault("CONSTANT", 0L);
+        long functions = byKind.getOrDefault("FUNCTION_CALL", 0L);
 
         System.out.println("══════════════════════════════════════════════════════");
         System.out.println("  RESOLUTION SUMMARY");
@@ -117,7 +117,7 @@ class ResolutionLogDiagnosticTest {
 
         // ── Top unresolved raw_input patterns ──
         List<Map<String, Object>> unresolvedEntries = allLog.stream()
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .collect(Collectors.toList());
 
         if (!unresolvedEntries.isEmpty()) {

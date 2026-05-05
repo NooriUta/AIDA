@@ -102,6 +102,26 @@ class UxAggregatorTest {
         assertThat(s.slowRenders().size()).isLessThanOrEqualTo(UxAggregator.SLOW_RENDER_MAX);
     }
 
+    // ── Event type counts ──────────────────────────────────────────────────────
+
+    @Test
+    void eventTypeCounts_tracksVerdandiEventsByType() {
+        aggregator.record(loomNodeSelected("n1", "DaliTable", "s1"));
+        aggregator.record(loomNodeSelected("n2", "DaliTable", "s1"));
+        aggregator.record(loomNodeSelected("n3", "DaliTable", "s1"));
+        aggregator.record(event("LOOM_FILTER_APPLIED", EventLevel.INFO, "s1", null));
+        aggregator.record(event("LOOM_DRILL_DOWN",     EventLevel.INFO, "s1", null));
+        // non-verdandi event — should NOT appear in counts
+        aggregator.record(new HeimdallEvent(
+                System.currentTimeMillis(), "dali", "HOUND_PARSE_STARTED",
+                EventLevel.INFO, "s1", null, null, 0, Map.of()));
+
+        UxAggregator.UxSummary s = aggregator.getUxSummary();
+        assertThat(s.eventTypeCounts()).hasSize(3);
+        assertThat(s.eventTypeCounts().get(0).eventType()).isEqualTo("LOOM_NODE_SELECTED");
+        assertThat(s.eventTypeCounts().get(0).count()).isEqualTo(3);
+    }
+
     // ── Active sessions ───────────────────────────────────────────────────────
 
     @Test
@@ -142,13 +162,13 @@ class UxAggregatorTest {
         return new HeimdallEvent(
                 System.currentTimeMillis(), "verdandi", "LOOM_NODE_SELECTED",
                 EventLevel.INFO, sessionId, null, null, 0,
-                Map.of("node_id", nodeId, "node_type", nodeType));
+                Map.of("nodeId", nodeId, "nodeType", nodeType));
     }
 
     private HeimdallEvent loomViewSlow(int nodesCount, long renderMs, String sessionId) {
         return new HeimdallEvent(
                 System.currentTimeMillis(), "verdandi", "LOOM_VIEW_SLOW",
                 EventLevel.WARN, sessionId, null, null, renderMs,
-                Map.of("nodes_count", nodesCount, "render_time_ms", renderMs));
+                Map.of("nodeCount", nodesCount));
     }
 }

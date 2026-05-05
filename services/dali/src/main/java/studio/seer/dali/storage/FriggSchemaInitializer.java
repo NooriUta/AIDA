@@ -251,6 +251,36 @@ public class FriggSchemaInitializer {
         } catch (Exception e) {
             log.warn("FriggSchemaInitializer: could not reset stale PROCESSING jobs: {}", e.getMessage());
         }
+        // BUG-SS-ENQUEUED-MISMATCH: Jobs can have state='ENQUEUED' in the column but a
+        // terminal state (SUCCEEDED/FAILED) in jobAsJson — caused by a previous crash while
+        // JobRunr was updating state. At startup BackgroundJobServer picks them up, tries
+        // ENQUEUED→PROCESSING, and throws IllegalJobStateChangeException. After 5 occurrences
+        // it declares FATAL and shuts down, making Dali return HTTP 409 for all new uploads.
+        // Fix: delete all ENQUEUED rows at startup. Any legitimately queued work must be
+        // resubmitted (client receives HTTP 202 on re-upload).
+        try {
+            frigg.sql("DELETE FROM `jobrunr_jobs` WHERE state = 'ENQUEUED'");
+            log.info("FriggSchemaInitializer: cleared stale ENQUEUED jobs");
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not clear stale ENQUEUED jobs: {}", e.getMessage());
+        }
+        // BUG-SS-SCHEDULED-STALE: Two failure modes for SCHEDULED jobs:
+        //   1. scheduledAt IS NULL  — invisible to the poll, stay stuck forever.
+        //   2. scheduledAt is valid but jobAsJson has a terminal state (FAILED/SUCCEEDED)
+        //      from a prior crash — when the retry fires, BackgroundJobServer tries
+        //      SCHEDULED→ENQUEUED→PROCESSING but jobAsJson disagrees → IllegalJobStateChangeException.
+        //      After 5 occurrences the server declares FATAL.  Typical source: probe sessions
+        //      that failed mid-run with an old/bad dialect (e.g. 'sql' instead of 'plsql') had
+        //      their retries scheduled; those retry jobs carry stale JSON on the next Dali start.
+        // Fix: delete ALL SCHEDULED jobs at startup.  Any legitimately scheduled work
+        // (harvest crons, etc.) will be rescheduled on its next cron tick; one-off sessions
+        // must be resubmitted by the client.
+        try {
+            frigg.sql("DELETE FROM `jobrunr_jobs` WHERE state = 'SCHEDULED'");
+            log.info("FriggSchemaInitializer: cleared stale SCHEDULED jobs");
+        } catch (Exception e) {
+            log.warn("FriggSchemaInitializer: could not clear stale SCHEDULED jobs: {}", e.getMessage());
+        }
     }
 
     private boolean createDocumentType(String typeName) {

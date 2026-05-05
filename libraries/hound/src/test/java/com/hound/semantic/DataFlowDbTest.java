@@ -115,7 +115,7 @@ class DataFlowDbTest {
     void dataFlowEdges_boundByResolvedAtoms() throws Exception {
         if (!parseAllFixtures()) { System.out.println("[SKIP] no fixtures"); return; }
         long dfCount     = scalar("SELECT count(*) AS cnt FROM DATA_FLOW");
-        long resolvedCnt = scalar("SELECT count(*) AS cnt FROM DaliAtom WHERE status = 'Обработано'");
+        long resolvedCnt = scalar("SELECT count(*) AS cnt FROM DaliAtom WHERE coalesce(primary_status, status) IN ['RESOLVED', 'Обработано']");
         System.out.printf("DATA_FLOW: %d  resolved atoms: %d%n", dfCount, resolvedCnt);
         assertTrue(dfCount <= resolvedCnt,
                 "DATA_FLOW count (%d) must not exceed resolved atom count (%d)".formatted(dfCount, resolvedCnt));

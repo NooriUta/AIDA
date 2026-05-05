@@ -6,6 +6,7 @@ import com.hound.semantic.model.AtomInfo;
 import com.hound.semantic.model.RecordInfo;
 import com.hound.semantic.model.RoutineInfo;
 import com.hound.semantic.model.StatementInfo;
+import com.hound.semantic.model.PlTypeInfo;
 import com.hound.semantic.model.TableInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,14 @@ public class AtomProcessor {
 
     // S1.PRE: resolution log — one entry per resolved/unresolved column-reference atom
     private final List<Map<String, Object>> resolutionLog = new ArrayList<>();
+
+    // HAL-08: pending qualified atom refs (alias.column where alias not yet known)
+    public record PendingQualifiedAtom(
+            Map<String, Object> atomData, String alias, String columnName,
+            String statementGeoid, String atomKey) {}
+    private final List<PendingQualifiedAtom> pendingQualifiedAtoms = new ArrayList<>();
+
+    public List<PendingQualifiedAtom> getPendingQualifiedAtoms() { return pendingQualifiedAtoms; }
 
     // G3: current MERGE UPDATE target column (set at enterMerge_element, cleared at exit)
     private String currentMergeTargetColumn = null;
@@ -78,8 +87,15 @@ public class AtomProcessor {
         if (text == null || text.isBlank()) return;
 
         if (statementGeoid == null) {
-            registerUnattachedAtom(text, buildAtomData(text, line, col, endLine, endCol,
-                    context, null, parentContext, isComplex, tokens, tokenDetails, nestedAtomCount));
+            Map<String, Object> unattData = buildAtomData(text, line, col, endLine, endCol,
+                    context, null, parentContext, isComplex, tokens, tokenDetails, nestedAtomCount);
+            // G3-FIX: classify unattached atoms (constant detection) — previously skipped
+            classifyAtom(unattData);
+            // G3-FIX: attach routine_geoid so unattached atoms are traceable to their routine
+            if (scopeManager != null && scopeManager.currentRoutine() != null) {
+                unattData.put("routine_geoid", scopeManager.currentRoutine());
+            }
+            registerUnattachedAtom(text, unattData);
             return;
         }
 
@@ -95,6 +111,7 @@ public class AtomProcessor {
         // Если есть вложенные атомы — сразу помечаем как обработанный
         if (nestedAtomCount > 0) {
             atomData.put("status", AtomInfo.STATUS_RESOLVED);
+            atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
             atomData.put("is_complex_atom", true);
         }
 
@@ -326,6 +343,10 @@ public class AtomProcessor {
 
         logger.debug("Resolving {} atoms for statement {}", stmtAtoms.size(), statementGeoid);
 
+        // HAL-07: capture routine_geoid before scope pops
+        String routineGeoid = (scopeManager != null && scopeManager.currentRoutine() != null)
+                ? scopeManager.currentRoutine() : null;
+
         int total = 0, resolved = 0, constants = 0, functions = 0, failed = 0;
 
         for (var entry : stmtAtoms.entrySet()) {
@@ -333,18 +354,20 @@ public class AtomProcessor {
             Map<String, Object> atomData = entry.getValue();
 
             // Пропускаем уже обработанные
-            if (atomData.get("status") != null) continue;
+            if (atomData.get("primary_status") != null) continue;
 
             // Пропускаем константы
             if (Boolean.TRUE.equals(atomData.get("is_constant"))) {
-                atomData.put("status", "constant");
+                atomData.put("status", AtomInfo.STATUS_CONSTANT);
+                atomData.put("primary_status", AtomInfo.STATUS_CONSTANT);
                 constants++;
                 appendLog(statementGeoid, atomData, null);
                 continue;
             }
             // Пропускаем вызовы функций
             if (Boolean.TRUE.equals(atomData.get("is_function_call"))) {
-                atomData.put("status", "function_call");
+                atomData.put("status", AtomInfo.STATUS_FUNCTION_CALL);
+                atomData.put("primary_status", AtomInfo.STATUS_FUNCTION_CALL);
                 functions++;
                 appendLog(statementGeoid, atomData, null);
                 continue;
@@ -355,6 +378,7 @@ public class AtomProcessor {
 
             if (resolution != null && Boolean.TRUE.equals(resolution.get("resolved"))) {
                 atomData.put("status", AtomInfo.STATUS_RESOLVED);
+                atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
                 atomData.put("resolution", resolution);
                 atomData.put("table_geoid", resolution.get("table_geoid"));
                 atomData.put("column_name", resolution.get("column_name"));
@@ -363,9 +387,23 @@ public class AtomProcessor {
                 atomData.put("is_routine_param", Boolean.TRUE.equals(resolution.get("is_routine_param")));
                 atomData.put("is_routine_var", Boolean.TRUE.equals(resolution.get("is_routine_var")));
 
-                // Reconstruct column only for physical tables.
-                // SubQuery/CTE atoms resolve to a statement geoid — those are linked
-                // via ATOM_REF_OUTPUT_COL, not via DaliColumn records.
+                // HAL-01: derive qualifier from resolution source
+                String resolveStrategy = (String) resolution.get("resolve_strategy");
+                atomData.put("resolve_strategy", resolveStrategy);
+                if (resolveStrategy != null) {
+                    switch (resolveStrategy) {
+                        case "3_cte"             -> atomData.put("qualifier", AtomInfo.QUALIFIER_CTE);
+                        case "4_subquery_alias",
+                             "5_child_subquery",
+                             "6_source_subquery" -> atomData.put("qualifier", AtomInfo.QUALIFIER_SUBQUERY);
+                        case "resolveImplicitTable" -> atomData.put("qualifier", AtomInfo.QUALIFIER_INFERRED);
+                        case "cursorRecordAliases"  -> atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                        default                  -> atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                    }
+                } else {
+                    atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                }
+
                 String tableGeoid = (String) resolution.get("table_geoid");
                 String columnName = (String) resolution.get("column_name");
                 if (tableGeoid != null && columnName != null && builder != null
@@ -376,28 +414,95 @@ public class AtomProcessor {
                 resolved++;
                 logger.debug("Atom resolved: {} → table={}, column={}", entry.getKey(), tableGeoid, columnName);
 
-                // Routine variables / parameters cannot produce DATA_FLOW edges (no DaliColumn source).
-                // Mark them so the UI can surface the gap rather than silently showing no lineage.
                 boolean isVar   = Boolean.TRUE.equals(atomData.get("is_routine_var"));
                 boolean isParam = Boolean.TRUE.equals(atomData.get("is_routine_param"));
                 if ((isVar || isParam) && atomData.get("dml_target_ref") != null) {
-                    atomData.put("warning", AtomInfo.STATUS_UNBOUND);
+                    atomData.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                    atomData.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
                 }
             } else {
                 failed++;
                 String parentCtx = (String) atomData.get("parent_context");
-                if ("SELECT".equals(parentCtx) || "INSERT".equals(parentCtx)
-                        || "UPDATE".equals(parentCtx) || "MERGE".equals(parentCtx)
-                        || "SET_EXPR".equals(parentCtx)) {
-                    logger.warn("Could not resolve atom: {} in context {}", entry.getKey(), parentCtx);
+
+                // HAL-08: qualified alias.column deferred to post-walk pending resolution
+                if (resolution != null && Boolean.TRUE.equals(resolution.get("pending_qualified"))) {
+                    String alias = (String) resolution.get("pending_alias");
+                    String colName = (String) resolution.get("pending_column");
+                    atomData.put("status", AtomInfo.STATUS_PENDING_INJECT);
+                    atomData.put("primary_status", AtomInfo.STATUS_PENDING_INJECT);
+                    atomData.put("column_name", colName);
+                    pendingQualifiedAtoms.add(new PendingQualifiedAtom(
+                            atomData, alias, colName, statementGeoid, entry.getKey()));
+                    logger.debug("PENDING_QUALIFIED: {} alias={} col={} deferred",
+                            entry.getKey(), alias, colName);
+                } else {
+                    // HAL2-01: check if atom references a pending source → PENDING_INJECT
+                    String pendingKind = detectPendingKind(atomData, statementGeoid, resolution);
+                    if (pendingKind != null) {
+                        atomData.put("status", AtomInfo.STATUS_PENDING_INJECT);
+                        atomData.put("primary_status", AtomInfo.STATUS_PENDING_INJECT);
+                        atomData.put("pending_kind", pendingKind);
+                        atomData.put("pending_since", System.currentTimeMillis());
+                        String pendingRoutine = scopeManager != null ? scopeManager.currentRoutine() : null;
+                        atomData.put("pending_snapshot", buildPendingSnapshot(
+                                pendingRoutine, statementGeoid));
+                        logger.debug("HAL2-01: PENDING_INJECT kind={} atom={}", pendingKind, entry.getKey());
+                    } else {
+                        if ("SELECT".equals(parentCtx) || "INSERT".equals(parentCtx)
+                                || "UPDATE".equals(parentCtx) || "MERGE".equals(parentCtx)
+                                || "SET_EXPR".equals(parentCtx)) {
+                            logger.warn("Could not resolve atom: {} in context {}", entry.getKey(), parentCtx);
+                            listener.onSemanticWarning(file, "ATOM_UNRESOLVED",
+                                    "Could not resolve atom: " + entry.getKey()
+                                            + " in context " + parentCtx);
+                        }
+                        atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+                        atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                        atomData.put("warning", AtomInfo.LEGACY_STATUS_UNRESOLVED);
+                    }
                 }
-                atomData.put("status", "unresolved");
-                atomData.put("warning", AtomInfo.STATUS_UNRESOLVED);
                 if (resolution != null) {
                     atomData.put("resolution", resolution);
                 }
             }
             appendLog(statementGeoid, atomData, resolution);
+        }
+
+        // HAL-02: derive kind; HAL-04: CTRL_FLOW + FN_VERIFIED; HAL-03: confidence
+        for (var atomData : stmtAtoms.values()) {
+            atomData.put("kind", deriveKind(atomData));
+
+            // HAL-04: CTRL_FLOW qualifier for control-flow contexts (ADR-HND-004 §4A)
+            String parentCtx = (String) atomData.get("parent_context");
+            if (parentCtx != null) {
+                switch (parentCtx) {
+                    case "IF_COND", "WHILE_COND", "EXIT_WHEN", "CONTINUE_WHEN", "RETURN_EXPR"
+                            -> atomData.put("qualifier", AtomInfo.QUALIFIER_CTRL_FLOW);
+                    default -> {}
+                }
+            }
+
+            // HAL-04: FN_VERIFIED / FN_UNVERIFIED for function calls
+            if (AtomInfo.STATUS_FUNCTION_CALL.equals(atomData.get("primary_status"))) {
+                boolean verified = false;
+                if (builder != null) {
+                    String atomText = (String) atomData.get("atom_text");
+                    if (atomText != null) {
+                        String funcName = atomText.contains("(")
+                                ? atomText.substring(0, atomText.indexOf('(')).trim().toUpperCase()
+                                : atomText.toUpperCase();
+                        verified = builder.getRoutines().containsKey(funcName);
+                    }
+                }
+                atomData.put("qualifier", verified
+                        ? AtomInfo.QUALIFIER_FN_VERIFIED : AtomInfo.QUALIFIER_FN_UNVERIFIED);
+            }
+
+            atomData.put("confidence", deriveConfidence(atomData));
+
+            // HAL-07: routine_geoid + pending_verification
+            if (routineGeoid != null) atomData.put("routine_geoid", routineGeoid);
+            atomData.put("pending_verification", true);
         }
 
         // B2.AR3 — atom resolution audit
@@ -437,8 +542,7 @@ public class AtomProcessor {
         if (si == null || !"INSERT".equals(si.getType())) return;
         if (!si.getInsertTargetColumns().isEmpty()) {
             // G5 explicit col list: column bindings already handled, but we still need to
-            // record which collection variables appear in VALUES so that RemoteWriter can
-            // create RECORD_USED_IN edges for FORALL INSERT patterns (G6-EXT).
+            // record which collection variables appear in VALUES for FORALL INSERT patterns (G6-EXT).
             Set<String> collsFound = new java.util.LinkedHashSet<>();
             for (Map<String, Object> a : stmtAtoms.values()) {
                 if (!Boolean.TRUE.equals(a.get("is_collection_field_access"))) continue;
@@ -508,7 +612,7 @@ public class AtomProcessor {
             }
 
             String columnRef = targetGeoid != null ? targetGeoid + "." + targetColName : targetColName;
-            // dataset_alias = collection variable name → used by RemoteWriter to build RECORD_USED_IN edge
+            // dataset_alias = collection variable name → used for FORALL INSERT column mapping
             si.addAffectedColumn(columnRef, targetColName, targetGeoid, collName,
                                  "INSERT", "target", slot);
             logger.debug("G6 INSERT_VALUES [{}] slot={} field(s)={} coll={} → target_col={}",
@@ -613,6 +717,28 @@ public class AtomProcessor {
     }
 
     /**
+     * G3-FIX: Immediately marks an already-registered atom as RESOLVED, binding it to the given
+     * target table and column. Used for MERGE INSERT column list atoms which are DML targets,
+     * not source references.
+     */
+    public void resolveAtomToTable(String statementGeoid, String atomKey,
+                                    String targetTableGeoid, String columnName) {
+        Map<String, Map<String, Object>> stmtAtoms = atomsByStatement.get(statementGeoid);
+        if (stmtAtoms == null) return;
+        Map<String, Object> atomData = stmtAtoms.get(atomKey);
+        if (atomData == null) return;
+
+        atomData.put("status", AtomInfo.STATUS_RESOLVED);
+        atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
+        atomData.put("is_column_reference", true);
+        atomData.put("table_geoid", targetTableGeoid);
+        atomData.put("table_name", targetTableGeoid);
+        atomData.put("column_name", columnName.toUpperCase());
+        atomData.put("resolve_strategy", "merge_insert_target");
+        atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+    }
+
+    /**
      * Порт Python: PlSqlAnalyzerListener._resolve_atom_reference()
      * ПОЛНАЯ логика разрешения атомов.
      */
@@ -648,6 +774,7 @@ public class AtomProcessor {
             if ("NEXTVAL".equalsIgnoreCase(tokens.get(tokens.size() - 1))) {
                 result.put("resolved", true);
                 result.put("reference_type", "sequence");
+                result.put("resolve_strategy", "sequence");
                 result.put("reason", "Выдача нового сиквенса");
                 return result;
             }
@@ -668,6 +795,7 @@ public class AtomProcessor {
                     result.put("column_name", columnName);
                     result.put("reference_type", "tables");
                     result.put("is_column_reference", true);
+                    result.put("resolve_strategy", resolved.getStrategy());
                     result.put("reason", "schema.table.column resolved: " + tableRef);
                     return result;
                 }
@@ -685,6 +813,7 @@ public class AtomProcessor {
                     result.put("column_name", columnName);
                     result.put("reference_type", resolved.getType().toLowerCase() + "s");
                     result.put("is_column_reference", true);
+                    result.put("resolve_strategy", resolved.getStrategy());
                     result.put("reason", "table.column resolved via " + resolved.getType());
                     return result;
                 }
@@ -701,6 +830,7 @@ public class AtomProcessor {
                             result.put("column_name", columnName);
                             result.put("reference_type", parentResolved.getType().toLowerCase() + "s");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", parentResolved.getStrategy());
                             result.put("reason", "table.column resolved via parent scope: " + tableAlias);
                             return result;
                         }
@@ -720,19 +850,24 @@ public class AtomProcessor {
                             result.put("column_name", columnName);
                             result.put("reference_type", "cursor_record");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", "cursorRecordAliases");
                             result.put("reason", "cursor record: " + tableAlias + "." + columnName);
                         } else {
-                            // Cursor exists but source table unknown (e.g., computed column)
                             result.put("resolved", true);
                             result.put("reference_type", "cursor_record_expr");
                             result.put("column_name", columnName);
+                            result.put("resolve_strategy", "cursorRecordAliases");
                             result.put("reason", "cursor record expr: " + tableAlias + "." + columnName);
                         }
                         return result;
                     }
                 }
 
-                result.put("reason", "Таблица/подзапрос не найден для: " + tableAlias);
+                // HAL-08: defer to pending — alias may appear in a later block
+                result.put("pending_qualified", true);
+                result.put("pending_alias", tableAlias);
+                result.put("pending_column", columnName);
+                result.put("reason", "Таблица/подзапрос не найден для: " + tableAlias + " (deferred)");
                 return result;
             }
 
@@ -743,6 +878,7 @@ public class AtomProcessor {
                 String firstText = tokenDetails.get(0).get("text");
                 if (firstText != null && "DATE".equalsIgnoreCase(firstText)) {
                     result.put("resolved", true);
+                    result.put("resolve_strategy", "constant");
                     result.put("reason", "Заглушка для константы ANSI Дата");
                     return result;
                 }
@@ -765,6 +901,7 @@ public class AtomProcessor {
                             result.put("resolved", true);
                             result.put("is_routine_var", true);
                             result.put("reference_type", "routine_variable");
+                            result.put("resolve_strategy", "hasVariable");
                             result.put("reason", "Variable of " + currentRoutine);
                             return result;
                         }
@@ -772,6 +909,7 @@ public class AtomProcessor {
                             result.put("resolved", true);
                             result.put("is_routine_param", true);
                             result.put("reference_type", "routine_parameter");
+                            result.put("resolve_strategy", "hasParameter");
                             result.put("reason", "Parameter of " + currentRoutine);
                             return result;
                         }
@@ -795,6 +933,7 @@ public class AtomProcessor {
                             result.put("column_name", colName);
                             result.put("reference_type", "tables");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", "source_table_direct");
                             result.put("reason", "Простая ссылка resolved: таблица " + tableInfo.tableName());
                             return result;
                         }
@@ -810,6 +949,7 @@ public class AtomProcessor {
                             result.put("column_name", colName);
                             result.put("reference_type", "tables");
                             result.put("is_column_reference", true);
+                            result.put("resolve_strategy", "target_table_direct");
                             result.put("reason", "Простая ссылка resolved: target таблица " + tableInfo.tableName());
                             return result;
                         }
@@ -825,6 +965,7 @@ public class AtomProcessor {
                 result.put("column_name", tokens.get(0).toUpperCase());
                 result.put("reference_type", "implicit");
                 result.put("is_column_reference", true);
+                result.put("resolve_strategy", "resolveImplicitTable");
                 result.put("reason", "Простая ссылка resolved через implicit table");
                 return result;
             }
@@ -836,6 +977,7 @@ public class AtomProcessor {
         // ═══ 3. CONSTANTS ═══
         if (!isComplex && tokens.size() == 1 && firstCanonical.isConstant()) {
             result.put("resolved", true);
+            result.put("resolve_strategy", "constant");
             result.put("reason", "Константа: " + firstCanonical);
             return result;
         }
@@ -843,6 +985,7 @@ public class AtomProcessor {
         // ═══ 4. SYSTEM PSEUDO-COLUMNS ═══
         if (tokens.size() == 1 && firstCanonical.isSystemPseudoColumn()) {
             result.put("resolved", true);
+            result.put("resolve_strategy", "system_pseudo");
             result.put("reason", "Системная псевдоколонка: " + tokens.get(0));
             return result;
         }
@@ -874,6 +1017,7 @@ public class AtomProcessor {
                 result.put("column_name", columnPart);
                 result.put("reference_type", tableRef.getType());
                 result.put("is_column_reference", true);
+                result.put("resolve_strategy", tableRef.getStrategy());
                 return result;
             }
             // Walk parent statement scopes (e.g. SOURCE.* in MERGE WHEN UPDATE SET)
@@ -889,6 +1033,7 @@ public class AtomProcessor {
                         result.put("column_name", columnPart);
                         result.put("reference_type", parentRef.getType());
                         result.put("is_column_reference", true);
+                        result.put("resolve_strategy", parentRef.getStrategy());
                         result.put("reason", "resolved via parent scope: " + parentGeoid);
                         return result;
                     }
@@ -907,11 +1052,13 @@ public class AtomProcessor {
                         result.put("column_name", columnPart);
                         result.put("reference_type", "cursor_record");
                         result.put("is_column_reference", true);
+                        result.put("resolve_strategy", "cursorRecordAliases");
                         result.put("reason", "cursor record (text): " + tablePart + "." + columnPart);
                     } else {
                         result.put("resolved", true);
                         result.put("reference_type", "cursor_record_expr");
                         result.put("column_name", columnPart);
+                        result.put("resolve_strategy", "cursorRecordAliases");
                         result.put("reason", "cursor record expr (text): " + tablePart + "." + columnPart);
                     }
                     return result;
@@ -926,6 +1073,7 @@ public class AtomProcessor {
             result.put("column_name", columnPart);
             result.put("reference_type", "implicit");
             result.put("is_column_reference", true);
+            result.put("resolve_strategy", "resolveImplicitTable");
             return result;
         }
 
@@ -1175,6 +1323,252 @@ public class AtomProcessor {
         return unattachedAtoms;
     }
 
+    public void classifyUnattachedAtoms() {
+        for (var atomData : unattachedAtoms.values()) {
+            if (Boolean.TRUE.equals(atomData.get("is_constant"))) {
+                atomData.put("primary_status", AtomInfo.STATUS_CONSTANT_ORPHAN);
+                atomData.put("status", AtomInfo.STATUS_CONSTANT_ORPHAN);
+            } else if (atomData.get("primary_status") == null) {
+                atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+            }
+            if (atomData.get("kind") == null) {
+                atomData.put("kind", deriveKind(atomData));
+            }
+            if (atomData.get("confidence") == null && atomData.get("primary_status") != null) {
+                atomData.put("confidence", deriveConfidence(atomData));
+            }
+        }
+    }
+
+    /**
+     * Post-walk: resolve deferred alias.column atoms.
+     * Called from resolvePendingColumns after all statements are parsed.
+     * For each pending qualified atom:
+     *   1. Re-try alias resolution (may succeed now that all CTEs/subqueries are registered)
+     *   2. If still unresolved: alias = table_name → find or create table + inferred column
+     *   3. Update atom status to RESOLVED or RECONSTRUCT_DIRECT
+     */
+    public void resolvePendingQualifiedAtoms() {
+        if (pendingQualifiedAtoms.isEmpty()) return;
+        int resolved = 0, reconstructed = 0;
+
+        for (var pqa : pendingQualifiedAtoms) {
+            var atomData = pqa.atomData();
+            String alias = pqa.alias();
+            String colName = pqa.columnName();
+            String stmtGeoid = pqa.statementGeoid();
+
+            // 1. Re-try alias resolution
+            if (nameResolver != null) {
+                ResolvedRef ref = nameResolver.resolve(alias, "any", stmtGeoid);
+                if (ref.isResolved()) {
+                    String tGeoid = ref.getGeoid();
+                    atomData.put("table_geoid", tGeoid);
+                    atomData.put("table_name", alias);
+                    atomData.put("column_name", colName);
+                    atomData.put("is_column_reference", true);
+                    atomData.put("resolve_strategy", ref.getStrategy());
+                    atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
+                    atomData.put("status", AtomInfo.STATUS_RESOLVED);
+                    atomData.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                    if (builder != null && tGeoid != null
+                            && !builder.getStatements().containsKey(tGeoid)) {
+                        builder.addInferredColumn(tGeoid, colName, "L5Q");
+                    }
+                    atomData.put("kind", deriveKind(atomData));
+                    atomData.put("confidence", deriveConfidence(atomData));
+                    resolved++;
+                    continue;
+                }
+
+                // 1b. Try parent statement scope
+                if (builder != null) {
+                    StatementInfo si = builder.getStatements().get(stmtGeoid);
+                    if (si != null && si.getParentStatementGeoid() != null) {
+                        ref = nameResolver.resolve(alias, "any", si.getParentStatementGeoid());
+                        if (ref.isResolved()) {
+                            String tGeoid = ref.getGeoid();
+                            atomData.put("table_geoid", tGeoid);
+                            atomData.put("table_name", alias);
+                            atomData.put("column_name", colName);
+                            atomData.put("is_column_reference", true);
+                            atomData.put("resolve_strategy", ref.getStrategy());
+                            atomData.put("primary_status", AtomInfo.STATUS_RESOLVED);
+                            atomData.put("status", AtomInfo.STATUS_RESOLVED);
+                            atomData.put("qualifier", AtomInfo.QUALIFIER_SUBQUERY);
+                            if (!builder.getStatements().containsKey(tGeoid)) {
+                                builder.addInferredColumn(tGeoid, colName, "L5Q");
+                            }
+                            atomData.put("kind", deriveKind(atomData));
+                            atomData.put("confidence", deriveConfidence(atomData));
+                            resolved++;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // 2. alias = table_name → reconstruct table + inferred column
+            if (builder != null) {
+                String upperAlias = alias.toUpperCase();
+                // Find existing table by name
+                String tGeoid = null;
+                for (var tEntry : builder.getTables().entrySet()) {
+                    String tName = tEntry.getValue().tableName();
+                    if (tName != null && tName.toUpperCase().endsWith(upperAlias)) {
+                        tGeoid = tEntry.getKey();
+                        break;
+                    }
+                }
+                // Not found → register new table with alias as table_name
+                if (tGeoid == null) {
+                    tGeoid = builder.ensureTable(upperAlias, null);
+                }
+                builder.addInferredColumn(tGeoid, colName, "L5Q");
+                atomData.put("table_geoid", tGeoid);
+                atomData.put("table_name", upperAlias);
+                atomData.put("column_name", colName);
+                atomData.put("is_column_reference", true);
+                atomData.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                atomData.put("status", AtomInfo.STATUS_RECONSTRUCT_DIRECT);
+                atomData.put("qualifier", AtomInfo.QUALIFIER_INFERRED);
+                atomData.put("resolve_strategy", "reconstruct_qualified");
+                atomData.put("kind", deriveKind(atomData));
+                atomData.put("confidence", deriveConfidence(atomData));
+                reconstructed++;
+            } else {
+                atomData.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("status", AtomInfo.STATUS_UNRESOLVED);
+                atomData.put("kind", deriveKind(atomData));
+            }
+        }
+
+        logger.info("Pending qualified atoms: {} total, {} resolved, {} reconstructed, {} unresolved",
+                pendingQualifiedAtoms.size(), resolved, reconstructed,
+                pendingQualifiedAtoms.size() - resolved - reconstructed);
+        pendingQualifiedAtoms.clear();
+    }
+
+    /**
+     * HAL2-02: Post-walk second pass — resolve PENDING_INJECT atoms.
+     * 1. Retry PIPELINED column injection (PlType registry now complete)
+     * 2. Re-resolve atoms with pending_kind against now-populated tables
+     */
+    public void resolvePendingInjectAtoms() {
+        if (builder == null) return;
+
+        // Phase 1: retry PIPELINED column injection
+        int injected = 0;
+        for (String tableGeoid : new ArrayList<>(builder.getPendingPipelinedTables())) {
+            for (RoutineInfo ri : builder.getRoutines().values()) {
+                if (!ri.isPipelined() || ri.getReturnType() == null) continue;
+                PlTypeInfo collType = builder.resolvePlTypeByName(ri.getReturnType(), null);
+                if (collType == null || !collType.isCollection()) continue;
+                PlTypeInfo elemType = builder.resolvePlTypeByName(
+                        collType.getElementTypeName(), null);
+                if (elemType != null && (elemType.isRecord() || elemType.isObject())) {
+                    builder.injectColumnsFromPlType(tableGeoid, elemType);
+                    builder.getPendingPipelinedTables().remove(tableGeoid);
+                    injected++;
+                    break;
+                }
+            }
+        }
+
+        // Phase 2: re-resolve PENDING_INJECT atoms
+        int resolved = 0, total = 0;
+        for (var stmtEntry : atomsByStatement.entrySet()) {
+            for (var atomEntry : stmtEntry.getValue().entrySet()) {
+                Map<String, Object> a = atomEntry.getValue();
+                String pk = (String) a.get("pending_kind");
+                if (pk == null) continue;
+                if (!AtomInfo.STATUS_PENDING_INJECT.equals(a.get("primary_status"))) continue;
+                total++;
+
+                String tableGeoid = (String) a.get("table_geoid");
+                String colName = (String) a.get("column_name");
+                if (tableGeoid == null || colName == null) continue;
+
+                String colGeoid = tableGeoid + "." + colName.toUpperCase();
+                if (builder.getColumns().containsKey(colGeoid)) {
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    a.put("qualifier", AtomInfo.QUALIFIER_LINKED);
+                    a.put("resolve_strategy", "pending_inject_second_pass");
+                    a.put("pending_kind", null);
+                    a.put("pending_snapshot", null);
+                    a.put("kind", deriveKind(a));
+                    a.put("confidence", deriveConfidence(a));
+                    resolved++;
+                    // HAL2-05: emit recompute event for cascade propagation
+                    String atomGeoid = (String) a.get("atom_geoid");
+                    if (atomGeoid != null) {
+                        listener.onRecomputeNeeded(atomGeoid,
+                                AtomInfo.STATUS_RECONSTRUCT_INVERSE, null);
+                    }
+                }
+            }
+        }
+
+        logger.info("HAL2-02: PIPELINED injections={}, PENDING_INJECT atoms: {} total, {} resolved",
+                injected, total, resolved);
+    }
+
+    /**
+     * HAL2-06: Classify atoms resolved against VTABLE (PlType-backed virtual tables)
+     * as RECONSTRUCT_INVERSE. Called after all resolution passes.
+     */
+    public void classifyVtableAtoms() {
+        if (builder == null) return;
+        int upgraded = 0;
+        for (var stmtEntry : atomsByStatement.values()) {
+            for (Map<String, Object> a : stmtEntry.values()) {
+                if (!AtomInfo.STATUS_RESOLVED.equals(a.get("primary_status"))) continue;
+                String tableGeoid = (String) a.get("table_geoid");
+                if (tableGeoid == null) continue;
+                TableInfo ti = builder.getTables().get(tableGeoid);
+                if (ti != null && "VTABLE".equals(ti.tableType())) {
+                    a.put("primary_status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    a.put("status", AtomInfo.STATUS_RECONSTRUCT_INVERSE);
+                    upgraded++;
+                }
+            }
+        }
+        if (upgraded > 0)
+            logger.info("HAL2-06: {} atoms upgraded to RECONSTRUCT_INVERSE (VTABLE-backed)", upgraded);
+    }
+
+    /**
+     * HAL2-03: Expire PENDING_INJECT atoms older than the given TTL.
+     * Transitions them to UNRESOLVED and clears pending fields.
+     * @param ttlMs TTL in milliseconds (default: {@link AtomInfo#PENDING_TTL_MS})
+     * @return number of atoms expired
+     */
+    public int expirePendingAtoms(long ttlMs) {
+        long now = System.currentTimeMillis();
+        int expired = 0;
+        for (var stmtEntry : atomsByStatement.values()) {
+            for (Map<String, Object> a : stmtEntry.values()) {
+                if (!AtomInfo.STATUS_PENDING_INJECT.equals(a.get("primary_status"))) continue;
+                Object sinceObj = a.get("pending_since");
+                if (sinceObj instanceof Number since && (now - since.longValue()) > ttlMs) {
+                    a.put("primary_status", AtomInfo.STATUS_UNRESOLVED);
+                    a.put("status", AtomInfo.STATUS_UNRESOLVED);
+                    a.put("pending_kind", null);
+                    a.put("pending_snapshot", null);
+                    a.put("kind", deriveKind(a));
+                    a.put("confidence", deriveConfidence(a));
+                    expired++;
+                }
+            }
+        }
+        if (expired > 0) {
+            logger.info("HAL2-03: expired {} PENDING_INJECT atoms (TTL={}ms)", expired, ttlMs);
+        }
+        return expired;
+    }
+
     /** S1.PRE: one entry per processed atom — used to write DaliResolutionLog. */
     public List<Map<String, Object>> getResolutionLog() {
         return Collections.unmodifiableList(resolutionLog);
@@ -1200,6 +1594,139 @@ public class AtomProcessor {
         entry.put("column_name", atomData.get("column_name"));
         entry.put("position",    atomData.get("position"));
         resolutionLog.add(entry);
+    }
+
+    static String deriveKind(Map<String, Object> atomData) {
+        if (Boolean.TRUE.equals(atomData.get("is_constant")))      return AtomInfo.KIND_CONSTANT;
+        if (Boolean.TRUE.equals(atomData.get("is_function_call"))) return AtomInfo.KIND_FUNCTION_CALL;
+        if (Boolean.TRUE.equals(atomData.get("is_routine_var")))   return AtomInfo.KIND_VARIABLE;
+        if (Boolean.TRUE.equals(atomData.get("is_routine_param"))) return AtomInfo.KIND_PARAMETER;
+
+        String refType = (String) atomData.get("reference_type");
+        if (refType != null) {
+            return switch (refType) {
+                case "sequence"                            -> AtomInfo.KIND_SEQUENCE;
+                case "cursor_record", "cursor_record_expr" -> AtomInfo.KIND_CURSOR_RECORD;
+                case "routine_variable"                    -> AtomInfo.KIND_VARIABLE;
+                case "routine_parameter"                   -> AtomInfo.KIND_PARAMETER;
+                default                                    -> AtomInfo.KIND_COLUMN;
+            };
+        }
+
+        if (Boolean.TRUE.equals(atomData.get("is_column_reference"))) return AtomInfo.KIND_COLUMN;
+
+        String ps = (String) atomData.get("primary_status");
+        if (AtomInfo.STATUS_UNRESOLVED.equals(ps)) return AtomInfo.KIND_UNKNOWN;
+        return AtomInfo.KIND_UNKNOWN;
+    }
+
+    static String deriveConfidence(Map<String, Object> atomData) {
+        String ps = (String) atomData.get("primary_status");
+        if (ps == null) return AtomInfo.CONFIDENCE_LOW;
+
+        // Unresolved atoms have no confidence
+        if (AtomInfo.STATUS_UNRESOLVED.equals(ps)) return null;
+
+        // Constants and system pseudo-columns are always HIGH
+        if (AtomInfo.STATUS_CONSTANT.equals(ps)) return AtomInfo.CONFIDENCE_HIGH;
+
+        // RECONSTRUCT_DIRECT: table found, column missing → MEDIUM
+        if (AtomInfo.STATUS_RECONSTRUCT_DIRECT.equals(ps)) return AtomInfo.CONFIDENCE_MEDIUM;
+        // RECONSTRUCT_INVERSE: reserved for V2, if set → MEDIUM
+        if (AtomInfo.STATUS_RECONSTRUCT_INVERSE.equals(ps)) return AtomInfo.CONFIDENCE_MEDIUM;
+        // PARTIAL: parent with mixed children → LOW
+        if (AtomInfo.STATUS_PARTIAL.equals(ps)) return AtomInfo.CONFIDENCE_LOW;
+        // PENDING_INJECT: deferred resolution → null (no confidence yet)
+        if (AtomInfo.STATUS_PENDING_INJECT.equals(ps)) return null;
+
+        // Function calls: verified → HIGH, unverified → LOW
+        if (AtomInfo.STATUS_FUNCTION_CALL.equals(ps)) {
+            String q = (String) atomData.get("qualifier");
+            if (AtomInfo.QUALIFIER_FN_VERIFIED.equals(q)) return AtomInfo.CONFIDENCE_HIGH;
+            return AtomInfo.CONFIDENCE_LOW;
+        }
+
+        // Pass 1: strategy-based mapping for RESOLVED atoms
+        String strategy = (String) atomData.get("resolve_strategy");
+        String base;
+        if (strategy == null) {
+            base = AtomInfo.CONFIDENCE_LOW;
+        } else {
+            base = switch (strategy) {
+                case "1_exact_geoid", "2_alias_scope", "2b_table_name_only", "3_cte",
+                     "hasVariable", "hasParameter",
+                     "source_table_direct", "target_table_direct",
+                     "constant", "sequence", "system_pseudo"
+                        -> AtomInfo.CONFIDENCE_HIGH;
+                case "4_subquery_alias", "5_child_subquery", "6_source_subquery",
+                     "7_parent_recursive", "cursorRecordAliases"
+                        -> AtomInfo.CONFIDENCE_MEDIUM;
+                case "8_global_ddl_fallback", "resolveImplicitTable"
+                        -> AtomInfo.CONFIDENCE_LOW;
+                case "text_fallback"
+                        -> AtomInfo.CONFIDENCE_LOW;
+                default -> AtomInfo.CONFIDENCE_LOW;
+            };
+        }
+
+        // Pass 2: kind-adjustment (ADR-HND-003 §Pass 2)
+        String kind = (String) atomData.get("kind");
+        if (AtomInfo.KIND_AMBIGUOUS.equals(kind)) {
+            base = minConfidence(base, AtomInfo.CONFIDENCE_LOW);
+        }
+
+        return base;
+    }
+
+    private static String minConfidence(String a, String b) {
+        return confidenceRank(a) <= confidenceRank(b) ? a : b;
+    }
+
+    private static int confidenceRank(String c) {
+        if (c == null) return 0;
+        return switch (c) {
+            case "FUZZY"  -> 1;
+            case "LOW"    -> 2;
+            case "MEDIUM" -> 3;
+            case "HIGH"   -> 4;
+            default       -> 0;
+        };
+    }
+
+    // ═══════ HAL2-01: PENDING_INJECT detection ═══════
+
+    private String detectPendingKind(Map<String, Object> atomData,
+                                     String statementGeoid,
+                                     Map<String, Object> resolution) {
+        if (builder == null) return null;
+
+        // 1. PIPELINED: atom references a synthetic table from TABLE(fn()) where injection failed
+        String tableGeoid = resolution != null ? (String) resolution.get("table_geoid") : null;
+        if (tableGeoid == null) tableGeoid = (String) atomData.get("table_geoid");
+        if (tableGeoid != null && builder.isPendingPipelined(tableGeoid)) {
+            return AtomInfo.PENDING_KIND_PIPELINED;
+        }
+
+        // 2. ROWTYPE: atom references a table that was used in %ROWTYPE but had no DDL columns
+        if (tableGeoid != null && builder.isPendingRowtype(tableGeoid)) {
+            return AtomInfo.PENDING_KIND_ROWTYPE;
+        }
+
+        // 3. MULTISET: atom is in a statement containing CAST(MULTISET) with unresolved type
+        if (statementGeoid != null && builder.isPendingMultiset(statementGeoid)) {
+            return AtomInfo.PENDING_KIND_MULTISET;
+        }
+
+        return null;
+    }
+
+    private String buildPendingSnapshot(String routineGeoid, String statementGeoid) {
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"routine_geoid\":\"").append(routineGeoid != null ? routineGeoid : "").append("\"");
+        sb.append(",\"statement_geoid\":\"").append(statementGeoid != null ? statementGeoid : "").append("\"");
+        sb.append(",\"session_id\":\"").append(file != null ? file : "").append("\"");
+        sb.append("}");
+        return sb.toString();
     }
 
     public void clear() {

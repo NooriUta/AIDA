@@ -47,7 +47,7 @@ class ExploreSchemaService {
             MATCH (s)-[:CONTAINS_ROUTINE]->(r1)-[:CONTAINS_ROUTINE*0..1]->(rr:DaliRoutine)
                   -[:CONTAINS_STMT]->(rootStmt:DaliStatement)
             WHERE coalesce(rootStmt.parent_statement, '') = ''
-            MATCH (rootStmt)<-[:CHILD_OF*0..30]-(sub:DaliStatement)-[:READS_FROM]->(t:DaliTable)
+            MATCH (rootStmt)<-[:CHILD_OF*0..30]-(sub:DaliStatement), (t:DaliTable)-[:READS_FROM]->(sub)
             WHERE t.schema_geoid IS NOT NULL AND t.schema_geoid <> $schema
             RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
@@ -125,7 +125,7 @@ class ExploreSchemaService {
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
-            MATCH (s)-[:CONTAINS_TABLE]->(t:DaliTable)<-[:READS_FROM]-(stmt:DaliStatement)
+            MATCH (s)-[:CONTAINS_TABLE]->(t:DaliTable), (t)-[:READS_FROM]->(stmt:DaliStatement)
             WHERE coalesce(stmt.parent_statement, '') = ''
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
@@ -135,7 +135,7 @@ class ExploreSchemaService {
             MATCH (s:DaliSchema)
             WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
             MATCH (s)-[:CONTAINS_TABLE]->(t:DaliTable)
-                  <-[:READS_FROM]-(:DaliStatement)-[:CHILD_OF*1..30]->(rootStmt:DaliStatement)
+            MATCH (t)-[:READS_FROM]->(:DaliStatement)-[:CHILD_OF*1..30]->(rootStmt:DaliStatement)
             WHERE coalesce(rootStmt.parent_statement, '') = ''
             RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
@@ -154,7 +154,7 @@ class ExploreSchemaService {
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.schema_geoid = $schema AND ($dbName = '' OR s.db_name = $dbName)
-            MATCH (s)-[:CONTAINS_TABLE]->(:DaliTable)<-[:READS_FROM]-(stmt:DaliStatement)
+            MATCH (s)-[:CONTAINS_TABLE]->(srcT:DaliTable)-[:READS_FROM]->(stmt:DaliStatement)
                   -[:WRITES_TO]->(target:DaliTable)
             WHERE coalesce(stmt.parent_statement, '') = ''
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
@@ -280,7 +280,7 @@ class ExploreSchemaService {
             UNION ALL
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
-            MATCH (s)-[:CONTAINS_TABLE]->(t:DaliTable)<-[:READS_FROM]-(stmt:DaliStatement)
+            MATCH (s)-[:CONTAINS_TABLE]->(t:DaliTable), (t)-[:READS_FROM]->(stmt:DaliStatement)
             WHERE coalesce(stmt.parent_statement, '') = ''
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
@@ -290,7 +290,7 @@ class ExploreSchemaService {
             MATCH (s:DaliSchema)
             WHERE s.db_name = $dbName
             MATCH (s)-[:CONTAINS_TABLE]->(t:DaliTable)
-                  <-[:READS_FROM]-(:DaliStatement)-[:CHILD_OF*1..30]->(rootStmt:DaliStatement)
+            MATCH (t)-[:READS_FROM]->(:DaliStatement)-[:CHILD_OF*1..30]->(rootStmt:DaliStatement)
             WHERE coalesce(rootStmt.parent_statement, '') = ''
             RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,

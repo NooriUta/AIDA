@@ -139,7 +139,7 @@ class AffectedColumnDbTest {
             sourceRes.entrySet().stream()
                     .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                     .forEach(e -> row(e.getKey(), e.getValue()));
-            long unresSource = sourceRes.getOrDefault("unresolved", 0L);
+            long unresSource = sourceRes.getOrDefault("UNRESOLVED", 0L);
             System.out.printf("%n  Unresolved SOURCE.*  : %d  (expect 0)%n", unresSource);
         }
 
@@ -163,7 +163,7 @@ class AffectedColumnDbTest {
 
         boolean hasMerge = files.stream().anyMatch(f -> f.getFileName().toString().contains("merge"));
         if (hasMerge) {
-            long unresSource = sourceRes.getOrDefault("unresolved", 0L);
+            long unresSource = sourceRes.getOrDefault("UNRESOLVED", 0L);
             assertEquals(0L, unresSource,
                     "BUG S1.BUG-4 regression: SOURCE.* in MERGE USING must be resolved");
             System.out.println("  SOURCE.* unresolved  : 0  [PASS]");

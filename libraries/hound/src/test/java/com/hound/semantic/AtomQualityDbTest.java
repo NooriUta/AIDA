@@ -65,10 +65,10 @@ class AtomQualityDbTest {
                 long cnt = e.getValue();
                 total += cnt;
                 switch (kind) {
-                    case "Обработано"    -> resolved   += cnt;
-                    case "constant"      -> constants  += cnt;
-                    case "function_call" -> functions  += cnt;
-                    default              -> unresolved += cnt;  // "unresolved" + legacy error messages
+                    case "RESOLVED", "Обработано" -> resolved   += cnt;
+                    case "CONSTANT", "constant"   -> constants  += cnt;
+                    case "FUNCTION_CALL", "function_call" -> functions += cnt;
+                    default                       -> unresolved += cnt;
                 }
             }
 

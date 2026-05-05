@@ -47,7 +47,7 @@ public record ParseResult(
         double resolutionRate,
 
         /**
-         * Number of column-reference atoms successfully resolved (status = "Обработано").
+         * Number of column-reference atoms successfully resolved (primary_status = "RESOLVED").
          * Used for per-file resolution breakdown in the UI.
          */
         int atomsResolved,

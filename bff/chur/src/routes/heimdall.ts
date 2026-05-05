@@ -48,9 +48,11 @@ function connectUpstreamWs(path: string): Promise<WebSocket> {
 export const heimdallRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /heimdall/events — frontend event proxy → HEIMDALL (EV-09 Sprint 5) ─
+  // No auth required: events are write-only telemetry, contain no sensitive data.
+  // HTA-14 in HEIMDALL backend validates tenantAlias in the payload.
+  // This allows Verdandi dev-mode to emit events without KC login.
   app.post(
     '/heimdall/events',
-    { preHandler: [app.authenticate] },
     async (request, reply) => {
       const body = request.body as Record<string, unknown>;
       const event = {

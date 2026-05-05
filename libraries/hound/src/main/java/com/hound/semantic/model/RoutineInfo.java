@@ -12,6 +12,7 @@ public class RoutineInfo {
 
     public record ParameterInfo(String name, String type, String mode) {}
     public record VariableInfo(String name, String type) {}
+    public record CursorInfo(String name, String selectStmtGeoid) {}
 
     private final String geoid;
     private final String name;
@@ -31,6 +32,7 @@ public class RoutineInfo {
     private boolean hasBody = false;
     private final List<ParameterInfo> typedParameters = new ArrayList<>();
     private final List<VariableInfo> typedVariables = new ArrayList<>();
+    private final List<CursorInfo> cursors = new ArrayList<>();
 
     public RoutineInfo(String geoid, String name, String routineType,
                        String packageGeoid, String schemaGeoid) {
@@ -107,4 +109,14 @@ public class RoutineInfo {
     }
 
     public List<VariableInfo> getTypedVariables() { return typedVariables; }
+
+    // ═══════ Cursors (HAL3-04) ═══════
+
+    public void addCursor(String name, String selectStmtGeoid) {
+        String upperName = name != null ? name.toUpperCase() : "UNKNOWN";
+        if (cursors.stream().anyMatch(c -> upperName.equals(c.name()))) return;
+        cursors.add(new CursorInfo(upperName, selectStmtGeoid));
+    }
+
+    public List<CursorInfo> getCursors() { return cursors; }
 }

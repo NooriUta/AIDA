@@ -54,7 +54,7 @@ class MergeUsingCollectionTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toUpperCase().startsWith("V.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedVAlias,
@@ -118,7 +118,7 @@ class MergeUsingCollectionTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toUpperCase().startsWith("N.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedNAlias,
@@ -144,7 +144,7 @@ class MergeUsingCollectionTest {
                     String raw = (String) e.get("raw_input");
                     return raw != null && raw.toUpperCase().startsWith("T.");
                 })
-                .filter(e -> "unresolved".equals(e.get("result_kind")))
+                .filter(e -> "UNRESOLVED".equals(e.get("result_kind")))
                 .count();
 
         assertEquals(0, unresolvedTAlias,

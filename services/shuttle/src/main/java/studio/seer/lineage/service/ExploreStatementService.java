@@ -72,7 +72,7 @@ public class ExploreStatementService {
             MATCH (root:DaliStatement)
             WHERE id(root) = $stmtId
             MATCH (sub:DaliStatement)-[:CHILD_OF*0..30]->(root)
-            MATCH (sub)-[:READS_FROM]->(t:DaliTable)
+            MATCH (t:DaliTable)-[:READS_FROM]->(sub)
             RETURN DISTINCT id(sub) AS srcId,
                    coalesce(sub.stmt_geoid, sub.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
@@ -142,10 +142,10 @@ public class ExploreStatementService {
             MATCH (p:DaliPackage {package_name: $pkg})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
             MATCH (rec:DaliRecord)
             WHERE rec.routine_geoid = r.routine_geoid
-            MATCH (rec)-[:HAS_RECORD_FIELD]->(f:DaliRecordField)
+            MATCH (rec)-[:RECORD_HAS_FIELD]->(f:DaliRecordField)
             RETURN id(rec) AS srcId, coalesce(rec.record_name, '') AS srcLabel, 'DaliRecord' AS srcType,
                    id(f) AS tgtId, coalesce(f.field_name, '') AS tgtLabel, '' AS tgtScope,
-                   'DaliRecordField' AS tgtType, 'HAS_RECORD_FIELD' AS edgeType
+                   'DaliRecordField' AS tgtType, 'RECORD_HAS_FIELD' AS edgeType
             LIMIT 2000
             """;
 
@@ -298,7 +298,8 @@ public class ExploreStatementService {
             LIMIT 300
             UNION ALL
             MATCH (p:DaliPackage {package_name: $pkg})-[:CONTAINS_ROUTINE]->(:DaliRoutine)
-                  -[:CONTAINS_STMT]->(stmt:DaliStatement)-[:READS_FROM]->(t:DaliTable)
+                  -[:CONTAINS_STMT]->(stmt:DaliStatement)
+            MATCH (t:DaliTable)-[:READS_FROM]->(stmt)
             WHERE coalesce(stmt.parent_statement, '') = ''
             RETURN DISTINCT id(stmt) AS srcId, coalesce(stmt.stmt_geoid, stmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,
@@ -307,7 +308,7 @@ public class ExploreStatementService {
             UNION ALL
             MATCH (p:DaliPackage {package_name: $pkg})-[:CONTAINS_ROUTINE]->(:DaliRoutine)
                   -[:CONTAINS_STMT]->(rootStmt:DaliStatement)<-[:CHILD_OF]-(subStmt:DaliStatement)
-                  -[:READS_FROM]->(t:DaliTable)
+            MATCH (t:DaliTable)-[:READS_FROM]->(subStmt)
             WHERE coalesce(rootStmt.parent_statement, '') = ''
             RETURN DISTINCT id(rootStmt) AS srcId, coalesce(rootStmt.stmt_geoid, rootStmt.snippet, '') AS srcLabel, 'DaliStatement' AS srcType,
                    id(t) AS tgtId, t.table_name AS tgtLabel, t.schema_geoid AS tgtScope,

@@ -13,13 +13,15 @@ interface ServiceStatus {
 
 // Order is fixed so cards never jump between polls.
 // Show dev instances only — avoids duplicates (api returns dev + docker per service).
-const STRIP_SERVICES = ['shuttle', 'chur', 'heimdall-backend', 'ygg'];
+const STRIP_SERVICES = ['shuttle', 'chur', 'heimdall-backend', 'mimir', 'anvil', 'ygg'];
 
 const DISPLAY: Record<string, string> = {
-  shuttle:          'Shuttle',
-  chur:             'Chur',
+  shuttle:            'Shuttle',
+  chur:               'Chur',
   'heimdall-backend': 'Heimdall',
-  ygg:              'Ygg',
+  mimir:              'Mimir',
+  anvil:              'Anvil',
+  ygg:                'Ygg',
 };
 
 function dotColor(status: string): string {

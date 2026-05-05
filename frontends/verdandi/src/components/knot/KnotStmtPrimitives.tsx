@@ -22,21 +22,25 @@ export function atomColor(a: KnotAtom): string {
 }
 
 export function atomStatusBg(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'обработано': return 'color-mix(in srgb, var(--suc) 15%, transparent)';
-    case 'unresolved': return 'color-mix(in srgb, var(--danger) 15%, transparent)';
-    case 'constant':   return 'color-mix(in srgb, var(--wrn) 12%, transparent)';
-    case 'function_call': return 'color-mix(in srgb, var(--inf) 15%, transparent)';
+  const s = status.toUpperCase();
+  switch (s) {
+    case 'RESOLVED': case 'ОБРАБОТАНО': return 'color-mix(in srgb, var(--suc) 15%, transparent)';
+    case 'RECONSTRUCT_DIRECT': case 'RECONSTRUCT_INVERSE': return 'color-mix(in srgb, var(--wrn) 15%, transparent)';
+    case 'UNRESOLVED': case 'PARTIAL': return 'color-mix(in srgb, var(--danger) 15%, transparent)';
+    case 'CONSTANT':      return 'color-mix(in srgb, var(--wrn) 12%, transparent)';
+    case 'FUNCTION_CALL': return 'color-mix(in srgb, var(--inf) 15%, transparent)';
     default: return 'var(--bg3)';
   }
 }
 
 export function atomStatusColor(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'обработано': return 'var(--suc)';
-    case 'unresolved': return 'var(--danger)';
-    case 'constant':   return 'var(--wrn)';
-    case 'function_call': return 'var(--inf)';
+  const s = status.toUpperCase();
+  switch (s) {
+    case 'RESOLVED': case 'ОБРАБОТАНО': return 'var(--suc)';
+    case 'RECONSTRUCT_DIRECT': case 'RECONSTRUCT_INVERSE': return 'var(--wrn)';
+    case 'UNRESOLVED': case 'PARTIAL': return 'var(--danger)';
+    case 'CONSTANT':      return 'var(--wrn)';
+    case 'FUNCTION_CALL': return 'var(--inf)';
     default: return 'var(--t3)';
   }
 }

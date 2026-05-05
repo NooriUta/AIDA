@@ -207,13 +207,12 @@ class JsonlBatchBuilderTest {
     /**
      * G6 / REMOTE_BATCH flush-order guard:
      * DaliRecord vertex MUST appear in the NDJSON payload BEFORE any
-     * BULK_COLLECTS_INTO or RECORD_USED_IN edge that references it.
+     * BULK_COLLECTS_INTO or RECORD_HAS_FIELD edge that references it.
      * ArcadeDB rejects dangling edges, so vertex-before-edge is mandatory.
+     * D-1 (Sprint 1.3): RECORD_USED_IN removed; D-3: HAS_RECORD_FIELD → RECORD_HAS_FIELD.
      */
     @Test
     void g6_daliRecord_vertexBeforeEdges_inBatchPayload() throws Exception {
-        // Build a minimal SemanticResult that contains a BULK COLLECT scenario:
-        //   SELECT stmt (cursor) → l_tab → INSERT stmt
         Map<String, StatementInfo> statements = new LinkedHashMap<>();
 
         StatementInfo selectStmt = new StatementInfo(
@@ -230,7 +229,6 @@ class JsonlBatchBuilderTest {
                 "INSERT", "target", 1);
         statements.put("INSERT:2", insertStmt);
 
-        // RecordInfo binding: l_tab → SELECT:1
         RecordInfo rec = new RecordInfo("PROCEDURE:LOAD:RECORD:L_TAB", "L_TAB", "PROCEDURE:LOAD");
         rec.setSourceStatementGeoid("SELECT:1");
         rec.addField("ORDER_ID");
@@ -248,11 +246,10 @@ class JsonlBatchBuilderTest {
         JsonlBatchBuilder builder = JsonlBatchBuilder.buildFromResult("test-sid", result);
         String payload = builder.build();
 
-        // Parse lines and record positions
         String[] lines = payload.split("\n");
-        int daliRecordPos      = -1;
+        int daliRecordPos       = -1;
         int bulkCollectsIntoPos = -1;
-        int recordUsedInPos     = -1;
+        int recordHasFieldPos   = -1;
 
         for (int i = 0; i < lines.length; i++) {
             if (lines[i].isBlank()) continue;
@@ -261,19 +258,19 @@ class JsonlBatchBuilderTest {
             String type = node.has("@type")  ? node.get("@type").asText()  : "";
             if ("DaliRecord".equals(cls) && "vertex".equals(type)) daliRecordPos = i;
             if ("BULK_COLLECTS_INTO".equals(cls) && "edge".equals(type)) bulkCollectsIntoPos = i;
-            if ("RECORD_USED_IN".equals(cls)     && "edge".equals(type)) recordUsedInPos     = i;
+            if ("RECORD_HAS_FIELD".equals(cls)   && "edge".equals(type)) recordHasFieldPos   = i;
         }
 
         assertTrue(daliRecordPos >= 0,       "DaliRecord vertex must be present in payload");
         assertTrue(bulkCollectsIntoPos >= 0, "BULK_COLLECTS_INTO edge must be present in payload");
-        assertTrue(recordUsedInPos >= 0,     "RECORD_USED_IN edge must be present in payload");
+        assertTrue(recordHasFieldPos >= 0,   "RECORD_HAS_FIELD edge must be present in payload");
 
         assertTrue(daliRecordPos < bulkCollectsIntoPos,
                 "DaliRecord vertex (line " + daliRecordPos + ") must appear BEFORE " +
                 "BULK_COLLECTS_INTO edge (line " + bulkCollectsIntoPos + ")");
-        assertTrue(daliRecordPos < recordUsedInPos,
+        assertTrue(daliRecordPos < recordHasFieldPos,
                 "DaliRecord vertex (line " + daliRecordPos + ") must appear BEFORE " +
-                "RECORD_USED_IN edge (line " + recordUsedInPos + ")");
+                "RECORD_HAS_FIELD edge (line " + recordHasFieldPos + ")");
     }
 
     // ── HOUND-DB-001: DaliSchema must carry db_name resolved from the database map ──
@@ -305,6 +302,60 @@ class JsonlBatchBuilderTest {
                 "db_name must be resolved from the databases map, not null");
         assertEquals("DWH", schemaVertex.get("db_geoid").asText(),
                 "db_geoid must equal the database geoid key");
+    }
+
+    @Test
+    void hal3_01_compensationStats_edgesWrittenToBatch() throws Exception {
+        Map<String, StatementInfo> statements = new LinkedHashMap<>();
+        StatementInfo stmt = new StatementInfo(
+                "STMT:1", "PLSQL_BLOCK", "v_name := emp_rec.name", 5, 5, null, "PROC:LOAD");
+        statements.put("STMT:1", stmt);
+
+        Map<String, RoutineInfo> routines = new LinkedHashMap<>();
+        RoutineInfo routine = new RoutineInfo("PROC:LOAD", "LOAD", "PROCEDURE", null, null);
+        routine.addTypedVariable("v_name", "VARCHAR2");
+        routine.addTypedParameter("p_out", "NUMBER", "OUT");
+        routines.put("PROC:LOAD", routine);
+
+        List<CompensationStats> compStats = List.of(
+                new CompensationStats("STMT:1", "ASSIGNS_TO_VARIABLE",
+                        "PROC:LOAD:VAR:0", "VARIABLE", "test-sid"),
+                new CompensationStats("STMT:1", "WRITES_TO_PARAMETER",
+                        "PROC:LOAD:PARAM:0", "PARAMETER", "test-sid")
+        );
+
+        Structure str = new Structure(
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), routines,
+                statements, Map.of(), Set.of(), Map.of(), Map.of(), compStats);
+
+        SemanticResult result = new SemanticResult(
+                "test-sid", "/test.sql", "plsql", 0,
+                str, List.of(), Map.of(), List.of(), Map.of(), List.of());
+
+        JsonlBatchBuilder builder = JsonlBatchBuilder.buildFromResult("test-sid", result);
+        String payload = builder.build();
+
+        int assignsCount = 0;
+        int writesCount = 0;
+        for (String line : payload.split("\n")) {
+            if (line.isBlank()) continue;
+            JsonNode node = MAPPER.readTree(line);
+            String cls = node.has("@class") ? node.get("@class").asText() : "";
+            if ("ASSIGNS_TO_VARIABLE".equals(cls)) {
+                assignsCount++;
+                assertEquals("STMT:1", node.get("@from").asText());
+                assertEquals("PROC:LOAD:VAR:0", node.get("@to").asText());
+                assertEquals("VARIABLE", node.get("target_kind").asText());
+            }
+            if ("WRITES_TO_PARAMETER".equals(cls)) {
+                writesCount++;
+                assertEquals("STMT:1", node.get("@from").asText());
+                assertEquals("PROC:LOAD:PARAM:0", node.get("@to").asText());
+                assertEquals("PARAMETER", node.get("target_kind").asText());
+            }
+        }
+        assertEquals(1, assignsCount, "Exactly 1 ASSIGNS_TO_VARIABLE edge expected");
+        assertEquals(1, writesCount, "Exactly 1 WRITES_TO_PARAMETER edge expected");
     }
 
     @Test

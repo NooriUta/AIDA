@@ -163,6 +163,30 @@ public class HeimdallEmitter {
                 "msg",  msg != null ? msg : ""), tenantAlias));
     }
 
+    /**
+     * Emitted for semantic-level warnings detected during the AST walk
+     * (e.g. unresolved atoms, orphan scopes, suspicious table names).
+     */
+    public void semanticWarning(String sessionId, String tenantAlias, String file,
+                                String category, String message) {
+        houndWarn(EventType.SEMANTIC_WARNING, sessionId, withTenant(Map.of(
+                "file",     file,
+                "category", category,
+                "msg",      message != null ? message : ""), tenantAlias));
+    }
+
+    /**
+     * Emitted for semantic-level errors detected during the AST walk
+     * (e.g. depth overflow, critical builder failures).
+     */
+    public void semanticError(String sessionId, String tenantAlias, String file,
+                              String category, String message) {
+        emit(build("hound", EventType.SEMANTIC_ERROR, EventLevel.ERROR, sessionId, 0, withTenant(Map.of(
+                "file",     file,
+                "category", category,
+                "msg",      message != null ? message : ""), tenantAlias)));
+    }
+
     /** Emitted when Hound encounters an error parsing a file. */
     public void fileParsingFailed(String sessionId, String tenantAlias, String file, String error) {
         emit(build("hound", EventType.FILE_PARSING_FAILED, EventLevel.ERROR, sessionId, 0, withTenant(Map.of(

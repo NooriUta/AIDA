@@ -22,10 +22,16 @@ export interface SlowRender {
   sessionId:   string;
 }
 
+export interface EventTypeCount {
+  eventType: string;
+  count:     number;
+}
+
 export interface UxSummary {
   hotNodes:            HotNode[];
   levelDistribution:   LevelDistribution;
   slowRenders:         SlowRender[];
+  eventTypeCounts:     EventTypeCount[];
   activeSessionCount:  number;
   totalEventsInWindow: number;
   windowMs:            number;

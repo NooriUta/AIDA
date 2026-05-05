@@ -8,7 +8,7 @@ package com.hound.storage;
 // antlr4=4.9.1 (Gremlin compat, ArcadeData/arcadedb#3235) while our hound grammars need 4.13.2.
 // Re-evaluate after July 2026 once ArcadeDB 27.x with ANTLR ≥ 4.13 lands.
 // When that becomes possible, restore G6/G8/DaliRecordField types in ensureSchema():
-//   edges: BULK_COLLECTS_INTO, RECORD_USED_IN, HAS_RECORD_FIELD, FIELD_MAPS_TO
+//   edges: BULK_COLLECTS_INTO, RECORD_HAS_FIELD, PLTYPE_HAS_FIELD, FIELD_MAPS_TO
 //   vertex: DaliRecord, DaliRecordField
 // NOT tech-debt: external blocker, no in-repo action available.
 

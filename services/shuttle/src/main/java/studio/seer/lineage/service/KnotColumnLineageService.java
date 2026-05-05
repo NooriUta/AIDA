@@ -65,8 +65,10 @@ public class KnotColumnLineageService {
             """;
 
         // Query 3: find one stmt_geoid that references this table in the session (for snippet)
+        // Sprint 1.2 inversion: READS_FROM is now Table→Stmt, WRITES_TO remains Stmt→Table.
+        // Use undirected edges (-[]-) to match either direction.
         String cypherStmt = """
-            MATCH (stmt:DaliStatement {session_id: $sid})-[:READS_FROM|WRITES_TO]->(t:DaliTable {table_geoid: $tg})
+            MATCH (stmt:DaliStatement {session_id: $sid})-[:READS_FROM|WRITES_TO]-(t:DaliTable {table_geoid: $tg})
             RETURN stmt.stmt_geoid AS stmtGeoid
             LIMIT 1
             """;
@@ -135,7 +137,7 @@ public class KnotColumnLineageService {
         }
         Map<String, Object> params = Map.of("rid", tableRid);
         String cypher = """
-            MATCH (stmt:DaliStatement)-[r:READS_FROM|WRITES_TO]->(t:DaliTable)
+            MATCH (stmt:DaliStatement)-[r:READS_FROM|WRITES_TO]-(t:DaliTable)
             WHERE id(t) = $rid
             MATCH (ro:DaliRoutine)-[:CONTAINS_STMT]->(stmt)
             RETURN DISTINCT
@@ -201,6 +203,14 @@ public class KnotColumnLineageService {
     Uni<List<KnotSnippet>>        loadSnippets(Map<String, Object> p)        { return bulkLoaders.loadSnippets(p);       }
     Uni<List<KnotAtom>>           loadAtoms(Map<String, Object> p)           { return bulkLoaders.loadAtoms(p);          }
     Uni<List<KnotCall>>           loadCalls(Map<String, Object> p)           { return bulkLoaders.loadCalls(p);          }
+
+    // G4: source_file-filtered overloads — delegate to KnotBulkLoaders with sourceFile
+    Uni<List<KnotOutputColumn>>   loadOutputColumns(Map<String, Object> p, String sf)  { return bulkLoaders.loadOutputColumns(p, sf);  }
+    Uni<List<KnotAffectedColumn>> loadAffectedColumns(Map<String, Object> p, String sf){ return bulkLoaders.loadAffectedColumns(p, sf);}
+    Uni<KnotParamVars>            loadParamsAndVars(Map<String, Object> p, String sf)   { return bulkLoaders.loadParamsAndVars(p, sf);  }
+    Uni<List<KnotSnippet>>        loadSnippets(Map<String, Object> p, String sf)        { return bulkLoaders.loadSnippets(p, sf);       }
+    Uni<List<KnotAtom>>           loadAtoms(Map<String, Object> p, String sf)           { return bulkLoaders.loadAtoms(p, sf);          }
+    Uni<List<KnotCall>>           loadCalls(Map<String, Object> p, String sf)           { return bulkLoaders.loadCalls(p, sf);          }
 
     // ── Statement extras (descendants + atom stats, lazy from Inspector) ──────
     //
@@ -312,7 +322,7 @@ public class KnotColumnLineageService {
             // Direct reads of the root stmt itself — Cypher keeps it clean.
             // id(t) in ArcadeDB Cypher returns the '#cluster:pos' string.
             Uni<List<SourceTableRef>> directUni = arcade.cypherIn(lineageDb(), """
-                    MATCH (s:DaliStatement {stmt_geoid: $geoid})-[:READS_FROM]->(t:DaliTable)
+                    MATCH (t:DaliTable)-[:READS_FROM]->(s:DaliStatement {stmt_geoid: $geoid})
                     RETURN DISTINCT id(t)         AS tblRid,
                                     t.table_geoid  AS tableGeoid,
                                     t.table_name   AS tableName,
@@ -335,7 +345,7 @@ public class KnotColumnLineageService {
             // sub-[:READS_FROM]->table. Returns which sub attributed the read.
             Uni<List<SourceTableRef>> hoistedUni = arcade.cypherIn(lineageDb(), """
                     MATCH (sub:DaliStatement)-[:CHILD_OF*1..30]->(root:DaliStatement {stmt_geoid: $geoid})
-                    MATCH (sub)-[:READS_FROM]->(t:DaliTable)
+                    MATCH (t:DaliTable)-[:READS_FROM]->(sub)
                     RETURN DISTINCT id(t)          AS tblRid,
                                     t.table_geoid  AS tableGeoid,
                                     t.table_name   AS tableName,

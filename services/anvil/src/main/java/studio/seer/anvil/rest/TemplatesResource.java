@@ -30,7 +30,7 @@ public class TemplatesResource {
             WHERE start.geoid = $nodeId AND start.db_name = $dbName
             CALL {
               WITH start
-              MATCH path = (start)-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW|JOIN_FLOW*1..5]->(affected)
+              MATCH path = (start)-[:ATOM_REF_COLUMN|DATA_FLOW|FILTER_FLOW*1..5]->(affected)
               WHERE affected.db_name = $dbName
               RETURN affected, length(path) AS depth
             }
@@ -84,7 +84,7 @@ public class TemplatesResource {
             MATCH (t:DaliTable)
             WHERE t.db_name = $dbName
               AND NOT (t)<-[:DATA_FLOW]-()
-              AND NOT (t)<-[:READS_FROM]-()
+              AND NOT (t)-[:READS_FROM]->()
             RETURN t.geoid AS id, t.qualifiedName AS label, 'DaliTable' AS type
             ORDER BY label ASC LIMIT 100
             """.strip(),

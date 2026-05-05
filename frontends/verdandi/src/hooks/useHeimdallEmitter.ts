@@ -29,6 +29,7 @@ interface UseHeimdallEmitterReturn {
 
 export function useHeimdallEmitter(): UseHeimdallEmitterReturn {
   const tenantAlias = useAuthStore(s => s.user?.activeTenantAlias);
+  const username    = useAuthStore(s => s.user?.username);
 
   const emit = useCallback<EmitFn>(
     (eventType, level, payload, sessionId, durationMs) => {
@@ -43,7 +44,7 @@ export function useHeimdallEmitter(): UseHeimdallEmitterReturn {
         eventType,
         level,
         sessionId:       sessionId ?? null,
-        userId:          null,
+        userId:          username ?? null,
         correlationId:   null,
         durationMs:      durationMs ?? 0,
         payload:         enrichedPayload,
@@ -57,7 +58,7 @@ export function useHeimdallEmitter(): UseHeimdallEmitterReturn {
         signal:      AbortSignal.timeout(2000),
       }).catch(() => { /* intentionally silent */ });
     },
-    [tenantAlias],
+    [tenantAlias, username],
   );
 
   return { emit };

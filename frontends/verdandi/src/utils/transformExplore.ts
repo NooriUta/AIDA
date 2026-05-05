@@ -23,10 +23,12 @@ const NESTING_EDGES = new Set<string>([
   'CONTAINS_ROUTINE', 'CONTAINS_STMT', 'CONTAINS_PACKAGE',
   'CONTAINS_TABLE', 'BELONGS_TO_SESSION',
   'HAS_COLUMN', 'HAS_OUTPUT_COL', 'HAS_AFFECTED_COL', 'HAS_PARAMETER', 'HAS_VARIABLE',
-  // Phase S2.4 — PL/SQL record field containment: fields render as rows inside RecordNode,
+  // Phase S2.4 — PL/SQL record/pltype field containment: fields render as rows inside their parent node,
   // never as separate canvas nodes. RETURNS_INTO (stmt→record) is NOT suppressed — it renders
-  // as a visible edge. BULK_COLLECTS_INTO and RECORD_USED_IN are handled below in SUPPRESSED_EDGES.
-  'HAS_RECORD_FIELD',
+  // as a visible edge. BULK_COLLECTS_INTO is handled below in SUPPRESSED_EDGES.
+  // D-3 (Sprint 1.3): HAS_RECORD_FIELD split → RECORD_HAS_FIELD + PLTYPE_HAS_FIELD
+  'RECORD_HAS_FIELD',
+  'PLTYPE_HAS_FIELD',
 ]);
 
 // ─── Suppressed edges: ALL structural/containment edges hidden from arrows ───
@@ -38,7 +40,7 @@ const SUPPRESSED_EDGES = new Set<string>([
   'CHILD_OF', 'USES_SUBQUERY', 'NESTED_IN',
   // NOTE: 'CALLS' is intentionally NOT suppressed — routine→routine call edges
   // are rendered at L2 AGG to show inter-procedure call flow.
-  'ROUTINE_USES_TABLE',
+  // ROUTINE_USES_TABLE removed Sprint 0.1 SCHEMA_CLEANUP (§13.5).
   'ATOM_REF_TABLE',
   'ATOM_REF_COLUMN',
   'ATOM_REF_STMT',
@@ -290,20 +292,18 @@ function transformSchemaExplore(result: ExploreResult): {
     )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
-      const flip = edgeType === 'READS_FROM';
+      // Sprint 1.2 inversion: READS_FROM flip-logic удалён. DB-direction is canonical.
       // Backend sets sourceHandle / targetHandle for column-level
       // DATA_FLOW / FILTER_FLOW ('src-#13:X' / 'tgt-#31:Y'). Pass them
-      // through to React Flow so the edge lands on the specific column
-      // row inside the parent TableNode / StatementNode card.
-      // Handles are also flipped together with source/target for READS_FROM.
+      // through to React Flow so the edge lands on the specific column row.
       const srcH = e.sourceHandle && e.sourceHandle.length > 0 ? e.sourceHandle : undefined;
       const tgtH = e.targetHandle && e.targetHandle.length > 0 ? e.targetHandle : undefined;
       return {
         id:           e.id,
-        source:       flip ? e.target : e.source,
-        target:       flip ? e.source : e.target,
-        sourceHandle: flip ? tgtH : srcH,
-        targetHandle: flip ? srcH : tgtH,
+        source:       e.source,
+        target:       e.target,
+        sourceHandle: srcH,
+        targetHandle: tgtH,
         type:         'default',
         pathOptions:  { curvature: EDGE_CURVATURE },
         animated:     ANIMATED_EDGES.has(edgeType),
@@ -456,7 +456,7 @@ export function transformGqlExplore(
   // (analogous to DaliColumn→TableNode and DaliOutputColumn→StatementNode)
   const fieldsByRecord = new Map<string, Array<{ id: string; name: string; type: string; isPrimaryKey: boolean; isForeignKey: boolean }>>();
   for (const e of result.edges) {
-    if (e.type !== 'HAS_RECORD_FIELD') continue;
+    if (e.type !== 'RECORD_HAS_FIELD') continue;
     const fieldNode = nodeById.get(e.target);
     if (!fieldNode || fieldNode.type !== 'DaliRecordField') continue;
     if (!fieldsByRecord.has(e.source)) fieldsByRecord.set(e.source, []);
@@ -595,19 +595,15 @@ export function transformGqlExplore(
     )
     .map((e) => {
       const edgeType = e.type as DaliEdgeType;
-      const flip = edgeType === 'READS_FROM';
-      // Column-level handles (backend sets 'src-#13:X' / 'tgt-#31:Y' for
-      // DATA_FLOW and FILTER_FLOW). Route them into the specific column
-      // row inside the parent card; flip together with source/target for
-      // READS_FROM so the swap keeps handles on the correct side.
+      // Sprint 1.2 inversion: READS_FROM flip-logic удалён. DB-direction is canonical.
       const srcH = e.sourceHandle && e.sourceHandle.length > 0 ? e.sourceHandle : undefined;
       const tgtH = e.targetHandle && e.targetHandle.length > 0 ? e.targetHandle : undefined;
       return {
         id:           e.id,
-        source:       flip ? e.target : e.source,
-        target:       flip ? e.source : e.target,
-        sourceHandle: flip ? tgtH : srcH,
-        targetHandle: flip ? srcH : tgtH,
+        source:       e.source,
+        target:       e.target,
+        sourceHandle: srcH,
+        targetHandle: tgtH,
         type:         'default',
         pathOptions:  { curvature: EDGE_CURVATURE },
         animated:     ANIMATED_EDGES.has(edgeType),
