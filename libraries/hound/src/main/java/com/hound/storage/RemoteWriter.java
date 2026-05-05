@@ -1377,6 +1377,28 @@ class RemoteWriter {
             }
         }
 
+        // ── CONTAINS_ATOM: DaliRoutine → DaliAtom (unattached orphans with routine_geoid) ──
+        @SuppressWarnings("unchecked")
+        Map<String, Object> unattachedCont = (Map<String, Object>) result.getAtoms().get("unattached");
+        if (unattachedCont != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> uAtoms =
+                    (Map<String, Map<String, Object>>) unattachedCont.get("atoms");
+            if (uAtoms != null) {
+                for (var at : uAtoms.entrySet()) {
+                    Map<String, Object> a = at.getValue();
+                    String routineGeoid = (String) a.get("routine_geoid");
+                    if (routineGeoid == null) continue;
+                    String routineRid = rid.routines.get(routineGeoid);
+                    String atomId = md5("unattached:" + at.getKey());
+                    String atomRid = rid.atoms.get(atomId);
+                    if (routineRid != null && atomRid != null) {
+                        edgeByRid("CONTAINS_ATOM", routineRid, atomRid, sid);
+                    }
+                }
+            }
+        }
+
         // ── HAS_JOIN ──
         for (var e : str.getStatements().entrySet()) {
             for (JoinInfo j : e.getValue().getJoins()) {

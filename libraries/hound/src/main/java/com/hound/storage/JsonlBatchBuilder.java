@@ -1037,6 +1037,26 @@ public class JsonlBatchBuilder {
             }
         }
 
+        // CONTAINS_ATOM: DaliRoutine → DaliAtom (unattached orphans with routine_geoid)
+        @SuppressWarnings("unchecked")
+        Map<String, Object> unattachedCont = (Map<String, Object>) result.getAtoms().get("unattached");
+        if (unattachedCont != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> uAtoms =
+                    (Map<String, Map<String, Object>>) unattachedCont.get("atoms");
+            if (uAtoms != null) {
+                for (var at : uAtoms.entrySet()) {
+                    Map<String, Object> a = at.getValue();
+                    String routineGeoid = (String) a.get("routine_geoid");
+                    if (routineGeoid == null) continue;
+                    if (!str.getRoutines().containsKey(routineGeoid)) continue;
+                    String atomId = atomIdMap.get("unattached:" + at.getKey());
+                    if (atomId != null)
+                        b.appendEdge("CONTAINS_ATOM", routineGeoid, atomId, sidProps);
+                }
+            }
+        }
+
         // CALLS: routine → routine
         Map<String, String> routineBySimpleName = new HashMap<>();
         for (String rg : str.getRoutines().keySet()) {
@@ -1793,6 +1813,26 @@ public class JsonlBatchBuilder {
                                     "via_atom", at.getKey()
                             ));
                     }
+                }
+            }
+        }
+
+        // CONTAINS_ATOM: DaliRoutine → DaliAtom (unattached orphans with routine_geoid)
+        @SuppressWarnings("unchecked")
+        Map<String, Object> unattCont2 = (Map<String, Object>) result.getAtoms().get("unattached");
+        if (unattCont2 != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> uAtoms2 =
+                    (Map<String, Map<String, Object>>) unattCont2.get("atoms");
+            if (uAtoms2 != null) {
+                for (var at : uAtoms2.entrySet()) {
+                    Map<String, Object> a = at.getValue();
+                    String routineGeoid = (String) a.get("routine_geoid");
+                    if (routineGeoid == null) continue;
+                    if (!str.getRoutines().containsKey(routineGeoid)) continue;
+                    String atomId = atomIdMap.get("unattached:" + at.getKey());
+                    if (atomId != null)
+                        b.appendEdge("CONTAINS_ATOM", routineGeoid, atomId, sidProps);
                 }
             }
         }

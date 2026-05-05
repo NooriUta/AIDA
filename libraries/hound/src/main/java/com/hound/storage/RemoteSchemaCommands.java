@@ -69,6 +69,7 @@ final class RemoteSchemaCommands {
                 // Edge types — statement structure
                 "CREATE EDGE TYPE HAS_OUTPUT_COL IF NOT EXISTS",
                 "CREATE EDGE TYPE HAS_ATOM IF NOT EXISTS",
+                "CREATE EDGE TYPE CONTAINS_ATOM IF NOT EXISTS",  // G3: DaliRoutine → DaliAtom (unattached orphans)
                 "CREATE EDGE TYPE HAS_JOIN IF NOT EXISTS",
                 "CREATE EDGE TYPE READS_FROM IF NOT EXISTS",
                 "CREATE EDGE TYPE WRITES_TO IF NOT EXISTS",
