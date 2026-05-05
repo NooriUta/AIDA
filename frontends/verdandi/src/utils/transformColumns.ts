@@ -73,6 +73,7 @@ export function applyStmtColumns(
 
   // DEBUG: trace enrichment matching
   {
+    const parentIds = [...colsByParent.keys()];
     const nodeIds = nodes.map((n) => n.id);
     const matched = nodeIds.filter((id) => colsByParent.has(id));
     // Show table nodes that requested enrichment but got 0 columns back
