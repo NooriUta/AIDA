@@ -73,10 +73,8 @@ export function applyStmtColumns(
 
   // DEBUG: trace enrichment matching
   {
-    const parentIds = [...colsByParent.keys()];
     const nodeIds = nodes.map((n) => n.id);
     const matched = nodeIds.filter((id) => colsByParent.has(id));
-    const unmatched = parentIds.filter((id) => !nodeIds.includes(id));
     // Show table nodes that requested enrichment but got 0 columns back
     const tableNodes = nodes.filter((n) => (n.data.nodeType === 'DaliTable' || n.type === 'tableNode'));
     const tablesWithout = tableNodes.filter((n) => !colsByParent.has(n.id));
