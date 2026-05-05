@@ -1,11 +1,10 @@
 // src/components/canvas/nodes/PackageGroupNode.tsx
-// L2 AGG — Package compound/group container.
-// Renders as a wide bordered box with a package header; child RoutineNodes
-// are placed inside by React Flow's parentId mechanism.
-// Size is pre-computed in transformExplore (compound ELK mode).
+// L2 AGG — Package visual group background.
+// Rendered as a semi-transparent bordered box behind member RoutineNodes.
+// Position and size are computed post-ELK by layoutGraph.createPackageGroups.
 
 import { memo } from 'react';
-import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { type NodeProps, type Node } from '@xyflow/react';
 import { Package } from 'lucide-react';
 import { useLoomStore } from '../../../stores/loomStore';
 import type { DaliNodeData } from '../../../types/domain';
@@ -36,9 +35,6 @@ export const PackageGroupNode = memo(({ data, selected, id }: NodeProps<PackageG
         if (data.childrenAvailable) drillDown(id, data.label, data.nodeType);
       }}
     >
-      <Handle type="target" position={Position.Left}
-        style={{ background: PKG_COLOR, zIndex: 5 }} />
-
       {/* Header */}
       <div style={{
         padding:      '7px 12px 5px',
@@ -82,8 +78,6 @@ export const PackageGroupNode = memo(({ data, selected, id }: NodeProps<PackageG
         </span>
       </div>
 
-      <Handle type="source" position={Position.Right}
-        style={{ background: PKG_COLOR, zIndex: 5 }} />
     </div>
   );
 });

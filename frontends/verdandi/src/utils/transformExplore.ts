@@ -312,6 +312,13 @@ function transformSchemaExplore(result: ExploreResult): {
       };
     });
 
+  // Diagnostic
+  {
+    const byType = new Map<string, number>();
+    for (const e of rfEdges) byType.set(e.data?.edgeType as string ?? '?', (byType.get(e.data?.edgeType as string ?? '?') ?? 0) + 1);
+    console.info(`[LOOM] schemaExplore output — ${rfNodes.length} nodes, ${rfEdges.length} edges:`, Object.fromEntries(byType));
+  }
+
   return { nodes: rfNodes, edges: rfEdges };
 }
 
@@ -366,11 +373,13 @@ function hoistSubqueryReads(result: ExploreResult): {
     }
   }
 
+  // Sprint 1.2 inversion: READS_FROM is now Table → Statement (source=table, target=stmt).
+  // Track existing root-stmt↔table pairs to avoid duplicate synthetic edges.
   const seen = new Set<string>();
   for (const e of result.edges) {
     if (e.type !== 'READS_FROM') continue;
-    if (stmtIds.has(e.source) && !allSubqIds.has(e.source)) {
-      seen.add(`${e.source}\x00${e.target}`);
+    if (stmtIds.has(e.target) && !allSubqIds.has(e.target)) {
+      seen.add(`${e.target}\x00${e.source}`);
     }
   }
 
@@ -378,14 +387,15 @@ function hoistSubqueryReads(result: ExploreResult): {
   let idx = 0;
   for (const e of result.edges) {
     if (e.type !== 'READS_FROM') continue;
-    const rootId = subqToRoot.get(e.source);
+    // After inversion: e.source=table, e.target=subStatement
+    const rootId = subqToRoot.get(e.target);
     if (!rootId) continue;
-    const key = `${rootId}\x00${e.target}`;
+    const key = `${rootId}\x00${e.source}`;
     if (seen.has(key)) continue;
     seen.add(key);
     syntheticEdges.push({
       id:       `__sqrf_${idx++}`,
-      source:   e.target,
+      source:   e.source,
       target:   rootId,
       type:     'default',
       animated: false,
@@ -414,6 +424,15 @@ export function transformGqlExplore(
   nodes: LoomNode[];
   edges: LoomEdge[];
 } {
+  // Diagnostic: edge count by type
+  {
+    const byType = new Map<string, number>();
+    for (const e of result.edges) byType.set(e.type, (byType.get(e.type) ?? 0) + 1);
+    const nodeTypes = new Map<string, number>();
+    for (const n of result.nodes) nodeTypes.set(n.type, (nodeTypes.get(n.type) ?? 0) + 1);
+    console.info('[LOOM] transform input — nodes:', Object.fromEntries(nodeTypes), 'edges:', Object.fromEntries(byType));
+  }
+
   if (isSchemaExploreResult(result)) {
     return transformSchemaExplore(result);
   }
@@ -529,11 +548,10 @@ export function transformGqlExplore(
       };
     });
 
-  // ── Package compound grouping (L2 AGG, package scope) ───────────────────────
-  // When the backend returns a DaliPackage node + CONTAINS_ROUTINE edges,
-  // group child DaliRoutine nodes as compound children of the Package container.
-  // ELK positions the Package group relative to Table nodes; Routines inside
-  // the group keep pre-computed relative positions (not moved by ELK).
+  // ── Package visual grouping (L2 AGG) ────────────────────────────────────────
+  // Annotate routines with their package membership. DaliPackage nodes stay in
+  // the array as packageGroupNode — layoutGraph excludes them from ELK and
+  // repositions them as visual background groups after the flat layout pass.
   {
     const pkgNodeMap = new Map<string, LoomNode>();
     for (const n of nodes) {
@@ -541,40 +559,16 @@ export function transformGqlExplore(
     }
 
     if (pkgNodeMap.size > 0) {
-      // Build package → [routineId] mapping from CONTAINS_ROUTINE edges
-      const routinesByPkg = new Map<string, string[]>();
       for (const e of result.edges) {
         if (e.type !== 'CONTAINS_ROUTINE') continue;
         if (!pkgNodeMap.has(e.source)) continue;
-        if (!routinesByPkg.has(e.source)) routinesByPkg.set(e.source, []);
-        routinesByPkg.get(e.source)!.push(e.target);
-      }
-
-      const ROUTINE_H = NODE_HEIGHT_BASE; // RoutineNode height — matches constants.ts LAYOUT.NODE_HEIGHT_BASE (80px)
-      const HDR_H     = 40;              // PackageGroupNode header area
-      const PAD_SIDE  = 16;              // left / right inner padding
-      const PAD_INNER = 10;             // vertical gap between routines
-
-      const nodeById = new Map(nodes.map((n) => [n.id, n]));
-      for (const [pkgId, pkgNode] of pkgNodeMap) {
-        const childIds = routinesByPkg.get(pkgId) ?? [];
-        let yOffset = HDR_H + PAD_INNER;
-
-        for (const rid of childIds) {
-          const rNode = nodeById.get(rid);
-          if (!rNode) continue;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rNode as any).parentId = pkgId;
-          rNode.position = { x: PAD_SIDE, y: yOffset };
-          yOffset += ROUTINE_H + PAD_INNER;
+        const rNode = nodes.find((n) => n.id === e.target);
+        if (rNode) {
+          rNode.data.metadata = { ...rNode.data.metadata, packageId: e.source };
         }
-
-        // Override node type → compound container
+      }
+      for (const pkgNode of pkgNodeMap.values()) {
         pkgNode.type = 'packageGroupNode';
-        const childCount = childIds.filter((rid) => nodeById.has(rid)).length;
-        const groupW     = NODE_WIDTH + PAD_SIDE * 2; // 400 + 32 = 432px — wide enough to contain RoutineNodes
-        const groupH     = HDR_H + childCount * (ROUTINE_H + PAD_INNER) + PAD_INNER;
-        pkgNode.style    = { ...(pkgNode.style ?? {}), width: groupW, height: groupH };
       }
     }
   }
@@ -618,6 +612,13 @@ export function transformGqlExplore(
     // (source=table, target=rootStmt) — rootStmt may be an external (existing) node.
     ...syntheticEdges.filter((e) => allKnownIds.has(e.source) && allKnownIds.has(e.target)),
   ];
+
+  // Diagnostic: output edge count by edgeType
+  {
+    const byType = new Map<string, number>();
+    for (const e of edges) byType.set(e.data?.edgeType as string ?? '?', (byType.get(e.data?.edgeType as string ?? '?') ?? 0) + 1);
+    console.info(`[LOOM] transform output — ${nodes.length} nodes, ${edges.length} edges:`, Object.fromEntries(byType));
+  }
 
   return { nodes, edges };
 }

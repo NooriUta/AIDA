@@ -655,6 +655,7 @@
     "timezone":             "Timezone",
     "locale":               "Language",
     "bio":                  "Bio",
+    "bioPlaceholder":       "Tell us about yourself, your role, or your projects…",
     "security": {
       "changePassword":    "Change password",
       "currentPassword":   "Current password",
@@ -669,18 +670,28 @@
       "terminateAll":      "Terminate all other sessions",
       "deleteAccount":     "Delete account",
       "deleteAccountDesc": "Permanently delete your account and all data. This action cannot be undone.",
-      "mismatch":          "Passwords do not match"
+      "mismatch":          "Passwords do not match",
+      "fillAll":           "Please fill in all fields",
+      "changed":           "Password updated"
     },
     "access": {
       "yourRole":      "Your role",
+      "currentRole":   "Current role",
       "permissions":   "Permissions",
+      "matrix":        "Permissions matrix",
       "module":        "Module",
       "view":          "View",
       "export":        "Export",
       "edit":          "Edit",
       "admin":         "Admin",
       "granted":       "✓",
-      "denied":        "—"
+      "denied":        "—",
+      "changeHint":    "Contact your system administrator to change your role.",
+      "roleDesc": {
+        "admin":  "Full access to all modules and platform management",
+        "editor": "View, edit, export, and analyse data",
+        "viewer": "Read-only access to graphs and sessions"
+      }
     },
     "appearance": {
       "theme":     "Theme",
@@ -698,15 +709,25 @@
       "preview":   "Preview text"
     },
     "graph": {
-      "title":          "Graph settings",
-      "autoLayout":     "Auto layout on load",
-      "drillAnimation": "Drill-down animation",
-      "hoverHighlight": "Highlight on hover",
-      "showEdgeLabels": "Show edge labels",
-      "colLevelDefault":"Columns visible by default",
-      "startLevel":     "Default start level",
-      "nodeLimit":      "Node limit",
-      "reset":          "Reset to defaults"
+      "title":              "Graph settings",
+      "autoLayout":         "Auto layout on load",
+      "autoLayoutDesc":     "Automatically run ELK layout when opening a graph.",
+      "drillAnimation":     "Drill-down animation",
+      "drillAnimationDesc": "Smooth transition when entering a table or schema.",
+      "hoverHighlight":     "Highlight on hover",
+      "hoverHighlightDesc": "Highlight connected nodes on cursor hover.",
+      "showEdgeLabels":     "Show edge labels",
+      "showEdgeLabelsDesc": "Display relationship type (READS_FROM, WRITES_TO) on edges.",
+      "colLevelDefault":    "Columns visible by default",
+      "colLevelDefaultDesc":"Open tables with columns visible (otherwise header only).",
+      "startLevel":         "Default start level",
+      "startLevelDesc":     "The level shown when opening LOOM.",
+      "levelSchema":        "Schemas",
+      "levelTables":        "Tables",
+      "levelColumns":       "Columns",
+      "nodeLimit":          "Node limit",
+      "nodeLimitDesc":      "Maximum number of nodes on the canvas.",
+      "reset":              "Reset to defaults"
     },
     "activity": {
       "sessions":   "Active sessions",

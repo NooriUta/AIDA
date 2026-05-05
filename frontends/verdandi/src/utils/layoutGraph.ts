@@ -32,6 +32,61 @@ function getNodeHeight(node: LoomNode): number {
   return NODE_HEIGHT_BASE;
 }
 
+// ─── Post-layout collision resolution ────────────────────────────────────────
+// Adapted from xyflow/node-collision-algorithms (naive iterative push-apart).
+// Runs AFTER ELK to guarantee zero overlaps — ELK layered can produce
+// overlapping nodes on cyclic graphs (routine↔table in DWH AGG views).
+const COLLISION_ITERATIONS = 80;
+const COLLISION_MARGIN     = 20;   // px gap between nodes after resolution
+const OVERLAP_THRESHOLD    = 1;    // px — any overlap > 1px is resolved
+
+function resolveCollisions(nodes: LoomNode[]): LoomNode[] {
+  interface Box {
+    x: number; y: number; w: number; h: number;
+    moved: boolean; idx: number;
+  }
+  const boxes: Box[] = nodes.map((n, idx) => ({
+    x: n.position.x - COLLISION_MARGIN,
+    y: n.position.y - COLLISION_MARGIN,
+    w: (typeof n.style?.width === 'number' ? n.style.width : NODE_WIDTH) + COLLISION_MARGIN * 2,
+    h: getNodeHeight(n) + COLLISION_MARGIN * 2,
+    moved: false,
+    idx,
+  }));
+
+  for (let iter = 0; iter < COLLISION_ITERATIONS; iter++) {
+    let moved = false;
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const A = boxes[i];
+        const B = boxes[j];
+        const dx = (A.x + A.w * 0.5) - (B.x + B.w * 0.5);
+        const dy = (A.y + A.h * 0.5) - (B.y + B.h * 0.5);
+        const px = (A.w + B.w) * 0.5 - Math.abs(dx);
+        const py = (A.h + B.h) * 0.5 - Math.abs(dy);
+        if (px > OVERLAP_THRESHOLD && py > OVERLAP_THRESHOLD) {
+          A.moved = B.moved = moved = true;
+          if (px < py) {
+            const m = (px / 2) * (dx > 0 ? 1 : -1);
+            A.x += m; B.x -= m;
+          } else {
+            const m = (py / 2) * (dy > 0 ? 1 : -1);
+            A.y += m; B.y -= m;
+          }
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  return nodes.map((node, i) => {
+    const b = boxes[i];
+    return b.moved
+      ? { ...node, position: { x: b.x + COLLISION_MARGIN, y: b.y + COLLISION_MARGIN } }
+      : node;
+  });
+}
+
 // ─── Fallback grid layout (used if ELK fails) ────────────────────────────────
 // Tracks per-column Y so tall nodes (table with many columns) don't overlap.
 function applyGridLayout(nodes: LoomNode[]): LoomNode[] {
@@ -96,6 +151,14 @@ function getLayeredOptions(nodeCount: number): Record<string, string> {
     'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
     'elk.layered.nodePlacement.strategy':
       nodeCount > LAYOUT.LARGE_GRAPH_THRESHOLD ? 'LINEAR_SEGMENTS' : 'BRANDES_KOEPF',
+    // Better cycle handling for routine↔table graphs (DWH AGG)
+    'elk.layered.cycleBreaking.strategy':        'DEPTH_FIRST',
+    // NETWORK_SIMPLEX layering distributes nodes more evenly across layers
+    'elk.layered.layering.strategy':             'NETWORK_SIMPLEX',
+    // Higher thoroughness = more crossing minimization iterations (default 7)
+    'elk.layered.thoroughness':                  String(nodeCount > 100 ? 10 : 25),
+    // Post-compaction: tighten edge lengths after layout
+    'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
     // Do NOT add unnecessary bendpoints — they create Z-shaped edge routes.
     'elk.layered.unnecessaryBendpoints':         'false',
   };
@@ -261,6 +324,49 @@ async function runElkLayout(
   }
 }
 
+// ─── Visual package groups ───────────────────────────────────────────────────
+// After ELK positions all flat nodes, compute bounding boxes for routines that
+// share a packageId and insert packageGroupNode backgrounds behind them.
+const PKG_PAD = 24;
+const PKG_HDR = 44;
+
+function createPackageGroups(layoutNodes: LoomNode[], pkgNodes: LoomNode[]): LoomNode[] {
+  const pkgMap = new Map(pkgNodes.map((n) => [n.id, n]));
+  const membersByPkg = new Map<string, LoomNode[]>();
+
+  for (const n of layoutNodes) {
+    const pkgId = (n.data?.metadata as Record<string, unknown>)?.packageId as string | undefined;
+    if (pkgId && pkgMap.has(pkgId)) {
+      if (!membersByPkg.has(pkgId)) membersByPkg.set(pkgId, []);
+      membersByPkg.get(pkgId)!.push(n);
+    }
+  }
+
+  const groups: LoomNode[] = [];
+  for (const [pkgId, pkg] of pkgMap) {
+    const members = membersByPkg.get(pkgId) ?? [];
+    if (members.length === 0) continue;
+
+    const minX = Math.min(...members.map((n) => n.position.x));
+    const minY = Math.min(...members.map((n) => n.position.y));
+    const maxX = Math.max(...members.map((n) => n.position.x + NODE_WIDTH));
+    const maxY = Math.max(...members.map((n) => n.position.y + getNodeHeight(n)));
+
+    groups.push({
+      ...pkg,
+      position: { x: minX - PKG_PAD, y: minY - PKG_HDR },
+      style: {
+        ...(pkg.style ?? {}),
+        width:  maxX - minX + PKG_PAD * 2,
+        height: maxY - minY + PKG_HDR + PKG_PAD,
+      },
+      zIndex: -1,
+    });
+  }
+
+  return [...groups, ...layoutNodes];
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 //
 // Compound mode (any node has parentId set):
@@ -308,6 +414,11 @@ export async function applyELKLayout(
   // ── Flat layout (no compound nodes) ──────────────────────────────────────
   const childNodes = nodes.filter((n) => n.parentId);
   if (childNodes.length === 0) {
+    // Separate package group nodes — excluded from ELK, repositioned as
+    // visual background groups after the flat layout pass.
+    const pkgNodes    = nodes.filter((n) => n.type === 'packageGroupNode');
+    const layoutNodes = pkgNodes.length > 0 ? nodes.filter((n) => n.type !== 'packageGroupNode') : nodes;
+
     // M-1: deduplicate before passing to ELK (duplicate src→tgt confuses layered algo)
     const flatEdges = deduplicateEdges(
       edges
@@ -319,8 +430,8 @@ export async function applyELKLayout(
     );
     const graph: ElkGraph = {
       id: 'root',
-      layoutOptions: isDense ? getDenseOptions() : getLayeredOptions(nodes.length),
-      children: nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: getNodeHeight(n) })),
+      layoutOptions: isDense ? getDenseOptions() : getLayeredOptions(layoutNodes.length),
+      children: layoutNodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: getNodeHeight(n) })),
       // Only data-flow edges — containment edges are filtered out so ELK receives
       // a clean DAG (or near-DAG) without CONTAINS_ROUTINE/CONTAINS_STMT chains.
       edges: flatEdges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
@@ -333,10 +444,16 @@ export async function applyELKLayout(
       layoutCache = { fingerprint: fp, result: laid, isGrid: true, isDense: false };
       return { nodes: laid, isGrid: true, isDense: false };
     }
-    const laid = nodes.map((node) => {
+    let laid = layoutNodes.map((node) => {
       const c = result.children.find((r) => r.id === node.id);
       return c ? { ...node, position: { x: c.x ?? 0, y: c.y ?? 0 } } : node;
     });
+    // Post-ELK collision resolution — push apart any remaining overlaps
+    laid = resolveCollisions(laid);
+    // Visual package group backgrounds — compute bounding box of member routines
+    if (pkgNodes.length > 0) {
+      laid = createPackageGroups(laid, pkgNodes);
+    }
     layoutCache = { fingerprint: fp, result: laid, isGrid: false, isDense };
     return { nodes: laid, isGrid: false, isDense };
   }
@@ -399,10 +516,16 @@ export async function applyELKLayout(
     return { nodes: laid, isGrid: true, isDense: false };
   }
   const posMap = new Map(result.children.map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
-  const laid = nodes.map((node) => {
-    if (node.parentId) return node; // keep pre-computed relative positions
+  // Separate top-level and child nodes — collision resolution only for top-level
+  const laidTop = topNodes.map((node) => {
     const pos = posMap.get(node.id);
     return pos ? { ...node, position: pos } : node;
+  });
+  const resolvedTop = resolveCollisions(laidTop);
+  const resolvedIds = new Map(resolvedTop.map((n) => [n.id, n]));
+  const laid = nodes.map((node) => {
+    if (node.parentId) return node; // keep pre-computed relative positions
+    return resolvedIds.get(node.id) ?? node;
   });
   layoutCache = { fingerprint: fp, result: laid, isGrid: false, isDense };
   return { nodes: laid, isGrid: false, isDense };

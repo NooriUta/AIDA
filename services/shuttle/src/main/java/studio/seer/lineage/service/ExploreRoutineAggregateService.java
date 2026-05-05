@@ -42,10 +42,12 @@ class ExploreRoutineAggregateService {
         if (isPackage) {
             cypher = """
                 MATCH (p:DaliPackage {package_name: $scope})-[:CONTAINS_ROUTINE]->(r:DaliRoutine)
-                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
-                OPTIONAL MATCH (tR:DaliTable)-[:READS_FROM]->(stmt)
-                OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
-                WITH p, r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
+                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(:DaliStatement)<-[:READS_FROM]-(tR:DaliTable)
+                WITH DISTINCT p, r, tR
+                WITH p, r, collect(tR) AS reads
+                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(:DaliStatement)-[:WRITES_TO]->(tW:DaliTable)
+                WITH DISTINCT p, r, reads, tW
+                WITH p, r, reads, collect(tW) AS writes
                 RETURN id(p) AS pkgId, p.package_name AS pkgName,
                        coalesce(p.schema_geoid, '') AS pkgSchema,
                        id(r) AS src, r.routine_name AS srcLabel,
@@ -61,17 +63,24 @@ class ExploreRoutineAggregateService {
                 MATCH (s:DaliSchema) WHERE s.schema_geoid = $scope
                 MATCH (s)-[:CONTAINS_ROUTINE]->(n1)
                 OPTIONAL MATCH (n1)-[:CONTAINS_ROUTINE]->(nested:DaliRoutine)
-                WITH s, CASE WHEN n1:DaliRoutine THEN n1 ELSE nested END AS r
+                WITH s,
+                     CASE WHEN n1:DaliPackage THEN nested ELSE n1 END AS r,
+                     CASE WHEN n1:DaliPackage THEN n1 ELSE null END AS pkg
                 WHERE r IS NOT NULL
-                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(stmt:DaliStatement)
-                OPTIONAL MATCH (tR:DaliTable)-[:READS_FROM]->(stmt)
-                OPTIONAL MATCH (stmt)-[:WRITES_TO]->(tW:DaliTable)
-                WITH r, collect(DISTINCT tR) AS reads, collect(DISTINCT tW) AS writes
+                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(:DaliStatement)<-[:READS_FROM]-(tR:DaliTable)
+                WITH DISTINCT r, pkg, tR
+                WITH r, pkg, collect(tR) AS reads
+                OPTIONAL MATCH (r)-[:CONTAINS_STMT]->(:DaliStatement)-[:WRITES_TO]->(tW:DaliTable)
+                WITH DISTINCT r, pkg, reads, tW
+                WITH r, pkg, reads, collect(tW) AS writes
                 RETURN id(r) AS src, r.routine_name AS srcLabel,
                        coalesce(r.schema_geoid, '') AS srcSchema,
                        coalesce(r.package_geoid, '') AS srcPackage,
                        coalesce(r.routine_type, '') AS srcKind,
-                       reads, writes
+                       reads, writes,
+                       CASE WHEN pkg IS NOT NULL THEN id(pkg) ELSE '' END AS pkgId,
+                       CASE WHEN pkg IS NOT NULL THEN pkg.package_name ELSE '' END AS pkgName,
+                       CASE WHEN pkg IS NOT NULL THEN coalesce(pkg.schema_geoid, '') ELSE '' END AS pkgSchema
                 LIMIT 300
                 """;
             params = Map.of("scope", scopeName);
@@ -85,13 +94,15 @@ class ExploreRoutineAggregateService {
         Uni<List<Map<String, Object>>> extQuery = finalIsPackage
             ? Uni.createFrom().item(List.of())
             : arcade.cypherIn(lineageDb(), """
-                MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(stmt:DaliStatement), (tR:DaliTable)-[:READS_FROM]->(stmt)
+                MATCH (extR:DaliRoutine)-[:CONTAINS_STMT]->(:DaliStatement)<-[:READS_FROM]-(tR:DaliTable)
                 WHERE extR.schema_geoid <> $scope
                   AND tR.schema_geoid = $scope
-                WITH extR, collect(DISTINCT tR) AS reads
-                OPTIONAL MATCH (extR)-[:CONTAINS_STMT]->(stmt2:DaliStatement)-[:WRITES_TO]->(tW:DaliTable)
+                WITH DISTINCT extR, tR
+                WITH extR, collect(tR) AS reads
+                OPTIONAL MATCH (extR)-[:CONTAINS_STMT]->(:DaliStatement)-[:WRITES_TO]->(tW:DaliTable)
                 WHERE tW.schema_geoid = $scope
-                WITH extR, reads, collect(DISTINCT tW) AS writes
+                WITH DISTINCT extR, reads, tW
+                With extR, reads, collect(tW) AS writes
                 RETURN id(extR) AS src, extR.routine_name AS srcLabel,
                        coalesce(extR.schema_geoid, '') AS srcSchema,
                        coalesce(extR.package_geoid, '') AS srcPackage,
@@ -116,7 +127,7 @@ class ExploreRoutineAggregateService {
                 MATCH (s:DaliSchema) WHERE s.schema_geoid = $scope
                 MATCH (s)-[:CONTAINS_ROUTINE]->(n1)
                 OPTIONAL MATCH (n1)-[:CONTAINS_ROUTINE]->(nested:DaliRoutine)
-                WITH CASE WHEN n1:DaliRoutine THEN n1 ELSE nested END AS r1
+                WITH CASE WHEN n1:DaliPackage THEN nested ELSE n1 END AS r1
                 WHERE r1 IS NOT NULL
                 MATCH (r1)-[:CALLS]->(r2:DaliRoutine)
                 RETURN id(r1) AS srcId, r1.routine_name AS srcLabel, 'DaliRoutine' AS srcType,
@@ -144,10 +155,7 @@ class ExploreRoutineAggregateService {
                 allRows.addAll(extRows);
 
                 var flatRows = new ArrayList<Map<String, Object>>();
-
-                String pkgNodeId    = "";
-                String pkgNodeName  = "";
-                String pkgNodeScope = "";
+                var emittedPkgs = new HashSet<String>();
 
                 for (var row : allRows) {
                     String rId     = str(row, "src");
@@ -157,27 +165,28 @@ class ExploreRoutineAggregateService {
                     String rKind   = str(row, "srcKind");
                     if (rId == null || rId.isEmpty()) continue;
 
-                    if (finalIsPackage && pkgNodeId.isEmpty()) {
-                        pkgNodeId    = str(row, "pkgId");
-                        pkgNodeName  = str(row, "pkgName");
-                        pkgNodeScope = str(row, "pkgSchema");
-                        if (!pkgNodeId.isEmpty()) {
-                            var pkgSelf = new HashMap<String, Object>();
-                            pkgSelf.put("srcId",        pkgNodeId);
-                            pkgSelf.put("srcLabel",     pkgNodeName);
-                            pkgSelf.put("srcType",      "DaliPackage");
-                            pkgSelf.put("srcScope",     pkgNodeScope);
-                            pkgSelf.put("srcPackage",   "");
-                            pkgSelf.put("srcKind",      "PKG");
-                            pkgSelf.put("tgtId",        pkgNodeId);
-                            pkgSelf.put("tgtLabel",     pkgNodeName);
-                            pkgSelf.put("tgtScope",     "");
-                            pkgSelf.put("tgtType",      "DaliPackage");
-                            pkgSelf.put("edgeType",     "NODE_ONLY");
-                            pkgSelf.put("sourceHandle", "");
-                            pkgSelf.put("targetHandle", "");
-                            flatRows.add(pkgSelf);
-                        }
+                    // Emit DaliPackage node (once per package) + CONTAINS_ROUTINE edge.
+                    // For package-scope: pkgId from first row; for schema-scope: from Cypher result.
+                    String rowPkgId    = str(row, "pkgId");
+                    String rowPkgName  = str(row, "pkgName");
+                    String rowPkgScope = str(row, "pkgSchema");
+
+                    if (!rowPkgId.isEmpty() && emittedPkgs.add(rowPkgId)) {
+                        var pkgSelf = new HashMap<String, Object>();
+                        pkgSelf.put("srcId",        rowPkgId);
+                        pkgSelf.put("srcLabel",     rowPkgName);
+                        pkgSelf.put("srcType",      "DaliPackage");
+                        pkgSelf.put("srcScope",     rowPkgScope);
+                        pkgSelf.put("srcPackage",   "");
+                        pkgSelf.put("srcKind",      "PKG");
+                        pkgSelf.put("tgtId",        rowPkgId);
+                        pkgSelf.put("tgtLabel",     rowPkgName);
+                        pkgSelf.put("tgtScope",     "");
+                        pkgSelf.put("tgtType",      "DaliPackage");
+                        pkgSelf.put("edgeType",     "NODE_ONLY");
+                        pkgSelf.put("sourceHandle", "");
+                        pkgSelf.put("targetHandle", "");
+                        flatRows.add(pkgSelf);
                     }
 
                     var selfRow = new HashMap<String, Object>();
@@ -196,12 +205,12 @@ class ExploreRoutineAggregateService {
                     selfRow.put("targetHandle", "");
                     flatRows.add(selfRow);
 
-                    if (finalIsPackage && !pkgNodeId.isEmpty()) {
+                    if (!rowPkgId.isEmpty()) {
                         var crRow = new HashMap<String, Object>();
-                        crRow.put("srcId",        pkgNodeId);
-                        crRow.put("srcLabel",     pkgNodeName);
+                        crRow.put("srcId",        rowPkgId);
+                        crRow.put("srcLabel",     rowPkgName);
                         crRow.put("srcType",      "DaliPackage");
-                        crRow.put("srcScope",     pkgNodeScope);
+                        crRow.put("srcScope",     rowPkgScope);
                         crRow.put("srcPackage",   "");
                         crRow.put("srcKind",      "");
                         crRow.put("tgtId",        rId);
@@ -219,11 +228,8 @@ class ExploreRoutineAggregateService {
                     if (reads != null) {
                         for (var t : reads) {
                             if (t == null) continue;
-                            var r = makeRoutineTableRow(rId, rLabel, t, "READS_FROM");
-                            r.put("srcScope",   rSchema);
-                            r.put("srcPackage", rPkg);
-                            r.put("srcKind",    rKind);
-                            flatRows.add(r);
+                            flatRows.add(makeRoutineTableRow(
+                                    rId, rLabel, rSchema, rPkg, rKind, t, "READS_FROM"));
                         }
                     }
                     @SuppressWarnings("unchecked")
@@ -231,16 +237,21 @@ class ExploreRoutineAggregateService {
                     if (writes != null) {
                         for (var t : writes) {
                             if (t == null) continue;
-                            var w = makeRoutineTableRow(rId, rLabel, t, "WRITES_TO");
-                            w.put("srcScope",   rSchema);
-                            w.put("srcPackage", rPkg);
-                            w.put("srcKind",    rKind);
-                            flatRows.add(w);
+                            flatRows.add(makeRoutineTableRow(
+                                    rId, rLabel, rSchema, rPkg, rKind, t, "WRITES_TO"));
                         }
                     }
                 }
 
                 flatRows.addAll(callRows);
+
+                // Post-dedup safety net: even if Cypher returns duplicates,
+                // drop repeated (srcId, edgeType, tgtId) triples before buildResult.
+                var seen = new HashSet<String>();
+                flatRows.removeIf(row -> {
+                    String key = str(row, "srcId") + "__" + str(row, "edgeType") + "__" + str(row, "tgtId");
+                    return !seen.add(key);
+                });
 
                 return ExploreService.buildResult(flatRows, finalScopeName,
                         finalIsPackage ? "DaliPackage" : "DaliSchema");
@@ -250,18 +261,37 @@ class ExploreRoutineAggregateService {
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /** Build one (routine → table) row in the uniform format buildResult() expects. */
-    private static Map<String, Object> makeRoutineTableRow(String rId, String rLabel,
-                                                           Map<String, Object> t, String edgeType) {
+    /**
+     * Build one routine↔table row in the uniform format buildResult() expects.
+     * Sprint 1.2: READS_FROM uses data-flow direction (Table → Routine);
+     *             WRITES_TO  uses data-flow direction (Routine → Table).
+     */
+    private static Map<String, Object> makeRoutineTableRow(
+            String rId, String rLabel, String rSchema, String rPkg, String rKind,
+            Map<String, Object> t, String edgeType) {
         var row = new HashMap<String, Object>();
-        row.put("srcId",       rId);
-        row.put("srcLabel",    rLabel);
-        row.put("srcType",     "DaliRoutine");
-        row.put("tgtId",       str(t, "@rid"));
-        row.put("tgtLabel",    str(t, "table_name"));
-        row.put("tgtScope",    str(t, "schema_geoid"));
-        row.put("tgtType",     "DaliTable");
-        row.put("edgeType",    edgeType);
+        if ("READS_FROM".equals(edgeType)) {
+            row.put("srcId",    str(t, "@rid"));
+            row.put("srcLabel", str(t, "table_name"));
+            row.put("srcType",  "DaliTable");
+            row.put("srcScope", str(t, "schema_geoid"));
+            row.put("tgtId",    rId);
+            row.put("tgtLabel", rLabel);
+            row.put("tgtType",  "DaliRoutine");
+            row.put("tgtScope", rSchema);
+        } else {
+            row.put("srcId",      rId);
+            row.put("srcLabel",   rLabel);
+            row.put("srcType",    "DaliRoutine");
+            row.put("srcScope",   rSchema);
+            row.put("srcPackage", rPkg);
+            row.put("srcKind",    rKind);
+            row.put("tgtId",      str(t, "@rid"));
+            row.put("tgtLabel",   str(t, "table_name"));
+            row.put("tgtType",    "DaliTable");
+            row.put("tgtScope",   str(t, "schema_geoid"));
+        }
+        row.put("edgeType",     edgeType);
         row.put("sourceHandle", "");
         row.put("targetHandle", "");
         return row;

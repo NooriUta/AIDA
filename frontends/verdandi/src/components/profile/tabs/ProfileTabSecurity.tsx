@@ -22,37 +22,37 @@ export const ProfileTabSecurity = memo(() => {
 
       {/* Password */}
       <SecurityBlock>
-        <BlockTitle dotOn>{t('profile.security.password')}</BlockTitle>
+        <BlockTitle dotOn>{t('profile.security.changePassword')}</BlockTitle>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <PasswordField label={t('profile.security.current')} value={current} onChange={setCurrent} />
+          <PasswordField label={t('profile.security.currentPassword')} value={current} onChange={setCurrent} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <PasswordField label={t('profile.security.new')}    value={next1}   onChange={setNext1} />
-            <PasswordField label={t('profile.security.repeat')} value={next2}   onChange={setNext2} />
+            <PasswordField label={t('profile.security.newPassword')}     value={next1}   onChange={setNext1} />
+            <PasswordField label={t('profile.security.confirmPassword')} value={next2}   onChange={setNext2} />
           </div>
         </div>
         {msg && <div style={{ marginTop: '10px', fontSize: '12px', color: msg.startsWith('✓') ? 'var(--suc)' : 'var(--danger)' }}>{msg}</div>}
         <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-          <button onClick={handleChangePassword} style={btnPrimary}>{t('profile.security.changeBtn')}</button>
+          <button onClick={handleChangePassword} style={btnPrimary}>{t('profile.security.updatePassword')}</button>
         </div>
       </SecurityBlock>
 
       {/* 2FA */}
       <SecurityBlock>
-        <BlockTitle dotOff>{t('profile.security.twoFa')}</BlockTitle>
+        <BlockTitle dotOff>{t('profile.security.twoFactor')}</BlockTitle>
         <p style={{ fontSize: '12px', color: 'var(--t2)', marginBottom: '14px', lineHeight: 1.6 }}>
-          {t('profile.security.twoFaDesc')}
+          {t('profile.security.twoFactorDesc')}
         </p>
-        <button style={btnSecondary}>{t('profile.security.enable2fa')}</button>
+        <button style={btnSecondary}>{t('profile.security.setupTwoFactor')}</button>
       </SecurityBlock>
 
       {/* Danger zone */}
       <SecurityBlock danger>
         <BlockTitle danger>{t('profile.security.dangerZone')}</BlockTitle>
         <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '12px' }}>
-          {t('profile.security.dangerDesc')}
+          {t('profile.security.deleteAccountDesc')}
         </p>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button style={btnDanger}>{t('profile.security.terminateSessions')}</button>
+          <button style={btnDanger}>{t('profile.security.terminateAll')}</button>
           <button style={btnDanger}>{t('profile.security.deleteAccount')}</button>
         </div>
       </SecurityBlock>
