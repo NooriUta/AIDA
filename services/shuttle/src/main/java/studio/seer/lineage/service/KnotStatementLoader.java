@@ -60,10 +60,10 @@ class KnotStatementLoader {
                    coalesce(r.routine_type, '')                                     AS routineType,
                    stmt.aliases                                                     AS stmtAliases,
                    count(a)                                                         AS atomTotal,
-                   count(CASE WHEN a.primary_status='RESOLVED'      THEN 1
-                              WHEN toLower(a.status)='обработано' THEN 1 END)     AS atomResolved,
-                   count(CASE WHEN a.primary_status='UNRESOLVED'   THEN 1
-                              WHEN toLower(a.status)='unresolved'  THEN 1 END)     AS atomFailed,
+                   count(CASE WHEN a.primary_status IN ['RESOLVED','RECONSTRUCT_DIRECT','RECONSTRUCT_INVERSE'] THEN 1
+                              WHEN toLower(a.status) IN ['обработано','resolved','reconstruct_direct','reconstruct_inverse'] THEN 1 END) AS atomResolved,
+                   count(CASE WHEN a.primary_status IN ['UNRESOLVED','PARTIAL'] THEN 1
+                              WHEN toLower(a.status) IN ['unresolved','partial'] THEN 1 END) AS atomFailed,
                    count(CASE WHEN a.primary_status='CONSTANT'     THEN 1
                               WHEN toLower(a.status)='constant'    THEN 1 END)     AS atomConst,
                    count(CASE WHEN a.primary_status='FUNCTION_CALL' THEN 1
@@ -132,10 +132,10 @@ class KnotStatementLoader {
                    coalesce(r.routine_type, '')                                     AS routineType,
                    stmt.aliases                                                     AS stmtAliases,
                    count(a)                                                         AS atomTotal,
-                   count(CASE WHEN a.primary_status='RESOLVED'      THEN 1
-                              WHEN toLower(a.status)='обработано' THEN 1 END)     AS atomResolved,
-                   count(CASE WHEN a.primary_status='UNRESOLVED'   THEN 1
-                              WHEN toLower(a.status)='unresolved'  THEN 1 END)     AS atomFailed,
+                   count(CASE WHEN a.primary_status IN ['RESOLVED','RECONSTRUCT_DIRECT','RECONSTRUCT_INVERSE'] THEN 1
+                              WHEN toLower(a.status) IN ['обработано','resolved','reconstruct_direct','reconstruct_inverse'] THEN 1 END) AS atomResolved,
+                   count(CASE WHEN a.primary_status IN ['UNRESOLVED','PARTIAL'] THEN 1
+                              WHEN toLower(a.status) IN ['unresolved','partial'] THEN 1 END) AS atomFailed,
                    count(CASE WHEN a.primary_status='CONSTANT'     THEN 1
                               WHEN toLower(a.status)='constant'    THEN 1 END)     AS atomConst,
                    count(CASE WHEN a.primary_status='FUNCTION_CALL' THEN 1

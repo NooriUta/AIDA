@@ -44,12 +44,15 @@ export const KnotStructure = memo(({ sessionId, tables, statements }: Props) => 
       for (const st of stmts) {
         const label = stmtShortLabel(st);
         st.sourceTables?.forEach(ref => {
-          const key = ref.geoid;
+          // Use name as key — geoid may be empty for reconstructed tables
+          const key = ref.name || ref.geoid;
+          if (!key) return;
           if (!srcMap.has(key)) srcMap.set(key, []);
           srcMap.get(key)!.push(label);
         });
         st.targetTables?.forEach(ref => {
-          const key = ref.geoid;
+          const key = ref.name || ref.geoid;
+          if (!key) return;
           if (!tgtMap.has(key)) tgtMap.set(key, []);
           tgtMap.get(key)!.push(label);
         });
@@ -70,25 +73,26 @@ export const KnotStructure = memo(({ sessionId, tables, statements }: Props) => 
     );
   }, [tables, filter]);
 
-  const loadDetail = useCallback((geoid: string) => {
+  // cacheKey = tb.id (stable RID); queryGeoid = actual geoid to pass to backend (may be empty → fallback to id)
+  const loadDetail = useCallback((cacheKey: string, queryGeoid: string) => {
     setDetails(prev => {
-      if (prev.has(geoid)) return prev;
+      if (prev.has(cacheKey)) return prev;
       const next = new Map(prev);
-      next.set(geoid, 'loading');
+      next.set(cacheKey, 'loading');
       return next;
     });
-    fetchKnotTableDetail(sessionId, geoid)
+    fetchKnotTableDetail(sessionId, queryGeoid)
       .then(detail => {
         setDetails(prev => {
           const next = new Map(prev);
-          next.set(geoid, detail);
+          next.set(cacheKey, detail);
           return next;
         });
       })
       .catch(() => {
         setDetails(prev => {
           const next = new Map(prev);
-          next.set(geoid, 'error');
+          next.set(cacheKey, 'error');
           return next;
         });
       });
@@ -101,9 +105,9 @@ export const KnotStructure = memo(({ sessionId, tables, statements }: Props) => 
       next.has(tb.id) ? next.delete(tb.id) : next.add(tb.id);
       return next;
     });
-    // Trigger lazy load on first open (outside the updater — no side-effects in updater)
-    if (!isOpen && !details.has(tb.geoid)) {
-      loadDetail(tb.geoid);
+    // Trigger lazy load on first open — use tb.id (RID) as cache key, geoid for the query
+    if (!isOpen && !details.has(tb.id)) {
+      loadDetail(tb.id, tb.geoid || tb.id);
     }
   }, [expanded, details, loadDetail]);
 
@@ -177,10 +181,11 @@ export const KnotStructure = memo(({ sessionId, tables, statements }: Props) => 
           <tbody>
             {filtered.map(tb => {
               const isOpen = expanded.has(tb.id);
-              const srcStmts = tableUsage.srcMap.get(tb.geoid) || [];
-              const tgtStmts = tableUsage.tgtMap.get(tb.geoid) || [];
+              // Look up by name — matches how tableUsage is keyed (name fallback for empty geoid)
+              const srcStmts = tableUsage.srcMap.get(tb.name) || [];
+              const tgtStmts = tableUsage.tgtMap.get(tb.name) || [];
               const isMaster = tb.dataSource === 'master';
-              const detail   = details.get(tb.geoid);
+              const detail   = details.get(tb.id);
               return [
                 <tr
                   key={tb.id}

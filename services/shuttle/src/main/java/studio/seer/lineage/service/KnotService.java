@@ -249,8 +249,9 @@ public class KnotService {
                     int cnt = num(row, "cnt");
                     atomTotal += cnt;
                     switch (ps) {
-                        case "RESOLVED", "обработано", "Обработано" -> atomResolved += cnt;
-                        case "UNRESOLVED", "unresolved"             -> atomFailed   += cnt;
+                        case "RESOLVED", "обработано", "Обработано",
+                             "RECONSTRUCT_DIRECT", "RECONSTRUCT_INVERSE" -> atomResolved += cnt;
+                        case "UNRESOLVED", "unresolved", "PARTIAL"  -> atomFailed   += cnt;
                         case "CONSTANT", "constant"                 -> atomConst    += cnt;
                         case "FUNCTION_CALL", "function_call"       -> atomFunc     += cnt;
                     }
