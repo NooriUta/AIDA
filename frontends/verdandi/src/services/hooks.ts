@@ -34,7 +34,7 @@ export const qk = {
   expandDeep:    (nodeId: string, depth: number) => ['expandDeep', nodeId, depth] as const,
   search:        (q: string)      => ['search', q]              as const,
   knotSessions:  ()               => ['knotSessions']           as const,
-  knotReport:    (sid: string)    => ['knotReport', sid]        as const,
+  knotReport:    (sid: string, sf?: string | null) => ['knotReport', sid, sf ?? ''] as const,
   knotSnippet:   (geoid: string)  => ['knotSnippet', geoid]     as const,
   knotScript:      (sid: string)    => ['knotScript', sid]        as const,
   knotSourceFile:  (sid: string)    => ['knotSourceFile', sid]    as const,
@@ -222,11 +222,11 @@ export function useKnotSessions() {
   });
 }
 
-export function useKnotReport(sessionId: string | null) {
+export function useKnotReport(sessionId: string | null, sourceFile?: string | null) {
   const onError = useOnUnauthorized();
   return useQuery({
-    queryKey: qk.knotReport(sessionId ?? ''),
-    queryFn:  () => fetchKnotReport(sessionId!),
+    queryKey: qk.knotReport(sessionId ?? '', sourceFile),
+    queryFn:  () => fetchKnotReport(sessionId!, sourceFile),
     enabled:  !!sessionId,
     staleTime: 60_000,
     throwOnError: false,

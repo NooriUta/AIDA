@@ -33,7 +33,10 @@ export const KnotPage = memo(() => {
   const { emit: emitHeimdall } = useHeimdallEmitter();
 
   const { data: sessions, isLoading: sessionsLoading, isError: sessionsError } = useKnotSessions();
-  const { data: report, isLoading: reportLoading, isError: reportError } = useKnotReport(selectedId);
+  // G4: pass filePath as sourceFile so the report is filtered to the selected file.
+  // Computed before selectedSession useMemo to satisfy React hook ordering.
+  const selectedFilePath = (sessions ?? []).find(s => s.sessionId === selectedId)?.filePath ?? null;
+  const { data: report, isLoading: reportLoading, isError: reportError } = useKnotReport(selectedId, selectedFilePath);
 
   // Auto-select session: prefer URL pkg match, fall back to first
   useEffect(() => {

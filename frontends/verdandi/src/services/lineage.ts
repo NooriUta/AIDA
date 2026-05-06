@@ -528,8 +528,8 @@ const KNOT_SESSIONS = /* GraphQL */ `
 `;
 
 const KNOT_REPORT = /* GraphQL */ `
-  query KnotReport($sessionId: String!) {
-    knotReport(sessionId: $sessionId) {
+  query KnotReport($sessionId: String!, $sourceFile: String) {
+    knotReport(sessionId: $sessionId, sourceFile: $sourceFile) {
       session {
         id sessionId sessionName dialect filePath processingMs
         tableCount columnCount schemaCount packageCount routineCount
@@ -611,8 +611,10 @@ export async function fetchKnotSessions(): Promise<KnotSession[]> {
   return data.knotSessions;
 }
 
-export async function fetchKnotReport(sessionId: string): Promise<KnotReport> {
-  const data = await gqlClient.request<{ knotReport: KnotReport }>(KNOT_REPORT, { sessionId });
+export async function fetchKnotReport(sessionId: string, sourceFile?: string | null): Promise<KnotReport> {
+  const variables: Record<string, string> = { sessionId };
+  if (sourceFile) variables.sourceFile = sourceFile;
+  const data = await gqlClient.request<{ knotReport: KnotReport }>(KNOT_REPORT, variables);
   return data.knotReport;
 }
 
