@@ -69,7 +69,7 @@ class KnotStatementLoader {
                    count(CASE WHEN a.primary_status='FUNCTION_CALL' THEN 1
                               WHEN toLower(a.status)='function_call' THEN 1 END)   AS atomFunc
             ORDER BY r.routine_name, geoid
-            LIMIT 1000
+            LIMIT 5000
             """;
 
         // Query 2: TABLE sources/targets — READS_FROM/WRITES_TO → DaliTable
@@ -141,7 +141,7 @@ class KnotStatementLoader {
                    count(CASE WHEN a.primary_status='FUNCTION_CALL' THEN 1
                               WHEN toLower(a.status)='function_call' THEN 1 END)   AS atomFunc
             ORDER BY r.routine_name, geoid
-            LIMIT 1000
+            LIMIT 5000
             """;
 
         String cypherTables = """

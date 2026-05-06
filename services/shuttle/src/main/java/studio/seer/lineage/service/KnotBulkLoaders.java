@@ -257,7 +257,7 @@ class KnotBulkLoaders {
                    coalesce(a.is_routine_param, false)         AS isRoutineParam,
                    coalesce(a.is_routine_var, false)           AS isRoutineVar,
                    a.nested_atoms_count                        AS nestedAtomsCount
-            LIMIT 5000
+            LIMIT 10000
             """; // ORDER BY removed — Java re-sorts by stmtGeoid+atomLine+atomPos below
 
         return arcade.cypherIn(lineageDb(), cypher, params)

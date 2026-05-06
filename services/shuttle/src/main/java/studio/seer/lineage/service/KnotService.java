@@ -304,7 +304,7 @@ public class KnotService {
                    coalesce(t.data_source,'reconstructed')     AS dataSource,
                    colCount
             ORDER BY name
-            LIMIT 300
+            LIMIT 1000
             """;
 
         // READS_FROM and WRITES_TO counts in a single query — split by edgeType in Java.
